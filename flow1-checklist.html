@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flow 1 Checklist - Horse Profile & History</title>
+    <style>
+      :root {
+        --ink: #17211b;
+        --muted: #637067;
+        --line: #d7dfd7;
+        --paper: #f7f9f5;
+        --panel: #fff;
+        --green: #245c43;
+        --green-soft: #e4f0e8;
+        --amber: #fff3d6;
+        --amber-ink: #76500e;
+        --red: #fde8e7;
+        --red-ink: #8b2d29;
+        --blue: #e9f1fb;
+        --blue-ink: #275486;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font:
+          15px/1.58 ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      header {
+        padding: 58px max(22px, calc((100% - 1180px) / 2));
+        color: #f3f8f3;
+        background: #183b2b;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+      }
+      h1 {
+        max-width: 860px;
+        margin: 0;
+        font-size: clamp(31px, 5vw, 56px);
+        letter-spacing: -1px;
+      }
+      h2 {
+        margin: 46px 0 14px;
+        font-size: 27px;
+      }
+      h3 {
+        margin: 26px 0 10px;
+        font-size: 19px;
+      }
+      header p {
+        max-width: 820px;
+        margin: 13px 0 0;
+        color: #c9dccd;
+      }
+      main {
+        max-width: 1180px;
+        margin: auto;
+        padding: 24px 22px 72px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 20px 0;
+      }
+      .stat,
+      .panel,
+      .decision,
+      .warning,
+      .note {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+      }
+      .stat {
+        padding: 15px;
+        background: var(--green-soft);
+      }
+      .stat strong {
+        display: block;
+        color: var(--green);
+        font-size: 25px;
+      }
+      .panel,
+      .decision,
+      .warning,
+      .note {
+        padding: 18px 20px;
+        margin: 16px 0;
+      }
+      .decision {
+        border-left: 5px solid var(--green);
+      }
+      .warning {
+        color: var(--amber-ink);
+        background: var(--amber);
+        border-color: #efd79e;
+      }
+      .note {
+        color: var(--blue-ink);
+        background: var(--blue);
+        border-color: #c8d9ef;
+      }
+      .toc {
+        columns: 3;
+        padding-left: 22px;
+      }
+      .toc li {
+        margin: 5px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0 26px;
+        background: var(--panel);
+      }
+      th,
+      td {
+        padding: 10px 11px;
+        vertical-align: top;
+        text-align: left;
+        border: 1px solid var(--line);
+      }
+      th {
+        color: #fff;
+        background: var(--green);
+      }
+      tr:nth-child(even) td {
+        background: #fbfcfa;
+      }
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: #edf1ed;
+        font:
+          0.92em ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .checklist {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0;
+      }
+      .checklist li {
+        position: relative;
+        padding: 8px 10px 8px 31px;
+        border-bottom: 1px solid #e8eee8;
+      }
+      .checklist li::before {
+        content: '☐';
+        position: absolute;
+        left: 5px;
+        color: var(--green);
+        font-size: 18px;
+        line-height: 1.35;
+      }
+      .status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .done {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+      .partial {
+        color: var(--amber-ink);
+        background: var(--amber);
+      }
+      .todo {
+        color: var(--red-ink);
+        background: var(--red);
+      }
+      .role {
+        font-weight: 700;
+        color: var(--green);
+      }
+      .rule {
+        border-left: 3px solid #87ad91;
+        padding: 8px 14px;
+        margin: 10px 0;
+        background: #fbfcfa;
+      }
+      footer {
+        max-width: 1180px;
+        margin: auto;
+        padding: 22px;
+        color: var(--muted);
+        border-top: 1px solid var(--line);
+      }
+      @media (max-width: 800px) {
+        header {
+          padding: 42px 18px;
+        }
+        main {
+          padding: 18px 14px 52px;
+        }
+        .grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .toc {
+          columns: 1;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+      @media (max-width: 450px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Flow 1: Quản lý Hồ sơ &amp; Lý lịch Ngựa</h1>
+      <p>
+        Artifact checklist cho phạm vi nghiệp vụ, quyền truy cập, endpoint,
+        business rule và tiêu chí nghiệm thu của Horse Profile &amp; History
+        Management.
+      </p>
+    </header>
+
+    <main>
+      <section class="grid" aria-label="Flow 1 summary">
+        <div class="stat"><strong>5</strong>actor chính</div>
+        <div class="stat"><strong>12</strong>nhóm chức năng</div>
+        <div class="stat"><strong>14</strong>business rules</div>
+        <div class="stat"><strong>4</strong>nhóm cross-cutting</div>
+      </section>
+
+      <section class="decision">
+        <h2>Mục tiêu Flow 1</h2>
+        <p>
+          Quản lý vòng đời hồ sơ ngựa từ lúc tạo mới, cập nhật, ownership, phả
+          hệ, sức khỏe, điều kiện tập luyện/thi đấu đến lịch sử thành tích và
+          chỉ số thể lực.
+        </p>
+        <p>
+          <strong>Nguyên tắc dữ liệu:</strong> mọi truy vấn nghiệp vụ phải giới
+          hạn theo <code>club_id</code>; ownership, weight, medical record,
+          training lock và race history là dữ liệu lịch sử, không ghi đè thành
+          một giá trị duy nhất.
+        </p>
+      </section>
+
+      <h2>Mục lục</h2>
+      <ol class="toc">
+        <li><a href="#actors">Actor &amp; quyền</a></li>
+        <li><a href="#profile">Hồ sơ ngựa</a></li>
+        <li><a href="#ownership">Ownership</a></li>
+        <li><a href="#pedigree">Pedigree</a></li>
+        <li><a href="#health">Sức khỏe</a></li>
+        <li><a href="#eligibility">Eligibility</a></li>
+        <li><a href="#performance">Performance</a></li>
+        <li><a href="#racing">Race history</a></li>
+        <li><a href="#cross-cutting">Audit &amp; notification</a></li>
+        <li><a href="#acceptance">Acceptance checklist</a></li>
+        <li><a href="#status">Source status</a></li>
+      </ol>
+
+      <section id="actors">
+        <h2>1. Actor và quyền</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Actor</th>
+              <th>View</th>
+              <th>Record / Update</th>
+              <th>Không được phép</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="role">Club Manager</td>
+              <td>Toàn bộ ngựa trong club</td>
+              <td>
+                Create, update toàn bộ profile, delete mềm, ownership, lifecycle
+                status
+              </td>
+              <td>Không truy cập dữ liệu club khác</td>
+            </tr>
+            <tr>
+              <td class="role">Head Trainer</td>
+              <td>Profile, pedigree, eligibility, performance</td>
+              <td>
+                Performance/training; chỉ sửa aptitude và weight nếu được cấp
+              </td>
+              <td>Không create/delete profile; không ghi medical diagnosis</td>
+            </tr>
+            <tr>
+              <td class="role">Veterinarian</td>
+              <td>Profile, health, medical history</td>
+              <td>
+                Medical record, diagnosis, injury, prescription, training lock,
+                health status
+              </td>
+              <td>Không sửa ownership/lifecycle/profile thương mại</td>
+            </tr>
+            <tr>
+              <td class="role">Groom / Stable Hand</td>
+              <td>Thông tin cần cho chăm sóc và stable</td>
+              <td>Care checklist, incident theo scope được cấp</td>
+              <td>
+                Không xem/sửa ownership, diagnosis hoặc performance nhạy cảm
+              </td>
+            </tr>
+            <tr>
+              <td class="role">Horse Owner</td>
+              <td>
+                Chỉ ngựa đang sở hữu: profile, pedigree, health summary, race
+                history
+              </td>
+              <td>
+                Không tự sửa hồ sơ; có thể approve workflow race nếu flow đó
+                được bật
+              </td>
+              <td>Không xem ngựa owner khác trong cùng club</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="warning">
+          <strong>Lưu ý:</strong> role trong JWT chỉ quyết định nhóm quyền. Với
+          <code>HORSE_OWNER</code>, service vẫn phải kiểm tra bảng
+          <code>horse_ownerships</code> để xác nhận quyền trên từng horse.
+        </div>
+      </section>
+
+      <section id="profile">
+        <h2>2. Quản lý hồ sơ ngựa</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Endpoint / chức năng</th>
+              <th>Actor</th>
+              <th>Nghiệp vụ bắt buộc</th>
+              <th>Done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /horses</code></td>
+              <td>Manager, Trainer, Vet, Groom, Owner</td>
+              <td>
+                Pagination; filter health/lifecycle; mặc định ACTIVE; club
+                isolation; Owner chỉ thấy horse mình sở hữu
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:id</code></td>
+              <td>Actor có quyền view</td>
+              <td>
+                Profile đầy đủ, current weight, photo URL, primary owner,
+                training lock summary, createdAt
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>POST /horses</code></td>
+              <td>Club Manager</td>
+              <td>
+                Validate required fields; default ACTIVE/ELIGIBLE; validate
+                parents cùng club; duplicate check; audit
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>PATCH /horses/:id</code></td>
+              <td>Manager; field scope cho Trainer/Vet</td>
+              <td>
+                Field-level authorization; validate changed fields; before/after
+                audit
+              </td>
+              <td><span class="status todo">TODO</span></td>
+            </tr>
+            <tr>
+              <td><code>DELETE /horses/:id</code></td>
+              <td>Club Manager</td>
+              <td>
+                Soft delete; chặn nếu active/scheduled training plan hoặc active
+                lock; audit
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>Profile fields</h3>
+        <ul class="checklist">
+          <li>
+            <code>name</code>, <code>dateOfBirth</code>, <code>gender</code>,
+            <code>breed</code>, <code>color</code>
+          </li>
+          <li>
+            <code>microchipId</code>, <code>mediaId/photoUrl</code>,
+            <code>raceAptitude</code>
+          </li>
+          <li>
+            <code>healthStatus</code>, <code>lifecycleStatus</code>, latest
+            weight
+          </li>
+          <li>Sire/dam relation và primary owner projection</li>
+        </ul>
+      </section>
+
+      <section id="ownership">
+        <h2>3. Quản lý ownership</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Actor</th>
+              <th>Nghiệp vụ</th>
+              <th>Done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /owners/me/horses</code></td>
+              <td>Horse Owner</td>
+              <td>
+                <code>owner_id = currentUser.id</code> và
+                <code>end_date IS NULL</code>
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:horseId/owners</code></td>
+              <td>Cùng club; Owner phải sở hữu horse</td>
+              <td>Trả current và historical ownership</td>
+              <td><span class="status done">DONE</span></td>
+            </tr>
+            <tr>
+              <td><code>PUT /horses/:id/owners</code></td>
+              <td>Club Manager</td>
+              <td>
+                Tổng percentage = 100; owner hợp lệ cùng club; đóng record cũ;
+                tạo record mới; audit/notification
+              </td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="rule">
+          <strong>BR-02:</strong> không cho duplicate owner trong cùng request
+          và không cho tổng tỷ lệ khác 100%.
+        </div>
+      </section>
+
+      <section id="pedigree">
+        <h2>4. Pedigree nhiều đời</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Endpoint</th>
+              <th>Response option</th>
+              <th>Nghiệp vụ</th>
+              <th>Done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET /horses/:id/pedigree?depth=1</code></td>
+              <td>Cha/mẹ trực tiếp</td>
+              <td>Parent cùng club, node null nếu chưa có dữ liệu</td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:id/pedigree?depth=2</code></td>
+              <td>Hai đời</td>
+              <td>Recursive CTE, không eager-load vô hạn</td>
+              <td><span class="status done">DONE</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:id/pedigree?depth=1..4</code></td>
+              <td>Tối đa bốn đời</td>
+              <td>Validate depth, detect cycle, không có all</td>
+              <td><span class="status done">DONE</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <ul class="checklist">
+          <li>
+            Schema chuẩn: <code>horses.sire_id</code> và
+            <code>horses.dam_id</code> là source of truth.
+          </li>
+          <li>Recursive CTE giới hạn depth tối đa 4 đời.</li>
+          <li>Constraint chống self-parent và duplicate SIRE/DAM.</li>
+          <li>
+            Transaction cập nhật hai cột parent, không rebuild bảng dẫn xuất.
+          </li>
+          <li>
+            Không suy ra aptitude tự động nếu chưa có rule nghiệp vụ được duyệt.
+          </li>
+        </ul>
+      </section>
+
+      <section id="health">
+        <h2>5. Sức khỏe và y tế</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Chức năng</th>
+              <th>Actor</th>
+              <th>Nghiệp vụ</th>
+              <th>Done</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Health status</td>
+              <td>Vet record; Manager quản lý lifecycle</td>
+              <td>ELIGIBLE, UNDER_OBSERVATION, INJURED, QUARANTINED</td>
+              <td><span class="status partial">PARTIAL</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:id/medical-records</code></td>
+              <td>Vet, Trainer, Manager; Owner theo policy</td>
+              <td>Diagnosis, severity, resulting status, prescriptions</td>
+              <td><span class="status done">DONE</span></td>
+            </tr>
+            <tr>
+              <td><code>GET /horses/:id/injuries</code></td>
+              <td>Vet, Trainer, Manager</td>
+              <td>Timeline injury và recovery status</td>
+              <td><span class="status done">DONE</span></td>
+            </tr>
+            <tr>
+              <td>Training lock</td>
+              <td>Veterinarian</td>
+              <td>Create, list, update, release; chỉ một lock ACTIVE/horse</td>
+              <td><span class="status todo">TODO</span></td>
+            </tr>
+            <tr>
+              <td>Medical write workflow</td>
+              <td>Veterinarian</td>
+              <td>Create record, prescription, injury marker, void record</td>
+              <td><span class="status todo">TODO</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="eligibility">
+        <h2>6. Eligibility huấn luyện và thi đấu</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Rule</th>
+              <th>Điều kiện</th>
+              <th>Kết quả</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>BR-04</td>
+              <td><code>lifecycleStatus = RETIRED/TRANSFERRED</code></td>
+              <td>
+                <code>canTrain = false</code>, <code>canRace = false</code>
+              </td>
+            </tr>
+            <tr>
+              <td>BR-05</td>
+              <td><code>healthStatus = INJURED/QUARANTINED</code></td>
+              <td>Không được train; racing bị khóa theo policy</td>
+            </tr>
+            <tr>
+              <td>BR-09</td>
+              <td>Có <code>training_lock.status = ACTIVE</code></td>
+              <td>Không train/race; trả lock detail</td>
+            </tr>
+            <tr>
+              <td>BR-12</td>
+              <td>Health không ELIGIBLE hoặc đang lock</td>
+              <td>Không được đăng ký race</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          Response chuẩn đề xuất: <code>canTrain</code>, <code>canRace</code>,
+          <code>trainingLock</code>, <code>healthStatus</code>,
+          <code>lifecycleStatus</code>, <code>warnings[]</code>.
+        </div>
+      </section>
+
+      <section id="performance">
+        <h2>7. Performance và thể lực</h2>
+        <ul class="checklist">
+          <li>Head Trainer xem performance summary của từng horse.</li>
+          <li>Hiển thị metric gần nhất: heart rate, speed, alert level.</li>
+          <li>Hiển thị lịch sử metric để vẽ chart theo thời gian.</li>
+          <li>Hiển thị evaluation gần nhất và score/comment.</li>
+          <li>Cho phép filter theo khoảng thời gian khi UI cần.</li>
+          <li>Không cho role không phù hợp ghi performance evaluation.</li>
+        </ul>
+        <p>
+          <span class="status partial">PARTIAL</span> Source đã có summary read,
+          nhưng chưa có đủ workflow record và dashboard filter.
+        </p>
+      </section>
+
+      <section id="racing">
+        <h2>8. Race history và aptitude warning</h2>
+        <ul class="checklist">
+          <li>Horse Owner chỉ xem race history của horse đang sở hữu.</li>
+          <li>
+            Race history trả race, scheduled time, status, registration status,
+            placing, time.
+          </li>
+          <li>
+            So sánh <code>raceAptitude</code> với <code>distanceMeters</code>.
+          </li>
+          <li>Hiển thị warning trước khi registration được confirm.</li>
+          <li>Cho phép Head Trainer bỏ qua warning có chủ đích.</li>
+          <li>
+            Lưu <code>aptitudeWarningIgnored</code>, người bỏ qua và thời điểm.
+          </li>
+          <li>Ghi audit khi warning bị bỏ qua.</li>
+        </ul>
+        <div class="warning">
+          Không lưu cứng kết quả warning lâu dài vì race distance hoặc aptitude
+          có thể thay đổi. Warning nên được tính lại trong racing service.
+        </div>
+      </section>
+
+      <section id="cross-cutting">
+        <h2>9. Cross-cutting nghiệp vụ</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Nhóm</th>
+              <th>Checklist</th>
+              <th>Rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Tenant isolation</td>
+              <td>
+                Horse, owner, parent, medical, race và performance đều cùng club
+              </td>
+              <td>Không tin <code>clubId</code> từ request</td>
+            </tr>
+            <tr>
+              <td>Audit</td>
+              <td>Create, update, delete, ownership, status, lock, override</td>
+              <td>BR-14; lưu actor, before/after, correlation ID</td>
+            </tr>
+            <tr>
+              <td>Notification</td>
+              <td>Status, ownership, lock, race approval/override</td>
+              <td>Không gửi trước khi transaction commit</td>
+            </tr>
+            <tr>
+              <td>Validation</td>
+              <td>
+                UUID, enum, percentage, parent relation, duplicate, date range
+              </td>
+              <td>Lỗi domain rõ ràng: 400/403/404/409</td>
+            </tr>
+            <tr>
+              <td>Testing</td>
+              <td>
+                RBAC, owner isolation, cycle, eligibility, ownership transaction
+              </td>
+              <td>Không chỉ dựa vào typecheck/build</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="acceptance">
+        <h2>10. Acceptance checklist</h2>
+        <h3>Profile lifecycle</h3>
+        <ul class="checklist">
+          <li>Manager tạo được horse với profile fields đầy đủ.</li>
+          <li>Duplicate profile trả 409.</li>
+          <li>Manager update/delete được horse trong club.</li>
+          <li>Delete bị chặn khi training plan/lock đang active.</li>
+          <li>Trainer/Vet chỉ update đúng field chuyên môn.</li>
+        </ul>
+        <h3>Ownership &amp; access</h3>
+        <ul class="checklist">
+          <li>Ownership total luôn bằng 100%.</li>
+          <li>Owner không xem được horse không thuộc mình.</li>
+          <li>Ownership history giữ được record đã kết thúc.</li>
+          <li>Mọi thay đổi ownership có audit và notification.</li>
+        </ul>
+        <h3>Pedigree</h3>
+        <ul class="checklist">
+          <li>Depth 1, depth N và all trả đúng cấu trúc.</li>
+          <li>Không query vượt max depth/max nodes.</li>
+          <li>Cycle bị từ chối khi ghi hoặc được phát hiện khi đọc.</li>
+          <li>Ancestor khác club bị từ chối.</li>
+        </ul>
+        <h3>Health, eligibility &amp; racing</h3>
+        <ul class="checklist">
+          <li>Active training lock khóa train/race.</li>
+          <li>Eligibility trả lock detail và warning.</li>
+          <li>Health/lifecycle status enforce đúng role.</li>
+          <li>Aptitude warning hiển thị trước race registration.</li>
+          <li>Override aptitude warning có actor/time/audit.</li>
+        </ul>
+      </section>
+
+      <section id="status">
+        <h2>11. Trạng thái source hiện tại</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Nhóm</th>
+              <th>Trạng thái</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Horse CRUD</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>
+                Happy path có; field-level authorization và business guard còn
+                thiếu.
+              </td>
+            </tr>
+            <tr>
+              <td>Ownership</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>
+                Query/replace có; audit/notification/concurrency hardening còn
+                thiếu.
+              </td>
+            </tr>
+            <tr>
+              <td>Pedigree</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>
+                Parent relation migration, recursive CTE API và cycle validation
+                đã có; focused tests còn thiếu.
+              </td>
+            </tr>
+            <tr>
+              <td>Medical read</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>
+                Records, prescriptions, injuries read có; write/lock workflow
+                còn pending.
+              </td>
+            </tr>
+            <tr>
+              <td>Eligibility</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>
+                Health/lifecycle cơ bản có; active lock/warnings chưa nối.
+              </td>
+            </tr>
+            <tr>
+              <td>Performance</td>
+              <td><span class="status partial">PARTIAL</span></td>
+              <td>Summary read có; recording/dashboard đầy đủ chưa có.</td>
+            </tr>
+            <tr>
+              <td>Audit/notification</td>
+              <td><span class="status todo">TODO</span></td>
+              <td>Entity/table có nhưng horse workflows chưa ghi dữ liệu.</td>
+            </tr>
+            <tr>
+              <td>Tests</td>
+              <td><span class="status todo">TODO</span></td>
+              <td>Chưa có focused tests cho Flow 1.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer>
+      Flow 1 working artifact. Cập nhật checklist sau mỗi migration hoặc thay
+      đổi business rule.
+    </footer>
+  </body>
+</html>

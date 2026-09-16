@@ -1,0 +1,6 @@
+﻿@import "tailwindcss";
+
+@theme {
+  --color-brand: #10b981;
+  --font-sans: 'Outfit', 'Geist', sans-serif;
+}
