@@ -46,6 +46,7 @@ export interface Horse {
   sireId?: string;
   damId?: string;
   primaryOwner?: PrimaryOwner;
+  isInTraining?: boolean;
 }
 
 export interface TrainingPlan {
@@ -65,50 +66,318 @@ const mockUsers: User[] = [
 ];
 
 const mockOwnerships: Ownership[] = [
-  { horseId: 'h1', ownerId: 'u3', percentage: 60 },
-  { horseId: 'h1', ownerId: 'u4', percentage: 40 },
-  { horseId: 'h2', ownerId: 'u2', percentage: 100 },
-  { horseId: 'h3', ownerId: 'u3', percentage: 51 },
-  { horseId: 'h3', ownerId: 'u1', percentage: 49 },
-  { horseId: 'h4', ownerId: 'u4', percentage: 75 },
-  { horseId: 'h4', ownerId: 'u3', percentage: 25 },
+  { horseId: 'goldship', ownerId: 'u3', percentage: 60 },
+  { horseId: 'goldship', ownerId: 'u4', percentage: 40 },
+  { horseId: 'winx', ownerId: 'u3', percentage: 51 },
+  { horseId: 'winx', ownerId: 'u1', percentage: 49 },
 ];
 
-// MOCK PEDIGREE DATA (30 horses)
-const pedigreeHorses: Horse[] = [];
-
-const createMockHorse = (id: string, name: string, gender: HorseGender, avatarId: number, aptitude: RaceAptitude, sireId?: string, damId?: string): Horse => ({
-  id, name, dateOfBirth: '2015-01-01', gender, breed: 'Thoroughbred', color: 'Bay', microchipId: `985${id}`, healthStatus: 'ELIGIBLE', lifecycleStatus: 'ACTIVE', fitness: 100, weight: 500, currentPhase: 'Base', lastTraining: 'N/A', age: 8, raceReadiness: 'High', avatar: `https://images.unsplash.com/photo-${avatarId}?q=80&w=150&h=150&auto=format&fit=crop`, race_aptitude: aptitude, sireId, damId
-});
-
-// Gen 1 (Target)
-const targetHorse = createMockHorse('h1', 'Thunder King', 'MALE', 1553310461, 'SPRINTER', 'sire1', 'dam1');
-
-// Gen 2 (Parents)
-const sire1 = createMockHorse('sire1', 'Storm Catcher', 'MALE', 1534438097544, 'SPRINTER', 'sire2_1', 'dam2_1');
-const dam1 = createMockHorse('dam1', 'Midnight Breeze', 'FEMALE', 1598974357801, 'MILER', 'sire2_2', 'dam2_2');
-
-// Gen 3 (Grandparents)
-const sire2_1 = createMockHorse('sire2_1', 'Wind Chaser', 'MALE', 1615560410492, 'SPRINTER', 'sire3_1', 'dam3_1');
-const dam2_1 = createMockHorse('dam2_1', 'Lightning Strike', 'FEMALE', 1553310461, 'STAYER', 'sire3_2', 'dam3_2');
-const sire2_2 = createMockHorse('sire2_2', 'Shadow Fax', 'MALE', 1534438097544, 'MILER', 'sire3_3', 'dam3_3');
-const dam2_2 = createMockHorse('dam2_2', 'Silver Cloud', 'FEMALE', 1598974357801, 'MILER', 'sire3_4', 'dam3_4');
-
-// Gen 4 (Great-Grandparents)
-const sire3_1 = createMockHorse('sire3_1', 'Gen3 Sire 1', 'MALE', 1615560410492, 'SPRINTER');
-const dam3_1 = createMockHorse('dam3_1', 'Gen3 Dam 1', 'FEMALE', 1553310461, 'SPRINTER');
-const sire3_2 = createMockHorse('sire3_2', 'Gen3 Sire 2', 'MALE', 1534438097544, 'STAYER');
-const dam3_2 = createMockHorse('dam3_2', 'Gen3 Dam 2', 'FEMALE', 1598974357801, 'STAYER');
-const sire3_3 = createMockHorse('sire3_3', 'Gen3 Sire 3', 'MALE', 1615560410492, 'MILER');
-const dam3_3 = createMockHorse('dam3_3', 'Gen3 Dam 3', 'FEMALE', 1553310461, 'MILER');
-const sire3_4 = createMockHorse('sire3_4', 'Gen3 Sire 4', 'MALE', 1534438097544, 'MILER');
-const dam3_4 = createMockHorse('dam3_4', 'Gen3 Dam 4', 'FEMALE', 1598974357801, 'MILER');
+// =====================================================
+// REAL HORSE DATA — Goldship Family (JPN) + Winx Family (AUS)
+// Sources: Wikipedia, JBIS, Racing Australia, PedigreeQuery
+// =====================================================
 
 const initialHorses: Horse[] = [
-  targetHorse, sire1, dam1, sire2_1, dam2_1, sire2_2, dam2_2, sire3_1, dam3_1, sire3_2, dam3_2, sire3_3, dam3_3, sire3_4, dam3_4,
-  { id: 'h2', name: 'Silver Arrow', dateOfBirth: '2023-01-20', gender: 'FEMALE', breed: 'Thoroughbred', color: 'Grey', microchipId: '985121028743211', healthStatus: 'UNDER_OBSERVATION', lifecycleStatus: 'ACTIVE', fitness: 75, weight: 498, currentPhase: 'Speed Work', lastTraining: '800 m', age: 3, raceReadiness: 'Medium', avatar: 'https://images.unsplash.com/photo-1598974357801-cbca100e65d3?q=80&w=200&h=200&auto=format&fit=crop', race_aptitude: 'MILER', sireId: 'sire2_2', damId: 'dam2_2', primaryOwner: { id: 'u2', name: 'Dubai Racing Club', percentage: 100 } },
-  { id: 'h3', name: 'Red Storm', dateOfBirth: '2021-11-10', gender: 'MALE', breed: 'Thoroughbred', color: 'Chestnut', microchipId: '985121028743212', healthStatus: 'INJURED', lifecycleStatus: 'ACTIVE', fitness: 60, weight: 520, currentPhase: 'Recovery', lastTraining: 'No training (Locked)', age: 5, raceReadiness: 'Low', avatar: 'https://images.unsplash.com/photo-1534438097544-59cb468903c7?q=80&w=200&h=200&auto=format&fit=crop', race_aptitude: 'STAYER', primaryOwner: { id: 'u3', name: 'Highflyer Syndicate', percentage: 51 } },
-  { id: 'h4', name: 'Night Eclipse', dateOfBirth: '2022-06-05', gender: 'GELDING', breed: 'Thoroughbred', color: 'Black', microchipId: '985121028743213', healthStatus: 'ELIGIBLE', lifecycleStatus: 'ACTIVE', fitness: 88, weight: 505, currentPhase: 'Race Prep', lastTraining: '1,600 m (Live)', age: 4, raceReadiness: 'Peak', avatar: 'https://images.unsplash.com/photo-1615560410492-a1b7e41d8e12?q=80&w=200&h=200&auto=format&fit=crop', race_aptitude: 'SPRINTER', primaryOwner: { id: 'u4', name: 'Starlight Racing', percentage: 75 } }
+  // ===== GOLDSHIP FAMILY =====
+
+  // Gen 1 — Target
+  {
+    id: 'goldship',
+    name: 'Gold Ship',
+    dateOfBirth: '2009-03-06',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Grey',
+    microchipId: 'JPN2009030601',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 85,
+    weight: 508,
+    currentPhase: 'Stud Duty',
+    lastTraining: 'N/A (Retired)',
+    age: 17,
+    raceReadiness: 'Low',
+    avatar: '/gold-ship.png',
+    race_aptitude: 'STAYER',
+    sireId: 'staygold',
+    damId: 'pointflag',
+    primaryOwner: { id: 'u3', name: 'Sheikh Mohammed', percentage: 60 },
+  },
+
+  // Gen 2 — Parents
+  {
+    id: 'staygold',
+    name: 'Stay Gold',
+    dateOfBirth: '1994-03-24',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Dark Bay',
+    microchipId: 'JPN1994032401',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 478,
+    currentPhase: 'Deceased',
+    lastTraining: 'N/A',
+    age: 21, // died 2015
+    raceReadiness: 'Low',
+    avatar: '/stay-gold.jpg',
+    race_aptitude: 'STAYER',
+    sireId: 'sundaysilence',
+    damId: 'goldensash',
+  },
+  {
+    id: 'pointflag',
+    name: 'Point Flag',
+    dateOfBirth: '2001-04-10',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'JPN2001041001',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 460,
+    currentPhase: 'Broodmare (Retired)',
+    lastTraining: 'N/A',
+    age: 25,
+    raceReadiness: 'Low',
+    avatar: '/point-flag.jpg',
+    race_aptitude: 'MILER',
+    sireId: 'mejiromcqueen',
+    damId: 'pastoralism',
+  },
+
+  // Gen 3 — Grandparents (Sire side)
+  {
+    id: 'sundaysilence',
+    name: 'Sunday Silence',
+    dateOfBirth: '1986-03-25',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Dark Brown',
+    microchipId: 'USA1986032501',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 490,
+    currentPhase: 'Deceased (2002)',
+    lastTraining: 'N/A',
+    age: 16, // died 2002
+    raceReadiness: 'Low',
+    avatar: '/sunday-silence.jpg',
+    race_aptitude: 'MILER',
+  },
+  {
+    id: 'goldensash',
+    name: 'Golden Sash',
+    dateOfBirth: '1988-04-23',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Chestnut',
+    microchipId: 'JPN1988042301',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 440,
+    currentPhase: 'Broodmare (Retired)',
+    lastTraining: 'N/A',
+    age: 38,
+    raceReadiness: 'Low',
+    avatar: '/golden-sash.jpg',
+    race_aptitude: 'MILER',
+  },
+
+  // Gen 3 — Grandparents (Dam side)
+  {
+    id: 'mejiromcqueen',
+    name: 'Mejiro McQueen',
+    dateOfBirth: '1987-04-03',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Grey',
+    microchipId: 'JPN1987040301',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 498,
+    currentPhase: 'Deceased (2006)',
+    lastTraining: 'N/A',
+    age: 19, // died 2006
+    raceReadiness: 'Low',
+    avatar: '/Mejiro-McQueen.jpg',
+    race_aptitude: 'STAYER',
+  },
+  {
+    id: 'pastoralism',
+    name: 'Pastoralism',
+    dateOfBirth: '1994-01-01',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'JPN1994010101',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 450,
+    currentPhase: 'Broodmare',
+    lastTraining: 'N/A',
+    age: 32,
+    raceReadiness: 'Low',
+    avatar: '', // No photo available
+    race_aptitude: 'MILER',
+  },
+
+  // ===== WINX FAMILY =====
+
+  // Gen 1 — Target (STILL ALIVE)
+  {
+    id: 'winx',
+    name: 'Winx',
+    dateOfBirth: '2011-09-14',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'AUS2011091401',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 90,
+    weight: 490,
+    currentPhase: 'Broodmare',
+    lastTraining: 'N/A (Retired 2019)',
+    age: 14,
+    raceReadiness: 'Low',
+    avatar: '/winx.jpg',
+    race_aptitude: 'MILER',
+    sireId: 'streetcry',
+    damId: 'vegasshowgirl',
+    primaryOwner: { id: 'u3', name: 'Sheikh Mohammed', percentage: 51 },
+    isInTraining: false,
+  },
+
+  // Gen 2 — Parents
+  {
+    id: 'streetcry',
+    name: 'Street Cry',
+    dateOfBirth: '1998-03-11',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Dark Bay',
+    microchipId: 'IRE1998031101',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 510,
+    currentPhase: 'Deceased (2014)',
+    lastTraining: 'N/A',
+    age: 16, // died 2014
+    raceReadiness: 'Low',
+    avatar: '/street-cry.jpg',
+    race_aptitude: 'MILER',
+    sireId: 'machiavellian',
+    damId: 'helenstreet',
+  },
+  {
+    id: 'vegasshowgirl',
+    name: 'Vegas Showgirl',
+    dateOfBirth: '2002-10-06',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'NZL2002100601',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 470,
+    currentPhase: 'Deceased (2023)',
+    lastTraining: 'N/A',
+    age: 21, // died 2023
+    raceReadiness: 'Low',
+    avatar: '/vegas-showgirl.jpg',
+    race_aptitude: 'SPRINTER',
+    sireId: 'alakbar',
+    damId: 'vegasmagic',
+  },
+
+  // Gen 3 — Grandparents (Sire side)
+  {
+    id: 'machiavellian',
+    name: 'Machiavellian',
+    dateOfBirth: '1987-01-31',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'USA1987013101',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 500,
+    currentPhase: 'Deceased (2004)',
+    lastTraining: 'N/A',
+    age: 17, // died 2004
+    raceReadiness: 'Low',
+    avatar: '/MACHIAVELLIAN.jpg',
+    race_aptitude: 'SPRINTER',
+  },
+  {
+    id: 'helenstreet',
+    name: 'Helen Street',
+    dateOfBirth: '1982-04-04',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'GBR1982040401',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 460,
+    currentPhase: 'Broodmare (Retired)',
+    lastTraining: 'N/A',
+    age: 44,
+    raceReadiness: 'Low',
+    avatar: '/helen-street.jpg',
+    race_aptitude: 'MILER',
+  },
+
+  // Gen 3 — Grandparents (Dam side)
+  {
+    id: 'alakbar',
+    name: 'Al Akbar',
+    dateOfBirth: '1990-11-07',
+    gender: 'MALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'AUS1990110701',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 490,
+    currentPhase: 'Deceased',
+    lastTraining: 'N/A',
+    age: 36,
+    raceReadiness: 'Low',
+    avatar: '/al-akbar.jpg',
+    race_aptitude: 'SPRINTER',
+  },
+  {
+    id: 'vegasmagic',
+    name: 'Vegas Magic',
+    dateOfBirth: '1985-01-01',
+    gender: 'FEMALE',
+    breed: 'Thoroughbred',
+    color: 'Bay',
+    microchipId: 'AUS1985010101',
+    healthStatus: 'ELIGIBLE',
+    lifecycleStatus: 'RETIRED',
+    fitness: 0,
+    weight: 450,
+    currentPhase: 'Broodmare (Retired)',
+    lastTraining: 'N/A',
+    age: 41,
+    raceReadiness: 'Low',
+    avatar: '/vegas-magic.jpg',
+    race_aptitude: 'MILER',
+  },
 ];
 
 interface AppState {
