@@ -5,6 +5,8 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Activity, BarChart3, Shield, Flag, ChevronDown, ArrowRight } from 'lucide-react';
 import { useGsapReveal, useGsapCounter } from '../hooks/useGsapReveal';
+import { T } from '../i18n/T';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -94,6 +96,7 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-white font-sans overflow-x-hidden">
+      <div className="fixed right-5 top-5 z-50"><LanguageSwitch inverted /></div>
       {/* ===== HERO SECTION ===== */}
       <section ref={heroRef} className="relative min-h-[100dvh] flex flex-col items-center justify-center overflow-hidden">
         {/* Video Background */}
@@ -125,7 +128,7 @@ const LandingPage = () => {
               <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow-md">
                 <Flag size={16} className="text-white" />
               </div>
-              <span className="text-lg font-bold tracking-tight text-white">HorseRacing</span>
+              <span className="text-lg font-bold tracking-tight text-white"><T>HorseRacing</T></span>
             </div>
             <Link
               to={isAuthenticated ? '/dashboard' : '/login'}
@@ -146,9 +149,7 @@ const LandingPage = () => {
             className="text-lg sm:text-xl text-white/80 font-light max-w-2xl mx-auto mb-10 leading-relaxed"
             data-hero-reveal
           >
-            Professional equine training management for race clubs.
-            Track performance, plan nutrition, monitor live sessions,
-            and register for races — all in one platform.
+            <T>Professional equine training management for race clubs. Track performance, plan nutrition, monitor live sessions, and register for races — all in one platform.</T>
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4" data-hero-reveal>
@@ -156,21 +157,21 @@ const LandingPage = () => {
               to={isAuthenticated ? '/dashboard' : '/login'}
               className="group px-8 py-3.5 rounded-xl bg-emerald-600 text-white font-semibold text-base hover:bg-emerald-500 transition-all duration-300 shadow-lg shadow-emerald-600/30 flex items-center gap-2"
             >
-              {isAuthenticated ? 'Go to dashboard' : 'Get started'}
+              <T>{isAuthenticated ? 'Go to dashboard' : 'Get started'}</T>
               <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform duration-200" />
             </Link>
             <a
               href="#features"
               className="px-8 py-3.5 rounded-xl bg-white/10 backdrop-blur-sm text-white font-medium text-base border border-white/20 hover:bg-white/20 transition-all duration-300"
             >
-              Explore features
+              <T>Explore features</T>
             </a>
           </div>
         </div>
 
         {/* Scroll indicator */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2" data-scroll-indicator>
-          <span className="text-xs text-white/50 tracking-widest font-light">scroll</span>
+          <span className="text-xs text-white/50 tracking-widest font-light"><T>scroll</T></span>
           <ChevronDown size={20} className="text-white/50 animate-bounce" />
         </div>
       </section>
@@ -180,15 +181,13 @@ const LandingPage = () => {
         <div className="max-w-6xl mx-auto">
           <div className="mb-16 max-w-xl" ref={featuresRef}>
             <p className="text-sm font-semibold text-emerald-600 tracking-wide mb-3" data-reveal>
-              Built for race clubs
+              <T>Built for race clubs</T>
             </p>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4" data-reveal>
-              Everything you need to manage elite equines
+              <T>Everything you need to manage elite equines</T>
             </h2>
             <p className="text-lg text-gray-500 font-light leading-relaxed" data-reveal>
-              From daily stable checks to race day registration. A single
-              platform designed around the workflows trainers, managers,
-              and owners actually use.
+              <T>From daily stable checks to race day registration. A single platform designed around the workflows trainers, managers, and owners actually use.</T>
             </p>
           </div>
 
@@ -206,8 +205,8 @@ const LandingPage = () => {
                 <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center mb-5 group-hover:bg-emerald-100 transition-colors duration-300">
                   <f.icon size={22} className="text-emerald-600" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{f.title}</h3>
-                <p className="text-gray-500 font-light leading-relaxed text-[0.95rem]">{f.desc}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2"><T>{f.title}</T></h3>
+                <p className="text-gray-500 font-light leading-relaxed text-[0.95rem]"><T>{f.desc}</T></p>
               </div>
             ))}
           </div>
@@ -221,16 +220,16 @@ const LandingPage = () => {
             <div data-reveal>
               <span ref={counter1} className="text-4xl sm:text-5xl font-bold tracking-tight text-gray-900 tabular-nums">0</span>
               <span className="text-4xl sm:text-5xl font-bold text-emerald-600">+</span>
-              <p className="text-gray-500 mt-2 font-medium text-sm">horses managed</p>
+              <p className="text-gray-500 mt-2 font-medium text-sm"><T>horses managed</T></p>
             </div>
             <div data-reveal>
               <span ref={counter2} className="text-4xl sm:text-5xl font-bold tracking-tight text-gray-900 tabular-nums">0</span>
-              <p className="text-gray-500 mt-2 font-medium text-sm">active trainers</p>
+              <p className="text-gray-500 mt-2 font-medium text-sm"><T>active trainers</T></p>
             </div>
             <div data-reveal>
               <span ref={counter3} className="text-4xl sm:text-5xl font-bold tracking-tight text-gray-900 tabular-nums">0</span>
               <span className="text-4xl sm:text-5xl font-bold text-emerald-600">.7%</span>
-              <p className="text-gray-500 mt-2 font-medium text-sm">system uptime</p>
+              <p className="text-gray-500 mt-2 font-medium text-sm"><T>system uptime</T></p>
             </div>
           </div>
         </div>
@@ -243,12 +242,12 @@ const LandingPage = () => {
             <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center">
               <Flag size={14} className="text-white" />
             </div>
-            <span className="text-sm font-bold tracking-tight text-gray-900">HorseRacing</span>
+            <span className="text-sm font-bold tracking-tight text-gray-900"><T>HorseRacing</T></span>
           </div>
 
           <div className="flex items-center gap-6 text-sm text-gray-400">
-            <a href="#" className="hover:text-gray-600 transition-colors">Privacy policy</a>
-            <a href="#" className="hover:text-gray-600 transition-colors">Terms of service</a>
+            <a href="#" className="hover:text-gray-600 transition-colors"><T>Privacy policy</T></a>
+            <a href="#" className="hover:text-gray-600 transition-colors"><T>Terms of service</T></a>
           </div>
 
           <p className="text-sm text-gray-400">
