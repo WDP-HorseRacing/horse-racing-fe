@@ -1,44 +1,66 @@
-﻿import React, { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/store';
 import { useNavigate, Link } from 'react-router-dom';
-import { Settings2, Activity, Plus, Filter } from 'lucide-react';
-import { motion } from 'motion/react';
+import { Settings2, Activity, Plus, Filter, Search } from 'lucide-react';
+import gsap from 'gsap';
 
 const TrainerHorses = () => {
   const navigate = useNavigate();
   const horses = useStore(state => state.horses);
   const currentUser = useStore(state => state.currentUser);
   const [filter, setFilter] = useState('ALL');
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const filteredHorses = horses.filter(h => {
-    if (filter === 'ALL') return true;
-    return h.healthStatus === filter || h.lifecycleStatus === filter;
+    const matchesFilter = filter === 'ALL' || h.healthStatus === filter || h.lifecycleStatus === filter;
+    const matchesSearch = search === '' || h.name.toLowerCase().includes(search.toLowerCase());
+    return matchesFilter && matchesSearch;
   });
 
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const cards = containerRef.current.querySelectorAll('[data-horse-card]');
+    gsap.fromTo(
+      cards,
+      { opacity: 0, y: 20, scale: 0.97 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.06, ease: 'power3.out', delay: 0.15 }
+    );
+  }, [filter, search]);
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-8 pb-20"
-    >
+    <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white mb-2">My Stable</h2>
-          <p className="text-slate-400">Manage horse profiles, training plans, and medical status.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">My stable</h2>
+          <p className="text-gray-500 font-light">Manage horse profiles, training plans, and medical status.</p>
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="bg-[#121212] border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2">
-            <Filter size={16} className="text-slate-500" />
+          {/* Search */}
+          <div className="relative flex-1 md:flex-none">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search horses..."
+              className="w-full md:w-48 bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all placeholder:text-gray-300"
+            />
+          </div>
+
+          {/* Filter */}
+          <div className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 flex items-center gap-2">
+            <Filter size={14} className="text-gray-400" />
             <select 
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="bg-transparent text-slate-300 text-sm focus:outline-none appearance-none cursor-pointer pr-4"
+              className="bg-transparent text-gray-600 text-sm focus:outline-none appearance-none cursor-pointer pr-4"
             >
-              <option value="ALL">All Status</option>
+              <option value="ALL">All status</option>
               <option value="ELIGIBLE">Eligible</option>
               <option value="INJURED">Injured</option>
-              <option value="UNDER_OBSERVATION">Under Monitor</option>
+              <option value="UNDER_OBSERVATION">Under observation</option>
               <option value="RETIRED">Retired</option>
             </select>
           </div>
@@ -46,53 +68,52 @@ const TrainerHorses = () => {
           {currentUser?.role === 'CLUB_MANAGER' && (
             <Link 
               to="/horses/new"
-              className="bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap shadow-[0_0_15px_rgba(16,185,129,0.2)]"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 flex items-center gap-2 whitespace-nowrap shadow-sm shadow-emerald-600/20 active:scale-[0.98]"
             >
-              <Plus size={16} /> Register Horse
+              <Plus size={16} /> Register horse
             </Link>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredHorses.map((horse, idx) => (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: idx * 0.05 }}
+      <div ref={containerRef} className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {filteredHorses.map((horse) => (
+          <div 
+            data-horse-card
             key={horse.id} 
-            className="bg-[#121212] border border-slate-800 rounded-3xl overflow-hidden flex flex-col md:flex-row hover:border-slate-700 transition-colors shadow-xl"
+            className="bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col md:flex-row transition-all duration-300 hover:border-emerald-100 hover:-translate-y-1 group"
+            style={{ boxShadow: 'var(--shadow-card)' }}
           >
             <div 
-              className="md:w-2/5 h-56 md:h-auto relative cursor-pointer"
+              className="md:w-2/5 h-48 md:h-auto relative cursor-pointer overflow-hidden"
               onClick={() => navigate(`/horses/${horse.id}`)}
             >
-              <img src={horse.avatar} alt={horse.name} className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#121212] md:from-transparent md:bg-gradient-to-r to-transparent"></div>
+              <img src={horse.avatar} alt={horse.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-t from-white/80 md:from-transparent md:bg-gradient-to-r to-transparent" />
             </div>
             
-            <div className="flex-1 p-6 flex flex-col justify-between relative z-10">
+            <div className="flex-1 p-5 flex flex-col justify-between relative z-10">
               <div>
                 <div className="flex justify-between items-start mb-2">
-                  <Link to={`/horses/${horse.id}`} className="text-xl font-bold text-white hover:text-emerald-400 transition-colors">
+                  <Link to={`/horses/${horse.id}`} className="text-lg font-bold text-gray-900 hover:text-emerald-600 transition-colors">
                     {horse.name}
                   </Link>
-                  <span className="px-2.5 py-1 bg-slate-800/50 rounded-lg text-xs font-semibold text-slate-300 border border-slate-700/50">
+                  <span className="px-2.5 py-1 bg-gray-50 rounded-lg text-xs font-semibold text-gray-500 border border-gray-100">
                     {horse.race_aptitude}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-x-6 gap-y-3 mb-6 mt-4">
+                <div className="flex flex-wrap gap-x-6 gap-y-2 mb-5 mt-3">
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Age & Gender</p>
-                    <p className="text-sm font-medium text-slate-300">{horse.age}yo {horse.gender.toLowerCase()}</p>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Age & gender</p>
+                    <p className="text-sm font-medium text-gray-700">{horse.age}yo {horse.gender.toLowerCase()}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Fitness</p>
-                    <p className="text-sm font-medium text-emerald-400">{horse.fitness}%</p>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Fitness</p>
+                    <p className="text-sm font-semibold text-emerald-600 tabular-nums">{horse.fitness}%</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Health</p>
-                    <p className={`text-sm font-medium ${horse.healthStatus === 'INJURED' || horse.healthStatus === 'QUARANTINED' ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Health</p>
+                    <p className={`text-sm font-medium ${horse.healthStatus === 'INJURED' || horse.healthStatus === 'QUARANTINED' ? 'text-red-500' : 'text-emerald-600'}`}>
                       {horse.healthStatus.replace('_', ' ')}
                     </p>
                   </div>
@@ -102,26 +123,33 @@ const TrainerHorses = () => {
               <div className="flex gap-3">
                 <button 
                   onClick={() => navigate(`/plan/${horse.id}`)}
-                  className="flex-1 bg-white hover:bg-slate-200 text-black py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
                 >
-                  <Settings2 size={16} />
+                  <Settings2 size={15} />
                   Plan
                 </button>
                 {horse.healthStatus === 'ELIGIBLE' && horse.lifecycleStatus === 'ACTIVE' && (
                   <button 
                     onClick={() => navigate(`/live-training/${horse.id}`)}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all duration-200 shadow-sm shadow-emerald-600/20 active:scale-[0.98]"
                   >
-                    <Activity size={16} />
+                    <Activity size={15} />
                     Live
                   </button>
                 )}
               </div>
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
-    </motion.div>
+
+      {filteredHorses.length === 0 && (
+        <div className="text-center py-16">
+          <p className="text-gray-400 text-lg">No horses found matching your criteria.</p>
+          <p className="text-gray-300 text-sm mt-1">Try adjusting your filters.</p>
+        </div>
+      )}
+    </div>
   );
 };
 

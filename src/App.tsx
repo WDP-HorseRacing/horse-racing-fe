@@ -1,4 +1,3 @@
-﻿import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +12,7 @@ import HorseDetails from './pages/HorseDetails';
 import HorseForm from './pages/HorseForm';
 import HorsePedigree from './pages/HorsePedigree';
 import HorseOwners from './pages/HorseOwners';
+import LandingPage from './pages/LandingPage';
 import { useStore } from './store/store';
 
 const ProtectedRoute = () => {
@@ -29,11 +29,13 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         
+        {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route element={<MainLayout />}>
             <Route path="dashboard" element={<Dashboard />} />
             
             {/* Horse Profile & Management (Flow 1) */}
