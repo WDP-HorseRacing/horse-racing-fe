@@ -3,8 +3,11 @@ import { useStore } from '../store/store';
 import { useNavigate, Link } from 'react-router-dom';
 import { Settings2, Activity, Plus, Filter, Search } from 'lucide-react';
 import gsap from 'gsap';
+import { T } from '../i18n/T';
+import { useI18n } from '../i18n/I18nContext';
 
 const TrainerHorses = () => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const horses = useStore(state => state.horses);
   const currentUser = useStore(state => state.currentUser);
@@ -32,8 +35,8 @@ const TrainerHorses = () => {
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">My stable</h2>
-          <p className="text-gray-500 font-light">Manage horse profiles, training plans, and medical status.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1"><T>My stable</T></h2>
+          <p className="text-gray-500 font-light"><T>Manage horse profiles, training plans, and medical status.</T></p>
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto">
@@ -44,7 +47,7 @@ const TrainerHorses = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search horses..."
+              placeholder={t('Search horses...')}
               className="w-full md:w-48 bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 transition-all placeholder:text-gray-300"
             />
           </div>
@@ -57,11 +60,11 @@ const TrainerHorses = () => {
               onChange={(e) => setFilter(e.target.value)}
               className="bg-transparent text-gray-600 text-sm focus:outline-none appearance-none cursor-pointer pr-4"
             >
-              <option value="ALL">All status</option>
-              <option value="ELIGIBLE">Eligible</option>
-              <option value="INJURED">Injured</option>
-              <option value="UNDER_OBSERVATION">Under observation</option>
-              <option value="RETIRED">Retired</option>
+              <option value="ALL"><T>All status</T></option>
+              <option value="ELIGIBLE"><T>Eligible</T></option>
+              <option value="INJURED"><T>Injured</T></option>
+              <option value="UNDER_OBSERVATION"><T>Under observation</T></option>
+              <option value="RETIRED"><T>Retired</T></option>
             </select>
           </div>
           
@@ -104,15 +107,15 @@ const TrainerHorses = () => {
                 </div>
                 <div className="flex flex-wrap gap-x-6 gap-y-2 mb-5 mt-3">
                   <div>
-                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Age & gender</p>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5"><T>Age & gender</T></p>
                     <p className="text-sm font-medium text-gray-700">{horse.age}yo {horse.gender.toLowerCase()}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Fitness</p>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5"><T>Fitness</T></p>
                     <p className="text-sm font-semibold text-emerald-600 tabular-nums">{horse.fitness}%</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5">Health</p>
+                    <p className="text-[10px] font-semibold text-gray-400 tracking-wide mb-0.5"><T>Health</T></p>
                     <p className={`text-sm font-medium ${horse.healthStatus === 'INJURED' || horse.healthStatus === 'QUARANTINED' ? 'text-red-500' : 'text-emerald-600'}`}>
                       {horse.healthStatus.replace('_', ' ')}
                     </p>
@@ -145,8 +148,8 @@ const TrainerHorses = () => {
 
       {filteredHorses.length === 0 && (
         <div className="text-center py-16">
-          <p className="text-gray-400 text-lg">No horses found matching your criteria.</p>
-          <p className="text-gray-300 text-sm mt-1">Try adjusting your filters.</p>
+          <p className="text-gray-400 text-lg"><T>No horses found matching your criteria.</T></p>
+          <p className="text-gray-300 text-sm mt-1"><T>Try adjusting your filters.</T></p>
         </div>
       )}
     </div>

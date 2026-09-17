@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useStore, type Horse, type HorseGender, type RaceAptitude, type HealthStatus, type LifecycleStatus } from '../store/store';
 import { ArrowLeft, Save, AlertTriangle, Info, Weight, Heart } from 'lucide-react';
+import { T } from '../i18n/T';
 
 const HorseForm = () => {
   const { id } = useParams();
@@ -19,15 +20,11 @@ const HorseForm = () => {
   const canEditProfile = isManager;
   const canEditPerformance = isManager || isTrainer;
 
-  const [formData, setFormData] = useState<Partial<Horse>>({
+  const [formData, setFormData] = useState<Partial<Horse>>(() => existingHorse ?? ({
     name: '', dateOfBirth: '', gender: 'MALE', breed: 'Thoroughbred', color: '', microchipId: '',
     avatar: 'https://images.unsplash.com/photo-1598974357801-cbca100e65d3?q=80&w=200&h=200&auto=format&fit=crop',
     sireId: '', damId: '', healthStatus: 'ELIGIBLE', lifecycleStatus: 'ACTIVE', weight: 500, race_aptitude: 'MILER'
-  });
-
-  useEffect(() => {
-    if (existingHorse) setFormData(existingHorse);
-  }, [existingHorse]);
+  }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +61,7 @@ const HorseForm = () => {
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">{isEditing ? 'Edit horse profile' : 'Register new horse'}</h1>
-          <p className="text-gray-500 font-light">Manage identity, lineage, and basic metrics.</p>
+          <p className="text-gray-500 font-light"><T>Manage identity, lineage, and basic metrics.</T></p>
         </div>
       </div>
 
@@ -72,7 +69,7 @@ const HorseForm = () => {
         <div className="mb-8 p-4 bg-amber-50 border border-amber-100 rounded-xl flex gap-3 items-start">
           <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
           <div>
-            <h4 className="text-amber-700 font-semibold text-sm mb-0.5">Restricted access</h4>
+            <h4 className="text-amber-700 font-semibold text-sm mb-0.5"><T>Restricted access</T></h4>
             <p className="text-gray-600 text-sm">Your role ({currentUser?.role?.replace('_', ' ')}) only permits editing performance metrics (weight & aptitude). Identity fields are locked.</p>
           </div>
         </div>
@@ -86,28 +83,28 @@ const HorseForm = () => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className={labelClasses}>Registered name</label>
+              <label className={labelClasses}><T>Registered name</T></label>
               <input type="text" required disabled={!canEditProfile} value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} className={inputClasses} />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClasses}>Microchip ID</label>
+              <label className={labelClasses}><T>Microchip ID</T></label>
               <input type="text" required disabled={!canEditProfile} value={formData.microchipId || ''} onChange={e => setFormData({...formData, microchipId: e.target.value})} className={inputClasses} />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClasses}>Date of birth</label>
+              <label className={labelClasses}><T>Date of birth</T></label>
               <input type="date" required disabled={!canEditProfile} value={formData.dateOfBirth || ''} onChange={e => setFormData({...formData, dateOfBirth: e.target.value})} className={inputClasses} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className={labelClasses}>Gender</label>
+                <label className={labelClasses}><T>Gender</T></label>
                 <select disabled={!canEditProfile} value={formData.gender || 'MALE'} onChange={e => setFormData({...formData, gender: e.target.value as HorseGender})} className={inputClasses}>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="GELDING">Gelding</option>
+                  <option value="MALE"><T>Male</T></option>
+                  <option value="FEMALE"><T>Female</T></option>
+                  <option value="GELDING"><T>Gelding</T></option>
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className={labelClasses}>Color</label>
+                <label className={labelClasses}><T>Color</T></label>
                 <input type="text" disabled={!canEditProfile} value={formData.color || ''} onChange={e => setFormData({...formData, color: e.target.value})} className={inputClasses} />
               </div>
             </div>
@@ -119,19 +116,19 @@ const HorseForm = () => {
           <h3 className="text-base font-bold text-gray-900 mb-2 flex items-center gap-2">
             <Heart size={18} className="text-rose-400" /> Lineage (sire & dam)
           </h3>
-          <p className="text-sm text-gray-400 mb-6">Parents must belong to the same racing club due to tenant isolation rules.</p>
+          <p className="text-sm text-gray-400 mb-6"><T>Parents must belong to the same racing club due to tenant isolation rules.</T></p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className={labelClasses}>Sire (father)</label>
+              <label className={labelClasses}><T>Sire (father)</T></label>
               <select disabled={!canEditProfile} value={formData.sireId || ''} onChange={e => setFormData({...formData, sireId: e.target.value})} className={inputClasses}>
-                <option value="">Unknown</option>
+                <option value=""><T>Unknown</T></option>
                 {horses.filter(h => h.gender !== 'FEMALE' && h.id !== id).map(h => (<option key={h.id} value={h.id}>{h.name}</option>))}
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className={labelClasses}>Dam (mother)</label>
+              <label className={labelClasses}><T>Dam (mother)</T></label>
               <select disabled={!canEditProfile} value={formData.damId || ''} onChange={e => setFormData({...formData, damId: e.target.value})} className={inputClasses}>
-                <option value="">Unknown</option>
+                <option value=""><T>Unknown</T></option>
                 {horses.filter(h => h.gender === 'FEMALE' && h.id !== id).map(h => (<option key={h.id} value={h.id}>{h.name}</option>))}
               </select>
             </div>
@@ -145,34 +142,34 @@ const HorseForm = () => {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className={labelClasses}>Weight (kg)</label>
+              <label className={labelClasses}><T>Weight (kg)</T></label>
               <input type="number" disabled={!canEditPerformance} value={formData.weight || 0} onChange={e => setFormData({...formData, weight: parseInt(e.target.value)})} className={inputClasses} />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClasses}>Race aptitude</label>
+              <label className={labelClasses}><T>Race aptitude</T></label>
               <select disabled={!canEditPerformance} value={formData.race_aptitude || 'MILER'} onChange={e => setFormData({...formData, race_aptitude: e.target.value as RaceAptitude})} className={inputClasses}>
-                <option value="SPRINTER">Sprinter (1000m - 1400m)</option>
-                <option value="MILER">Miler (1600m)</option>
-                <option value="STAYER">Stayer (2000m+)</option>
+                <option value="SPRINTER"><T>Sprinter (1000m - 1400m)</T></option>
+                <option value="MILER"><T>Miler (1600m)</T></option>
+                <option value="STAYER"><T>Stayer (2000m+)</T></option>
               </select>
             </div>
             {isManager && (
               <>
                 <div className="space-y-1.5">
-                  <label className={labelClasses}>Health status</label>
+                  <label className={labelClasses}><T>Health status</T></label>
                   <select value={formData.healthStatus || 'ELIGIBLE'} onChange={e => setFormData({...formData, healthStatus: e.target.value as HealthStatus})} className={inputClasses}>
-                    <option value="ELIGIBLE">Eligible</option>
-                    <option value="UNDER_OBSERVATION">Under observation</option>
-                    <option value="INJURED">Injured</option>
-                    <option value="QUARANTINED">Quarantined</option>
+                    <option value="ELIGIBLE"><T>Eligible</T></option>
+                    <option value="UNDER_OBSERVATION"><T>Under observation</T></option>
+                    <option value="INJURED"><T>Injured</T></option>
+                    <option value="QUARANTINED"><T>Quarantined</T></option>
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className={labelClasses}>Lifecycle status</label>
+                  <label className={labelClasses}><T>Lifecycle status</T></label>
                   <select value={formData.lifecycleStatus || 'ACTIVE'} onChange={e => setFormData({...formData, lifecycleStatus: e.target.value as LifecycleStatus})} className={inputClasses}>
-                    <option value="ACTIVE">Active</option>
-                    <option value="RETIRED">Retired</option>
-                    <option value="TRANSFERRED">Transferred</option>
+                    <option value="ACTIVE"><T>Active</T></option>
+                    <option value="RETIRED"><T>Retired</T></option>
+                    <option value="TRANSFERRED"><T>Transferred</T></option>
                   </select>
                 </div>
               </>

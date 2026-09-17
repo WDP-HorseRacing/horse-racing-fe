@@ -1,12 +1,19 @@
 {
     "name":  "horse-racing-fe",
     "private":  true,
+    "packageManager": "pnpm@11.15.1",
+    "engines": {
+                    "node": ">=20.19.0"
+                },
     "version":  "0.0.0",
     "type":  "module",
     "scripts":  {
                     "dev":  "vite",
                     "build":  "tsc -b \u0026\u0026 vite build",
                     "lint":  "oxlint",
+                    "typecheck": "tsc -b --pretty false",
+                    "check:i18n": "node scripts/check-i18n.mjs",
+                    "check": "pnpm typecheck && pnpm lint && pnpm check:i18n",
                     "preview":  "vite preview"
                 },
     "dependencies":  {

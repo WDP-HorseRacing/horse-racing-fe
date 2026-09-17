@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../store/store';
 import { KeyRound, Mail, ArrowRight, ArrowLeft, ShieldCheck, Flag } from 'lucide-react';
 import gsap from 'gsap';
+import { T } from '../i18n/T';
+import { LanguageSwitch } from '../i18n/LanguageSwitch';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -49,6 +51,7 @@ export const Login = () => {
 
   return (
     <div className="min-h-screen flex font-sans">
+      <div className="fixed right-5 top-5 z-50"><LanguageSwitch /></div>
       {/* Left — Image Panel */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <img
@@ -62,17 +65,17 @@ export const Login = () => {
         <div className="relative z-10 flex flex-col justify-end p-12 pb-16">
           <Link to="/" className="absolute top-8 left-8 flex items-center gap-2.5 text-white/80 hover:text-white transition-colors">
             <ArrowLeft size={18} />
-            <span className="text-sm font-medium">Back to home</span>
+            <span className="text-sm font-medium"><T>Back to home</T></span>
           </Link>
 
           <div className="flex items-center gap-2.5 mb-6">
             <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20">
               <Flag size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white">HorseRacing</span>
+            <span className="text-xl font-bold tracking-tight text-white"><T>HorseRacing</T></span>
           </div>
           <p className="text-white/70 text-base font-light max-w-sm leading-relaxed">
-            Professional equine training management. Built for trainers, managers, and owners who demand precision.
+            <T>Professional equine training management. Built for trainers, managers, and owners who demand precision.</T>
           </p>
         </div>
       </div>
@@ -91,8 +94,8 @@ export const Login = () => {
           </Link>
 
           <div className="mb-10" data-form-reveal>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-2">Welcome back</h1>
-            <p className="text-gray-500 font-light">Sign in to your account to continue.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-2"><T>Welcome back</T></h1>
+            <p className="text-gray-500 font-light"><T>Sign in to your account to continue.</T></p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5" data-form-reveal>
@@ -152,13 +155,15 @@ export const Login = () => {
           <div className="mt-10 pt-8 border-t border-gray-100" data-form-reveal>
             <div className="flex items-center gap-2 mb-4">
               <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs font-semibold text-gray-400 tracking-wide">Demo credentials</span>
+              <span className="text-xs font-semibold text-gray-400 tracking-wide"><T>Demo credentials</T></span>
             </div>
             <div className="space-y-2">
               {[
                 { label: 'Head Trainer', email: 'trainer@gmail.com', color: 'emerald' },
                 { label: 'Club Manager', email: 'manager@gmail.com', color: 'sky' },
                 { label: 'Horse Owner', email: 'owner@gmail.com', color: 'amber' },
+                { label: 'Veterinarian', email: 'vet@gmail.com', color: 'red' },
+                { label: 'Groom', email: 'groom@gmail.com', color: 'emerald' },
               ].map((demo) => (
                 <button
                   key={demo.email}
