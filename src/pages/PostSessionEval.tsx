@@ -1,45 +1,115 @@
-import React from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/store';
+import { ArrowLeft, Star, MessageSquare, Thermometer, Footprints } from 'lucide-react';
 
 const PostSessionEval = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const horse = useStore(state => state.horses.find(h => h.id === id)) || useStore(state => state.horses[0]);
+  const [score, setScore] = useState<number | null>(null);
+  const [gaitQuality, setGaitQuality] = useState<string>('');
+  const [temperament, setTemperament] = useState<string>('');
+  const [notes, setNotes] = useState('');
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="max-w-3xl mx-auto space-y-6 pb-12">
+      <button onClick={() => navigate(-1)} className="flex items-center text-gray-400 hover:text-gray-600 transition-colors text-sm font-medium">
+        <ArrowLeft size={16} className="mr-2" /> Back
+      </button>
+
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-white mb-2">Session Evaluation</h2>
-        <p className="text-slate-400">Record performance metrics and notes for {horse?.name}.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">Session evaluation</h2>
+        <p className="text-gray-500 font-light">Record performance metrics and notes for {horse?.name}.</p>
       </div>
 
-      <div className="bg-[#161616] p-8 rounded-2xl border border-slate-800 space-y-8">
+      <div className="bg-white p-7 rounded-2xl border border-gray-100 space-y-8" style={{ boxShadow: 'var(--shadow-card)' }}>
+        {/* Overall Score */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-4">Overall Performance Score (1-10)</label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-4">
+            <Star size={16} className="text-amber-500" /> Overall performance score (1–10)
+          </label>
           <div className="flex gap-2">
-            {[1,2,3,4,5,6,7,8,9,10].map(score => (
+            {[1,2,3,4,5,6,7,8,9,10].map(s => (
               <button 
-                key={score}
-                className="flex-1 py-3 rounded-lg bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 font-bold transition-colors border border-slate-700"
+                key={s}
+                onClick={() => setScore(s)}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-[0.95] ${
+                  score === s
+                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700'
+                }`}
               >
-                {score}
+                {s}
               </button>
             ))}
           </div>
         </div>
 
+        {/* Gait Quality */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Trainer's Notes</label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <Footprints size={16} className="text-sky-500" /> Gait quality
+          </label>
+          <div className="flex gap-2.5">
+            {['Excellent', 'Good', 'Fair', 'Poor'].map(g => (
+              <button
+                key={g}
+                onClick={() => setGaitQuality(g)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 active:scale-[0.98] ${
+                  gaitQuality === g
+                    ? 'bg-sky-50 border border-sky-200 text-sky-700'
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Temperament */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <Thermometer size={16} className="text-amber-500" /> Temperament during session
+          </label>
+          <div className="flex gap-2.5">
+            {['Calm', 'Responsive', 'Anxious', 'Aggressive'].map(t => (
+              <button
+                key={t}
+                onClick={() => setTemperament(t)}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 active:scale-[0.98] ${
+                  temperament === t
+                    ? 'bg-amber-50 border border-amber-200 text-amber-700'
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <MessageSquare size={16} className="text-emerald-500" /> Trainer's notes
+          </label>
           <textarea 
-            className="w-full h-32 bg-[#0a0a0a] border border-slate-700 rounded-xl p-4 text-white focus:outline-none focus:border-emerald-500 transition-colors"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="w-full h-32 bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-700 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:bg-white transition-all placeholder:text-gray-300 resize-none"
             placeholder="E.g., Showed good stamina in the final 400m, but stride length was slightly shorter than baseline."
-          ></textarea>
+          />
         </div>
         
-        <div className="flex justify-end gap-4">
-          <button onClick={() => navigate('/horses')} className="px-6 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800">Cancel</button>
-          <button onClick={() => navigate('/dashboard')} className="px-6 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400">Save Evaluation</button>
+        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+          <button onClick={() => navigate('/horses')} className="px-5 py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm hover:bg-gray-50 transition-all active:scale-[0.98]">
+            Cancel
+          </button>
+          <button onClick={() => navigate('/dashboard')} className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-500 transition-all shadow-sm shadow-emerald-600/20 active:scale-[0.98]">
+            Save evaluation
+          </button>
         </div>
       </div>
     </div>
