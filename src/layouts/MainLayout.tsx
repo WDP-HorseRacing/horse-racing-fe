@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Calendar, Flag, LogOut, Activity } from 'lucide-react';
+import { LayoutDashboard, Users, Calendar, Flag, LogOut, Activity, Bell, Stethoscope, ClipboardCheck, MapPinned, Camera, BarChart3, Workflow, Boxes, UserCircle } from 'lucide-react';
 import { useStore } from '../store/store';
 import Lenis from 'lenis';
+import { useI18n } from '../i18n/I18nContext';
+import { T } from '../i18n/T';
 
 const MainLayout = () => {
   const { currentUser, logout } = useStore();
   const navigate = useNavigate();
+  const { language, toggleLanguage, t } = useI18n();
 
   // Initialize Lenis smooth scroll
   useEffect(() => {
@@ -29,18 +32,45 @@ const MainLayout = () => {
     return () => lenis.destroy();
   }, []);
 
-  const navItems = [
+  const common = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'My horses', path: '/horses', icon: Users },
-    { name: 'Schedule', path: '/adjust-plan', icon: Calendar },
-    { name: 'Live training', path: '/live-training/h1', icon: Activity, roles: ['HEAD_TRAINER'] },
-    { name: 'Race registration', path: '/race-registration', icon: Flag },
+    { name: 'Horses', path: '/horses', icon: Users },
   ];
-
-  const filteredNavItems = navItems.filter(item => {
-    if (!item.roles) return true;
-    return item.roles.includes(currentUser?.role || '');
-  });
+  const roleItems = (() => {
+    switch (currentUser?.role) {
+      case 'VETERINARIAN': return [
+        { name: 'Medical', path: '/medical', icon: Stethoscope },
+        { name: 'Alerts', path: '/alerts', icon: Bell },
+        { name: 'Reports', path: '/reports', icon: BarChart3 },
+      ];
+      case 'GROOM': return [
+        { name: 'Tasks', path: '/tasks', icon: ClipboardCheck },
+        { name: 'Stable', path: '/stable', icon: MapPinned },
+        { name: 'Report incident', path: '/incidents/new', icon: Camera },
+      ];
+      case 'CLUB_MANAGER': return [
+        { name: 'Operations', path: '/operations', icon: Boxes },
+        { name: 'Reports', path: '/reports', icon: BarChart3 },
+        { name: 'Race registration', path: '/race-registration', icon: Flag },
+      ];
+      case 'HORSE_OWNER': return [
+        { name: 'Racing', path: '/race-registration', icon: Flag },
+        { name: 'Reports', path: '/reports', icon: BarChart3 },
+      ];
+      default: return [
+        { name: 'Schedule', path: '/adjust-plan', icon: Calendar },
+        { name: 'Live training', path: '/live-training/goldship', icon: Activity },
+        { name: 'Alerts', path: '/alerts', icon: Bell },
+        { name: 'Race registration', path: '/race-registration', icon: Flag },
+      ];
+    }
+  })();
+  const filteredNavItems = [
+    ...common,
+    ...roleItems,
+    { name: 'Workflow', path: '/workflow', icon: Workflow },
+    { name: 'Profile', path: '/profile', icon: UserCircle },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -58,6 +88,8 @@ const MainLayout = () => {
     switch (currentUser?.role) {
       case 'CLUB_MANAGER': return 'Management portal';
       case 'HORSE_OWNER': return 'Owner portal';
+      case 'VETERINARIAN': return 'Veterinary portal';
+      case 'GROOM': return 'Groom portal';
       default: return 'Trainer portal';
     }
   })();
@@ -70,7 +102,7 @@ const MainLayout = () => {
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-600/20">
             <Flag size={16} className="text-white" />
           </div>
-          <span className="text-lg font-bold tracking-tight text-gray-900">HorseRacing</span>
+          <span className="text-lg font-bold tracking-tight text-gray-900"><T>HorseRacing</T></span>
         </div>
         
         <nav className="flex-1 space-y-1">
@@ -87,7 +119,7 @@ const MainLayout = () => {
               }
             >
               <item.icon size={18} />
-              {item.name}
+              {t(item.name)}
             </NavLink>
           ))}
         </nav>
@@ -113,7 +145,7 @@ const MainLayout = () => {
               className="flex items-center justify-center w-full gap-2 py-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 text-sm font-medium active:scale-[0.98]"
             >
               <LogOut size={16} />
-              Sign out
+              {t('Sign out')}
             </button>
           </div>
         </div>
@@ -123,9 +155,13 @@ const MainLayout = () => {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-16 border-b border-gray-100 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md shrink-0">
           <div>
-            <h1 className="text-sm font-semibold text-gray-900">{portalName}</h1>
-            <p className="text-xs text-gray-400">{greeting}, {currentUser?.name?.split(' ')[0] || 'there'}</p>
+            <h1 className="text-sm font-semibold text-gray-900">{t(portalName)}</h1>
+            <p className="text-xs text-gray-400">{t(greeting)}, {currentUser?.name?.split(' ')[0] || 'there'}</p>
           </div>
+          <button onClick={toggleLanguage} aria-label="Change language" className="flex items-center rounded-xl border border-gray-200 bg-white p-1 text-xs font-semibold shadow-sm">
+            <span className={`rounded-lg px-3 py-1.5 ${language === 'en' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}><T>EN</T></span>
+            <span className={`rounded-lg px-3 py-1.5 ${language === 'vi' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}><T>VI</T></span>
+          </button>
         </header>
         <div id="main-scroll" className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-8">

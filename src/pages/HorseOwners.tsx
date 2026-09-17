@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore, type Ownership } from '../store/store';
 import { ArrowLeft, Users, AlertTriangle, Plus, Save, Trash2 } from 'lucide-react';
+import { T } from '../i18n/T';
 
 const HorseOwners = () => {
   const { id } = useParams();
@@ -16,7 +17,7 @@ const HorseOwners = () => {
   const currentHorseOwnerships = ownerships.filter(o => o.horseId === id);
   const [localOwnerships, setLocalOwnerships] = useState<Ownership[]>(currentHorseOwnerships);
   
-  if (!horse) return <div className="p-8 text-gray-400">Horse not found</div>;
+  if (!horse) return <div className="p-8 text-gray-400"><T>Horse not found</T></div>;
 
   const totalPercentage = localOwnerships.reduce((sum, o) => sum + o.percentage, 0);
   const isTotalValid = totalPercentage === 100;
@@ -58,7 +59,7 @@ const HorseOwners = () => {
           <img src={horse.avatar} alt={horse.name} className="w-full h-full object-cover" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Syndicate allocation</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900"><T>Syndicate allocation</T></h1>
           <p className="text-gray-500 text-sm mt-0.5">Manage ownership percentages for {horse.name}</p>
         </div>
       </div>
@@ -67,7 +68,7 @@ const HorseOwners = () => {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between items-end mb-2">
-            <span className="text-sm font-medium text-gray-600">Total allocation</span>
+            <span className="text-sm font-medium text-gray-600"><T>Total allocation</T></span>
             <span className={`text-2xl font-bold tabular-nums ${isTotalValid ? 'text-emerald-600' : 'text-red-500'}`}>
               {totalPercentage}%
             </span>
@@ -97,7 +98,7 @@ const HorseOwners = () => {
           </h2>
           
           {localOwnerships.length === 0 ? (
-            <p className="text-gray-400 italic text-sm py-4">No owners assigned.</p>
+            <p className="text-gray-400 italic text-sm py-4"><T>No owners assigned.</T></p>
           ) : (
             localOwnerships.map((ownership) => {
               const user = users.find(u => u.id === ownership.ownerId);
@@ -137,14 +138,14 @@ const HorseOwners = () => {
         {/* Add Owner & Save */}
         {canEdit && (
           <div className="mt-8 pt-8 border-t border-gray-100">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">Add owner to syndicate</h3>
+            <h3 className="text-sm font-medium text-gray-500 mb-3"><T>Add owner to syndicate</T></h3>
             <div className="flex gap-3">
               <select 
                 id="add-owner-select"
                 className="flex-1 bg-white border border-gray-200 text-gray-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
                 defaultValue=""
               >
-                <option value="" disabled>Select a user...</option>
+                <option value="" disabled><T>Select a user...</T></option>
                 {availableUsers.map(u => (<option key={u.id} value={u.id}>{u.name} ({u.role.replace('_', ' ')})</option>))}
               </select>
               <button 

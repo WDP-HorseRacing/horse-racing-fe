@@ -1,4 +1,21 @@
-# React + TypeScript + Vite
+# RACEOS Web
+
+React, TypeScript, Vite, and Zustand web client managed with pnpm.
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Quality checks:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm build
+```
+
+## Original Vite notes
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

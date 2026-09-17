@@ -14,6 +14,10 @@ import HorsePedigree from './pages/HorsePedigree';
 import HorseOwners from './pages/HorseOwners';
 import LandingPage from './pages/LandingPage';
 import { useStore } from './store/store';
+import { Alerts, GroomTasks, IncidentReport, Medical, Operations, Profile, Reports, StableMap, Workflow } from './pages/OperationalPages';
+import VeterinaryAction from './pages/VeterinaryAction';
+import TrainingSessionEditor from './pages/TrainingSessionEditor';
+import { I18nProvider } from './i18n/I18nContext';
 
 const ProtectedRoute = () => {
   const isAuthenticated = useStore(state => state.isAuthenticated);
@@ -27,7 +31,7 @@ const ProtectedRoute = () => {
 
 function App() {
   return (
-    <BrowserRouter>
+    <I18nProvider><BrowserRouter>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPage />} />
@@ -48,16 +52,31 @@ function App() {
             
             {/* Training (Flow 2) */}
             <Route path="plan/:id" element={<TrainerPlan />} />
+            <Route path="plan/:id/session/:sessionId" element={<TrainingSessionEditor />} />
             <Route path="adjust-plan" element={<TrainerAdjustPlan />} />
             <Route path="live-training/:id" element={<RealtimeTraining />} />
             <Route path="eval/:id" element={<PostSessionEval />} />
             
             {/* Race Registration (Flow 5) */}
             <Route path="race-registration" element={<RaceRegistration />} />
+
+            {/* Cross-platform feature parity */}
+            <Route path="tasks" element={<GroomTasks />} />
+            <Route path="stable" element={<StableMap />} />
+            <Route path="incidents/new" element={<IncidentReport />} />
+            <Route path="medical" element={<Medical />} />
+            <Route path="medical/exam/:id" element={<VeterinaryAction mode="exam" />} />
+            <Route path="medical/injury/:id" element={<VeterinaryAction mode="injury" />} />
+            <Route path="medical/lock/:id" element={<VeterinaryAction mode="lock" />} />
+            <Route path="alerts" element={<Alerts />} />
+            <Route path="operations" element={<Operations />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="workflow" element={<Workflow />} />
           </Route>
         </Route>
       </Routes>
-    </BrowserRouter>
+    </BrowserRouter></I18nProvider>
   );
 }
 

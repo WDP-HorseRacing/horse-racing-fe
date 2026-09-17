@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/store';
 import { Activity, HeartPulse, Timer, AlertTriangle } from 'lucide-react';
+import { T } from '../i18n/T';
 
 const RealtimeTraining = () => {
   const { id } = useParams();
@@ -29,7 +30,7 @@ const RealtimeTraining = () => {
     return () => clearInterval(interval);
   }, [speed]);
 
-  if (!horse) return <div className="text-center py-20 text-gray-400">Horse not found</div>;
+  if (!horse) return <div className="text-center py-20 text-gray-400"><T>Horse not found</T></div>;
 
   const isCritical = heartRate > 190;
 
@@ -72,11 +73,11 @@ const RealtimeTraining = () => {
               {/* Speed in center */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="text-3xl font-bold text-white tabular-nums">{Math.round(speed)}</span>
-                <span className="text-xs text-gray-400">km/h</span>
+                <span className="text-xs text-gray-400"><T>km/h</T></span>
               </div>
             </div>
-            <p className="text-gray-400 text-sm font-mono">Track position rendering...</p>
-            <p className="text-xs text-gray-500 mt-1">Three.js integration ready</p>
+            <p className="text-gray-400 text-sm font-mono"><T>Track position rendering...</T></p>
+            <p className="text-xs text-gray-500 mt-1"><T>Three.js integration ready</T></p>
           </div>
         </div>
 
@@ -88,12 +89,12 @@ const RealtimeTraining = () => {
               : 'bg-white border-gray-100'
           }`} style={!isCritical ? { boxShadow: 'var(--shadow-card)' } : undefined}>
             <HeartPulse size={40} className={`mb-3 ${isCritical ? 'text-red-500 animate-bounce' : 'text-emerald-500'}`} />
-            <p className="text-gray-400 text-xs tracking-wide mb-2 font-medium">Heart rate</p>
+            <p className="text-gray-400 text-xs tracking-wide mb-2 font-medium"><T>Heart rate</T></p>
             <div className="flex items-end gap-1.5">
               <span className={`text-5xl font-bold tracking-tighter tabular-nums ${isCritical ? 'text-red-500' : 'text-gray-900'}`}>
                 {Math.round(heartRate)}
               </span>
-              <span className="text-gray-400 pb-1 text-sm">bpm</span>
+              <span className="text-gray-400 pb-1 text-sm"><T>bpm</T></span>
             </div>
             {isCritical && (
               <div className="mt-3 px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs flex items-center gap-1.5 animate-pulse font-semibold">
@@ -104,10 +105,10 @@ const RealtimeTraining = () => {
 
           <div className="flex-1 bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center justify-center" style={{ boxShadow: 'var(--shadow-card)' }}>
             <Activity size={40} className="text-sky-500 mb-3" />
-            <p className="text-gray-400 text-xs tracking-wide mb-2 font-medium">Current speed</p>
+            <p className="text-gray-400 text-xs tracking-wide mb-2 font-medium"><T>Current speed</T></p>
             <div className="flex items-end gap-1.5">
               <span className="text-5xl font-bold tracking-tighter text-gray-900 tabular-nums">{Math.round(speed)}</span>
-              <span className="text-gray-400 pb-1 text-sm">km/h</span>
+              <span className="text-gray-400 pb-1 text-sm"><T>km/h</T></span>
             </div>
           </div>
 
