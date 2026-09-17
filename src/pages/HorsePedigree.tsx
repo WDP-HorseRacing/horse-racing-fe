@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/store';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import gsap from 'gsap';
+import { T } from '../i18n/T';
 
 const PedigreeNode = ({ horseId, role, generation }: { horseId?: string, role: string, generation: number }) => {
   const horses = useStore(state => state.horses);
@@ -16,7 +17,7 @@ const PedigreeNode = ({ horseId, role, generation }: { horseId?: string, role: s
   if (!horse) {
     return (
       <div className={`${sizeClass} bg-gray-50 border border-gray-200 border-dashed rounded-xl flex items-center justify-center p-2 opacity-60`}>
-        <span className="text-gray-400 text-xs text-center leading-tight">Unknown<br/>{role}</span>
+        <span className="text-gray-400 text-xs text-center leading-tight"><T>Unknown</T><br/><T>{role}</T></span>
       </div>
     );
   }
@@ -34,7 +35,7 @@ const PedigreeNode = ({ horseId, role, generation }: { horseId?: string, role: s
       <img src={horse.avatar} alt={horse.name} className={`${imgClass} rounded-lg object-cover shrink-0 mr-2.5 border border-gray-100`} />
       <div className="overflow-hidden flex-1 min-w-0">
         <p className={`${textClass} font-semibold text-gray-800 truncate group-hover:text-emerald-600 transition-colors`}>{horse.name}</p>
-        <p className="text-[9px] text-gray-400 tracking-wide truncate">{role}</p>
+        <p className="text-[9px] text-gray-400 tracking-wide truncate"><T>{role}</T></p>
       </div>
       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <ExternalLink size={10} className="text-emerald-500" />
@@ -66,7 +67,7 @@ const HorsePedigree = () => {
     );
   }, [id]);
 
-  if (!targetHorse) return <div className="text-center py-20 text-gray-400">Horse not found</div>;
+  if (!targetHorse) return <div className="text-center py-20 text-gray-400"><T>Horse not found</T></div>;
 
   return (
     <div className="max-w-[1400px] mx-auto pb-12 overflow-hidden">
@@ -76,7 +77,7 @@ const HorsePedigree = () => {
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">{targetHorse.name}'s pedigree</h1>
-        <p className="text-gray-500 font-light">4-generation bloodline lineage</p>
+        <p className="text-gray-500 font-light"><T>4-generation bloodline lineage</T></p>
       </div>
 
       <div className="w-full overflow-x-auto pb-6 custom-scrollbar">

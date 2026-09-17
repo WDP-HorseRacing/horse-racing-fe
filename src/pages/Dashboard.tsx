@@ -3,6 +3,7 @@ import { useStore } from '../store/store';
 import { Activity, AlertCircle, Flag, Users, BarChart3, ArrowRight, Calendar, Heart, Zap, Trophy, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
+import { T } from '../i18n/T';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -100,7 +101,7 @@ const Dashboard = () => {
             <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }}>
               <div>
                 <p className="text-3xl font-bold text-gray-900 tabular-nums">{eligibleHorses.length}</p>
-                <p className="text-sm text-gray-400 mt-1">Training ready</p>
+                <p className="text-sm text-gray-400 mt-1"><T>Training ready</T></p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
                 <Activity className="text-emerald-500" size={22} />
@@ -109,14 +110,14 @@ const Dashboard = () => {
             <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }}>
               <div>
                 <p className="text-3xl font-bold text-gray-900 tabular-nums">{raceReady.length}</p>
-                <p className="text-sm text-gray-400 mt-1">Race ready</p>
+                <p className="text-sm text-gray-400 mt-1"><T>Race ready</T></p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
                 <Flag className="text-amber-500" size={22} />
               </div>
             </div>
             <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3">Quick actions</h4>
+              <h4 className="text-sm font-semibold text-gray-400 mb-3"><T>Quick actions</T></h4>
               <div className="space-y-2">
                 <button onClick={() => navigate('/horses')} className="w-full text-left text-sm text-gray-700 hover:text-emerald-600 font-medium flex items-center justify-between py-2 px-3 rounded-lg hover:bg-emerald-50 transition-all duration-200">
                   View all horses <ArrowRight size={14} />
@@ -147,7 +148,7 @@ const Dashboard = () => {
                   <img src={horse.avatar} alt={horse.name} className="w-12 h-12 rounded-xl object-cover border border-gray-100" />
                   <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-semibold text-gray-800 truncate">{horse.name}</h4>
-                    <p className="text-xs text-gray-400">{horse.currentPhase}</p>
+                    <p className="text-xs text-gray-400"><T>{horse.currentPhase}</T></p>
                   </div>
                   <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
                     horse.healthStatus === 'INJURED'
@@ -177,7 +178,7 @@ const Dashboard = () => {
       <div ref={containerRef} className="space-y-8 pb-8">
         <div data-dash-reveal>
           <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-          <p className="text-gray-500 font-light">Club overview and management tools.</p>
+          <p className="text-gray-500 font-light"><T>Club overview and management tools.</T></p>
         </div>
 
         {/* Top Stats Row */}
@@ -230,7 +231,7 @@ const Dashboard = () => {
           {/* Recent Horses + Actions */}
           <div data-dash-reveal className="md:col-span-3 bg-white rounded-2xl border border-gray-100 p-7" style={{ boxShadow: 'var(--shadow-card)' }}>
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-gray-400">Horse roster</h3>
+              <h3 className="text-sm font-semibold text-gray-400"><T>Horse roster</T></h3>
               <button onClick={() => navigate('/horses')} className="text-xs text-emerald-600 font-semibold hover:text-emerald-500 flex items-center gap-1">
                 View all <ArrowRight size={12} />
               </button>
@@ -278,12 +279,45 @@ const Dashboard = () => {
     );
   }
 
+  if (currentUser.role === 'VETERINARIAN' || currentUser.role === 'GROOM') {
+    const isVet = currentUser.role === 'VETERINARIAN';
+    const queue = isVet ? [...injuredHorses, ...monitorHorses] : activeHorses.slice(0, 4);
+    return (
+      <div ref={containerRef} className="space-y-8 pb-8">
+        <div data-dash-reveal>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
+          <p className="text-gray-500 font-light">{isVet ? 'Clinical queue, medical alerts, and preventive care.' : 'Daily care, stable tasks, and veterinary instructions.'}</p>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+          {[
+            { label: isVet ? 'Critical cases' : 'Tasks today', value: isVet ? injuredHorses.length : 8, color: 'text-red-500' },
+            { label: isVet ? 'Monitoring' : 'Completed', value: isVet ? monitorHorses.length : 3, color: 'text-amber-500' },
+            { label: isVet ? 'Healthy' : 'Horses in care', value: eligibleHorses.length, color: 'text-emerald-600' },
+            { label: 'Open alerts', value: 2, color: 'text-sky-500' },
+          ].map(stat => <div key={stat.label} data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-5" style={{ boxShadow: 'var(--shadow-card)' }}><p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p><p className="text-xs text-gray-400 mt-1">{stat.label}</p></div>)}
+        </div>
+        <div className="grid md:grid-cols-5 gap-5">
+          <div data-dash-reveal className="md:col-span-3 bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <h3 className="text-sm font-semibold text-gray-500 mb-5">{isVet ? 'Cases requiring attention' : 'Next care actions'}</h3>
+            <div className="space-y-3">{queue.map(horse => <div key={horse.id} onClick={() => navigate(`/horses/${horse.id}`)} className="flex items-center gap-3 rounded-xl p-3 hover:bg-gray-50 cursor-pointer"><img src={horse.avatar} className="w-10 h-10 rounded-xl object-cover" /><div className="flex-1"><p className="text-sm font-semibold text-gray-800">{horse.name}</p><p className="text-xs text-gray-400"><T>{horse.currentPhase}</T></p></div><span className="text-xs font-medium text-emerald-600"><T>Open</T></span></div>)}</div>
+          </div>
+          <div data-dash-reveal className="md:col-span-2 bg-emerald-50 border border-emerald-100 rounded-2xl p-6">
+            <AlertCircle className="text-emerald-600 mb-4" />
+            <h3 className="font-semibold text-gray-900">{isVet ? 'Preventive schedule' : 'Vet instruction'}</h3>
+            <p className="text-sm text-gray-500 mt-2">{isVet ? 'Three vaccinations and one farrier review are due this week.' : 'Thunder King: walk in hand only for 20 minutes.'}</p>
+            <button onClick={() => navigate(isVet ? '/medical' : '/tasks')} className="mt-6 text-sm font-semibold text-emerald-700"><T>Open workspace →</T></button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ===== HORSE_OWNER DASHBOARD =====
   return (
     <div ref={containerRef} className="space-y-8 pb-8">
       <div data-dash-reveal>
         <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-        <p className="text-gray-500 font-light">Your stable and ownership portfolio.</p>
+        <p className="text-gray-500 font-light"><T>Your stable and ownership portfolio.</T></p>
       </div>
 
       {/* Portfolio Summary */}
@@ -293,21 +327,21 @@ const Dashboard = () => {
             <Users size={18} className="text-emerald-500" />
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums">{myHorses.length}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Horses owned</p>
+          <p className="text-xs text-gray-400 mt-0.5"><T>Horses owned</T></p>
         </div>
         <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
           <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
             <Zap size={18} className="text-amber-500" />
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums">{myTotalShare}<span className="text-lg text-gray-400">%</span></p>
-          <p className="text-xs text-gray-400 mt-0.5">Total ownership share</p>
+          <p className="text-xs text-gray-400 mt-0.5"><T>Total ownership share</T></p>
         </div>
         <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
           <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center mb-3">
             <Trophy size={18} className="text-sky-500" />
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums">{myHorses.filter(h => h.raceReadiness === 'Peak' || h.raceReadiness === 'High').length}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Race ready</p>
+          <p className="text-xs text-gray-400 mt-0.5"><T>Race ready</T></p>
         </div>
       </div>
 
@@ -319,8 +353,8 @@ const Dashboard = () => {
         </h3>
         {myHorses.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <p className="text-gray-400 mb-2">You don't own any horses yet.</p>
-            <p className="text-sm text-gray-300">Contact your club manager to get started.</p>
+            <p className="text-gray-400 mb-2"><T>You don't own any horses yet.</T></p>
+            <p className="text-sm text-gray-300"><T>Contact your club manager to get started.</T></p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -340,7 +374,7 @@ const Dashboard = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold text-emerald-600 tabular-nums">{ownership?.percentage}%</p>
-                    <p className="text-xs text-gray-400">share</p>
+                    <p className="text-xs text-gray-400"><T>share</T></p>
                   </div>
                 </div>
               );

@@ -1,0 +1,447 @@
+{
+  "mockUsers": [
+    {
+      "id": "u1",
+      "name": "Dr. Nguyen",
+      "email": "trainer@gmail.com",
+      "role": "HEAD_TRAINER",
+      "avatar": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?q=80&w=150&h=150&auto=format&fit=crop"
+    },
+    {
+      "id": "u2",
+      "name": "Mr. John",
+      "email": "manager@gmail.com",
+      "role": "CLUB_MANAGER",
+      "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&h=150&auto=format&fit=crop"
+    },
+    {
+      "id": "u3",
+      "name": "Sheikh Mohammed",
+      "email": "owner@gmail.com",
+      "role": "HORSE_OWNER",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=150&h=150&auto=format&fit=crop"
+    },
+    {
+      "id": "u4",
+      "name": "Sarah Connor",
+      "email": "sarah@gmail.com",
+      "role": "HORSE_OWNER",
+      "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?q=80&w=150&h=150&auto=format&fit=crop"
+    },
+    {
+      "id": "u5",
+      "name": "Dr. Sanjay Rao",
+      "email": "vet@gmail.com",
+      "role": "VETERINARIAN",
+      "avatar": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&h=150&auto=format&fit=crop"
+    },
+    {
+      "id": "u6",
+      "name": "Mai Tran",
+      "email": "groom@gmail.com",
+      "role": "GROOM",
+      "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=150&h=150&auto=format&fit=crop"
+    }
+  ],
+  "mockOwnerships": [
+    {
+      "horseId": "goldship",
+      "ownerId": "u3",
+      "percentage": 60
+    },
+    {
+      "horseId": "goldship",
+      "ownerId": "u4",
+      "percentage": 40
+    },
+    {
+      "horseId": "winx",
+      "ownerId": "u3",
+      "percentage": 51
+    },
+    {
+      "horseId": "winx",
+      "ownerId": "u1",
+      "percentage": 49
+    }
+  ],
+  "initialHorses": [
+    {
+      "id": "goldship",
+      "name": "Gold Ship",
+      "dateOfBirth": "2009-03-06",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Grey",
+      "microchipId": "JPN2009030601",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "ACTIVE",
+      "fitness": 85,
+      "weight": 508,
+      "currentPhase": "Stud Duty",
+      "lastTraining": "N/A (Retired)",
+      "age": 17,
+      "raceReadiness": "High",
+      "avatar": "/gold-ship.png",
+      "race_aptitude": "STAYER",
+      "sireId": "staygold",
+      "damId": "pointflag",
+      "primaryOwner": {
+        "id": "u3",
+        "name": "Sheikh Mohammed",
+        "percentage": 60
+      }
+    },
+    {
+      "id": "staygold",
+      "name": "Stay Gold",
+      "dateOfBirth": "1994-03-24",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Dark Bay",
+      "microchipId": "JPN1994032401",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 478,
+      "currentPhase": "Deceased",
+      "lastTraining": "N/A",
+      "age": 21,
+      "raceReadiness": "Low",
+      "avatar": "/stay-gold.jpg",
+      "race_aptitude": "STAYER",
+      "sireId": "sundaysilence",
+      "damId": "goldensash"
+    },
+    {
+      "id": "pointflag",
+      "name": "Point Flag",
+      "dateOfBirth": "2001-04-10",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "JPN2001041001",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 460,
+      "currentPhase": "Broodmare (Retired)",
+      "lastTraining": "N/A",
+      "age": 25,
+      "raceReadiness": "Low",
+      "avatar": "/point-flag.jpg",
+      "race_aptitude": "MILER",
+      "sireId": "mejiromcqueen",
+      "damId": "pastoralism"
+    },
+    {
+      "id": "sundaysilence",
+      "name": "Sunday Silence",
+      "dateOfBirth": "1986-03-25",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Dark Brown",
+      "microchipId": "USA1986032501",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 490,
+      "currentPhase": "Deceased (2002)",
+      "lastTraining": "N/A",
+      "age": 16,
+      "raceReadiness": "Low",
+      "avatar": "/sunday-silence.jpg",
+      "race_aptitude": "MILER"
+    },
+    {
+      "id": "goldensash",
+      "name": "Golden Sash",
+      "dateOfBirth": "1988-04-23",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Chestnut",
+      "microchipId": "JPN1988042301",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 440,
+      "currentPhase": "Broodmare (Retired)",
+      "lastTraining": "N/A",
+      "age": 38,
+      "raceReadiness": "Low",
+      "avatar": "/golden-sash.jpg",
+      "race_aptitude": "MILER"
+    },
+    {
+      "id": "mejiromcqueen",
+      "name": "Mejiro McQueen",
+      "dateOfBirth": "1987-04-03",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Grey",
+      "microchipId": "JPN1987040301",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 498,
+      "currentPhase": "Deceased (2006)",
+      "lastTraining": "N/A",
+      "age": 19,
+      "raceReadiness": "Low",
+      "avatar": "/Mejiro-McQueen.jpg",
+      "race_aptitude": "STAYER"
+    },
+    {
+      "id": "pastoralism",
+      "name": "Pastoralism",
+      "dateOfBirth": "1994-01-01",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "JPN1994010101",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 450,
+      "currentPhase": "Broodmare",
+      "lastTraining": "N/A",
+      "age": 32,
+      "raceReadiness": "Low",
+      "avatar": "",
+      "race_aptitude": "MILER"
+    },
+    {
+      "id": "winx",
+      "name": "Winx",
+      "dateOfBirth": "2011-09-14",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "AUS2011091401",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 90,
+      "weight": 490,
+      "currentPhase": "Broodmare",
+      "lastTraining": "N/A (Retired 2019)",
+      "age": 14,
+      "raceReadiness": "Low",
+      "avatar": "/winx.jpg",
+      "race_aptitude": "MILER",
+      "sireId": "streetcry",
+      "damId": "vegasshowgirl",
+      "primaryOwner": {
+        "id": "u3",
+        "name": "Sheikh Mohammed",
+        "percentage": 51
+      },
+      "isInTraining": false
+    },
+    {
+      "id": "streetcry",
+      "name": "Street Cry",
+      "dateOfBirth": "1998-03-11",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Dark Bay",
+      "microchipId": "IRE1998031101",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 510,
+      "currentPhase": "Deceased (2014)",
+      "lastTraining": "N/A",
+      "age": 16,
+      "raceReadiness": "Low",
+      "avatar": "/street-cry.jpg",
+      "race_aptitude": "MILER",
+      "sireId": "machiavellian",
+      "damId": "helenstreet"
+    },
+    {
+      "id": "vegasshowgirl",
+      "name": "Vegas Showgirl",
+      "dateOfBirth": "2002-10-06",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "NZL2002100601",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 470,
+      "currentPhase": "Deceased (2023)",
+      "lastTraining": "N/A",
+      "age": 21,
+      "raceReadiness": "Low",
+      "avatar": "/vegas-showgirl.jpg",
+      "race_aptitude": "SPRINTER",
+      "sireId": "alakbar",
+      "damId": "vegasmagic"
+    },
+    {
+      "id": "machiavellian",
+      "name": "Machiavellian",
+      "dateOfBirth": "1987-01-31",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "USA1987013101",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 500,
+      "currentPhase": "Deceased (2004)",
+      "lastTraining": "N/A",
+      "age": 17,
+      "raceReadiness": "Low",
+      "avatar": "/MACHIAVELLIAN.jpg",
+      "race_aptitude": "SPRINTER"
+    },
+    {
+      "id": "helenstreet",
+      "name": "Helen Street",
+      "dateOfBirth": "1982-04-04",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "GBR1982040401",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 460,
+      "currentPhase": "Broodmare (Retired)",
+      "lastTraining": "N/A",
+      "age": 44,
+      "raceReadiness": "Low",
+      "avatar": "/helen-street.jpg",
+      "race_aptitude": "MILER"
+    },
+    {
+      "id": "alakbar",
+      "name": "Al Akbar",
+      "dateOfBirth": "1990-11-07",
+      "gender": "MALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "AUS1990110701",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 490,
+      "currentPhase": "Deceased",
+      "lastTraining": "N/A",
+      "age": 36,
+      "raceReadiness": "Low",
+      "avatar": "/al-akbar.jpg",
+      "race_aptitude": "SPRINTER"
+    },
+    {
+      "id": "vegasmagic",
+      "name": "Vegas Magic",
+      "dateOfBirth": "1985-01-01",
+      "gender": "FEMALE",
+      "breed": "Thoroughbred",
+      "color": "Bay",
+      "microchipId": "AUS1985010101",
+      "healthStatus": "ELIGIBLE",
+      "lifecycleStatus": "RETIRED",
+      "fitness": 0,
+      "weight": 450,
+      "currentPhase": "Broodmare (Retired)",
+      "lastTraining": "N/A",
+      "age": 41,
+      "raceReadiness": "Low",
+      "avatar": "/vegas-magic.jpg",
+      "race_aptitude": "MILER"
+    }
+  ],
+  "upcomingRaces": [
+    { "id": "r1", "name": "Spring Sprint Cup", "dist": 1200, "date": "Oct 15, 2026", "venue": "Sha Tin Racecourse" },
+    { "id": "r2", "name": "Classic Mile Stakes", "dist": 1600, "date": "Nov 3, 2026", "venue": "Happy Valley" },
+    { "id": "r3", "name": "Grand Endurance Derby", "dist": 2400, "date": "Dec 12, 2026", "venue": "Sha Tin Racecourse" }
+  ],
+  "raceRegistrations": [],
+  "groomTasks": [
+    { "time": "06:00", "horse": "Thunder King", "detail": "Morning feed and medication" },
+    { "time": "06:30", "horse": "Silver Arrow", "detail": "Prepare for endurance session" },
+    { "time": "07:10", "horse": "Red Storm", "detail": "Ice bath · left fore" },
+    { "time": "08:00", "horse": "Night Eclipse", "detail": "Grooming and sensor fitting" }
+  ],
+  "operationalAlerts": [
+    { "severity": "Critical", "horse": "Thunder King", "detail": "Heart rate exceeded 180 bpm during speed work." },
+    { "severity": "Warning", "horse": "Red Storm", "detail": "Recovery score remains below target." },
+    { "severity": "Info", "horse": "Silver Arrow", "detail": "Vaccination is due in three days." }
+  ],
+  "inventory": [
+    { "name": "Electrolyte mix", "stock": "12 kg", "low": true },
+    { "name": "Premium feed", "stock": "186 kg", "low": false },
+    { "name": "Medical wraps", "stock": "42 rolls", "low": false }
+  ],
+  "reportMetrics": [
+    { "label": "Revenue", "value": "$104k" },
+    { "label": "Operating cost", "value": "$90k" },
+    { "label": "Stable fitness", "value": "78%" },
+    { "label": "Race ready", "value": "2" }
+  ],
+  "reportTrend": [48, 62, 55, 74, 68, 88],
+  "workflowSteps": [
+    { "role": "Trainer", "action": "Publishes training plan" },
+    { "role": "Groom", "action": "Prepares and executes session" },
+    { "role": "Sensors", "action": "Stream live telemetry" },
+    { "role": "Veterinarian", "action": "Investigates abnormal signals" },
+    { "role": "Trainer", "action": "Adjusts recovery plan" },
+    { "role": "Owner", "action": "Monitors readiness and racing" }
+  ],
+  "trainingPlans": [
+    {
+      "id": "plan-goldship-conditioning",
+      "horseId": "goldship",
+      "name": "Conditioning & Exhibition Readiness",
+      "objective": "Build sustainable condition and prepare Gold Ship for the October exhibition event.",
+      "status": "active",
+      "startDate": "2026-09-14",
+      "endDate": "2026-10-18",
+      "targetEvent": "Autumn Champions Exhibition · Oct 18",
+      "note": "Prioritize soundness, consistent aerobic work, and a gradual taper.",
+      "publishedAt": "2026-09-14T06:00:00.000Z",
+      "phases": [
+        {
+          "id": "phase-base",
+          "name": "Base conditioning",
+          "objective": "Establish aerobic consistency and movement quality.",
+          "order": 1,
+          "startDate": "2026-09-14",
+          "endDate": "2026-09-24",
+          "sessions": [
+            { "id": "session-base-1", "date": "2026-09-16", "time": "06:00", "title": "Long easy canter", "type": "Aerobic", "objective": "Build low-intensity aerobic volume.", "distanceM": 1600, "durationMin": 35, "intensity": "Light", "workloadPercent": 48, "surface": "Turf", "status": "completed", "assignedGroom": "Mai Tran", "note": "Even rhythm, no pace pressure.", "energyMcal": 23, "concentratePercent": 30 },
+            { "id": "session-base-2", "date": "2026-09-19", "time": "06:30", "title": "Progressive aerobic set", "type": "Endurance", "objective": "Increase continuous-work tolerance.", "distanceM": 2000, "durationMin": 42, "intensity": "Moderate", "workloadPercent": 62, "surface": "Turf", "status": "scheduled", "assignedGroom": "Mai Tran", "note": "Finish last 400 m at controlled tempo.", "energyMcal": 27, "concentratePercent": 40 }
+          ]
+        },
+        {
+          "id": "phase-build",
+          "name": "Strength and speed build",
+          "objective": "Develop race-specific strength and controlled speed.",
+          "order": 2,
+          "startDate": "2026-09-25",
+          "endDate": "2026-10-09",
+          "sessions": [
+            { "id": "session-hill-1", "date": "2026-09-27", "time": "06:00", "title": "Hill strength repeats", "type": "Strength", "objective": "Improve hindquarter power and posture.", "distanceM": 1400, "durationMin": 32, "intensity": "Moderate", "workloadPercent": 70, "surface": "Dirt", "status": "planned", "assignedGroom": "Peter Osei", "note": "Three repeats, full walk recovery.", "energyMcal": 29, "concentratePercent": 45 },
+            { "id": "session-speed-1", "date": "2026-10-03", "time": "06:20", "title": "Controlled speed blocks", "type": "Speed", "objective": "Introduce target pace without maximal effort.", "distanceM": 1200, "durationMin": 24, "intensity": "High", "workloadPercent": 80, "surface": "Turf", "status": "planned", "assignedGroom": "Mai Tran", "note": "Telemetry and post-session recovery required.", "energyMcal": 32, "concentratePercent": 50 }
+          ]
+        },
+        {
+          "id": "phase-taper",
+          "name": "Event taper",
+          "objective": "Preserve sharpness while reducing fatigue.",
+          "order": 3,
+          "startDate": "2026-10-10",
+          "endDate": "2026-10-18",
+          "sessions": [
+            { "id": "session-taper-1", "date": "2026-10-12", "time": "06:00", "title": "Short sharpener", "type": "Race prep", "objective": "Confirm responsiveness and finish feeling fresh.", "distanceM": 800, "durationMin": 18, "intensity": "Moderate", "workloadPercent": 55, "surface": "Turf", "status": "planned", "assignedGroom": "Mai Tran", "note": "No additional load after this session.", "energyMcal": 24, "concentratePercent": 35 }
+          ]
+        }
+      ]
+    }
+  ]
+}

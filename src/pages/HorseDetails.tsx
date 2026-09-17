@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../store/store';
 import { ArrowLeft, Activity, Calendar, FileText, Weight, Heart, Hash, Medal, Users, Edit3, Share2, ArrowRight } from 'lucide-react';
 import gsap from 'gsap';
+import { T } from '../i18n/T';
 
 const HorseDetails = () => {
   const { id } = useParams();
@@ -27,7 +28,7 @@ const HorseDetails = () => {
   if (!horse) {
     return (
       <div className="text-center py-20">
-        <p className="text-gray-400 text-lg">Horse not found</p>
+        <p className="text-gray-400 text-lg"><T>Horse not found</T></p>
         <button onClick={() => navigate('/horses')} className="mt-4 text-emerald-600 text-sm font-medium hover:underline">
           Back to stable
         </button>
@@ -116,7 +117,7 @@ const HorseDetails = () => {
               ['Date of birth', horse.dateOfBirth],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between border-b border-gray-50 pb-3 last:border-0 last:pb-0">
-                <span className="text-gray-400">{label}</span>
+                <span className="text-gray-400"><T>{label}</T></span>
                 <span className="font-medium text-gray-800">{value}</span>
               </div>
             ))}
@@ -131,17 +132,17 @@ const HorseDetails = () => {
           </h2>
           <div className="space-y-3.5 text-sm relative z-10">
             <div className="flex justify-between border-b border-gray-50 pb-3 items-center">
-              <span className="text-gray-400">Aptitude</span>
+              <span className="text-gray-400"><T>Aptitude</T></span>
               <span className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${getAptitudeStyle(horse.race_aptitude)}`}>
                 {horse.race_aptitude}
               </span>
             </div>
             <div className="flex justify-between border-b border-gray-50 pb-3 items-center">
-              <span className="text-gray-400">Weight</span>
+              <span className="text-gray-400"><T>Weight</T></span>
               <span className="font-medium text-gray-800 flex items-center gap-1.5"><Weight size={14} className="text-gray-300" /> {horse.weight} kg</span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-400">Fitness</span>
+              <span className="text-gray-400"><T>Fitness</T></span>
               <span className="font-semibold text-emerald-600 flex items-center gap-1.5"><Heart size={14} /> {horse.fitness}%</span>
             </div>
           </div>
@@ -159,7 +160,7 @@ const HorseDetails = () => {
                 <p className="text-emerald-600 font-bold text-lg tabular-nums mt-1">{horse.primaryOwner.percentage}%</p>
               </div>
             ) : (
-              <p className="text-gray-400 text-sm mb-4">No primary owner assigned</p>
+              <p className="text-gray-400 text-sm mb-4"><T>No primary owner assigned</T></p>
             )}
           </div>
           <Link to={`/horses/${horse.id}/owners`} className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-800 transition-all text-center text-sm flex items-center justify-center gap-2 active:scale-[0.98]">
@@ -183,17 +184,17 @@ const HorseDetails = () => {
           {/* Sire */}
           <div className="p-4 rounded-xl border border-blue-50 bg-blue-50/30 flex items-center gap-4 hover:bg-blue-50/60 transition-colors cursor-pointer" onClick={() => sire && navigate(`/horses/${sire.id}`)}>
             <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shrink-0 border border-blue-100 overflow-hidden shadow-sm">
-              {sire ? <img src={sire.avatar} alt="Sire" className="w-full h-full object-cover" /> : <span className="text-gray-300 font-bold text-sm">S</span>}
+              {sire ? <img src={sire.avatar} alt="Sire" className="w-full h-full object-cover" /> : <span className="text-gray-300 font-bold text-sm"><T>S</T></span>}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-blue-400 tracking-wide mb-0.5">Sire (father)</p>
+              <p className="text-[10px] font-semibold text-blue-400 tracking-wide mb-0.5"><T>Sire (father)</T></p>
               {sire ? (
                 <>
                   <p className="text-sm font-semibold text-gray-800">{sire.name}</p>
                   <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${getAptitudeStyle(sire.race_aptitude)}`}>{sire.race_aptitude}</span>
                 </>
               ) : (
-                <p className="text-gray-400 italic text-sm">Unknown sire</p>
+                <p className="text-gray-400 italic text-sm"><T>Unknown sire</T></p>
               )}
             </div>
           </div>
@@ -201,17 +202,17 @@ const HorseDetails = () => {
           {/* Dam */}
           <div className="p-4 rounded-xl border border-rose-50 bg-rose-50/30 flex items-center gap-4 hover:bg-rose-50/60 transition-colors cursor-pointer" onClick={() => dam && navigate(`/horses/${dam.id}`)}>
             <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center shrink-0 border border-rose-100 overflow-hidden shadow-sm">
-              {dam ? <img src={dam.avatar} alt="Dam" className="w-full h-full object-cover" /> : <span className="text-gray-300 font-bold text-sm">D</span>}
+              {dam ? <img src={dam.avatar} alt="Dam" className="w-full h-full object-cover" /> : <span className="text-gray-300 font-bold text-sm"><T>D</T></span>}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-rose-400 tracking-wide mb-0.5">Dam (mother)</p>
+              <p className="text-[10px] font-semibold text-rose-400 tracking-wide mb-0.5"><T>Dam (mother)</T></p>
               {dam ? (
                 <>
                   <p className="text-sm font-semibold text-gray-800">{dam.name}</p>
                   <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-semibold border ${getAptitudeStyle(dam.race_aptitude)}`}>{dam.race_aptitude}</span>
                 </>
               ) : (
-                <p className="text-gray-400 italic text-sm">Unknown dam</p>
+                <p className="text-gray-400 italic text-sm"><T>Unknown dam</T></p>
               )}
             </div>
           </div>

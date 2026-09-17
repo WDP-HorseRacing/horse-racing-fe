@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStore } from '../store/store';
 import { ArrowLeft, Star, MessageSquare, Thermometer, Footprints } from 'lucide-react';
+import { T } from '../i18n/T';
+import { useI18n } from '../i18n/I18nContext';
 
 const PostSessionEval = () => {
+  const { t } = useI18n();
   const { id } = useParams();
   const navigate = useNavigate();
-  const horse = useStore(state => state.horses.find(h => h.id === id)) || useStore(state => state.horses[0]);
+  const horse = useStore(state => state.horses.find(h => h.id === id) ?? state.horses[0]);
   const [score, setScore] = useState<number | null>(null);
   const [gaitQuality, setGaitQuality] = useState<string>('');
   const [temperament, setTemperament] = useState<string>('');
@@ -19,7 +22,7 @@ const PostSessionEval = () => {
       </button>
 
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">Session evaluation</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1"><T>Session evaluation</T></h2>
         <p className="text-gray-500 font-light">Record performance metrics and notes for {horse?.name}.</p>
       </div>
 
@@ -99,7 +102,7 @@ const PostSessionEval = () => {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full h-32 bg-gray-50 border border-gray-200 rounded-xl p-4 text-gray-700 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:bg-white transition-all placeholder:text-gray-300 resize-none"
-            placeholder="E.g., Showed good stamina in the final 400m, but stride length was slightly shorter than baseline."
+            placeholder={t('E.g., Showed good stamina in the final 400m, but stride length was slightly shorter than baseline.')}
           />
         </div>
         
