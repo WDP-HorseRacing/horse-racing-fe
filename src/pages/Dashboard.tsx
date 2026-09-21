@@ -1,423 +1,503 @@
-import { useRef, useEffect } from 'react';
-import { useStore } from '../store/store';
-import { Activity, AlertCircle, Flag, Users, BarChart3, ArrowRight, Calendar, Heart, Zap, Trophy, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
-import { T } from '../i18n/T';
+import {
+  Activity,
+  AlertTriangle,
+  Calendar,
+  ClipboardCheck,
+  Flag,
+  HeartPulse,
+  Lock,
+  Stethoscope,
+  TrendingUp,
+  Trophy,
+  Users,
+} from 'lucide-react';
+import { useStore } from '../store/store';
+import { useService } from '../hooks/useService';
+import { Avatar, Card, PageHeader, Pill, Reveal, SectionTitle, Skeleton, Stat } from '../components/ui';
+import { HealthPill, SessionPill } from '../components/ui/status';
+import { getProgressBoard, listAwaitingReview, listTodaySessions } from '../services/training.service';
+import { getHealthBoard } from '../services/medical.service';
+import { listTrainingLocks, listCareSchedules } from '../services/medical.service';
+import { listHorses } from '../services/horse.service';
+import { listRaces, listRegistrations } from '../services/race.service';
+import { listIncidents, listRestockRequests } from '../services/care.service';
+import { healthLabel, intensityLabel, workoutLabel } from '../lib/labels';
+import { formatDate } from '../lib/format';
 
-const Dashboard = () => {
+function TodayScheduleCard({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
-  const currentUser = useStore(state => state.currentUser);
-  const horses = useStore(state => state.horses);
-  const ownerships = useStore(state => state.ownerships);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { data, loading } = useService(() => listTodaySessions(), []);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const els = containerRef.current.querySelectorAll('[data-dash-reveal]');
-    gsap.fromTo(
-      els,
-      { opacity: 0, y: 25 },
-      { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out', delay: 0.1 }
-    );
-  }, [currentUser?.role]);
+  return (
+    <Card className={compact ? '' : 'md:col-span-3'}>
+      <SectionTitle icon={<Calendar size={16} className="text-emerald-500" />}>Buổi tập hôm nay</SectionTitle>
+      {loading && <Skeleton rows={3} />}
+      {!loading && (data?.length ?? 0) === 0 && (
+        <p className="py-6 text-center text-sm font-light text-gray-400">Hôm nay không có buổi tập nào.</p>
+      )}
+      <div className="space-y-2">
+        {data?.map((session) => (
+          <button
+            key={session.id}
+            onClick={() => navigate('/training/today')}
+            className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all duration-200 ${
+              session.status === 'IN_PROGRESS'
+                ? 'border border-emerald-100 bg-emerald-50'
+                : session.status === 'CANCELLED'
+                  ? 'opacity-50'
+                  : 'hover:bg-gray-50'
+            }`}
+          >
+            <span className="w-24 shrink-0 font-mono text-xs text-gray-400 tabular-nums">{session.slotLabel}</span>
+            <Avatar src={session.horseAvatar} name={session.horseName} size={32} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-gray-800">{session.horseName}</p>
+              <p className="truncate text-xs text-gray-400">
+                {workoutLabel[session.workoutType]} · {session.distanceM} m × {session.repetitions} ·{' '}
+                {intensityLabel[session.intensity]}
+              </p>
+            </div>
+            <SessionPill status={session.status} />
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  })();
+export default function Dashboard() {
+  const currentUser = useStore((state) => state.currentUser);
+  const navigate = useNavigate();
 
   if (!currentUser) return null;
 
-  // Filter data based on role
-  const activeHorses = horses.filter(h => h.lifecycleStatus === 'ACTIVE');
-  const eligibleHorses = activeHorses.filter(h => h.healthStatus === 'ELIGIBLE');
-  const injuredHorses = activeHorses.filter(h => h.healthStatus === 'INJURED');
-  const monitorHorses = activeHorses.filter(h => h.healthStatus === 'UNDER_OBSERVATION');
-  const raceReady = activeHorses.filter(h => h.raceReadiness === 'Peak' || h.raceReadiness === 'High');
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Chào buổi sáng';
+    if (hour < 18) return 'Chào buổi chiều';
+    return 'Chào buổi tối';
+  })();
 
-  // Owner's horses
-  const myHorseIds = ownerships.filter(o => o.ownerId === currentUser.id).map(o => o.horseId);
-  const myHorses = horses.filter(h => myHorseIds.includes(h.id));
-  const myTotalShare = ownerships.filter(o => o.ownerId === currentUser.id).reduce((s, o) => s + o.percentage, 0);
+  const firstName = currentUser.name.split(' ').pop();
 
-  // ===== HEAD_TRAINER DASHBOARD =====
-  if (currentUser.role === 'HEAD_TRAINER') {
-    return (
-      <div ref={containerRef} className="space-y-8 pb-8">
-        <div data-dash-reveal>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-          <p className="text-gray-500 font-light">Track condition is optimal. {eligibleHorses.length} horses eligible for training today.</p>
-        </div>
-
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
-          {/* Today's Schedule - Wide */}
-          <div data-dash-reveal className="md:col-span-3 bg-white rounded-2xl border border-gray-100 p-7 relative overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <h3 className="text-sm font-semibold text-gray-400 mb-5 flex items-center gap-2">
-              <Calendar size={16} className="text-emerald-500" />
-              Today's schedule
-            </h3>
-            <div className="space-y-3">
-              {[
-                { time: '06:30', horse: 'Thunder King', type: 'Speed work', dist: '1,200m', status: 'done' },
-                { time: '08:00', horse: 'Silver Arrow', type: 'Endurance', dist: '2,400m', status: 'active' },
-                { time: '10:30', horse: 'Night Eclipse', type: 'Race prep', dist: '1,600m', status: 'upcoming' },
-                { time: '14:00', horse: 'Red Storm', type: 'Recovery walk', dist: '800m', status: 'upcoming' },
-              ].map((s, i) => (
-                <div
-                  key={i}
-                  className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-200 ${
-                    s.status === 'active'
-                      ? 'bg-emerald-50 border border-emerald-100'
-                      : s.status === 'done'
-                      ? 'opacity-50'
-                      : 'hover:bg-gray-50'
-                  }`}
-                >
-                  <span className="text-sm font-mono text-gray-400 w-12 tabular-nums shrink-0">{s.time}</span>
-                  <div className={`w-1.5 h-8 rounded-full shrink-0 ${
-                    s.status === 'active' ? 'bg-emerald-500' : s.status === 'done' ? 'bg-gray-200' : 'bg-gray-200'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{s.horse}</p>
-                    <p className="text-xs text-gray-400">{s.type} · {s.dist}</p>
-                  </div>
-                  {s.status === 'active' && (
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Live
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="md:col-span-2 flex flex-col gap-5">
-            <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 tabular-nums">{eligibleHorses.length}</p>
-                <p className="text-sm text-gray-400 mt-1"><T>Training ready</T></p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
-                <Activity className="text-emerald-500" size={22} />
-              </div>
-            </div>
-            <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6 flex items-center justify-between" style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div>
-                <p className="text-3xl font-bold text-gray-900 tabular-nums">{raceReady.length}</p>
-                <p className="text-sm text-gray-400 mt-1"><T>Race ready</T></p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
-                <Flag className="text-amber-500" size={22} />
-              </div>
-            </div>
-            <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-              <h4 className="text-sm font-semibold text-gray-400 mb-3"><T>Quick actions</T></h4>
-              <div className="space-y-2">
-                <button onClick={() => navigate('/horses')} className="w-full text-left text-sm text-gray-700 hover:text-emerald-600 font-medium flex items-center justify-between py-2 px-3 rounded-lg hover:bg-emerald-50 transition-all duration-200">
-                  View all horses <ArrowRight size={14} />
-                </button>
-                <button onClick={() => navigate('/race-registration')} className="w-full text-left text-sm text-gray-700 hover:text-emerald-600 font-medium flex items-center justify-between py-2 px-3 rounded-lg hover:bg-emerald-50 transition-all duration-200">
-                  Race registration <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Requires Attention */}
-        {(injuredHorses.length > 0 || monitorHorses.length > 0) && (
-          <div data-dash-reveal>
-            <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <AlertCircle size={18} className="text-amber-500" />
-              Requires attention
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[...injuredHorses, ...monitorHorses].map(horse => (
-                <div 
-                  key={horse.id} 
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  className="bg-white border border-gray-100 hover:border-gray-200 rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
-                  style={{ boxShadow: 'var(--shadow-card)' }}
-                >
-                  <img src={horse.avatar} alt={horse.name} className="w-12 h-12 rounded-xl object-cover border border-gray-100" />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-gray-800 truncate">{horse.name}</h4>
-                    <p className="text-xs text-gray-400"><T>{horse.currentPhase}</T></p>
-                  </div>
-                  <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                    horse.healthStatus === 'INJURED'
-                      ? 'bg-red-50 text-red-600 border border-red-100'
-                      : 'bg-amber-50 text-amber-600 border border-amber-100'
-                  }`}>
-                    {horse.healthStatus.replace('_', ' ')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
+  if (currentUser.role === 'HEAD_TRAINER') return <TrainerDashboard greeting={greeting} name={firstName ?? ''} />;
+  if (currentUser.role === 'VETERINARIAN') return <VetDashboard greeting={greeting} name={firstName ?? ''} />;
+  if (currentUser.role === 'HORSE_OWNER') return <OwnerDashboard greeting={greeting} name={firstName ?? ''} />;
+  if (currentUser.role === 'GROOM') {
+    navigate('/care/today', { replace: true });
+    return null;
   }
+  return <ManagerDashboard greeting={greeting} name={firstName ?? ''} />;
+}
 
-  // ===== CLUB_MANAGER DASHBOARD =====
-  if (currentUser.role === 'CLUB_MANAGER') {
-    const healthBreakdown = [
-      { label: 'Eligible', count: eligibleHorses.length, color: 'bg-emerald-500', pct: Math.round((eligibleHorses.length / activeHorses.length) * 100) },
-      { label: 'Observation', count: monitorHorses.length, color: 'bg-amber-400', pct: Math.round((monitorHorses.length / activeHorses.length) * 100) },
-      { label: 'Injured', count: injuredHorses.length, color: 'bg-red-400', pct: Math.round((injuredHorses.length / activeHorses.length) * 100) },
-    ];
+/* ===== Huấn luyện viên trưởng ===== */
 
-    return (
-      <div ref={containerRef} className="space-y-8 pb-8">
-        <div data-dash-reveal>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-          <p className="text-gray-500 font-light"><T>Club overview and management tools.</T></p>
-        </div>
+function TrainerDashboard({ greeting, name }: { greeting: string; name: string }) {
+  const navigate = useNavigate();
+  const progress = useService(() => getProgressBoard(), []);
+  const review = useService(() => listAwaitingReview(), []);
+  const zoneId = useStore((state) => state.currentUser?.zoneId);
+  const zoneName = zoneId === 'zone_a' ? 'Khu A' : 'Khu B';
 
-        {/* Top Stats Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-          {[
-            { label: 'Total horses', value: activeHorses.length, icon: Users, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500' },
-            { label: 'Race ready', value: raceReady.length, icon: Trophy, iconBg: 'bg-amber-50', iconColor: 'text-amber-500' },
-            { label: 'Injured', value: injuredHorses.length, icon: Heart, iconBg: 'bg-red-50', iconColor: 'text-red-400' },
-            { label: 'Active plans', value: 8, icon: ClipboardList, iconBg: 'bg-sky-50', iconColor: 'text-sky-500' },
-          ].map((stat, i) => (
-            <div key={i} data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-5" style={{ boxShadow: 'var(--shadow-card)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <div className={`w-9 h-9 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
-                  <stat.icon size={18} className={stat.iconColor} />
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums">{stat.value}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{stat.label}</p>
-            </div>
-          ))}
-        </div>
+  const rows = (progress.data ?? []).filter((row) => row.zoneId === zoneId);
+  const needsPlan = rows.filter((row) => row.planTag);
+  const alerts = rows.reduce((sum, row) => sum + row.alerts7, 0);
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
-          {/* Health Breakdown */}
-          <div data-dash-reveal className="md:col-span-2 bg-white rounded-2xl border border-gray-100 p-7" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <h3 className="text-sm font-semibold text-gray-400 mb-5 flex items-center gap-2">
-              <BarChart3 size={16} className="text-emerald-500" />
-              Health status breakdown
-            </h3>
-            {/* Stacked bar */}
-            <div className="h-4 bg-gray-100 rounded-full overflow-hidden flex mb-5">
-              {healthBreakdown.map((h, i) => (
-                <div key={i} className={`h-full ${h.color} transition-all duration-700`} style={{ width: `${h.pct}%` }} />
-              ))}
-            </div>
-            <div className="space-y-3">
-              {healthBreakdown.map((h, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2.5 h-2.5 rounded-full ${h.color}`} />
-                    <span className="text-sm text-gray-600">{h.label}</span>
-                  </div>
-                  <span className="text-sm font-semibold text-gray-800 tabular-nums">{h.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Horses + Actions */}
-          <div data-dash-reveal className="md:col-span-3 bg-white rounded-2xl border border-gray-100 p-7" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-semibold text-gray-400"><T>Horse roster</T></h3>
-              <button onClick={() => navigate('/horses')} className="text-xs text-emerald-600 font-semibold hover:text-emerald-500 flex items-center gap-1">
-                View all <ArrowRight size={12} />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {activeHorses.slice(0, 5).map(horse => (
-                <div
-                  key={horse.id}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 cursor-pointer transition-all duration-200"
-                >
-                  <img src={horse.avatar} alt={horse.name} className="w-9 h-9 rounded-lg object-cover" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{horse.name}</p>
-                    <p className="text-xs text-gray-400">{horse.breed} · {horse.age}yo</p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                    horse.healthStatus === 'ELIGIBLE' ? 'text-emerald-600 bg-emerald-50' :
-                    horse.healthStatus === 'INJURED' ? 'text-red-600 bg-red-50' :
-                    'text-amber-600 bg-amber-50'
-                  }`}>
-                    {horse.healthStatus.replace('_', ' ')}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 pt-5 border-t border-gray-100 flex gap-3">
-              <button
-                onClick={() => navigate('/horses/new')}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 transition-all duration-200 shadow-sm shadow-emerald-600/20 active:scale-[0.98]"
-              >
-                Register new horse
-              </button>
-              <button
-                onClick={() => navigate('/race-registration')}
-                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-all duration-200 active:scale-[0.98]"
-              >
-                Race registration
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (currentUser.role === 'VETERINARIAN' || currentUser.role === 'GROOM') {
-    const isVet = currentUser.role === 'VETERINARIAN';
-    const queue = isVet ? [...injuredHorses, ...monitorHorses] : activeHorses.slice(0, 4);
-    return (
-      <div ref={containerRef} className="space-y-8 pb-8">
-        <div data-dash-reveal>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-          <p className="text-gray-500 font-light">{isVet ? 'Clinical queue, medical alerts, and preventive care.' : 'Daily care, stable tasks, and veterinary instructions.'}</p>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-          {[
-            { label: isVet ? 'Critical cases' : 'Tasks today', value: isVet ? injuredHorses.length : 8, color: 'text-red-500' },
-            { label: isVet ? 'Monitoring' : 'Completed', value: isVet ? monitorHorses.length : 3, color: 'text-amber-500' },
-            { label: isVet ? 'Healthy' : 'Horses in care', value: eligibleHorses.length, color: 'text-emerald-600' },
-            { label: 'Open alerts', value: 2, color: 'text-sky-500' },
-          ].map(stat => <div key={stat.label} data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-5" style={{ boxShadow: 'var(--shadow-card)' }}><p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p><p className="text-xs text-gray-400 mt-1">{stat.label}</p></div>)}
-        </div>
-        <div className="grid md:grid-cols-5 gap-5">
-          <div data-dash-reveal className="md:col-span-3 bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <h3 className="text-sm font-semibold text-gray-500 mb-5">{isVet ? 'Cases requiring attention' : 'Next care actions'}</h3>
-            <div className="space-y-3">{queue.map(horse => <div key={horse.id} onClick={() => navigate(`/horses/${horse.id}`)} className="flex items-center gap-3 rounded-xl p-3 hover:bg-gray-50 cursor-pointer"><img src={horse.avatar} className="w-10 h-10 rounded-xl object-cover" /><div className="flex-1"><p className="text-sm font-semibold text-gray-800">{horse.name}</p><p className="text-xs text-gray-400"><T>{horse.currentPhase}</T></p></div><span className="text-xs font-medium text-emerald-600"><T>Open</T></span></div>)}</div>
-          </div>
-          <div data-dash-reveal className="md:col-span-2 bg-emerald-50 border border-emerald-100 rounded-2xl p-6">
-            <AlertCircle className="text-emerald-600 mb-4" />
-            <h3 className="font-semibold text-gray-900">{isVet ? 'Preventive schedule' : 'Vet instruction'}</h3>
-            <p className="text-sm text-gray-500 mt-2">{isVet ? 'Three vaccinations and one farrier review are due this week.' : 'Thunder King: walk in hand only for 20 minutes.'}</p>
-            <button onClick={() => navigate(isVet ? '/medical' : '/tasks')} className="mt-6 text-sm font-semibold text-emerald-700"><T>Open workspace →</T></button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ===== HORSE_OWNER DASHBOARD =====
   return (
-    <div ref={containerRef} className="space-y-8 pb-8">
-      <div data-dash-reveal>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">{greeting}, {currentUser.name.split(' ')[0]}</h2>
-        <p className="text-gray-500 font-light"><T>Your stable and ownership portfolio.</T></p>
+    <Reveal className="space-y-8 pb-8">
+      <div data-reveal>
+        <PageHeader
+          title={`${greeting}, ${name}`}
+          description={`${zoneName} đang có ${rows.length} ngựa hoạt động. ${rows.filter((row) => !row.blocked).length} con đủ điều kiện tập hôm nay.`}
+        />
       </div>
 
-      {/* Portfolio Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
-            <Users size={18} className="text-emerald-500" />
-          </div>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums">{myHorses.length}</p>
-          <p className="text-xs text-gray-400 mt-0.5"><T>Horses owned</T></p>
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-5">
+        <div data-reveal className="md:col-span-3">
+          <TodayScheduleCard compact />
         </div>
-        <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-          <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
-            <Zap size={18} className="text-amber-500" />
+        <div className="flex flex-col gap-5 md:col-span-2">
+          <div data-reveal>
+            <Stat
+              value={review.data?.length ?? 0}
+              label="Buổi chờ đánh giá"
+              icon={<ClipboardCheck size={22} />}
+              tone="warning"
+              onClick={() => navigate('/training/review')}
+            />
           </div>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums">{myTotalShare}<span className="text-lg text-gray-400">%</span></p>
-          <p className="text-xs text-gray-400 mt-0.5"><T>Total ownership share</T></p>
-        </div>
-        <div data-dash-reveal className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-          <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center mb-3">
-            <Trophy size={18} className="text-sky-500" />
+          <div data-reveal>
+            <Stat
+              value={needsPlan.length}
+              label="Ngựa cần giáo án mới"
+              icon={<TrendingUp size={22} />}
+              onClick={() => navigate('/training/plans')}
+            />
           </div>
-          <p className="text-2xl font-bold text-gray-900 tabular-nums">{myHorses.filter(h => h.raceReadiness === 'Peak' || h.raceReadiness === 'High').length}</p>
-          <p className="text-xs text-gray-400 mt-0.5"><T>Race ready</T></p>
+          <div data-reveal>
+            <Stat
+              value={alerts}
+              label="Cảnh báo trong 7 ngày"
+              icon={<AlertTriangle size={22} />}
+              tone={alerts > 0 ? 'danger' : 'default'}
+              onClick={() => navigate('/training/progress')}
+            />
+          </div>
         </div>
       </div>
 
-      {/* My Horses */}
-      <div data-dash-reveal>
-        <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Users size={18} className="text-emerald-500" />
-          Your horses
-        </h3>
-        {myHorses.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <p className="text-gray-400 mb-2"><T>You don't own any horses yet.</T></p>
-            <p className="text-sm text-gray-300"><T>Contact your club manager to get started.</T></p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {myHorses.map(horse => {
-              const ownership = ownerships.find(o => o.horseId === horse.id && o.ownerId === currentUser.id);
-              return (
-                <div
-                  key={horse.id}
-                  onClick={() => navigate(`/horses/${horse.id}`)}
-                  className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-100 active:scale-[0.99]"
-                  style={{ boxShadow: 'var(--shadow-card)' }}
-                >
-                  <img src={horse.avatar} alt={horse.name} className="w-14 h-14 rounded-xl object-cover border border-gray-100" />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-semibold text-gray-800 truncate">{horse.name}</h4>
-                    <p className="text-xs text-gray-400">{horse.breed} · {horse.age}yo · {horse.race_aptitude}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-emerald-600 tabular-nums">{ownership?.percentage}%</p>
-                    <p className="text-xs text-gray-400"><T>share</T></p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Training Updates Feed */}
-      <div data-dash-reveal>
-        <h3 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Activity size={18} className="text-emerald-500" />
-          Recent training updates
-        </h3>
-        <div className="bg-white rounded-2xl border border-gray-100 p-6" style={{ boxShadow: 'var(--shadow-card)' }}>
-          <div className="space-y-4">
-            {[
-              { horse: 'Thunder King', event: 'Completed speed work session — 1,200m in 1:14.3', time: '2 hours ago', type: 'training' },
-              { horse: 'Night Eclipse', event: 'Fitness score updated to 88%', time: '5 hours ago', type: 'fitness' },
-              { horse: 'Thunder King', event: 'Race registration submitted for Spring Sprint Cup', time: 'Yesterday', type: 'race' },
-            ].map((update, i) => (
-              <div key={i} className="flex items-start gap-3 pb-4 border-b border-gray-50 last:border-0 last:pb-0">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                  update.type === 'training' ? 'bg-emerald-50' :
-                  update.type === 'fitness' ? 'bg-sky-50' : 'bg-amber-50'
-                }`}>
-                  {update.type === 'training' ? <Activity size={14} className="text-emerald-500" /> :
-                   update.type === 'fitness' ? <Heart size={14} className="text-sky-500" /> :
-                   <Flag size={14} className="text-amber-500" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">{update.horse}</span> — {update.event}
+      <div data-reveal>
+        <Card>
+          <SectionTitle icon={<Users size={16} className="text-emerald-500" />}>Ngựa trong khu</SectionTitle>
+          {progress.loading && <Skeleton rows={4} />}
+          <div className="space-y-2">
+            {rows.map((row) => (
+              <button
+                key={row.horseId}
+                onClick={() => navigate(`/horses/${row.horseId}`)}
+                className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-gray-50"
+              >
+                <Avatar src={row.horseAvatar} name={row.horseName} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-gray-800">{row.horseName}</p>
+                  <p className="truncate text-xs text-gray-400">
+                    {row.planName ? `${row.planName} · ${row.phaseLabel}` : 'Chưa có giáo án'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{update.time}</p>
                 </div>
-              </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {row.planTag === 'ENDING_SOON' && <Pill tone="amber">Sắp hết giáo án</Pill>}
+                  {row.planTag === 'NO_PLAN' && <Pill tone="gray">Chưa có giáo án</Pill>}
+                  {row.locked && <Pill tone="red"><Lock size={11} />Khóa</Pill>}
+                  <span className="hidden sm:block">
+                    <HealthPill status={row.healthStatus as never} />
+                  </span>
+                </div>
+              </button>
             ))}
           </div>
+        </Card>
+      </div>
+    </Reveal>
+  );
+}
+
+/* ===== Bác sĩ thú y ===== */
+
+function VetDashboard({ greeting, name }: { greeting: string; name: string }) {
+  const navigate = useNavigate();
+  const board = useService(() => getHealthBoard(), []);
+  const locks = useService(() => listTrainingLocks(), []);
+  const care = useService(() => listCareSchedules(), []);
+  const incidents = useService(() => listIncidents(), []);
+
+  const activeLocks = (locks.data ?? []).filter((lock) => !lock.liftedAt);
+  const dueCare = (care.data ?? []).filter((item) => item.overdue || item.dueSoon);
+  const openIncidents = (incidents.data ?? []).filter((item) => item.status !== 'RESOLVED');
+
+  return (
+    <Reveal className="space-y-8 pb-8">
+      <div data-reveal>
+        <PageHeader
+          title={`${greeting}, bác sĩ ${name}`}
+          description={`${board.data?.tasks.length ?? 0} việc đang chờ xử lý trên toàn câu lạc bộ.`}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+        <div data-reveal>
+          <Stat
+            value={board.data?.counts.INJURED ?? 0}
+            label="Đang chấn thương"
+            icon={<HeartPulse size={22} />}
+            tone="danger"
+            onClick={() => navigate('/medical/board')}
+          />
+        </div>
+        <div data-reveal>
+          <Stat
+            value={board.data?.counts.UNDER_OBSERVATION ?? 0}
+            label="Cần theo dõi"
+            icon={<Stethoscope size={22} />}
+            tone="warning"
+            onClick={() => navigate('/medical/board')}
+          />
+        </div>
+        <div data-reveal>
+          <Stat
+            value={activeLocks.length}
+            label="Khóa huấn luyện hiệu lực"
+            icon={<Lock size={22} />}
+            tone="danger"
+            onClick={() => navigate('/medical/locks')}
+          />
+        </div>
+        <div data-reveal>
+          <Stat
+            value={dueCare.length}
+            label="Lịch chăm sóc tới hạn"
+            icon={<Calendar size={22} />}
+            tone="warning"
+            onClick={() => navigate('/medical/care')}
+          />
         </div>
       </div>
-    </div>
-  );
-};
 
-export default Dashboard;
+      <div className="grid gap-5 md:grid-cols-5">
+        <div data-reveal className="md:col-span-3">
+          <Card>
+            <SectionTitle icon={<AlertTriangle size={16} className="text-amber-500" />}>Việc cần xử lý</SectionTitle>
+            {board.loading && <Skeleton rows={3} />}
+            {!board.loading && (board.data?.tasks.length ?? 0) === 0 && (
+              <p className="py-6 text-center text-sm font-light text-gray-400">Không có việc nào đang chờ.</p>
+            )}
+            <div className="space-y-2">
+              {board.data?.tasks.slice(0, 6).map((task) => (
+                <button
+                  key={task.key}
+                  onClick={() => navigate('/medical/board')}
+                  className="flex w-full items-start gap-3 rounded-xl p-3 text-left transition hover:bg-gray-50"
+                >
+                  <span
+                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${task.urgent ? 'bg-red-500' : 'bg-amber-400'}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-800">
+                      {task.horseName} · <span className="font-normal text-gray-500">{task.source}</span>
+                    </p>
+                    <p className="truncate text-xs text-gray-400">{task.detail}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+        </div>
+        <div data-reveal className="md:col-span-2">
+          <Card>
+            <SectionTitle icon={<Flag size={16} className="text-emerald-500" />}>Sự cố chưa xử lý</SectionTitle>
+            {openIncidents.length === 0 && (
+              <p className="py-6 text-center text-sm font-light text-gray-400">Không có sự cố nào.</p>
+            )}
+            <div className="space-y-3">
+              {openIncidents.map((incident) => (
+                <div key={incident.id} className="rounded-xl bg-gray-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-800">{incident.horseName}</p>
+                    {incident.urgent && <Pill tone="red">Khẩn</Pill>}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">{incident.description}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </Reveal>
+  );
+}
+
+/* ===== Chủ sở hữu ngựa ===== */
+
+function OwnerDashboard({ greeting, name }: { greeting: string; name: string }) {
+  const navigate = useNavigate();
+  const horses = useService(() => listHorses(), []);
+  const progress = useService(() => getProgressBoard(), []);
+  const registrations = useService(() => listRegistrations(), []);
+
+  const pending = (registrations.data ?? []).filter((item) => item.canDecide);
+
+  return (
+    <Reveal className="space-y-8 pb-8">
+      <div data-reveal>
+        <PageHeader
+          title={`${greeting}, ${name}`}
+          description={`Bạn đang sở hữu ${horses.data?.length ?? 0} con ngựa tại câu lạc bộ.`}
+        />
+      </div>
+
+      {pending.length > 0 && (
+        <div data-reveal>
+          <Card tone="warning">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {pending.length} đăng ký thi đấu đang chờ bạn duyệt
+                </p>
+                <p className="mt-0.5 text-sm text-gray-600">
+                  {pending.map((item) => `${item.horseName} — ${item.raceName}`).join(', ')}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/races/approvals')}
+                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+              >
+                Xem và duyệt
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {horses.loading && <Skeleton rows={3} />}
+      <div className="grid gap-5 sm:grid-cols-2">
+        {horses.data?.map((horse) => {
+          const row = progress.data?.find((item) => item.horseId === horse.id);
+          return (
+            <div data-reveal key={horse.id}>
+              <button onClick={() => navigate(`/horses/${horse.id}`)} className="w-full text-left">
+                <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(5,96,69,0.1)]">
+                  <div className="flex items-center gap-4">
+                    <Avatar src={horse.avatar} name={horse.name} size={56} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-lg font-bold text-gray-900">{horse.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {horse.zoneName ?? 'Chưa xếp chuồng'} · {horse.stallCode ?? '—'}
+                      </p>
+                    </div>
+                    <HealthPill status={horse.healthStatus} />
+                  </div>
+                  <div className="mt-5 space-y-2 border-t border-gray-50 pt-4 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="font-light text-gray-400">Giáo án</span>
+                      <span className="text-right font-medium text-gray-700">
+                        {row?.planName ? `${row.planName} · ${row.phaseLabel}` : 'Chưa có giáo án'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-light text-gray-400">Được đua</span>
+                      <span className="text-right font-medium text-gray-700">
+                        {horse.raceAllowed ? 'Có' : horse.raceReason}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Reveal>
+  );
+}
+
+/* ===== Quản lý câu lạc bộ ===== */
+
+function ManagerDashboard({ greeting, name }: { greeting: string; name: string }) {
+  const navigate = useNavigate();
+  const board = useService(() => getHealthBoard(), []);
+  const races = useService(() => listRaces(), []);
+  const restock = useService(() => listRestockRequests(), []);
+  const progress = useService(() => getProgressBoard(), []);
+
+  const pendingRestock = (restock.data ?? []).filter((item) => item.status === 'PENDING');
+  const upcomingRaces = (races.data ?? []).filter((race) => race.status === 'OPEN');
+  const alerts7 = (progress.data ?? []).reduce((sum, row) => sum + row.alerts7, 0);
+
+  return (
+    <Reveal className="space-y-8 pb-8">
+      <div data-reveal>
+        <PageHeader
+          title={`${greeting}, ${name}`}
+          description="Toàn cảnh câu lạc bộ: đàn ngựa, huấn luyện, vận hành và thi đấu."
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+        {(['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'] as const).map((status, index) => (
+          <div data-reveal key={status}>
+            <Stat
+              value={board.data?.counts[status] ?? 0}
+              label={healthLabel[status]}
+              icon={index === 0 ? <Users size={22} /> : <HeartPulse size={22} />}
+              tone={status === 'INJURED' ? 'danger' : status === 'UNDER_OBSERVATION' ? 'warning' : status === 'ELIGIBLE' ? 'success' : 'default'}
+              onClick={() => navigate('/medical/board')}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-5">
+        <div data-reveal className="md:col-span-3">
+          <TodayScheduleCard compact />
+        </div>
+        <div className="flex flex-col gap-5 md:col-span-2">
+          <div data-reveal>
+            <Stat
+              value={alerts7}
+              label="Cảnh báo huấn luyện 7 ngày"
+              icon={<Activity size={22} />}
+              tone={alerts7 > 0 ? 'danger' : 'default'}
+              onClick={() => navigate('/training/progress')}
+            />
+          </div>
+          <div data-reveal>
+            <Stat
+              value={pendingRestock.length}
+              label="Đề xuất vật tư chờ duyệt"
+              icon={<ClipboardCheck size={22} />}
+              tone={pendingRestock.length > 0 ? 'warning' : 'default'}
+              onClick={() => navigate('/care/supplies')}
+            />
+          </div>
+          <div data-reveal>
+            <Card>
+              <SectionTitle icon={<Trophy size={16} className="text-amber-500" />}>Giải đua sắp tới</SectionTitle>
+              {upcomingRaces.length === 0 && (
+                <p className="text-sm font-light text-gray-400">Chưa có giải nào đang mở đăng ký.</p>
+              )}
+              <div className="space-y-2">
+                {upcomingRaces.map((race) => (
+                  <button
+                    key={race.id}
+                    onClick={() => navigate('/races')}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl p-2.5 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-800">{race.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {formatDate(race.date)} · {race.distanceM} m
+                      </p>
+                    </div>
+                    <Pill tone="green">{race.registrationCount} ngựa</Pill>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      <div data-reveal>
+        <Card>
+          <SectionTitle icon={<TrendingUp size={16} className="text-emerald-500" />}>
+            Ngựa cần chú ý
+          </SectionTitle>
+          {progress.loading && <Skeleton rows={3} />}
+          <div className="space-y-2">
+            {(progress.data ?? [])
+              .filter((row) => row.blocked || row.alerts7 > 0 || row.planTag)
+              .slice(0, 6)
+              .map((row) => (
+                <button
+                  key={row.horseId}
+                  onClick={() => navigate(`/horses/${row.horseId}`)}
+                  className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-gray-50"
+                >
+                  <Avatar src={row.horseAvatar} name={row.horseName} size={34} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-800">{row.horseName}</p>
+                    <p className="truncate text-xs text-gray-400">
+                      {row.blockReason ?? row.zoneName ?? '—'}
+                    </p>
+                  </div>
+                  {row.alerts7 > 0 && <Pill tone="red">{row.alerts7} cảnh báo</Pill>}
+                  {row.planTag === 'ENDING_SOON' && <Pill tone="amber">Sắp hết giáo án</Pill>}
+                  {row.planTag === 'NO_PLAN' && <Pill tone="gray">Chưa có giáo án</Pill>}
+                </button>
+              ))}
+          </div>
+        </Card>
+      </div>
+    </Reveal>
+  );
+}

@@ -18,13 +18,13 @@ function translateVietnamese(text: string) {
 
 export function I18nProvider({ children }: PropsWithChildren) {
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = window.localStorage.getItem('raceos-language');
-    return saved === 'vi' || saved === 'en' ? saved : 'en';
+    const saved = window.localStorage.getItem('horseracing-language');
+    return saved === 'en' ? saved : 'vi';
   });
   const value = useMemo<I18nValue>(() => ({
     language,
-    setLanguage: (next) => { setLanguageState(next); window.localStorage.setItem('raceos-language', next); },
-    toggleLanguage: () => { const next = language === 'en' ? 'vi' : 'en'; setLanguageState(next); window.localStorage.setItem('raceos-language', next); },
+    setLanguage: (next) => { setLanguageState(next); window.localStorage.setItem('horseracing-language', next); },
+    toggleLanguage: () => { const next = language === 'en' ? 'vi' : 'en'; setLanguageState(next); window.localStorage.setItem('horseracing-language', next); },
     t: (text) => language === 'vi' ? translateVietnamese(text) : text,
   }), [language]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

@@ -1,78 +1,69 @@
+// Trạng thái phiên làm việc. Dữ liệu nghiệp vụ không nằm ở đây —
+// mọi màn hình lấy qua `services/*` bằng hook useService.
 import { create } from 'zustand';
-import { horses as initialHorses, ownerships as initialOwnerships, raceRegistrations as initialRaceRegistrations, trainingPlans as initialTrainingPlans, users as initialUsers } from '../data/raceos';
-import type { Horse, Ownership, RaceRegistration, TrainingPlan, TrainingSession, User } from '../types/raceos';
-
-export type {
-  HealthStatus,
-  Horse,
-  HorseGender,
-  LifecycleStatus,
-  Ownership,
-  RaceAptitude,
-  TrainingPlan,
-  TrainingSession,
-  User,
-  UserRole,
-} from '../types/raceos';
+import type { AppNotification, User } from '../types/domain';
+import { getCurrentUser, setCurrentUser } from '../services/api';
+import { login as loginService, logout as logoutService } from '../services/auth.service';
+import { readNotificationsSync } from '../services/system.service';
+import { subscribe } from '../services/db';
 
 interface AppState {
-  horses: Horse[];
-  users: User[];
-  ownerships: Ownership[];
-  trainingPlans: TrainingPlan[];
-  raceRegistrations: RaceRegistration[];
-  alerts: unknown[];
-  isAuthenticated: boolean;
   currentUser: User | null;
-  createHorse: (horse: Horse) => void;
-  updateHorse: (id: string, partialData: Partial<Horse>) => void;
-  deleteHorse: (id: string) => void;
-  updateOwnerships: (horseId: string, newOwnerships: Ownership[]) => void;
-  saveTrainingPlan: (plan: TrainingPlan) => void;
-  saveTrainingSession: (planId: string, phaseId: string, session: TrainingSession) => void;
-  registerRace: (registration: RaceRegistration) => void;
-  login: (email: string, password: string) => Promise<boolean>;
+  isAuthenticated: boolean;
+  notifications: AppNotification[];
+  unreadCount: number;
+  login: (email: string, password: string) => Promise<User>;
+  switchUser: (userId: string) => void;
   logout: () => void;
+  refresh: () => void;
 }
 
 export const useStore = create<AppState>((set) => ({
-  horses: initialHorses,
-  users: initialUsers,
-  ownerships: initialOwnerships,
-  trainingPlans: initialTrainingPlans,
-  raceRegistrations: initialRaceRegistrations,
-  alerts: [],
-  isAuthenticated: false,
-  currentUser: null,
-  createHorse: (horse) => set((state) => ({ horses: [...state.horses, horse] })),
-  updateHorse: (id, partialData) =>
-    set((state) => ({
-      horses: state.horses.map((horse) =>
-        horse.id === id ? { ...horse, ...partialData } : horse,
-      ),
-    })),
-  deleteHorse: (id) =>
-    set((state) => ({ horses: state.horses.filter((horse) => horse.id !== id) })),
-  updateOwnerships: (horseId, newOwnerships) =>
-    set((state) => ({
-      ownerships: [
-        ...state.ownerships.filter((ownership) => ownership.horseId !== horseId),
-        ...newOwnerships,
-      ],
-    })),
-  saveTrainingPlan: (plan) =>
-    set((state) => ({ trainingPlans: state.trainingPlans.some((item) => item.id === plan.id) ? state.trainingPlans.map((item) => item.id === plan.id ? plan : item) : [...state.trainingPlans, plan] })),
-  saveTrainingSession: (planId, phaseId, session) =>
-    set((state) => ({ trainingPlans: state.trainingPlans.map((plan) => plan.id !== planId ? plan : { ...plan, phases: plan.phases.map((phase) => phase.id !== phaseId ? phase : { ...phase, sessions: phase.sessions.some((item) => item.id === session.id) ? phase.sessions.map((item) => item.id === session.id ? session : item) : [...phase.sessions, session] }) }) })),
-  registerRace: (registration) =>
-    set((state) => ({ raceRegistrations: state.raceRegistrations.some((item) => item.horseId === registration.horseId && item.raceId === registration.raceId) ? state.raceRegistrations : [...state.raceRegistrations, registration] })),
+  currentUser: getCurrentUser(),
+  isAuthenticated: !!getCurrentUser(),
+  notifications: readNotificationsSync(),
+  unreadCount: readNotificationsSync().filter((item) => !item.readAt).length,
+
   login: async (email, password) => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    if (password !== 'password123') return false;
-    const user = initialUsers.find((candidate) => candidate.email === email);
-    if (!user) return false;
-    set({ isAuthenticated: true, currentUser: user });
-    return true;
+    const user = await loginService(email, password);
+    const notifications = readNotificationsSync();
+    set({
+      currentUser: user,
+      isAuthenticated: true,
+      notifications,
+      unreadCount: notifications.filter((item) => !item.readAt).length,
+    });
+    return user;
   },
-  logout: () => set({ isAuthenticated: false, currentUser: null }),
+
+  switchUser: (userId) => {
+    setCurrentUser(userId);
+    const user = getCurrentUser();
+    const notifications = readNotificationsSync();
+    set({
+      currentUser: user,
+      isAuthenticated: !!user,
+      notifications,
+      unreadCount: notifications.filter((item) => !item.readAt).length,
+    });
+  },
+
+  logout: () => {
+    logoutService();
+    set({ currentUser: null, isAuthenticated: false, notifications: [], unreadCount: 0 });
+  },
+
+  refresh: () => {
+    const user = getCurrentUser();
+    const notifications = readNotificationsSync();
+    set({
+      currentUser: user,
+      isAuthenticated: !!user,
+      notifications,
+      unreadCount: notifications.filter((item) => !item.readAt).length,
+    });
+  },
 }));
+
+// Kho dữ liệu đổi (kể cả từ tab khác) thì chuông thông báo cập nhật theo.
+subscribe(() => useStore.getState().refresh());

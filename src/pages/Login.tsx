@@ -1,136 +1,151 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useStore } from '../store/store';
-import { KeyRound, Mail, ArrowRight, ArrowLeft, ShieldCheck, Flag } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flag, KeyRound, Mail, Users } from 'lucide-react';
 import gsap from 'gsap';
-import { T } from '../i18n/T';
-import { LanguageSwitch } from '../i18n/LanguageSwitch';
+import { useStore } from '../store/store';
+import { listAccounts, SHARED_PASSWORD } from '../services/auth.service';
+import { roleLabel } from '../lib/labels';
+import { Avatar } from '../components/ui';
+import type { UserRole } from '../types/domain';
+
+const roleOrder: UserRole[] = ['CLUB_MANAGER', 'HEAD_TRAINER', 'VETERINARIAN', 'GROOM', 'HORSE_OWNER'];
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const login = useStore(state => state.login);
+  const login = useStore((state) => state.login);
   const navigate = useNavigate();
   const formRef = useRef<HTMLDivElement>(null);
+
+  const accounts = useMemo(() => listAccounts(), []);
+  const grouped = useMemo(
+    () =>
+      roleOrder.map((role) => ({
+        role,
+        users: accounts.filter((user) => user.role === role),
+      })),
+    [accounts],
+  );
 
   useEffect(() => {
     if (!formRef.current) return;
     const elements = formRef.current.querySelectorAll('[data-form-reveal]');
-    gsap.fromTo(
+    const tween = gsap.fromTo(
       elements,
       { opacity: 0, y: 20 },
-      { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out', delay: 0.2 }
+      { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out', delay: 0.15 },
     );
+    return () => {
+      tween.kill();
+    };
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault();
     setError('');
     setIsLoading(true);
-    
     try {
-      const success = await login(email, password);
-      if (success) {
-        navigate('/dashboard');
-      } else {
-        setError('Invalid email or password. Please try again.');
-      }
-    } catch {
-      setError('An error occurred. Please try again later.');
+      await login(email, password);
+      navigate('/dashboard');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không đăng nhập được, vui lòng thử lại.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoClick = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('password123');
+  const quickFill = (value: string) => {
+    setEmail(value);
+    setPassword(SHARED_PASSWORD);
+    setError('');
   };
 
   return (
-    <div className="min-h-screen flex font-sans">
-      <div className="fixed right-5 top-5 z-50"><LanguageSwitch /></div>
-      {/* Left — Image Panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+    <div className="flex min-h-screen font-sans">
+      {/* Bên trái — ảnh */}
+      <div className="relative hidden overflow-hidden lg:flex lg:w-1/2">
         <img
           src="/mike-kotsch-aZ4HBJf8Gmc-unsplash.jpg"
-          alt="Horse on green meadow"
-          className="absolute inset-0 w-full h-full object-cover"
+          alt="Ngựa trên đồng cỏ của trường đua"
+          className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/60 to-emerald-800/30" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
 
         <div className="relative z-10 flex flex-col justify-end p-12 pb-16">
-          <Link to="/" className="absolute top-8 left-8 flex items-center gap-2.5 text-white/80 hover:text-white transition-colors">
+          <Link
+            to="/"
+            className="absolute left-8 top-8 flex items-center gap-2.5 text-white/80 transition-colors hover:text-white"
+          >
             <ArrowLeft size={18} />
-            <span className="text-sm font-medium"><T>Back to home</T></span>
+            <span className="text-sm font-medium">Về trang chủ</span>
           </Link>
 
-          <div className="flex items-center gap-2.5 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20">
+          <div className="mb-6 flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/15 backdrop-blur-sm">
               <Flag size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-white"><T>HorseRacing</T></span>
+            <span className="text-xl font-bold tracking-tight text-white">HorseRacing</span>
           </div>
-          <p className="text-white/70 text-base font-light max-w-sm leading-relaxed">
-            <T>Professional equine training management. Built for trainers, managers, and owners who demand precision.</T>
+          <p className="max-w-sm text-base font-light leading-relaxed text-white/70">
+            Hệ thống quản lý huấn luyện ngựa đua. Hồ sơ đàn ngựa, giáo án, y tế, chăm sóc và thi đấu trong
+            một nơi duy nhất.
           </p>
         </div>
       </div>
 
-      {/* Right — Form Panel */}
-      <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-12 bg-white">
+      {/* Bên phải — biểu mẫu */}
+      <div className="flex flex-1 items-center justify-center bg-white px-6 py-12 sm:px-12">
         <div className="w-full max-w-md" ref={formRef}>
-          {/* Mobile back link */}
           <Link
             to="/"
-            className="lg:hidden inline-flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors mb-8 text-sm"
+            className="mb-8 inline-flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-gray-600 lg:hidden"
             data-form-reveal
           >
             <ArrowLeft size={16} />
-            Back to home
+            Về trang chủ
           </Link>
 
           <div className="mb-10" data-form-reveal>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-2"><T>Welcome back</T></h1>
-            <p className="text-gray-500 font-light"><T>Sign in to your account to continue.</T></p>
+            <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-900">Đăng nhập</h1>
+            <p className="font-light text-gray-500">Dùng tài khoản câu lạc bộ cấp cho bạn.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5" data-form-reveal>
             <div className="space-y-4">
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-300 group-focus-within:text-emerald-500 transition-colors">
+              <div className="group relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-emerald-500">
                   <Mail className="h-5 w-5" />
                 </div>
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl pl-12 pr-4 py-3.5 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:bg-white transition-all placeholder:text-gray-400 font-light"
-                  placeholder="name@gmail.com"
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 font-light text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
+                  placeholder="ten@horseracing.vn"
                   required
                 />
               </div>
 
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-300 group-focus-within:text-emerald-500 transition-colors">
+              <div className="group relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-emerald-500">
                   <KeyRound className="h-5 w-5" />
                 </div>
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-50 text-gray-900 border border-gray-200 rounded-xl pl-12 pr-4 py-3.5 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 focus:bg-white transition-all placeholder:text-gray-400 font-light"
-                  placeholder="••••••••"
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 font-light text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
+                  placeholder="••••••"
                   required
                 />
               </div>
             </div>
 
             {error && (
-              <div className="text-red-600 text-sm font-medium flex items-center bg-red-50 p-3 rounded-xl border border-red-100">
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm font-medium text-red-600">
                 {error}
               </div>
             )}
@@ -138,46 +153,55 @@ export const Login = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center group disabled:opacity-70 disabled:cursor-not-allowed shadow-md shadow-emerald-600/20 hover:shadow-lg hover:shadow-emerald-500/25 active:scale-[0.98]"
+              className="group flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3.5 font-semibold text-white shadow-md shadow-emerald-600/20 transition-all duration-200 hover:bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
               ) : (
                 <>
-                  Sign in
-                  <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  Đăng nhập
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Demo Accounts */}
-          <div className="mt-10 pt-8 border-t border-gray-100" data-form-reveal>
-            <div className="flex items-center gap-2 mb-4">
-              <ShieldCheck className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs font-semibold text-gray-400 tracking-wide"><T>Demo credentials</T></span>
+          <div className="mt-10 border-t border-gray-100 pt-8" data-form-reveal>
+            <div className="mb-4 flex items-center gap-2">
+              <Users className="h-3.5 w-3.5 text-gray-400" />
+              <span className="text-xs font-semibold tracking-wide text-gray-400">Chọn nhanh tài khoản</span>
             </div>
-            <div className="space-y-2">
-              {[
-                { label: 'Head Trainer', email: 'trainer@gmail.com', color: 'emerald' },
-                { label: 'Club Manager', email: 'manager@gmail.com', color: 'sky' },
-                { label: 'Horse Owner', email: 'owner@gmail.com', color: 'amber' },
-                { label: 'Veterinarian', email: 'vet@gmail.com', color: 'red' },
-                { label: 'Groom', email: 'groom@gmail.com', color: 'emerald' },
-              ].map((demo) => (
-                <button
-                  key={demo.email}
-                  onClick={() => handleDemoClick(demo.email)}
-                  className="flex items-center justify-between w-full p-3 rounded-xl hover:bg-gray-50 text-left transition-all duration-200 group border border-transparent hover:border-gray-100"
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-700">{demo.label}</span>
-                    <span className="text-xs text-gray-400 font-mono">{demo.email}</span>
+            <div className="max-h-72 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
+              {grouped.map((group) => (
+                <div key={group.role}>
+                  <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-gray-300">
+                    {roleLabel[group.role]}
+                  </p>
+                  <div className="space-y-1">
+                    {group.users.map((user) => (
+                      <button
+                        key={user.id}
+                        onClick={() => quickFill(user.email)}
+                        className={`group flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all duration-200 ${
+                          email === user.email
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : 'border-transparent hover:border-gray-100 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Avatar name={user.name} size={30} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-700">{user.name}</p>
+                          <p className="truncate font-mono text-xs text-gray-400">{user.email}</p>
+                        </div>
+                        {user.zoneId && (
+                          <span className="rounded-lg bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
+                            {user.zoneId === 'zone_a' ? 'Khu A' : 'Khu B'}
+                          </span>
+                        )}
+                      </button>
+                    ))}
                   </div>
-                  <span className="text-xs text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity bg-emerald-50 px-2.5 py-1 rounded-lg font-medium">
-                    Auto-fill
-                  </span>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -186,3 +210,5 @@ export const Login = () => {
     </div>
   );
 };
+
+export default Login;
