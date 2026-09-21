@@ -1,176 +1,475 @@
-import { useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Calendar, Flag, LogOut, Activity, Bell, Stethoscope, ClipboardCheck, MapPinned, Camera, BarChart3, Workflow, Boxes, UserCircle } from 'lucide-react';
-import { useStore } from '../store/store';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
+import {
+  Activity,
+  BarChart3,
+  Bell,
+  Boxes,
+  Calendar,
+  CalendarCheck,
+  ClipboardCheck,
+  ClipboardList,
+  Flag,
+  HeartPulse,
+  LayoutDashboard,
+  Lock,
+  LogOut,
+  MapPinned,
+  Play,
+  Camera,
+  ScrollText,
+  Settings,
+  ShieldCheck,
+  Stethoscope,
+  Syringe,
+  TrendingUp,
+  Trophy,
+  Users,
+  UtensilsCrossed,
+} from 'lucide-react';
 import Lenis from 'lenis';
-import { useI18n } from '../i18n/I18nContext';
-import { T } from '../i18n/T';
+import { useStore } from '../store/store';
+import { Avatar, ToastHost, useToast } from '../components/ui';
+import { roleLabel } from '../lib/labels';
+import { markAllNotificationsRead, markNotificationRead } from '../services/system.service';
+import { syncRunningSessions } from '../services/training.service';
+import { formatRelative } from '../lib/format';
+import { now } from '../lib/clock';
+import { playAlertBeep } from '../lib/sound';
 
-const MainLayout = () => {
+interface NavItem {
+  name: string;
+  path: string;
+  icon: typeof Flag;
+}
+
+function menuFor(role: string | undefined, zoneName: string): { group?: string; items: NavItem[] }[] {
+  switch (role) {
+    case 'CLUB_MANAGER':
+      return [
+        { items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] },
+        {
+          group: 'Đàn ngựa',
+          items: [
+            { name: 'Ngựa', path: '/horses', icon: Users },
+            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
+          ],
+        },
+        {
+          group: 'Huấn luyện',
+          items: [
+            { name: 'Tiến độ', path: '/training/progress', icon: TrendingUp },
+            { name: 'Lịch tập', path: '/training/schedule', icon: Calendar },
+            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
+          ],
+        },
+        {
+          group: 'Y tế',
+          items: [
+            { name: 'Sơ đồ sức khỏe', path: '/medical/board', icon: HeartPulse },
+            { name: 'Hồ sơ khám', path: '/medical/records', icon: Stethoscope },
+            { name: 'Lịch chăm sóc', path: '/medical/care', icon: Syringe },
+          ],
+        },
+        {
+          group: 'Vận hành',
+          items: [
+            { name: 'Vật tư', path: '/care/supplies', icon: Boxes },
+            { name: 'Giải đua', path: '/races', icon: Trophy },
+            { name: 'Kết quả', path: '/races/results', icon: Flag },
+            { name: 'Báo cáo', path: '/reports', icon: BarChart3 },
+          ],
+        },
+        {
+          group: 'Quản trị',
+          items: [
+            { name: 'Nhân sự', path: '/admin/users', icon: Users },
+            { name: 'Phân quyền', path: '/admin/permissions', icon: ShieldCheck },
+            { name: 'Khu và ô chuồng', path: '/admin/zones', icon: MapPinned },
+            { name: 'Nhật ký thao tác', path: '/admin/audit', icon: ScrollText },
+            { name: 'Công cụ hệ thống', path: '/admin/system', icon: Settings },
+          ],
+        },
+      ];
+    case 'HEAD_TRAINER':
+      return [
+        { items: [{ name: `Tổng quan ${zoneName}`, path: '/dashboard', icon: LayoutDashboard }] },
+        {
+          group: 'Đàn ngựa',
+          items: [
+            { name: 'Ngựa', path: '/horses', icon: Users },
+            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
+          ],
+        },
+        {
+          group: 'Huấn luyện',
+          items: [
+            { name: 'Giáo án', path: '/training/plans', icon: ClipboardList },
+            { name: 'Lịch tập', path: '/training/schedule', icon: Calendar },
+            { name: 'Buổi tập hôm nay', path: '/training/today', icon: CalendarCheck },
+            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
+            { name: 'Chờ đánh giá', path: '/training/review', icon: ClipboardCheck },
+            { name: 'Tiến độ', path: '/training/progress', icon: TrendingUp },
+          ],
+        },
+        {
+          group: 'Khác',
+          items: [
+            { name: 'Đăng ký thi đấu', path: '/races', icon: Trophy },
+            { name: 'Khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
+          ],
+        },
+      ];
+    case 'VETERINARIAN':
+      return [
+        { items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] },
+        {
+          group: 'Y tế',
+          items: [
+            { name: 'Sơ đồ sức khỏe', path: '/medical/board', icon: HeartPulse },
+            { name: 'Hồ sơ khám', path: '/medical/records', icon: Stethoscope },
+            { name: 'Khóa huấn luyện', path: '/medical/locks', icon: Lock },
+            { name: 'Lịch chăm sóc định kỳ', path: '/medical/care', icon: Syringe },
+            { name: 'Sự cố', path: '/care/incidents', icon: Camera },
+          ],
+        },
+        {
+          group: 'Theo dõi',
+          items: [
+            { name: 'Ngựa', path: '/horses', icon: Users },
+            { name: 'Nhịp tim tối đa', path: '/medical/heart-rate', icon: Activity },
+            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
+            { name: 'Duyệt khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
+          ],
+        },
+      ];
+    case 'GROOM':
+      return [
+        {
+          items: [
+            { name: 'Hôm nay', path: '/care/today', icon: CalendarCheck },
+            { name: 'Buổi tập hôm nay', path: '/training/today', icon: Play },
+            { name: 'Việc chăm sóc của tôi', path: '/care/instructions', icon: ClipboardCheck },
+            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
+            { name: 'Ngựa', path: '/horses', icon: Users },
+            { name: 'Khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
+            { name: 'Báo sự cố', path: '/care/incidents/new', icon: Camera },
+            { name: 'Vật tư', path: '/care/supplies', icon: Boxes },
+          ],
+        },
+      ];
+    case 'HORSE_OWNER':
+      return [
+        {
+          items: [
+            { name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard },
+            { name: 'Ngựa của tôi', path: '/horses', icon: Users },
+            { name: 'Duyệt đăng ký thi đấu', path: '/races/approvals', icon: Trophy },
+            { name: 'Báo cáo chi phí', path: '/reports', icon: BarChart3 },
+          ],
+        },
+      ];
+    default:
+      return [{ items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] }];
+  }
+}
+
+function NotificationBell() {
+  const notifications = useStore((state) => state.notifications);
+  const unread = useStore((state) => state.unreadCount);
+  const refresh = useStore((state) => state.refresh);
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const seen = useRef<Set<string>>(new Set());
+  const primed = useRef(false);
+
+  // Cảnh báo khẩn hiện thông báo nổi kèm tiếng bíp ngắn.
+  useEffect(() => {
+    const urgent = notifications.filter((item) => item.level === 'URGENT' && !item.readAt);
+    if (!primed.current) {
+      urgent.forEach((item) => seen.current.add(item.id));
+      primed.current = true;
+      return;
+    }
+    const fresh = urgent.filter((item) => !seen.current.has(item.id));
+    fresh.forEach((item) => {
+      seen.current.add(item.id);
+      toast.push(`${item.title} — ${item.body}`, 'error');
+    });
+    if (fresh.length > 0) playAlertBeep();
+  }, [notifications, toast]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((value) => !value)}
+        aria-label="Thông báo"
+        className="relative rounded-xl border border-gray-200 bg-white p-2.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
+      >
+        <Bell size={17} />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white tabular-nums">
+            {unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <button className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} aria-hidden />
+          <div className="absolute right-0 top-12 z-50 w-96 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_16px_48px_rgba(5,96,69,0.14)]">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <span className="text-sm font-semibold text-gray-900">Thông báo</span>
+              {unread > 0 && (
+                <button
+                  onClick={async () => {
+                    await markAllNotificationsRead();
+                    refresh();
+                  }}
+                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
+                >
+                  Đánh dấu đã đọc hết
+                </button>
+              )}
+            </div>
+            <div className="max-h-96 overflow-y-auto custom-scrollbar">
+              {notifications.length === 0 && (
+                <p className="px-4 py-10 text-center text-sm font-light text-gray-400">Chưa có thông báo nào</p>
+              )}
+              {notifications.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={async () => {
+                    await markNotificationRead(item.id);
+                    refresh();
+                    setOpen(false);
+                    if (item.link) navigate(item.link);
+                  }}
+                  className={`flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50 ${
+                    item.readAt ? 'opacity-55' : ''
+                  }`}
+                >
+                  <span
+                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                      item.level === 'URGENT' ? 'bg-red-500' : 'bg-emerald-500'
+                    }`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-gray-800">{item.title}</span>
+                    <span className="mt-0.5 block text-xs font-light text-gray-500">{item.body}</span>
+                    <span className="mt-1 block text-[11px] text-gray-400">
+                      {formatRelative(item.createdAt, now())}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Chạy nền: sinh mẫu cho buổi đang diễn ra, ghi cảnh báo, tự kết thúc khi quá giờ. */
+function useSessionTicker() {
+  useEffect(() => {
+    const tick = () => {
+      syncRunningSessions().catch(() => undefined);
+    };
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => window.clearInterval(timer);
+  }, []);
+}
+
+function Shell() {
   const { currentUser, logout } = useStore();
   const navigate = useNavigate();
-  const { language, toggleLanguage, t } = useI18n();
+  const [accountOpen, setAccountOpen] = useState(false);
+  useSessionTicker();
 
-  // Initialize Lenis smooth scroll
   useEffect(() => {
-    const scrollContainer = document.getElementById('main-scroll');
-    if (!scrollContainer) return;
-
+    const container = document.getElementById('main-scroll');
+    if (!container) return;
     const lenis = new Lenis({
-      wrapper: scrollContainer,
-      content: scrollContainer.firstElementChild as HTMLElement,
+      wrapper: container,
+      content: container.firstElementChild as HTMLElement,
       smoothWheel: true,
       lerp: 0.08,
     });
-
-    function raf(time: number) {
+    let frame = 0;
+    const raf = (time: number) => {
       lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
-
-    return () => lenis.destroy();
+      frame = requestAnimationFrame(raf);
+    };
+    frame = requestAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(frame);
+      lenis.destroy();
+    };
   }, []);
 
-  const common = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Horses', path: '/horses', icon: Users },
-  ];
-  const roleItems = (() => {
-    switch (currentUser?.role) {
-      case 'VETERINARIAN': return [
-        { name: 'Medical', path: '/medical', icon: Stethoscope },
-        { name: 'Alerts', path: '/alerts', icon: Bell },
-        { name: 'Reports', path: '/reports', icon: BarChart3 },
-      ];
-      case 'GROOM': return [
-        { name: 'Tasks', path: '/tasks', icon: ClipboardCheck },
-        { name: 'Stable', path: '/stable', icon: MapPinned },
-        { name: 'Report incident', path: '/incidents/new', icon: Camera },
-      ];
-      case 'CLUB_MANAGER': return [
-        { name: 'Operations', path: '/operations', icon: Boxes },
-        { name: 'Reports', path: '/reports', icon: BarChart3 },
-        { name: 'Race registration', path: '/race-registration', icon: Flag },
-      ];
-      case 'HORSE_OWNER': return [
-        { name: 'Racing', path: '/race-registration', icon: Flag },
-        { name: 'Reports', path: '/reports', icon: BarChart3 },
-      ];
-      default: return [
-        { name: 'Schedule', path: '/adjust-plan', icon: Calendar },
-        { name: 'Live training', path: '/live-training/goldship', icon: Activity },
-        { name: 'Alerts', path: '/alerts', icon: Bell },
-        { name: 'Race registration', path: '/race-registration', icon: Flag },
-      ];
-    }
-  })();
-  const filteredNavItems = [
-    ...common,
-    ...roleItems,
-    { name: 'Workflow', path: '/workflow', icon: Workflow },
-    { name: 'Profile', path: '/profile', icon: UserCircle },
-  ];
+  const zoneName = currentUser?.zoneId === 'zone_a' ? 'Khu A' : currentUser?.zoneId === 'zone_b' ? 'Khu B' : 'khu';
+  const groups = useMemo(() => menuFor(currentUser?.role, zoneName), [currentUser?.role, zoneName]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  const greeting = (() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  })();
-
-  const portalName = (() => {
-    switch (currentUser?.role) {
-      case 'CLUB_MANAGER': return 'Management portal';
-      case 'HORSE_OWNER': return 'Owner portal';
-      case 'VETERINARIAN': return 'Veterinary portal';
-      case 'GROOM': return 'Groom portal';
-      default: return 'Trainer portal';
-    }
+  const scope = (() => {
+    if (!currentUser) return '';
+    if (currentUser.role === 'HEAD_TRAINER') return zoneName;
+    if (currentUser.role === 'GROOM') return 'Ngựa được giao';
+    if (currentUser.role === 'HORSE_OWNER') return 'Ngựa sở hữu';
+    return 'Toàn câu lạc bộ';
   })();
 
   return (
     <div className="flex h-screen bg-[#f8faf8] font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-100 p-6 flex flex-col shrink-0">
-        <div className="flex items-center gap-2.5 mb-10">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow-sm shadow-emerald-600/20">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-gray-100 bg-white p-5 lg:flex">
+        <Link to="/dashboard" className="mb-8 flex items-center gap-2.5 px-1">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/20">
             <Flag size={16} className="text-white" />
           </div>
-          <span className="text-lg font-bold tracking-tight text-gray-900"><T>HorseRacing</T></span>
-        </div>
-        
-        <nav className="flex-1 space-y-1">
-          {filteredNavItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm font-medium ${
-                  isActive 
-                    ? 'bg-emerald-50 text-emerald-700 border-l-[3px] border-emerald-600 ml-[-3px]' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                }`
-              }
-            >
-              <item.icon size={18} />
-              {t(item.name)}
-            </NavLink>
+          <span className="text-lg font-bold tracking-tight text-gray-900">HorseRacing</span>
+        </Link>
+
+        <nav className="flex-1 space-y-5 overflow-y-auto custom-scrollbar pr-1">
+          {groups.map((group, index) => (
+            <div key={group.group ?? index} className="space-y-0.5">
+              {group.group && (
+                <p className="mb-1.5 px-4 text-[11px] font-semibold tracking-wide text-gray-300">{group.group}</p>
+              )}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'ml-[-3px] border-l-[3px] border-emerald-600 bg-emerald-50 text-emerald-700'
+                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    }`
+                  }
+                >
+                  <item.icon size={17} className="shrink-0" />
+                  <span className="truncate">{item.name}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
-        
-        <div className="mt-auto pt-6 border-t border-gray-100">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[12px] bg-gray-100 overflow-hidden ring-2 ring-emerald-100 shrink-0">
-                <img
-                  src={currentUser?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&h=100&auto=format&fit=crop'}
-                  alt="User avatar"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{currentUser?.name || 'Unknown User'}</p>
-                <p className="text-xs text-gray-400 truncate">{currentUser?.role?.replace('_', ' ') || 'Guest'}</p>
-              </div>
+
+        <div className="mt-6 border-t border-gray-100 pt-5">
+          <div className="flex items-center gap-3">
+            <Avatar name={currentUser?.name ?? '?'} size={40} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
+              <p className="truncate text-xs text-gray-400">
+                {currentUser ? roleLabel[currentUser.role] : ''}
+              </p>
             </div>
-            
-            <button 
-              onClick={handleLogout}
-              className="flex items-center justify-center w-full gap-2 py-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 text-sm font-medium active:scale-[0.98]"
-            >
-              <LogOut size={16} />
-              {t('Sign out')}
-            </button>
           </div>
+          <button
+            onClick={() => {
+              logout();
+              navigate('/');
+            }}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
+          >
+            <LogOut size={15} />
+            Đăng xuất
+          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-16 border-b border-gray-100 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md shrink-0">
-          <div>
-            <h1 className="text-sm font-semibold text-gray-900">{t(portalName)}</h1>
-            <p className="text-xs text-gray-400">{t(greeting)}, {currentUser?.name?.split(' ')[0] || 'there'}</p>
+      <main className="flex h-screen flex-1 flex-col overflow-hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-100 bg-white/80 px-5 backdrop-blur-md sm:px-8">
+          <div className="min-w-0">
+            <h1 className="truncate text-sm font-semibold text-gray-900">
+              {currentUser ? roleLabel[currentUser.role] : 'HorseRacing'}
+            </h1>
+            <p className="truncate text-xs text-gray-400">
+              {currentUser?.name} · Phạm vi: {scope}
+            </p>
           </div>
-          <button onClick={toggleLanguage} aria-label="Change language" className="flex items-center rounded-xl border border-gray-200 bg-white p-1 text-xs font-semibold shadow-sm">
-            <span className={`rounded-lg px-3 py-1.5 ${language === 'en' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}><T>EN</T></span>
-            <span className={`rounded-lg px-3 py-1.5 ${language === 'vi' ? 'bg-emerald-600 text-white' : 'text-gray-400'}`}><T>VI</T></span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            <NotificationBell />
+            <div className="relative">
+              <button
+                onClick={() => setAccountOpen((value) => !value)}
+                className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white py-1.5 pl-1.5 pr-3 transition hover:bg-gray-50"
+              >
+                <Avatar name={currentUser?.name ?? '?'} size={26} />
+                <span className="hidden text-xs font-semibold text-gray-700 sm:inline">Tài khoản</span>
+              </button>
+              {accountOpen && (
+                <>
+                  <button className="fixed inset-0 z-40 cursor-default" onClick={() => setAccountOpen(false)} aria-hidden />
+                  <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white py-1.5 shadow-[0_16px_48px_rgba(5,96,69,0.14)]">
+                    <Link
+                      to="/profile"
+                      onClick={() => setAccountOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50"
+                    >
+                      Hồ sơ cá nhân
+                    </Link>
+                    <Link
+                      to="/login"
+                      onClick={() => setAccountOpen(false)}
+                      className="block px-4 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50"
+                    >
+                      Đổi tài khoản
+                    </Link>
+                    <button
+                      onClick={() => {
+                        logout();
+                        navigate('/');
+                      }}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-red-500 transition hover:bg-red-50"
+                    >
+                      Đăng xuất
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
+
         <div id="main-scroll" className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto p-8">
+          <div className="mx-auto max-w-6xl p-5 pb-16 sm:p-8">
             <Outlet />
           </div>
         </div>
+
+        {/* Thanh điều hướng dưới cho màn hình nhỏ — ưu tiên cho nhân viên chăm sóc */}
+        <nav className="flex shrink-0 items-center justify-around border-t border-gray-100 bg-white px-2 py-1.5 lg:hidden">
+          {groups
+            .flatMap((group) => group.items)
+            .slice(0, 5)
+            .map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition ${
+                    isActive ? 'text-emerald-700' : 'text-gray-400'
+                  }`
+                }
+              >
+                <item.icon size={18} />
+                <span className="w-full truncate text-center">{item.name}</span>
+              </NavLink>
+            ))}
+        </nav>
       </main>
     </div>
   );
-};
+}
 
-export default MainLayout;
+export default function MainLayout() {
+  return (
+    <ToastHost>
+      <Shell />
+    </ToastHost>
+  );
+}

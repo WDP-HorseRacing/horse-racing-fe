@@ -1,4 +1,4 @@
-﻿# RaceOS Web Design Constraints & Rules
+﻿# HorseRacing Web Design Constraints & Rules
 
 ## 1. Brand Color
 - Sử dụng màu **Xanh lá (Grass Green)** làm màu chủ đạo. Màu xanh này phải thể hiện sự phóng khoáng, tự nhiên của đồng cỏ tại trường đua ngựa.

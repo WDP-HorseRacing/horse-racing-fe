@@ -1,8 +1,12 @@
-# Data boundary
+# Ranh giới dữ liệu
 
-- `raceos.json` contains local development fixtures only.
-- `../types/raceos.ts` is the canonical UI contract.
-- `parse-raceos.ts` validates unknown JSON/API payloads at runtime.
-- `raceos.ts` is the adapter consumed by the Zustand store and pages.
+Dữ liệu nghiệp vụ không còn nằm ở thư mục này. Ranh giới hiện tại:
 
-When the API is available, replace the JSON input in `raceos.ts` with the API response and pass it through `parseRaceOSFixture`. Keep the exports unchanged so pages and store actions do not need to change.
+- `src/types/domain.ts` — hợp đồng dữ liệu duy nhất của giao diện, bám theo thiết kế bảng của back end.
+- `src/services/db.ts` — kho dữ liệu (hiện lưu ở `localStorage`, khóa `horseracing_db_v1`).
+- `src/services/seed.ts` — dữ liệu khởi tạo, sinh theo ngày tương đối so với hôm nay.
+- `src/services/*.service.ts` — tầng dịch vụ theo từng luồng nghiệp vụ. Màn hình chỉ gọi qua đây.
+- `src/auth/permissions.ts` — bảng quyền dùng chung cho menu, nút bấm và tầng dịch vụ.
+
+Khi nối back end: thay phần ruột của từng hàm trong `services/*.service.ts` bằng lời gọi API,
+giữ nguyên chữ ký hàm và kiểu trả về. Màn hình không phải sửa.
