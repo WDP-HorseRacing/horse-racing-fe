@@ -5,6 +5,8 @@ import gsap from 'gsap';
 import { useStore } from '../store/store';
 import { listAccounts, SHARED_PASSWORD } from '../services/auth.service';
 import { roleLabel } from '../lib/labels';
+import { getDb } from '../services/db';
+import { managedZoneIds } from '../services/selectors';
 import { Avatar } from '../components/ui';
 import type { UserRole } from '../types/domain';
 
@@ -90,7 +92,7 @@ export const Login = () => {
             <span className="text-xl font-bold tracking-tight text-white">HorseRacing</span>
           </div>
           <p className="max-w-sm text-base font-light leading-relaxed text-white/70">
-            Hệ thống quản lý huấn luyện ngựa đua. Hồ sơ đàn ngựa, giáo án, y tế, chăm sóc và thi đấu trong
+            Hệ thống quản lý huấn luyện ngựa đua. Hồ sơ đàn ngựa, lớp huấn luyện theo giáo án và y tế trong
             một nơi duy nhất.
           </p>
         </div>
@@ -193,9 +195,11 @@ export const Login = () => {
                           <p className="truncate text-sm font-medium text-gray-700">{user.name}</p>
                           <p className="truncate font-mono text-xs text-gray-400">{user.email}</p>
                         </div>
-                        {user.zoneId && (
+                        {user.role === 'HEAD_TRAINER' && (
                           <span className="rounded-lg bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                            {user.zoneId === 'zone_a' ? 'Khu A' : 'Khu B'}
+                            {managedZoneIds(getDb(), user.id)
+                              .map((zoneId) => getDb().zones.find((zone) => zone.id === zoneId)?.code)
+                              .join(' · ') || 'Chưa có khu'}
                           </span>
                         )}
                       </button>

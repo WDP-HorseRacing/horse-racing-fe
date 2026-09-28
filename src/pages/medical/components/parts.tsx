@@ -1,0 +1,158 @@
+// Mảnh giao diện nhỏ dùng lại giữa các màn hình y tế.
+import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, BellRing } from 'lucide-react';
+import { Avatar, Pill, cn } from '../../../components/ui';
+import { HealthPill } from '../../../components/ui/status';
+import { healthHint, healthLabel, lifecycleLabel } from '../../../lib/labels';
+import { links } from '../../../lib/links';
+import type { HealthStatus } from '../../../types/domain';
+import type { MedHorseRef, PeriodicRowState } from '../../../services/medical.service';
+import { HEALTH_ORDER, dueText, healthSwatch, periodicTone } from './utils';
+
+/** Ảnh + tên ngựa, bấm để sang tab Y tế trong hồ sơ. */
+export function HorseChip({
+  horse,
+  size = 36,
+  sub,
+  tab = 'medical',
+  plain = false,
+}: {
+  horse: Pick<MedHorseRef, 'id' | 'name' | 'avatar'> & Partial<MedHorseRef>;
+  size?: number;
+  sub?: ReactNode;
+  tab?: string;
+  /** Không bọc link (dùng trong hàng bảng đã bấm được). */
+  plain?: boolean;
+}) {
+  const meta =
+    sub ??
+    ([horse.zoneName, horse.stallCode].filter(Boolean).join(' · ') ||
+      (horse.lifecycleStatus && horse.lifecycleStatus !== 'ACTIVE' ? lifecycleLabel[horse.lifecycleStatus] : ''));
+  const body = (
+    <span className="flex min-w-0 items-center gap-3">
+      <Avatar src={horse.avatar} name={horse.name} size={size} />
+      <span className="min-w-0">
+        <span className="block truncate font-semibold text-gray-900">{horse.name}</span>
+        {meta && <span className="block truncate text-xs font-light text-gray-400">{meta}</span>}
+      </span>
+    </span>
+  );
+  if (plain) return body;
+  return (
+    <Link
+      to={links.horse(horse.id, tab)}
+      onClick={(event) => event.stopPropagation()}
+      className="inline-flex min-w-0 rounded-xl transition hover:opacity-80"
+    >
+      {body}
+    </Link>
+  );
+}
+
+/** Bốn nút chọn trạng thái sức khỏe có màu. */
+export function HealthPicker({
+  value,
+  onChange,
+  current,
+  error,
+}: {
+  value: HealthStatus | '';
+  onChange: (value: HealthStatus) => void;
+  current?: HealthStatus;
+  error?: string;
+}) {
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        {HEALTH_ORDER.map((status) => {
+          const active = value === status;
+          return (
+            <button
+              key={status}
+              type="button"
+              onClick={() => onChange(status)}
+              className={cn(
+                'rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-200 active:scale-[0.98]',
+                active ? healthSwatch[status].active : healthSwatch[status].idle,
+              )}
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <span className={cn('h-2 w-2 rounded-full', active ? 'bg-white' : healthSwatch[status].dot)} />
+                {healthLabel[status]}
+                {current === status && (
+                  <span className={cn('ml-auto text-[11px] font-medium', active ? 'text-white/80' : 'text-gray-400')}>
+                    hiện tại
+                  </span>
+                )}
+              </span>
+              <span className={cn('mt-0.5 block text-[11px] leading-snug', active ? 'text-white/85' : 'text-gray-500')}>
+                {healthHint[status]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+/** Sức khỏe trước → sau. */
+export function HealthShift({ from, to }: { from: HealthStatus; to: HealthStatus }) {
+  if (from === to) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+        <HealthPill status={to} /> giữ nguyên
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <HealthPill status={from} />
+      <ArrowRight size={13} className="text-gray-300" />
+      <HealthPill status={to} />
+    </span>
+  );
+}
+
+/** Mô tả yêu cầu khám (có thể gộp nhiều dòng). */
+export function RequestLines({ lines, compact = false }: { lines: string[]; compact?: boolean }) {
+  if (lines.length <= 1) {
+    return <p className={cn('text-sm text-gray-700', compact && 'line-clamp-2')}>{lines[0] ?? '—'}</p>;
+  }
+  return (
+    <ul className="space-y-0.5 text-sm text-gray-700">
+      {lines.map((line, index) => (
+        <li key={index} className="flex gap-2">
+          <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gray-300" />
+          <span className={cn(compact && 'line-clamp-1')}>{line}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function PeriodicPill({
+  state,
+  label,
+  overdueDays,
+  alerted,
+}: {
+  state: PeriodicRowState;
+  label: string;
+  overdueDays: number;
+  alerted?: boolean;
+}) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Pill tone={periodicTone[state]}>{label}</Pill>
+      <span className="text-xs text-gray-400">{dueText(overdueDays)}</span>
+      {alerted && (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-500" title="Đã gửi cảnh báo cho bác sĩ và quản lý">
+          <BellRing size={11} /> đã cảnh báo
+        </span>
+      )}
+    </span>
+  );
+}

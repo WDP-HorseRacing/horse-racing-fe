@@ -1,5 +1,5 @@
 // Hạ tầng chung cho mọi service: độ trễ, phiên đăng nhập, nhật ký thao tác, thông báo.
-import type { AppNotification, AuditLog, Database, User, UserRole } from '../types/domain';
+import type { AppNotification, AuditLog, Database, NotificationLevel, User, UserRole } from '../types/domain';
 import { AppError, ERR_FORBIDDEN, getDb, mutate, newId, stamp } from './db';
 import { can } from '../auth/permissions';
 
@@ -50,6 +50,7 @@ export interface AuditInput {
   action: string;
   entityType: string;
   entityId: string;
+  horseId?: string;
   before?: unknown;
   after?: unknown;
   reason?: string;
@@ -68,20 +69,21 @@ export function writeAudit(db: Database, at: Date, input: AuditInput) {
     action: input.action,
     entityType: input.entityType,
     entityId: input.entityId,
+    horseId: input.horseId,
     before: input.before,
     after: input.after,
     reason: input.reason,
     ...stamp(at),
   };
   db.auditLogs.unshift(entry);
-  if (db.auditLogs.length > 400) db.auditLogs.length = 400;
+  if (db.auditLogs.length > 600) db.auditLogs.length = 600;
 }
 
 /* ===== Thông báo ===== */
 
 export interface NotifyInput {
   userId: string;
-  level?: 'NORMAL' | 'URGENT';
+  level?: NotificationLevel;
   title: string;
   body: string;
   link?: string;
@@ -99,7 +101,22 @@ export function pushNotification(db: Database, at: Date, input: NotifyInput) {
     ...stamp(at),
   };
   db.notifications.unshift(entry);
-  if (db.notifications.length > 200) db.notifications.length = 200;
+  // Giới hạn theo từng người nhận để thông báo của người này không đẩy mất của người khác.
+  const mine = db.notifications.filter((item) => item.userId === input.userId);
+  if (mine.length > 60) {
+    const drop = new Set(mine.slice(60).map((item) => item.id));
+    db.notifications = db.notifications.filter((item) => !drop.has(item.id));
+  }
+}
+
+/** Gửi cùng một thông báo cho nhiều người, bỏ trùng và bỏ mã rỗng. */
+export function notifyMany(
+  db: Database,
+  at: Date,
+  userIds: (string | undefined)[],
+  input: Omit<NotifyInput, 'userId'>,
+) {
+  [...new Set(userIds.filter(Boolean) as string[])].forEach((userId) => pushNotification(db, at, { ...input, userId }));
 }
 
 /* ===== Chống ghi đè ===== */
@@ -119,13 +136,22 @@ export type Committed<T> = [T] extends [void] ? true : T;
 
 /** Bọc một thao tác ghi: mở kho, chạy, lưu, trả kết quả kèm độ trễ. */
 export function commit<T>(fn: (db: Database) => T): Promise<Committed<T>> {
-  const result = mutate(fn);
-  return delay((result === undefined ? true : result) as Committed<T>);
+  try {
+    const result = mutate(fn);
+    return delay((result === undefined ? true : result) as Committed<T>);
+  } catch (error) {
+    // Lỗi nghiệp vụ luôn trả về dạng Promise bị từ chối, không ném đồng bộ.
+    return Promise.reject(error);
+  }
 }
 
 /** Bọc một truy vấn chỉ đọc. */
 export function query<T>(fn: (db: Database) => T): Promise<T> {
-  return delay(fn(getDb()));
+  try {
+    return delay(fn(getDb()));
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 export { AppError };

@@ -1,80 +1,55 @@
-// Mô hình dữ liệu nghiệp vụ — bám theo thiết kế dữ liệu của BE (mục 13 của tài liệu phân tích).
+// Mô hình dữ liệu nghiệp vụ — bám theo bản chốt Flow 1-2-3 sau review.
 // Mã enum giữ tiếng Anh, nhãn tiếng Việt nằm ở `src/lib/labels.ts`.
 
-export type UserRole =
-  | 'CLUB_MANAGER'
-  | 'HEAD_TRAINER'
-  | 'VETERINARIAN'
-  | 'GROOM'
-  | 'HORSE_OWNER';
+/* ===== Enum dùng chung ===== */
+
+export type UserRole = 'CLUB_MANAGER' | 'HEAD_TRAINER' | 'VETERINARIAN' | 'GROOM' | 'HORSE_OWNER';
+
+export type NotificationLevel = 'NORMAL' | 'HIGH' | 'URGENT';
+
+/* ===== Enum Flow 1 ===== */
 
 export type HorseSex = 'MALE' | 'FEMALE' | 'GELDING';
 export type DistancePreference = 'SPRINTER' | 'MILER' | 'STAYER';
+/** Trạng thái sức khỏe — Flow 3 sở hữu, Flow 1 và Flow 2 chỉ đọc. */
 export type HealthStatus = 'ELIGIBLE' | 'UNDER_OBSERVATION' | 'INJURED' | 'QUARANTINED';
+/** Trạng thái vòng đời — Flow 1 sở hữu. */
 export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED';
-export type StallType = 'STANDARD' | 'ISOLATION' | 'RECOVERY';
+export type ZoneStatus = 'ACTIVE' | 'MAINTENANCE' | 'CLOSED';
+/** AVAILABLE và OCCUPIED do hệ thống tự đặt; người dùng chỉ chuyển AVAILABLE ⇄ MAINTENANCE. */
+export type StallStatus = 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
+/** Vị trí của ngựa trong quy trình xếp chỗ — chỉ tính ra, không lưu. */
+export type HorsePlacement = 'NO_ZONE' | 'WAITING_STALL' | 'WAITING_GROOM' | 'PLACED' | 'NONE';
+export type MeasurementType = 'WEIGHT' | 'HEIGHT' | 'BODY_CONDITION' | 'TEMPERATURE';
+
+/* ===== Enum Flow 2 ===== */
 
 export type WorkoutType = 'WALK' | 'TROT' | 'CANTER' | 'BREEZE' | 'TIME_TRIAL';
-export type TrainingIntensity = 'LIGHT' | 'MODERATE' | 'HEAVY' | 'MAXIMUM';
+export type TrainingIntensity = 'LIGHT' | 'MEDIUM' | 'HEAVY' | 'MAX';
 export type TrackSurface = 'TURF' | 'DIRT' | 'SYNTHETIC';
-export type PlanStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
-export type SessionStatus =
-  | 'SCHEDULED'
-  | 'IN_PROGRESS'
-  | 'AWAITING_REVIEW'
-  | 'COMPLETED'
-  | 'CANCELLED';
-export type CancelCategory =
-  | 'TRAINER_CHANGED'
-  | 'GROOM_REPORTED'
-  | 'MEDICAL_BLOCK'
-  | 'PLAN_CLOSED'
-  | 'LIFECYCLE';
-export type EarlyEndReason = 'HORSE_UNWELL' | 'TRAINER_ORDER' | 'WEATHER_TRACK' | 'OTHER';
-export type EndReason = 'NORMAL' | 'STOPPED_BY_USER' | 'TRAINING_LOCK' | 'AUTO_TIMEOUT';
-export type CompletionLevel = 'BELOW' | 'MET' | 'EXCEEDED';
-export type PlanCloseReason =
-  | 'GOAL_REACHED'
-  | 'NEW_PLAN'
-  | 'INJURY_ILLNESS'
-  | 'GOAL_CHANGED'
-  | 'OWNER_REQUEST'
-  | 'LIFECYCLE'
-  | 'OTHER';
+/** Trạng thái lớp — tính ra từ ngày và các mốc kết thúc sớm / hủy. */
+export type ClassStatus = 'SCHEDULED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+export type SessionStatus = 'SCHEDULED' | 'IN_PROGRESS' | 'AWAITING_REVIEW' | 'COMPLETED' | 'CANCELLED';
+export type SessionCancelKind = 'MANUAL' | 'CLASS_CANCELLED' | 'CLASS_ENDED_EARLY';
+export type SessionEndReason = 'NORMAL' | 'EMERGENCY_STOP' | 'AUTO_TIMEOUT';
+export type AttendanceStatus = 'EXPECTED' | 'PRESENT' | 'ABSENT';
+/** Nhóm lý do vắng của MỘT con ngựa trong MỘT buổi — không bao giờ hủy buổi của cả lớp. */
+export type AbsenceReason = 'MEDICAL_BLOCK' | 'GROOM_REPORTED' | 'TRAINER_CHANGED' | 'LIFECYCLE';
+export type EnrollmentCloseReason = 'MANUAL' | 'ZONE_CHANGE' | 'LIFECYCLE';
+export type GroomTaskKind = 'PREPARE' | 'TO_TRACK' | 'COOL_DOWN';
 export type SimScenario = 'NORMAL' | 'HEART_OVER' | 'INJURY_RISK' | 'SIGNAL_LOST' | 'RANDOM';
 export type AlertRule = 'R1' | 'R3' | 'R6';
 export type AlertLevel = 'RED' | 'GRAY';
+export type AlertAckAction = 'STOP_HORSE' | 'CONTINUE';
 
-export type Severity = 'MILD' | 'MODERATE' | 'SEVERE';
-export type MedicalRecordStatus = 'IN_TREATMENT' | 'RESOLVED';
-export type MedicalReason = 'ROUTINE' | 'INCIDENT' | 'RECHECK' | 'OTHER';
-export type CareScheduleType = 'VACCINE' | 'DEWORMING' | 'FARRIER';
-export type BodyRegion =
-  | 'HEAD'
-  | 'NECK'
-  | 'SHOULDER'
-  | 'BACK'
-  | 'HIP'
-  | 'CHEST'
-  | 'ABDOMEN'
-  | 'FORE_THIGH'
-  | 'FORE_CANNON'
-  | 'FORE_FETLOCK'
-  | 'FORE_HOOF'
-  | 'HIND_THIGH'
-  | 'HIND_CANNON'
-  | 'HIND_FETLOCK'
-  | 'HIND_HOOF';
-export type BodySide = 'LEFT' | 'RIGHT';
+/* ===== Enum Flow 3 ===== */
 
-export type MeasurementType = 'WEIGHT' | 'HEIGHT' | 'BODY_CONDITION' | 'TEMPERATURE';
-export type DailyTaskType = 'FEED' | 'CLEAN' | 'BATH' | 'CARE';
-export type IncidentType = 'NOT_EATING' | 'COLIC_FEVER' | 'HOOF_DAMAGE' | 'OTHER';
-export type IncidentStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED';
-export type SupplyGroup = 'FEED' | 'MEDICINE' | 'TOOL';
-export type RaceStatus = 'OPEN' | 'CLOSED' | 'FINISHED';
-export type RegistrationStatus = 'PENDING_OWNER' | 'REGISTERED' | 'REJECTED' | 'CANCELLED';
-export type ExpenseCategory = 'BOARDING' | 'MEDICAL' | 'RACE_FEE' | 'OPERATION' | 'OTHER';
+export type ExamRequestSource = 'GROOM_REPORT' | 'BODY_METRIC_ALERT' | 'TRAINING_ALERT' | 'MANUAL' | 'VET_SELF';
+export type ExamUrgency = 'NORMAL' | 'URGENT';
+export type ExamRequestStatus = 'PENDING' | 'EXAMINED' | 'DISMISSED';
+export type ExaminationKind = 'PERIODIC' | 'CASE';
+export type MedicalCaseStatus = 'OPEN' | 'CLOSED';
+export type LockLiftKind = 'MANUAL' | 'CASE_CLOSED' | 'TRANSFER';
 
 export interface BaseEntity {
   id: string;
@@ -83,33 +58,34 @@ export interface BaseEntity {
   version: number;
 }
 
+/* ===== Flow 1 — tài khoản, khu, ô, ngựa ===== */
+
 export interface User extends BaseEntity {
   name: string;
   email: string;
   phone: string;
   role: UserRole;
-  zoneId?: string;
   avatar: string;
   active: boolean;
+  // Không còn zoneId: khu của HT = các khu có headTrainerId trỏ tới HT đó.
 }
 
 export interface Zone extends BaseEntity {
   code: string;
   name: string;
+  /** Một khu có đúng một HT phụ trách; chỉ được để trống khi khu không còn ngựa. */
   headTrainerId?: string;
+  status: ZoneStatus;
+  statusReason?: string;
+  deletedAt?: string;
 }
 
 export interface Stall extends BaseEntity {
   code: string;
   zoneId: string;
-  type: StallType;
-}
-
-export interface TrainingSlot {
-  id: string;
-  code: string;
-  startTime: string;
-  endTime: string;
+  status: StallStatus;
+  maintenanceNote?: string;
+  deletedAt?: string;
 }
 
 export interface Horse extends BaseEntity {
@@ -118,34 +94,29 @@ export interface Horse extends BaseEntity {
   breed?: string;
   color?: string;
   birthDate?: string;
+  /** Duy nhất, tính cả hồ sơ đã xóa và đã chuyển nhượng. */
   chipNumber?: string;
   distancePreference?: DistancePreference;
   healthStatus: HealthStatus;
   lifecycleStatus: LifecycleStatus;
-  isReference: boolean;
+  /** Chỉ trỏ tới ngựa có hồ sơ tại câu lạc bộ. */
   sireId?: string;
   damId?: string;
+  /** Ảnh đại diện duy nhất, chỉ CM thay. */
   avatar?: string;
-  dailyRate?: number;
-  deletedAt?: string;
-  deleteReason?: string;
-}
-
-export interface StallAssignment extends BaseEntity {
-  horseId: string;
-  stallId: string;
+  /** Một chủ sở hữu duy nhất (tài khoản HORSE_OWNER). */
+  ownerId?: string;
+  /** Không có khu → "Chờ xếp khu", chỉ CM xử lý. */
+  zoneId?: string;
+  /** Có khu nhưng chưa có ô → "Chờ xếp ô". */
+  stallId?: string;
+  /** Groom phân công theo con ngựa. */
   groomId?: string;
-  startAt: string;
-  endAt?: string;
-}
-
-export interface Ownership extends BaseEntity {
-  horseId: string;
-  ownerId: string;
-  percent: number;
-  isRepresentative: boolean;
-  startDate: string;
-  endDate?: string;
+  /** Hạn khám (YYYY-MM-DD) đã được gửi cảnh báo quá hạn — mỗi hạn chỉ gửi một lần. */
+  periodicOverdueNotifiedFor?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  deleteReason?: string;
 }
 
 export interface BodyMeasurement extends BaseEntity {
@@ -154,67 +125,144 @@ export interface BodyMeasurement extends BaseEntity {
   value: number;
   measuredAt: string;
   recordedBy: string;
+  /** Ngoài khoảng bình thường (người nhập đã xác nhận). */
+  abnormal: boolean;
+  note?: string;
+  /** Có giá trị = ghi trong buổi khám của Flow 3, không xóa được ở Flow 1. */
+  examinationId?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  deleteReason?: string;
 }
 
-export interface HorsePhoto extends BaseEntity {
-  horseId: string;
-  src: string;
-  caption?: string;
-  uploadedBy: string;
-  isAvatar: boolean;
-  removedAt?: string;
+export interface LifecycleConsequences {
+  enrollmentsClosed: number;
+  stallFreed?: string;
+  zoneCleared?: string;
+  groomEnded?: string;
+  lockLifted?: boolean;
+  ownerCleared?: string;
+  healthReset?: boolean;
 }
 
 export interface LifecycleEvent extends BaseEntity {
   horseId: string;
-  from: LifecycleStatus;
-  to: LifecycleStatus;
+  from: LifecycleStatus | 'DELETED';
+  to: LifecycleStatus | 'DELETED';
   reason: string;
   by: string;
   at: string;
+  consequences: LifecycleConsequences;
 }
 
-/* ===== Flow 2 ===== */
+/* ===== Flow 2 — môn học, giáo án, lớp, buổi học ===== */
 
-export interface TrainingPlan extends BaseEntity {
-  horseId: string;
+export interface TrainingSlot {
+  id: string;
+  code: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface TrainingSubject extends BaseEntity {
   name: string;
-  goal: string;
-  targetDistanceM?: number;
-  startDate: string;
-  endDate: string;
-  createdBy: string;
-  cancelledAt?: string;
-  cancelledBy?: string;
-  closeReason?: PlanCloseReason;
-  closeNote?: string;
-  completedEarlyAt?: string;
-  completedEarlyBy?: string;
-  needsReview: boolean;
-  needsReviewReason?: string;
-  endingSoonNotifiedAt?: string;
-}
-
-export interface TrainingPhase extends BaseEntity {
-  planId: string;
-  orderNo: number;
-  name: string;
-  goal: string;
-  weeks: number;
-  startDate: string;
-  endDate: string;
-}
-
-export interface PhaseWorkout extends BaseEntity {
-  phaseId: string;
-  dayOfWeek: number; // 1 = thứ 2 … 7 = chủ nhật
-  slotId: string;
   workoutType: WorkoutType;
   distanceM: number;
   repetitions: number;
   intensity: TrainingIntensity;
   surface: TrackSurface;
-  notes?: string;
+  description?: string;
+  createdBy: string;
+  deletedAt?: string;
+}
+
+export interface ProgramItem {
+  subjectId: string;
+  sessionsPerWeek: number;
+}
+
+export interface ProgramPhase {
+  name: string;
+  weeks: number;
+  items: ProgramItem[];
+}
+
+/** Giáo án: khuôn mẫu không ngày, không gắn ngựa. */
+export interface TrainingProgram extends BaseEntity {
+  name: string;
+  description?: string;
+  phases: ProgramPhase[];
+  createdBy: string;
+  deletedAt?: string;
+}
+
+export interface TrainingClass extends BaseEntity {
+  name: string;
+  programId: string;
+  /** Lớp chỉ nhận ngựa thuộc khu này; HT phụ trách lớp = HT của khu. */
+  zoneId: string;
+  slotId: string;
+  startDate: string;
+  endDate: string;
+  capacity: number;
+  createdBy: string;
+  endedEarlyAt?: string;
+  endedEarlyBy?: string;
+  endNote?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+}
+
+/** Buổi học thuộc về lớp, nhiều ngựa chung một buổi. Nội dung chụp lại từ môn học khi sinh buổi. */
+export interface ClassSession extends BaseEntity {
+  classId: string;
+  date: string;
+  slotId: string;
+  subjectId: string;
+  subjectName: string;
+  workoutType: WorkoutType;
+  distanceM: number;
+  repetitions: number;
+  intensity: TrainingIntensity;
+  surface: TrackSurface;
+  phaseNo?: number;
+  phaseName?: string;
+  weekNo?: number;
+  isExtra: boolean;
+  note?: string;
+  status: SessionStatus;
+  startedAt?: string;
+  startedBy?: string;
+  endedAt?: string;
+  endedBy?: string;
+  endReason?: SessionEndReason;
+  stopReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+  cancelKind?: SessionCancelKind;
+  simScenario?: SimScenario;
+  simSeed?: number;
+  simSpeed?: number;
+  simTargetHorseId?: string;
+  completedAt?: string;
+}
+
+export interface ClassEnrollment extends BaseEntity {
+  classId: string;
+  horseId: string;
+  joinedAt: string;
+  joinedBy: string;
+  withdrawnAt?: string;
+  withdrawnBy?: string;
+  withdrawReason?: EnrollmentCloseReason;
+  withdrawNote?: string;
+}
+
+export interface GroomTaskMark {
+  at: string;
+  by: string;
 }
 
 export interface SessionSummary {
@@ -233,10 +281,8 @@ export interface SessionSummary {
 }
 
 export interface Evaluation {
-  performanceScore: number;
-  completionLevel: CompletionLevel;
-  ownerComment: string;
-  internalNote?: string;
+  score: number;
+  notes: string;
   trialTimeSeconds?: number;
   trialNotCompleted?: boolean;
   videoSrc?: string;
@@ -246,40 +292,28 @@ export interface Evaluation {
   editedAt?: string;
 }
 
-export interface TrainingSession extends BaseEntity {
+/** Kết quả của một con ngựa trong một buổi học. Tạo lười; lúc bấm Bắt đầu thì tạo đủ cho cả buổi. */
+export interface SessionAttendance extends BaseEntity {
+  sessionId: string;
   horseId: string;
-  planId: string;
-  phaseId: string;
-  phaseWorkoutId?: string;
-  sessionDate: string; // YYYY-MM-DD
-  slotId: string;
+  enrollmentId: string;
+  status: AttendanceStatus;
+  absenceReason?: AbsenceReason;
+  absenceNote?: string;
+  markedBy?: string;
+  markedAt?: string;
+  /** Groom riêng cho buổi này (HT đổi); lúc bắt đầu được chốt thành Groom thực tế. */
   groomId?: string;
-  workoutType: WorkoutType;
-  distanceM: number;
-  repetitions: number;
-  intensity: TrainingIntensity;
-  surface: TrackSurface;
-  trainerNote?: string;
-  status: SessionStatus;
-  startedAt?: string;
-  startedBy?: string;
-  endedAt?: string;
-  endedBy?: string;
-  endReason?: EndReason;
-  earlyEndReason?: EarlyEndReason;
-  earlyEndNote?: string;
-  stopReason?: string;
-  cancelledAt?: string;
-  cancelledBy?: string;
-  cancelCategory?: CancelCategory;
-  cancelReason?: string;
-  simScenario?: SimScenario;
-  simScenarioResolved?: Exclude<SimScenario, 'RANDOM'>;
+  groomOverridden?: boolean;
+  tasks: Partial<Record<GroomTaskKind, GroomTaskMark>>;
+  simScenario?: Exclude<SimScenario, 'RANDOM'>;
   simSeed?: number;
-  simStartedAt?: string;
-  simSpeed?: number;
+  /** Không có = ngựa chưa được VET đặt ngưỡng, quy tắc R1 không chạy. */
   maxHeartRateUsed?: number;
-  edited?: boolean;
+  stoppedAtSecond?: number;
+  stoppedAt?: string;
+  stoppedBy?: string;
+  stopReason?: string;
   summary?: SessionSummary;
   evaluation?: Evaluation;
 }
@@ -294,7 +328,8 @@ export interface TrainingAlert extends BaseEntity {
   value: number;
   acknowledgedBy?: string;
   acknowledgedAt?: string;
-  ackAction?: 'STOPPED' | 'CONTINUE';
+  ackAction?: AlertAckAction;
+  examRequestId?: string;
 }
 
 export interface HorseMaxHeartRate extends BaseEntity {
@@ -305,40 +340,56 @@ export interface HorseMaxHeartRate extends BaseEntity {
   active: boolean;
 }
 
-/* ===== Flow 3 ===== */
+/* ===== Flow 3 — y tế ===== */
 
-export interface Prescription {
-  drug: string;
-  dosage: string;
-  days: number;
-}
-
-export interface MedicalRecord extends BaseEntity {
+export interface ExamRequest extends BaseEntity {
   horseId: string;
-  examDate: string;
-  reason: MedicalReason;
-  symptoms: string;
-  diagnosis: string;
-  severity: Severity;
-  treatmentPlan?: string;
-  prescriptions: Prescription[];
-  careInstruction?: string;
-  recheckDate?: string;
-  noRaceUntil?: string;
-  cost?: number;
-  status: MedicalRecordStatus;
-  sourceType?: string;
-  sourceId?: string;
+  source: ExamRequestSource;
+  urgency: ExamUrgency;
+  description: string;
+  /** Mã người gửi, hoặc 'SYSTEM' với yêu cầu tự động. */
   createdBy: string;
-  editedAt?: string;
+  refType?: 'MEASUREMENT' | 'ALERT' | 'SESSION';
+  refId?: string;
+  status: ExamRequestStatus;
+  examinationId?: string;
+  resolvedAt?: string;
+  dismissedBy?: string;
+  dismissReason?: string;
 }
 
-export interface MedicalFollowUp extends BaseEntity {
-  recordId: string;
-  date: string;
-  note: string;
+export interface MedicalCase extends BaseEntity {
+  horseId: string;
+  title?: string;
+  status: MedicalCaseStatus;
+  openedBy: string;
+  openedAt: string;
+  closedBy?: string;
+  closedAt?: string;
+  /** Một trường chi phí duy nhất, nhập một lần khi đóng bệnh án. */
   cost?: number;
-  createdBy: string;
+  closeNote?: string;
+}
+
+export interface ExamCorrection {
+  note: string;
+  by: string;
+  at: string;
+}
+
+/** Buổi khám: không sửa, không xóa — chỉ thêm ghi chú đính chính. */
+export interface Examination extends BaseEntity {
+  horseId: string;
+  kind: ExaminationKind;
+  caseId?: string;
+  examinedAt: string;
+  vetId: string;
+  diagnosisAndTreatment: string;
+  healthStatusBefore: HealthStatus;
+  healthStatusAfter: HealthStatus;
+  nextAppointment?: string;
+  linkedRequestIds: string[];
+  corrections: ExamCorrection[];
 }
 
 export interface HealthStatusLog extends BaseEntity {
@@ -346,174 +397,29 @@ export interface HealthStatusLog extends BaseEntity {
   fromStatus: HealthStatus;
   toStatus: HealthStatus;
   reason: string;
-  recordId?: string;
+  examinationId?: string;
   changedBy: string;
   changedAt: string;
-}
-
-export interface InjuryMark extends BaseEntity {
-  horseId: string;
-  region: BodyRegion;
-  side?: BodySide;
-  description: string;
-  severity: Severity;
-  detectedAt: string;
-  recordId?: string;
-  resolvedAt?: string;
-}
-
-export interface InjuryUpdate extends BaseEntity {
-  markId: string;
-  date: string;
-  severity: Severity;
-  note: string;
-  photoSrc?: string;
-  createdBy: string;
 }
 
 export interface TrainingLock extends BaseEntity {
   horseId: string;
   reason: string;
-  expectedLiftDate?: string;
-  placedBy: string;
   placedAt: string;
-  liftedBy?: string;
+  placedBy: string;
+  expectedLiftDate?: string;
+  caseId?: string;
   liftedAt?: string;
+  liftedBy?: string;
   liftReason?: string;
-}
-
-export interface CareSchedule extends BaseEntity {
-  horseId: string;
-  type: CareScheduleType;
-  name?: string;
-  dueDate: string;
-  intervalDays: number;
-  doneAt?: string;
-  doneBy?: string;
-  doneNote?: string;
-  cost?: number;
-  notifiedBeforeAt?: string;
-  notifiedOverdueAt?: string;
-}
-
-/* ===== Flow 4 ===== */
-
-export interface DietItem {
-  kind: 'GRAIN' | 'HAY' | 'VITAMIN' | 'OTHER';
-  name: string;
-  amount: number;
-  unit: string;
-}
-
-export interface DietMeal {
-  meal: 'MORNING' | 'NOON' | 'AFTERNOON' | 'EVENING';
-  items: DietItem[];
-}
-
-export interface DietPlan extends BaseEntity {
-  horseId: string;
-  revision: number;
-  status: 'PENDING' | 'APPROVED' | 'SUPERSEDED';
-  meals: DietMeal[];
-  proposedBy: string;
-  approvedBy?: string;
-}
-
-export interface DailyTask extends BaseEntity {
-  horseId: string;
-  date: string;
-  type: DailyTaskType;
-  meal?: DietMeal['meal'];
-  label: string;
-  groomId: string;
-  doneAt?: string;
-  doneBy?: string;
-}
-
-export interface Incident extends BaseEntity {
-  horseId: string;
-  type: IncidentType;
-  description: string;
-  photos: string[];
-  urgent: boolean;
-  status: IncidentStatus;
-  reportedBy: string;
-  handledBy?: string;
-  conclusion?: string;
-}
-
-export interface SupplyItem extends BaseEntity {
-  name: string;
-  group: SupplyGroup;
-  unit: string;
-}
-
-export interface ZoneStock extends BaseEntity {
-  zoneId: string;
-  itemId: string;
-  quantity: number;
-  minQuantity: number;
-}
-
-export interface RestockRequest extends BaseEntity {
-  zoneId: string;
-  itemId: string;
-  quantity: number;
-  reason: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  requestedBy: string;
-  decidedBy?: string;
-  decisionNote?: string;
-}
-
-/* ===== Flow 5 ===== */
-
-export interface Race extends BaseEntity {
-  name: string;
-  date: string;
-  venue: string;
-  distanceM: number;
-  surface: TrackSurface;
-  minAge?: number;
-  fee: number;
-  purse: number;
-  registrationDeadline: string;
-  status: RaceStatus;
-}
-
-export interface RaceRegistration extends BaseEntity {
-  raceId: string;
-  horseId: string;
-  status: RegistrationStatus;
-  createdBy: string;
-  ownerDecisionBy?: string;
-  cancelReason?: string;
-}
-
-export interface RaceResult extends BaseEntity {
-  raceId: string;
-  horseId: string;
-  rank: number;
-  timeSeconds: number;
-  prize: number;
-}
-
-export interface Expense extends BaseEntity {
-  horseId?: string;
-  zoneId?: string;
-  category: ExpenseCategory;
-  amount: number;
-  date: string;
-  sourceType?: string;
-  sourceId?: string;
-  note?: string;
+  liftKind?: LockLiftKind;
 }
 
 /* ===== Chung ===== */
 
 export interface AppNotification extends BaseEntity {
   userId: string;
-  level: 'NORMAL' | 'URGENT';
+  level: NotificationLevel;
   title: string;
   body: string;
   link?: string;
@@ -528,16 +434,10 @@ export interface AuditLog extends BaseEntity {
   action: string;
   entityType: string;
   entityId: string;
+  horseId?: string;
   before?: unknown;
   after?: unknown;
   reason?: string;
-}
-
-/** Dòng trong khung "Việc cần xử lý" đã được Bác sĩ bỏ qua. */
-export interface TaskDismissal extends BaseEntity {
-  key: string;
-  note: string;
-  by: string;
 }
 
 export interface AppSettings {
@@ -545,7 +445,9 @@ export interface AppSettings {
   /** Chênh lệch giữa giờ hệ thống và giờ thực, tính bằng mili giây. */
   clockOffsetMs: number;
   simSpeed: number;
-  defaultDailyRate: number;
+  /** Chu kỳ khám định kỳ chung của câu lạc bộ (ngày), do CM đặt. */
+  examCycleDays: number;
+  /** Chỉ là giá trị gợi ý trong form của VET — quy tắc R1 không dùng giá trị này. */
   defaultMaxHeartRate: number;
 }
 
@@ -557,35 +459,21 @@ export interface Database {
   stalls: Stall[];
   slots: TrainingSlot[];
   horses: Horse[];
-  stallAssignments: StallAssignment[];
-  ownerships: Ownership[];
   bodyMeasurements: BodyMeasurement[];
-  horsePhotos: HorsePhoto[];
   lifecycleEvents: LifecycleEvent[];
-  plans: TrainingPlan[];
-  phases: TrainingPhase[];
-  phaseWorkouts: PhaseWorkout[];
-  sessions: TrainingSession[];
+  subjects: TrainingSubject[];
+  programs: TrainingProgram[];
+  classes: TrainingClass[];
+  sessions: ClassSession[];
+  enrollments: ClassEnrollment[];
+  attendances: SessionAttendance[];
   alerts: TrainingAlert[];
   maxHeartRates: HorseMaxHeartRate[];
-  medicalRecords: MedicalRecord[];
-  medicalFollowUps: MedicalFollowUp[];
+  examRequests: ExamRequest[];
+  medicalCases: MedicalCase[];
+  examinations: Examination[];
   healthStatusLogs: HealthStatusLog[];
-  injuryMarks: InjuryMark[];
-  injuryUpdates: InjuryUpdate[];
   trainingLocks: TrainingLock[];
-  careSchedules: CareSchedule[];
-  dietPlans: DietPlan[];
-  dailyTasks: DailyTask[];
-  incidents: Incident[];
-  supplyItems: SupplyItem[];
-  zoneStocks: ZoneStock[];
-  restockRequests: RestockRequest[];
-  races: Race[];
-  raceRegistrations: RaceRegistration[];
-  raceResults: RaceResult[];
-  expenses: Expense[];
   notifications: AppNotification[];
   auditLogs: AuditLog[];
-  taskDismissals: TaskDismissal[];
 }

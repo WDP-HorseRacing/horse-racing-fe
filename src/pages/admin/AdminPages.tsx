@@ -1,138 +1,241 @@
-import { useState } from 'react';
-import { Check, Clock, Database, Play, RefreshCw, ShieldCheck, Wallet, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Check, Clock, Database, Play, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import {
   getPermissionMatrix,
   getSettings,
-  getZonesAndStalls,
   listAuditLogs,
   listAuditOptions,
   listUsers,
+  nudgeClock,
   resetToSeedData,
   runScheduledJobs,
   setClock,
-  nudgeClock,
   setSimulationSpeed,
   setUserActive,
   setUserRole,
 } from '../../services/system.service';
-import { setClubDefaultDailyRate } from '../../services/horse.service';
 import {
+  Avatar,
   Button,
   Card,
   ConfirmDialog,
-  EmptyState,
+  DataTable,
   ErrorBox,
   Field,
+  FilterSelect,
   Input,
+  Modal,
+  Notice,
   PageHeader,
   Pill,
+  SearchInput,
+  Segmented,
   SectionTitle,
   Select,
   Skeleton,
+  Toolbar,
+  useToast,
 } from '../../components/ui';
 import { AuditList } from './AuditList';
-import { roleLabel, stallTypeLabel } from '../../lib/labels';
-import { formatDateTime, formatMoney } from '../../lib/format';
+import { roleLabel } from '../../lib/labels';
+import { formatDateTime } from '../../lib/format';
 import { now } from '../../lib/clock';
 import type { UserRole } from '../../types/domain';
+
+type UserRow = Awaited<ReturnType<typeof listUsers>>[number];
 
 /* ===== Nhân sự ===== */
 
 export function AdminUsers() {
   const { data, loading, reload } = useService(() => listUsers(), []);
   const action = useAction();
-  const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ role: 'GROOM' as UserRole, zoneId: '' });
+  const toast = useToast();
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [editing, setEditing] = useState<UserRow | null>(null);
+  const [role, setRole] = useState<UserRole>('GROOM');
+  const [locking, setLocking] = useState<UserRow | null>(null);
 
-  if (loading) return <Skeleton rows={5} />;
+  const rows = useMemo(
+    () =>
+      (data ?? [])
+        .filter((user) => !roleFilter || user.role === roleFilter)
+        .filter((user) => !search || `${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase())),
+    [data, roleFilter, search],
+  );
+
+  if (loading) return <Skeleton rows={6} />;
+
+  const counts = (data ?? []).reduce<Record<string, number>>((acc, user) => {
+    acc[user.role] = (acc[user.role] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6">
       <PageHeader
-        title="Nhân sự và phân quyền"
-        description="Gán vai trò, khu phụ trách và khóa tài khoản. Tài khoản bị khóa không đăng nhập được."
+        title="Nhân sự"
+        description="Gán vai trò và khóa tài khoản. Khu phụ trách của huấn luyện viên được gán ở danh mục khu chuồng."
       />
       {action.error && <ErrorBox message={action.error} />}
 
-      <div className="space-y-2">
-        {data?.map((user) => (
-          <Card key={user.id}>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 font-semibold text-gray-900">
-                  {user.name}
-                  {!user.active && <Pill tone="red">Đã khóa</Pill>}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {user.email} · {user.phone}
-                </p>
+      <Toolbar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc email…" className="min-w-[240px] flex-1" />
+        <Segmented
+          value={roleFilter}
+          onChange={setRoleFilter}
+          options={[
+            { value: '', label: 'Tất cả' },
+            ...(Object.keys(roleLabel) as UserRole[]).map((item) => ({
+              value: item,
+              label: roleLabel[item].replace('Quản lý câu lạc bộ', 'Quản lý').replace('Huấn luyện viên trưởng', 'HLV trưởng'),
+              badge: counts[item],
+            })),
+          ]}
+        />
+      </Toolbar>
+
+      <DataTable
+        rows={rows}
+        rowKey={(row) => row.id}
+        pageSize={20}
+        columns={[
+          {
+            key: 'name',
+            header: 'Tài khoản',
+            render: (row) => (
+              <div className="flex items-center gap-3">
+                <Avatar name={row.name} size={36} />
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-gray-900">
+                    {row.name}
+                    {!row.active && <Pill tone="red">Đã khóa</Pill>}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {row.email} · {row.phone}
+                  </p>
+                </div>
               </div>
-              <div className="text-sm">
-                <p className="font-medium text-gray-700">{roleLabel[user.role]}</p>
-                <p className="text-xs text-gray-400">
-                  {user.zoneName ?? (user.horseCount > 0 ? `${user.horseCount} ngựa được giao` : 'Toàn câu lạc bộ')}
-                </p>
-              </div>
-              <div className="flex gap-2">
+            ),
+          },
+          { key: 'role', header: 'Vai trò', render: (row) => <span className="font-medium text-gray-700">{roleLabel[row.role]}</span> },
+          {
+            key: 'resp',
+            header: 'Trách nhiệm đang giữ',
+            render: (row) =>
+              row.responsibilities.length ? (
+                <ul className="space-y-0.5 text-xs text-gray-500">
+                  {row.responsibilities.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="text-xs text-gray-300">—</span>
+              ),
+          },
+          {
+            key: 'actions',
+            header: '',
+            className: 'text-right',
+            render: (row) => (
+              <div className="flex justify-end gap-2">
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => {
-                    setEditing(editing === user.id ? null : user.id);
-                    setForm({ role: user.role, zoneId: user.zoneName === 'Khu A' ? 'zone_a' : 'zone_b' });
+                    setEditing(row);
+                    setRole(row.role);
+                    action.clearError();
                   }}
                 >
-                  Gán vai trò
+                  Đổi vai trò
                 </Button>
                 <Button
                   size="sm"
-                  variant={user.active ? 'ghost' : 'secondary'}
+                  variant={row.active ? 'ghost' : 'soft'}
                   onClick={async () => {
-                    const done = await action.run(() => setUserActive(user.id, !user.active));
-                    if (done !== undefined) reload();
-                  }}
-                >
-                  {user.active ? 'Khóa' : 'Mở khóa'}
-                </Button>
-              </div>
-            </div>
-
-            {editing === user.id && (
-              <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-gray-100 pt-4">
-                <Field label="Vai trò" className="min-w-[200px] flex-1">
-                  <Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as UserRole })}>
-                    {Object.entries(roleLabel).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                {form.role === 'HEAD_TRAINER' && (
-                  <Field label="Khu phụ trách" className="w-40">
-                    <Select value={form.zoneId} onChange={(event) => setForm({ ...form, zoneId: event.target.value })}>
-                      <option value="zone_a">Khu A</option>
-                      <option value="zone_b">Khu B</option>
-                    </Select>
-                  </Field>
-                )}
-                <Button
-                  onClick={async () => {
-                    const done = await action.run(() => setUserRole(user.id, form.role, form.zoneId));
+                    if (row.active) {
+                      setLocking(row);
+                      return;
+                    }
+                    const done = await action.run(() => setUserActive(row.id, true));
                     if (done !== undefined) {
-                      setEditing(null);
+                      toast.push(`Đã mở khóa ${row.name}`, 'success');
                       reload();
                     }
                   }}
                 >
-                  Lưu
+                  {row.active ? 'Khóa' : 'Mở khóa'}
                 </Button>
               </div>
-            )}
-          </Card>
-        ))}
-      </div>
+            ),
+          },
+        ]}
+      />
+
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={`Đổi vai trò — ${editing?.name ?? ''}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditing(null)}>
+              Hủy
+            </Button>
+            <Button
+              disabled={action.pending}
+              onClick={async () => {
+                if (!editing) return;
+                const done = await action.run(() => setUserRole(editing.id, role));
+                if (done !== undefined) {
+                  toast.push('Đã đổi vai trò', 'success');
+                  setEditing(null);
+                  reload();
+                }
+              }}
+            >
+              Lưu
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {action.error && <ErrorBox message={action.error} />}
+          <Field label="Vai trò mới">
+            <Select value={role} onChange={(event) => setRole(event.target.value as UserRole)}>
+              {(Object.keys(roleLabel) as UserRole[]).map((value) => (
+                <option key={value} value={value}>
+                  {roleLabel[value]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Notice tone="info">
+            Không đổi được vai trò khi tài khoản còn là chủ của ngựa đang ở câu lạc bộ, còn phụ trách khu có ngựa, hoặc còn
+            là Groom của ngựa nào. Hãy chuyển trách nhiệm cho người khác trước.
+          </Notice>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={!!locking}
+        title={`Khóa tài khoản ${locking?.name ?? ''}`}
+        message="Tài khoản bị khóa không đăng nhập được. Các trách nhiệm dưới đây vẫn giữ nguyên và cần được chuyển cho người khác."
+        consequences={locking?.responsibilities.length ? locking.responsibilities : ['Tài khoản không giữ trách nhiệm nào.']}
+        confirmLabel="Xác nhận khóa"
+        pending={action.pending}
+        onClose={() => setLocking(null)}
+        onConfirm={async () => {
+          if (!locking) return;
+          const done = await action.run(() => setUserActive(locking.id, false));
+          if (done !== undefined) {
+            toast.push(`Đã khóa ${locking.name}`, 'success');
+            setLocking(null);
+            reload();
+          }
+        }}
+      />
     </div>
   );
 }
@@ -141,36 +244,28 @@ export function AdminUsers() {
 
 export function AdminPermissions() {
   const { data, loading } = useService(() => getPermissionMatrix(), []);
-  const [selected, setSelected] = useState<{ feature: string; role: string; scope?: string } | null>(null);
 
   if (loading || !data) return <Skeleton rows={5} />;
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6">
       <PageHeader
         title="Ma trận phân quyền"
-        description="Bảng này sinh trực tiếp từ bảng quyền dùng chung của hệ thống — menu, nút bấm và tầng dịch vụ đều hỏi cùng một nơi."
+        description="Sinh trực tiếp từ bảng quyền dùng chung — menu, nút bấm và tầng dịch vụ đều hỏi cùng một nơi. Rê chuột lên dấu tích để xem phạm vi."
       />
-
-      {selected && (
-        <Card tone="success">
-          <p className="text-sm text-gray-700">
-            <strong>{selected.feature}</strong> — {selected.role}:{' '}
-            {selected.scope ? `được phép, phạm vi ${selected.scope.toLowerCase()}` : 'không có quyền'}
-          </p>
-        </Card>
-      )}
-
       {data.groups.map((group) => (
-        <Card key={group.group} className="overflow-x-auto">
-          <SectionTitle icon={<ShieldCheck size={16} className="text-emerald-600" />}>{group.group}</SectionTitle>
-          <table className="w-full min-w-[720px] text-left text-sm">
+        <Card key={group.group} className="overflow-x-auto p-0 sm:p-0">
+          <div className="px-5 pt-5 sm:px-6">
+            <SectionTitle icon={<ShieldCheck size={16} />}>{group.group}</SectionTitle>
+          </div>
+          <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-3 py-2 text-xs font-semibold text-gray-400">Chức năng</th>
-                {data.roles.map((role) => (
-                  <th key={role} className="px-3 py-2 text-center text-xs font-semibold text-gray-400">
-                    {roleLabel[role].replace('Quản lý câu lạc bộ', 'Quản lý')}
+              <tr className="border-y border-emerald-950/[0.06] bg-emerald-50/30">
+                <th className="w-16 px-5 py-2.5 text-xs font-semibold text-gray-500">Mã</th>
+                <th className="px-3 py-2.5 text-xs font-semibold text-gray-500">Chức năng</th>
+                {data.roles.map((item) => (
+                  <th key={item} className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500">
+                    {roleLabel[item].replace('Quản lý câu lạc bộ', 'Quản lý').replace('Huấn luyện viên trưởng', 'HLV trưởng')}
                   </th>
                 ))}
               </tr>
@@ -178,22 +273,18 @@ export function AdminPermissions() {
             <tbody>
               {group.rows.map((row) => (
                 <tr key={row.key} className="border-b border-gray-50 last:border-0">
+                  <td className="px-5 py-2.5 font-mono text-xs text-gray-400">{row.code}</td>
                   <td className="px-3 py-2.5 text-gray-700">{row.feature}</td>
                   {row.cells.map((cell) => (
-                    <td key={cell.role} className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={() =>
-                          setSelected({ feature: row.feature, role: roleLabel[cell.role], scope: cell.scopeLabel })
-                        }
-                        className="inline-flex items-center justify-center rounded-lg p-1.5 transition hover:bg-gray-100"
-                        title={cell.scopeLabel ?? 'Không có quyền'}
-                      >
-                        {cell.allowed ? (
-                          <Check size={16} className="text-emerald-600" />
-                        ) : (
-                          <X size={16} className="text-gray-200" />
-                        )}
-                      </button>
+                    <td key={cell.role} className="px-3 py-2.5 text-center" title={cell.scopeLabel ?? 'Không có quyền'}>
+                      {cell.allowed ? (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                          <Check size={12} />
+                          {cell.scopeLabel}
+                        </span>
+                      ) : (
+                        <X size={14} className="mx-auto text-gray-200" />
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -206,95 +297,46 @@ export function AdminPermissions() {
   );
 }
 
-/* ===== Khu và ô chuồng ===== */
-
-export function AdminZones() {
-  const { data, loading } = useService(() => getZonesAndStalls(), []);
-  if (loading) return <Skeleton rows={4} />;
-
-  return (
-    <div className="space-y-6 pb-8">
-      <PageHeader title="Khu và ô chuồng" description="Danh mục khu chuồng, ô và tình trạng sử dụng." />
-      {data?.map((zone) => (
-        <Card key={zone.id}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-gray-900">{zone.name}</p>
-              <p className="text-xs text-gray-400">
-                Huấn luyện viên phụ trách: {zone.headTrainerName ?? 'Không có — chỉ xem, không lập giáo án'}
-              </p>
-            </div>
-            <Pill tone="gray">
-              {zone.stalls.filter((stall) => stall.horseName).length}/{zone.stalls.length} ô đang dùng
-            </Pill>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {zone.stalls.map((stall) => (
-              <div
-                key={stall.id}
-                className={`rounded-xl border p-3 ${stall.horseName ? 'border-emerald-100 bg-emerald-50/40' : 'border-dashed border-gray-200 bg-gray-50/50'}`}
-              >
-                <p className="font-mono text-xs text-gray-400">{stall.code}</p>
-                <p className="mt-1 truncate text-sm font-medium text-gray-800">{stall.horseName ?? 'Trống'}</p>
-                <p className="mt-0.5 text-[11px] text-gray-400">{stallTypeLabel[stall.type]}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
 /* ===== Nhật ký thao tác ===== */
 
 export function AdminAudit() {
   const [filters, setFilters] = useState({ userId: '', action: '', entityType: '' });
   const options = useService(() => listAuditOptions(), []);
-  const { data, loading } = useService(
-    () => listAuditLogs(filters),
-    [filters.userId, filters.action, filters.entityType],
-  );
+  const { data, loading } = useService(() => listAuditLogs(filters), [filters.userId, filters.action, filters.entityType]);
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6">
       <PageHeader
         title="Nhật ký thao tác"
-        description="Mọi thao tác thêm, sửa, xóa, hủy, bắt đầu, kết thúc và xác nhận cảnh báo đều được ghi kèm giá trị trước và sau."
+        description="Mọi thao tác thêm, sửa, xóa đều được ghi kèm người thực hiện, thời điểm, giá trị trước và sau, lý do."
       />
-
-      <Card>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Select value={filters.userId} onChange={(event) => setFilters({ ...filters, userId: event.target.value })}>
-            <option value="">Mọi người thực hiện</option>
-            {options.data?.users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name}
-              </option>
-            ))}
-          </Select>
-          <Select value={filters.action} onChange={(event) => setFilters({ ...filters, action: event.target.value })}>
-            <option value="">Mọi hành động</option>
-            {options.data?.actions.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={filters.entityType}
-            onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
-          >
-            <option value="">Mọi loại đối tượng</option>
-            {options.data?.entityTypes.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </Card>
-
+      <Toolbar>
+        <FilterSelect label="Người thực hiện" value={filters.userId} onChange={(value) => setFilters({ ...filters, userId: value })}>
+          <option value="">Mọi người thực hiện</option>
+          {options.data?.users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.name}
+            </option>
+          ))}
+        </FilterSelect>
+        <FilterSelect label="Hành động" value={filters.action} onChange={(value) => setFilters({ ...filters, action: value })}>
+          <option value="">Mọi hành động</option>
+          {options.data?.actions.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </FilterSelect>
+        <FilterSelect label="Đối tượng" value={filters.entityType} onChange={(value) => setFilters({ ...filters, entityType: value })}>
+          <option value="">Mọi loại đối tượng</option>
+          {options.data?.entityTypes.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </FilterSelect>
+        <span className="ml-auto text-sm text-gray-400">{data?.length ?? 0} dòng</span>
+      </Toolbar>
       {loading ? <Skeleton rows={5} /> : <AuditList rows={data ?? []} />}
     </div>
   );
@@ -321,30 +363,27 @@ export function AdminSystem() {
   const [log, setLog] = useState<string[] | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [fixedValue, setFixedValue] = useState('');
-  const [rateForm, setRateForm] = useState({ value: '', reason: '' });
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6">
       <PageHeader
         title="Công cụ hệ thống"
-        description="Các tiện ích vận hành: giờ hệ thống, tác vụ định kỳ và khôi phục dữ liệu khởi tạo."
+        description="Giờ hệ thống, bộ mô phỏng thiết bị đeo, tác vụ định kỳ và khôi phục dữ liệu khởi tạo."
       />
-
       {action.error && <ErrorBox message={action.error} />}
 
-      <div className="grid gap-5 md:grid-cols-2">
-        <Card>
-          <SectionTitle icon={<Clock size={16} className="text-emerald-600" />}>Giờ hệ thống</SectionTitle>
+      <div className="grid gap-5 lg:grid-cols-12">
+        <Card className="lg:col-span-7">
+          <SectionTitle icon={<Clock size={16} />}>Giờ hệ thống</SectionTitle>
           <p className="mb-4 text-sm font-light text-gray-500">
-            Mọi quy tắc thời gian trong hệ thống đọc từ đây. Đặt lệch giờ chỉ dùng khi cần kiểm thử nghiệp vụ theo
-            mốc thời gian — đồng hồ vẫn chạy tiếp, không đứng yên.
+            Mọi quy tắc thời gian đọc từ đây. Đặt lệch giờ chỉ dùng khi cần kiểm thử theo mốc thời gian — đồng hồ vẫn chạy
+            tiếp, không đứng yên.
           </p>
-          <p className="mb-4 rounded-xl bg-gray-50 p-3 font-mono text-sm text-gray-700">
-            {formatDateTime(now())} ·{' '}
-            {offsetLabel(settings.data?.clockMode, settings.data?.clockOffsetMs)}
+          <p className="mb-4 rounded-xl bg-emerald-50/60 p-3 font-mono text-sm text-gray-700">
+            {formatDateTime(now())} · {offsetLabel(settings.data?.clockMode, settings.data?.clockOffsetMs)}
           </p>
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Đặt tới mốc" className="min-w-[200px] flex-1">
+            <Field label="Đặt tới mốc" className="min-w-[220px] flex-1">
               <Input type="datetime-local" value={fixedValue} onChange={(event) => setFixedValue(event.target.value)} />
             </Field>
             <Button
@@ -357,10 +396,7 @@ export function AdminSystem() {
             >
               Áp dụng
             </Button>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
             <Button
-              size="sm"
               variant="secondary"
               onClick={() => {
                 nudgeClock(3_600_000);
@@ -370,7 +406,6 @@ export function AdminSystem() {
               +1 giờ
             </Button>
             <Button
-              size="sm"
               variant="secondary"
               onClick={() => {
                 nudgeClock(86_400_000);
@@ -380,7 +415,6 @@ export function AdminSystem() {
               +1 ngày
             </Button>
             <Button
-              size="sm"
               variant="ghost"
               onClick={() => {
                 setClock('REAL');
@@ -392,37 +426,27 @@ export function AdminSystem() {
           </div>
         </Card>
 
-        <Card>
-          <SectionTitle icon={<Play size={16} className="text-emerald-600" />}>Thiết bị đeo mô phỏng</SectionTitle>
+        <Card variant="flat" className="lg:col-span-5">
+          <SectionTitle icon={<Play size={16} />}>Thiết bị đeo mô phỏng</SectionTitle>
           <p className="mb-4 text-sm font-light text-gray-500">
-            Thiết bị đeo thật chưa được gắn vào hệ thống. Trong lúc đó, buổi tập nhận dữ liệu từ bộ mô phỏng chạy trong
-            ứng dụng. Tốc độ mô phỏng áp dụng cho các buổi bắt đầu sau khi đổi.
+            Buổi tập nhận nhịp tim và tốc độ từ bộ mô phỏng chạy trong ứng dụng. Tốc độ mới áp dụng cho các buổi bắt đầu sau
+            khi đổi.
           </p>
-          <div className="flex gap-2">
-            {[1, 5, 10].map((speed) => (
-              <button
-                key={speed}
-                onClick={() => {
-                  setSimulationSpeed(speed);
-                  settings.reload();
-                }}
-                className={`flex-1 rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${
-                  settings.data?.simSpeed === speed
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                ×{speed}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            value={String(settings.data?.simSpeed ?? 1)}
+            onChange={(value) => {
+              setSimulationSpeed(Number(value));
+              settings.reload();
+            }}
+            options={[1, 5, 10].map((speed) => ({ value: String(speed), label: `×${speed}` }))}
+          />
         </Card>
 
-        <Card>
-          <SectionTitle icon={<RefreshCw size={16} className="text-emerald-600" />}>Tác vụ định kỳ</SectionTitle>
+        <Card variant="flat" className="lg:col-span-5">
+          <SectionTitle icon={<RefreshCw size={16} />}>Tác vụ định kỳ</SectionTitle>
           <p className="mb-4 text-sm font-light text-gray-500">
-            Chạy các việc nền theo chu kỳ: nhắc giáo án sắp hết, nhắc lịch chăm sóc tới hạn hoặc quá hạn, dọn ảnh đã gỡ
-            quá 30 ngày.
+            Quét ngựa quá hạn khám định kỳ trên 7 ngày để gửi cảnh báo cho bác sĩ và quản lý (mỗi ngựa một lần cho tới
+            khi được khám).
           </p>
           <Button
             onClick={async () => {
@@ -434,7 +458,7 @@ export function AdminSystem() {
             {action.pending ? 'Đang chạy…' : 'Chạy ngay'}
           </Button>
           {log && (
-            <div className="mt-4 rounded-xl bg-gray-50 p-4 text-sm">
+            <div className="mt-4 rounded-xl bg-white p-4 text-sm">
               {log.length === 0 ? (
                 <p className="font-light text-gray-400">Không có việc nào cần xử lý.</p>
               ) : (
@@ -448,53 +472,10 @@ export function AdminSystem() {
           )}
         </Card>
 
-        <Card>
-          <SectionTitle icon={<Wallet size={16} className="text-emerald-600" />}>
-            Phí nuôi dưỡng mặc định
-          </SectionTitle>
+        <Card tone="danger" className="lg:col-span-7">
+          <SectionTitle icon={<Database size={16} />}>Khôi phục dữ liệu khởi tạo</SectionTitle>
           <p className="mb-4 text-sm font-light text-gray-500">
-            Áp cho mọi con ngựa chưa được đặt mức riêng. Mức riêng của từng con đặt ở trang chi tiết ngựa, thẻ
-            &ldquo;Chuồng trại và phụ trách&rdquo;.
-          </p>
-          <p className="mb-4 rounded-xl bg-gray-50 p-3 text-lg font-bold text-gray-900 tabular-nums">
-            {formatMoney(settings.data?.defaultDailyRate)}
-            <span className="ml-1 text-sm font-medium text-gray-400">mỗi ngày</span>
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Mức mới (đ/ngày)" className="min-w-[180px] flex-1" error={action.field === 'value' ? action.error : undefined}>
-              <Input
-                type="number"
-                min={1}
-                step={100000}
-                value={rateForm.value}
-                onChange={(event) => setRateForm({ ...rateForm, value: event.target.value })}
-                placeholder="1200000"
-              />
-            </Field>
-            <Field label="Lý do" className="min-w-[180px] flex-1">
-              <Input value={rateForm.reason} onChange={(event) => setRateForm({ ...rateForm, reason: event.target.value })} />
-            </Field>
-            <Button
-              onClick={async () => {
-                const done = await action.run(() =>
-                  setClubDefaultDailyRate(Number(rateForm.value), rateForm.reason),
-                );
-                if (done !== undefined) {
-                  setRateForm({ value: '', reason: '' });
-                  settings.reload();
-                }
-              }}
-              disabled={action.pending || !rateForm.value}
-            >
-              Áp dụng
-            </Button>
-          </div>
-        </Card>
-
-        <Card tone="danger">
-          <SectionTitle icon={<Database size={16} className="text-red-500" />}>Khôi phục dữ liệu khởi tạo</SectionTitle>
-          <p className="mb-4 text-sm font-light text-gray-500">
-            Xóa toàn bộ dữ liệu đang có và tạo lại bộ dữ liệu khởi tạo. Thao tác này không hoàn tác được.
+            Xóa toàn bộ dữ liệu đang có và tạo lại bộ dữ liệu mẫu cho buổi demo. Thao tác này không hoàn tác được.
           </p>
           <Button variant="danger" onClick={() => setResetOpen(true)}>
             Khôi phục dữ liệu
@@ -507,7 +488,7 @@ export function AdminSystem() {
         title="Khôi phục dữ liệu khởi tạo"
         message="Toàn bộ dữ liệu hiện có sẽ bị xóa và thay bằng bộ dữ liệu khởi tạo."
         consequences={[
-          'Mọi hồ sơ, giáo án, buổi tập và hồ sơ y tế đã tạo sẽ mất.',
+          'Mọi hồ sơ, lớp học, buổi tập và bệnh án đã tạo sẽ mất.',
           'Nhật ký thao tác và thông báo cũng bị xóa.',
           'Thao tác không hoàn tác được.',
         ]}
@@ -520,8 +501,4 @@ export function AdminSystem() {
       />
     </div>
   );
-}
-
-export function AdminEmpty() {
-  return <EmptyState title="Chức năng này chưa được bật" />;
 }

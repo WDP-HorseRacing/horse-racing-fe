@@ -13,7 +13,8 @@ export interface SimConfig {
   intensity: TrainingIntensity;
   scenario: Exclude<SimScenario, 'RANDOM'>;
   seed: number;
-  maxHeartRate: number;
+  /** Ngưỡng do bác sĩ đặt. Không có thì quy tắc R1 không chạy. */
+  maxHeartRate?: number;
 }
 
 export type SimPhase = 'WARMUP_WALK' | 'WARMUP_TROT' | 'RUN' | 'RECOVERY_WALK' | 'COOLDOWN' | 'IDLE';
@@ -59,6 +60,16 @@ export interface SimResult {
     mainAvgHeartRate: number;
     suggestedTrialSeconds?: number;
   };
+}
+
+/** Hạt giống riêng cho từng ngựa trong cùng một buổi (FNV-1a trên seed + khóa). */
+export function deriveSeed(seed: number, key: string): number {
+  let hash = 0x811c9dc5 ^ (seed >>> 0);
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
 }
 
 function mulberry32(seed: number) {
@@ -167,7 +178,7 @@ export function simulate(config: SimConfig, untilSecond: number): SimResult {
         speedTarget = target.speed;
         heartTarget =
           config.scenario === 'HEART_OVER' && runIndex === targetRun
-            ? config.maxHeartRate + 11
+            ? (config.maxHeartRate ?? 230) + 11
             : target.heartRate;
         break;
       case 'RECOVERY_WALK':
@@ -194,13 +205,13 @@ export function simulate(config: SimConfig, untilSecond: number): SimResult {
     const outSpeed = Math.max(0, Math.round((speed + speedNoise) * 100) / 100);
     const outHeartRate = Math.max(30, Math.round(heartRate + heartNoise));
 
-    // Kịch bản mất tín hiệu: 15 giây đầu của pha đi bộ hồi sức đầu tiên.
+    // Kịch bản mất tín hiệu: khoảng 22 giây trong pha đi bộ hồi sức đầu tiên
+    // (bài chỉ có 1 lần chạy thì rơi vào pha thả lỏng) — đủ để vượt ngưỡng R6 là 15 giây.
     const lost =
       config.scenario === 'SIGNAL_LOST' &&
-      phase === 'RECOVERY_WALK' &&
-      runIndex === 1 &&
+      ((phase === 'RECOVERY_WALK' && runIndex === 1) || (config.repetitions === 1 && phase === 'COOLDOWN')) &&
       t - phaseStart >= 20 &&
-      t - phaseStart <= 35;
+      t - phaseStart <= 42;
 
     if (!lost) {
       count += 1;
@@ -227,7 +238,7 @@ export function simulate(config: SimConfig, untilSecond: number): SimResult {
     /* --- Quy tắc cảnh báo --- */
     const canFire = (rule: AlertRule) => (lastAlertAt[rule] ?? -999) <= t - 60;
 
-    if (!lost && outHeartRate > config.maxHeartRate) {
+    if (!lost && config.maxHeartRate !== undefined && outHeartRate > config.maxHeartRate) {
       overThresholdStreak += 1;
       if (overThresholdStreak >= 5 && canFire('R1')) {
         alerts.push({ rule: 'R1', atSecond: t, value: outHeartRate });
@@ -247,7 +258,7 @@ export function simulate(config: SimConfig, untilSecond: number): SimResult {
       }
     }
 
-    if (lostStreak > 10 && canFire('R6')) {
+    if (lostStreak > 15 && canFire('R6')) {
       alerts.push({ rule: 'R6', atSecond: t, value: 0 });
       lastAlertAt.R6 = t;
     }
