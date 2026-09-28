@@ -5,9 +5,15 @@ export function activeLock(db: Database, horseId: string): TrainingLock | undefi
   return db.trainingLocks.find((lock) => lock.horseId === horseId && !lock.liftedAt);
 }
 
-/** Bảng điều kiện được tập theo trạng thái sức khỏe (Flow 2, mục III.5). */
+export const INTENSITY_ORDER: TrainingIntensity[] = ['LIGHT', 'MEDIUM', 'HEAVY', 'MAX'];
+
+export function intensityRank(intensity: TrainingIntensity): number {
+  return INTENSITY_ORDER.indexOf(intensity);
+}
+
+/** Bảng cường độ được phép tập theo trạng thái sức khỏe (bản chốt A.4). */
 export function healthAllows(status: HealthStatus, intensity: TrainingIntensity): boolean {
   if (status === 'ELIGIBLE') return true;
-  if (status === 'UNDER_OBSERVATION') return intensity === 'LIGHT' || intensity === 'MODERATE';
+  if (status === 'UNDER_OBSERVATION') return intensity === 'LIGHT' || intensity === 'MEDIUM';
   return false;
 }

@@ -1,12 +1,13 @@
 // Thông báo, nhật ký thao tác, quản trị và các tác vụ nền.
-import type { UserRole } from '../types/domain';
+import type { Database, User, UserRole } from '../types/domain';
 import { AppError, ERR_NOT_FOUND, getDb, mutate, resetDatabase, stamp, touch } from './db';
-import { commit, getCurrentUser, pushNotification, query, requirePermission, requireUser, writeAudit } from './api';
+import { commit, getCurrentUser, query, requirePermission, requireUser, writeAudit } from './api';
 import { CAPABILITIES, SCOPE_LABEL } from '../auth/permissions';
-import { findUser, groomIdOf, zoneIdOf } from './selectors';
+import { horsesOfGroom, horsesOfZone, managedZoneIds, periodicStatus } from './selectors';
+import { runPeriodicOverdueJob } from './ops';
 import { clockOffsetMs, now, resetToRealTime, setSystemTime, shiftTime } from '../lib/clock';
-import { addDays, toDateKey } from '../lib/format';
-import { careTypeLabel } from '../lib/labels';
+import { toDateKey } from '../lib/format';
+import { roleLabel } from '../lib/labels';
 
 /* ===== Thông báo ===== */
 
@@ -70,11 +71,12 @@ export function listAuditLogs(filters: { userId?: string; action?: string; entit
 }
 
 export function listAuditForHorse(horseId: string) {
-  return query((db) =>
-    db.auditLogs
-      .filter((item) => item.entityId === horseId || item.entityId.includes(horseId))
-      .sort((a, b) => b.at.localeCompare(a.at)),
-  );
+  return query((db) => {
+    requirePermission('admin.audit');
+    return db.auditLogs
+      .filter((item) => item.horseId === horseId || item.entityId === horseId)
+      .sort((a, b) => b.at.localeCompare(a.at));
+  });
 }
 
 export function listAuditOptions() {
@@ -85,7 +87,24 @@ export function listAuditOptions() {
   }));
 }
 
-/* ===== Quản trị ===== */
+/* ===== Quản trị nhân sự (A.9) ===== */
+
+/** Trách nhiệm đang vướng của một tài khoản: khu phụ trách, ngựa được giao, ngựa sở hữu. */
+function responsibilitiesOf(db: Database, user: User): string[] {
+  const list: string[] = [];
+  managedZoneIds(db, user.id).forEach((zoneId) => {
+    const zone = db.zones.find((item) => item.id === zoneId);
+    const count = horsesOfZone(db, zoneId).filter((horse) => horse.lifecycleStatus !== 'TRANSFERRED').length;
+    list.push(`Phụ trách ${zone?.name ?? zoneId}${count ? ` (${count} ngựa)` : ''}`);
+  });
+  const groomHorses = horsesOfGroom(db, user.id);
+  if (groomHorses.length) list.push(`Groom của ${groomHorses.map((horse) => horse.name).join(', ')}`);
+  const owned = db.horses.filter(
+    (horse) => horse.ownerId === user.id && !horse.deletedAt && horse.lifecycleStatus !== 'TRANSFERRED',
+  );
+  if (owned.length) list.push(`Chủ của ${owned.map((horse) => horse.name).join(', ')}`);
+  return list;
+}
 
 export function listUsers() {
   return query((db) => {
@@ -96,13 +115,16 @@ export function listUsers() {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      zoneName: db.zones.find((zone) => zone.id === user.zoneId)?.name,
       active: user.active,
-      horseCount: db.horses.filter((horse) => groomIdOf(db, horse.id) === user.id).length,
+      zoneNames: managedZoneIds(db, user.id).map((zoneId) => db.zones.find((zone) => zone.id === zoneId)?.name ?? ''),
+      groomHorseCount: horsesOfGroom(db, user.id).length,
+      ownedHorseCount: db.horses.filter((horse) => horse.ownerId === user.id && !horse.deletedAt).length,
+      responsibilities: responsibilitiesOf(db, user),
     }));
   });
 }
 
+/** Khóa tài khoản chỉ cảnh báo kèm danh sách trách nhiệm và bắt xác nhận, không chặn cứng (A.9.3). */
 export function setUserActive(userId: string, active: boolean) {
   return commit((db) => {
     const actor = requirePermission('admin.users');
@@ -118,34 +140,67 @@ export function setUserActive(userId: string, active: boolean) {
       entityType: 'User',
       entityId: userId,
       before: { active: before },
-      after: { active },
+      after: { active, responsibilities: active ? undefined : responsibilitiesOf(db, user) },
       actor,
     });
   });
 }
 
-export function setUserRole(userId: string, role: UserRole, zoneId?: string) {
+/**
+ * Đổi vai trò (A.9.2): không cho đổi khi tài khoản còn là chủ của ngựa ACTIVE/RETIRED,
+ * còn phụ trách khu có ngựa, hoặc còn là Groom của ngựa nào. Bỏ qua hồ sơ đã xóa.
+ */
+export function setUserRole(userId: string, role: UserRole) {
   return commit((db) => {
     const actor = requirePermission('admin.users');
     const user = db.users.find((item) => item.id === userId);
     if (!user) throw new AppError(ERR_NOT_FOUND);
+    if (user.role === role) return;
     const at = now();
-    const before = { role: user.role, zoneId: user.zoneId };
-    user.role = role;
-    user.zoneId = role === 'HEAD_TRAINER' ? zoneId : undefined;
-    touch(user, at);
-    if (role === 'HEAD_TRAINER' && zoneId) {
+
+    if (user.role === 'HORSE_OWNER') {
+      const owned = db.horses.filter(
+        (horse) => horse.ownerId === user.id && !horse.deletedAt && horse.lifecycleStatus !== 'TRANSFERRED',
+      );
+      if (owned.length) {
+        throw new AppError(
+          `Tài khoản đang là chủ của ${owned.map((horse) => horse.name).join(', ')}. Hãy gán chủ mới trước khi đổi vai trò.`,
+        );
+      }
+    }
+    if (user.role === 'HEAD_TRAINER') {
+      const busy = managedZoneIds(db, user.id).filter((zoneId) => horsesOfZone(db, zoneId).length > 0);
+      if (busy.length) {
+        throw new AppError(
+          `Tài khoản đang phụ trách ${busy.map((zoneId) => db.zones.find((zone) => zone.id === zoneId)?.name).join(', ')} còn ngựa. Hãy đổi HT phụ trách khu trước.`,
+        );
+      }
       db.zones.forEach((zone) => {
-        if (zone.id === zoneId) zone.headTrainerId = userId;
-        else if (zone.headTrainerId === userId) zone.headTrainerId = undefined;
+        if (zone.headTrainerId === user.id) {
+          zone.headTrainerId = undefined;
+          touch(zone, at);
+        }
       });
     }
+    if (user.role === 'GROOM') {
+      const horses = horsesOfGroom(db, user.id);
+      if (horses.length) {
+        throw new AppError(
+          `Tài khoản đang là Groom của ${horses.map((horse) => horse.name).join(', ')}. Hãy phân công Groom khác trước.`,
+        );
+      }
+    }
+
+    const before = { role: user.role };
+    user.role = role;
+    touch(user, at);
     writeAudit(db, at, {
-      action: 'Gán vai trò',
+      action: 'Đổi vai trò',
       entityType: 'User',
       entityId: userId,
       before,
-      after: { role, zoneId },
+      after: { role },
+      reason: `${roleLabel[before.role]} → ${roleLabel[role]}`,
       actor,
     });
   });
@@ -160,6 +215,7 @@ export function getPermissionMatrix() {
       group,
       rows: CAPABILITIES.filter((item) => item.group === group).map((item) => ({
         key: item.key,
+        code: item.code,
         feature: item.feature,
         cells: roles.map((role) => {
           const scope = item.roles[role];
@@ -168,27 +224,6 @@ export function getPermissionMatrix() {
       })),
     })),
   });
-}
-
-export function getZonesAndStalls() {
-  return query((db) =>
-    db.zones.map((zone) => ({
-      id: zone.id,
-      name: zone.name,
-      headTrainerName: findUser(db, zone.headTrainerId)?.name,
-      stalls: db.stalls
-        .filter((stall) => stall.zoneId === zone.id)
-        .map((stall) => {
-          const assignment = db.stallAssignments.find((item) => item.stallId === stall.id && !item.endAt);
-          return {
-            id: stall.id,
-            code: stall.code,
-            type: stall.type,
-            horseName: assignment ? db.horses.find((horse) => horse.id === assignment.horseId)?.name : undefined,
-          };
-        }),
-    })),
-  );
 }
 
 /* ===== Công cụ hệ thống ===== */
@@ -204,117 +239,37 @@ export function resetToSeedData() {
 
 /**
  * Tác vụ nền theo chu kỳ — phần BE sẽ chạy bằng cron.
- * Chạy theo giờ hệ thống hiện tại.
+ * Hiện gồm: cảnh báo quá hạn khám định kỳ trên 7 ngày.
  */
 export function runScheduledJobs() {
   return commit((db) => {
     requirePermission('admin.system');
     const at = now();
-    const todayKey = toDateKey(at);
-    const log: string[] = [];
-
-    // 1. Giáo án đã qua ngày kết thúc → báo huấn luyện viên.
-    db.plans
-      .filter((plan) => !plan.cancelledAt && plan.endDate < todayKey && !plan.endingSoonNotifiedAt)
-      .forEach((plan) => {
-        const trainer = db.users.find(
-          (user) => user.role === 'HEAD_TRAINER' && user.zoneId === zoneIdOf(db, plan.horseId),
-        );
-        if (trainer) {
-          pushNotification(db, at, {
-            userId: trainer.id,
-            title: `Giáo án "${plan.name}" đã kết thúc`,
-            body: 'Hãy chuẩn bị giáo án mới cho ngựa.',
-            link: `/training/plans/${plan.id}`,
-          });
-          log.push(`Giáo án "${plan.name}" đã kết thúc`);
-        }
-        plan.endingSoonNotifiedAt = at.toISOString();
-        touch(plan, at);
-      });
-
-    // 2. Giáo án đang áp dụng còn ≤ 7 ngày và chưa có giáo án nối tiếp.
-    db.plans
-      .filter(
-        (plan) =>
-          !plan.cancelledAt &&
-          plan.startDate <= todayKey &&
-          plan.endDate >= todayKey &&
-          !plan.endingSoonNotifiedAt,
-      )
-      .forEach((plan) => {
-        const daysLeft = Math.round(
-          (new Date(plan.endDate).getTime() - new Date(todayKey).getTime()) / 86_400_000,
-        );
-        if (daysLeft > 7) return;
-        const hasNext = db.plans.some(
-          (item) => item.horseId === plan.horseId && !item.cancelledAt && item.startDate > plan.endDate,
-        );
-        if (hasNext) return;
-        const trainer = db.users.find(
-          (user) => user.role === 'HEAD_TRAINER' && user.zoneId === zoneIdOf(db, plan.horseId),
-        );
-        if (trainer) {
-          const horse = db.horses.find((item) => item.id === plan.horseId);
-          pushNotification(db, at, {
-            userId: trainer.id,
-            title: `Giáo án ${horse?.name} còn ${daysLeft} ngày`,
-            body: 'Thêm giai đoạn nối tiếp hoặc chuẩn bị giáo án mới.',
-            link: `/training/plans/${plan.id}`,
-          });
-          log.push(`Nhắc giáo án sắp hết của ${horse?.name}`);
-        }
-        plan.endingSoonNotifiedAt = at.toISOString();
-        touch(plan, at);
-      });
-
-    // 3. Lịch chăm sóc sắp đến hạn hoặc quá hạn.
-    db.careSchedules
-      .filter((item) => !item.doneAt)
-      .forEach((item) => {
-        const horse = db.horses.find((horse) => horse.id === item.horseId);
-        if (!horse || horse.lifecycleStatus === 'TRANSFERRED') return;
-        const overdue = item.dueDate < todayKey;
-        const soon = !overdue && item.dueDate <= toDateKey(addDays(at, 7));
-        if (overdue && item.notifiedOverdueAt) return;
-        if (soon && item.notifiedBeforeAt) return;
-        if (!overdue && !soon) return;
-
-        const receivers = [
-          ...db.users.filter((user) => user.role === 'VETERINARIAN').map((user) => user.id),
-          groomIdOf(db, item.horseId),
-        ].filter(Boolean) as string[];
-        receivers.forEach((userId) => {
-          pushNotification(db, at, {
-            userId,
-            level: overdue ? 'URGENT' : 'NORMAL',
-            title: `${horse.name}: ${careTypeLabel[item.type].toLowerCase()} ${overdue ? 'quá hạn' : 'sắp đến hạn'}`,
-            body: `Hạn ${item.dueDate}.`,
-            link: '/medical/care',
-          });
-        });
-        if (overdue) item.notifiedOverdueAt = at.toISOString();
-        else item.notifiedBeforeAt = at.toISOString();
-        touch(item, at);
-        log.push(`${horse.name}: ${careTypeLabel[item.type].toLowerCase()} ${overdue ? 'quá hạn' : 'sắp đến hạn'}`);
-      });
-
-    // 4. Ảnh đã gỡ quá 30 ngày → xóa hẳn.
-    const before = db.horsePhotos.length;
-    db.horsePhotos = db.horsePhotos.filter(
-      (photo) => !photo.removedAt || at.getTime() - new Date(photo.removedAt).getTime() < 30 * 86_400_000,
-    );
-    if (db.horsePhotos.length < before) log.push(`Xóa hẳn ${before - db.horsePhotos.length} ảnh đã gỡ quá 30 ngày`);
-
+    const overdue = runPeriodicOverdueJob(db, at);
+    const log = overdue.map((name) => `Cảnh báo quá hạn khám định kỳ: ${name}`);
     writeAudit(db, at, {
       action: 'Chạy tác vụ định kỳ',
       entityType: 'System',
-      entityId: todayKey,
+      entityId: toDateKey(at),
       after: { jobs: log.length },
       bySystem: true,
     });
-
     return log;
+  });
+}
+
+/** Kiểm tra nền khi mở ứng dụng — không cần quyền, không ghi gì nếu không có việc. */
+export function runBackgroundChecks() {
+  const db = getDb();
+  const at = now();
+  const pending = db.horses.some((horse) => {
+    if (horse.deletedAt || horse.lifecycleStatus === 'TRANSFERRED') return false;
+    const status = periodicStatus(db, horse, at);
+    return status.state === 'OVERDUE_ALERT' && horse.periodicOverdueNotifiedFor !== status.dueDate;
+  });
+  if (!pending) return;
+  mutate((draft) => {
+    runPeriodicOverdueJob(draft, at);
   });
 }
 

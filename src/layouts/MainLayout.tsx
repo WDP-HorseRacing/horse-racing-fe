@@ -1,41 +1,51 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
+import * as Popover from '@radix-ui/react-popover';
+import * as Dropdown from '@radix-ui/react-dropdown-menu';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   Activity,
-  BarChart3,
+  BookOpen,
   Bell,
-  Boxes,
-  Calendar,
   CalendarCheck,
+  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   Flag,
   HeartPulse,
+  Layers,
   LayoutDashboard,
   Lock,
   LogOut,
   MapPinned,
-  Play,
-  Camera,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   ScrollText,
   Settings,
   ShieldCheck,
   Stethoscope,
   Syringe,
   TrendingUp,
-  Trophy,
+  UserCog,
   Users,
-  UtensilsCrossed,
+  Warehouse,
+  X,
 } from 'lucide-react';
 import Lenis from 'lenis';
 import { useStore } from '../store/store';
-import { Avatar, ToastHost, useToast } from '../components/ui';
+import { Avatar, ToastHost, Tip, cn, useToast } from '../components/ui';
+import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
-import { markAllNotificationsRead, markNotificationRead } from '../services/system.service';
-import { syncRunningSessions } from '../services/training.service';
+import { links } from '../lib/links';
+import { markAllNotificationsRead, markNotificationRead, runBackgroundChecks } from '../services/system.service';
+import { syncRunningSessions } from '../services/session.service';
+import { getDb } from '../services/db';
+import { managedZoneIds } from '../services/selectors';
 import { formatRelative } from '../lib/format';
 import { now } from '../lib/clock';
 import { playAlertBeep } from '../lib/sound';
+import type { UserRole } from '../types/domain';
 
 interface NavItem {
   name: string;
@@ -43,118 +53,120 @@ interface NavItem {
   icon: typeof Flag;
 }
 
-function menuFor(role: string | undefined, zoneName: string): { group?: string; items: NavItem[] }[] {
+interface NavGroup {
+  group?: string;
+  items: NavItem[];
+}
+
+function menuFor(role: UserRole | undefined): NavGroup[] {
   switch (role) {
     case 'CLUB_MANAGER':
       return [
-        { items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] },
+        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
         {
           group: 'Đàn ngựa',
           items: [
-            { name: 'Ngựa', path: '/horses', icon: Users },
-            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
+            { name: 'Ngựa', path: links.horses, icon: Users },
+            { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
+            { name: 'Khu và ô chuồng', path: links.zones, icon: Warehouse },
           ],
         },
         {
           group: 'Huấn luyện',
           items: [
-            { name: 'Tiến độ', path: '/training/progress', icon: TrendingUp },
-            { name: 'Lịch tập', path: '/training/schedule', icon: Calendar },
-            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
+            { name: 'Lớp học', path: links.classes, icon: Layers },
+            { name: 'Giáo án', path: links.programs, icon: ClipboardList },
+            { name: 'Môn học', path: links.subjects, icon: BookOpen },
+            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
+            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
+            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
           ],
         },
         {
           group: 'Y tế',
           items: [
-            { name: 'Sơ đồ sức khỏe', path: '/medical/board', icon: HeartPulse },
-            { name: 'Hồ sơ khám', path: '/medical/records', icon: Stethoscope },
-            { name: 'Lịch chăm sóc', path: '/medical/care', icon: Syringe },
-          ],
-        },
-        {
-          group: 'Vận hành',
-          items: [
-            { name: 'Vật tư', path: '/care/supplies', icon: Boxes },
-            { name: 'Giải đua', path: '/races', icon: Trophy },
-            { name: 'Kết quả', path: '/races/results', icon: Flag },
-            { name: 'Báo cáo', path: '/reports', icon: BarChart3 },
+            { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
+            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+            { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
+            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
           ],
         },
         {
           group: 'Quản trị',
           items: [
-            { name: 'Nhân sự', path: '/admin/users', icon: Users },
-            { name: 'Phân quyền', path: '/admin/permissions', icon: ShieldCheck },
-            { name: 'Khu và ô chuồng', path: '/admin/zones', icon: MapPinned },
-            { name: 'Nhật ký thao tác', path: '/admin/audit', icon: ScrollText },
-            { name: 'Công cụ hệ thống', path: '/admin/system', icon: Settings },
+            { name: 'Nhân sự', path: links.adminUsers, icon: UserCog },
+            { name: 'Phân quyền', path: links.adminPermissions, icon: ShieldCheck },
+            { name: 'Nhật ký thao tác', path: links.adminAudit, icon: ScrollText },
+            { name: 'Công cụ hệ thống', path: links.adminSystem, icon: Settings },
           ],
         },
       ];
     case 'HEAD_TRAINER':
       return [
-        { items: [{ name: `Tổng quan ${zoneName}`, path: '/dashboard', icon: LayoutDashboard }] },
+        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
         {
           group: 'Đàn ngựa',
           items: [
-            { name: 'Ngựa', path: '/horses', icon: Users },
-            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
+            { name: 'Ngựa', path: links.horses, icon: Users },
+            { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
           ],
         },
         {
           group: 'Huấn luyện',
           items: [
-            { name: 'Giáo án', path: '/training/plans', icon: ClipboardList },
-            { name: 'Lịch tập', path: '/training/schedule', icon: Calendar },
-            { name: 'Buổi tập hôm nay', path: '/training/today', icon: CalendarCheck },
-            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
-            { name: 'Chờ đánh giá', path: '/training/review', icon: ClipboardCheck },
-            { name: 'Tiến độ', path: '/training/progress', icon: TrendingUp },
+            { name: 'Buổi tập hôm nay', path: links.today, icon: CalendarCheck },
+            { name: 'Lớp học', path: links.classes, icon: Layers },
+            { name: 'Giáo án', path: links.programs, icon: ClipboardList },
+            { name: 'Môn học', path: links.subjects, icon: BookOpen },
+            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
+            { name: 'Chờ đánh giá', path: links.review, icon: ClipboardCheck },
+            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
+            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
           ],
         },
         {
-          group: 'Khác',
+          group: 'Y tế',
           items: [
-            { name: 'Đăng ký thi đấu', path: '/races', icon: Trophy },
-            { name: 'Khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
+            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
           ],
         },
       ];
     case 'VETERINARIAN':
       return [
-        { items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] },
+        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
         {
           group: 'Y tế',
           items: [
-            { name: 'Sơ đồ sức khỏe', path: '/medical/board', icon: HeartPulse },
-            { name: 'Hồ sơ khám', path: '/medical/records', icon: Stethoscope },
-            { name: 'Khóa huấn luyện', path: '/medical/locks', icon: Lock },
-            { name: 'Lịch chăm sóc định kỳ', path: '/medical/care', icon: Syringe },
-            { name: 'Sự cố', path: '/care/incidents', icon: Camera },
+            { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
+            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+            { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
+            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
           ],
         },
         {
-          group: 'Theo dõi',
+          group: 'Huấn luyện',
           items: [
-            { name: 'Ngựa', path: '/horses', icon: Users },
-            { name: 'Nhịp tim tối đa', path: '/medical/heart-rate', icon: Activity },
-            { name: 'Theo dõi trực tiếp', path: '/training/live', icon: Activity },
-            { name: 'Duyệt khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
+            { name: 'Nhịp tim tối đa', path: links.heartRate, icon: Activity },
+            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
+            { name: 'Lớp học', path: links.classes, icon: Layers },
           ],
         },
+        { group: 'Đàn ngựa', items: [{ name: 'Ngựa', path: links.horses, icon: Users }] },
       ];
     case 'GROOM':
       return [
+        { items: [{ name: 'Việc hôm nay', path: links.dashboard, icon: CalendarCheck }] },
         {
+          group: 'Ngựa được giao',
           items: [
-            { name: 'Hôm nay', path: '/care/today', icon: CalendarCheck },
-            { name: 'Buổi tập hôm nay', path: '/training/today', icon: Play },
-            { name: 'Việc chăm sóc của tôi', path: '/care/instructions', icon: ClipboardCheck },
-            { name: 'Sơ đồ chuồng', path: '/stable', icon: MapPinned },
-            { name: 'Ngựa', path: '/horses', icon: Users },
-            { name: 'Khẩu phần', path: '/care/diet', icon: UtensilsCrossed },
-            { name: 'Báo sự cố', path: '/care/incidents/new', icon: Camera },
-            { name: 'Vật tư', path: '/care/supplies', icon: Boxes },
+            { name: 'Ngựa', path: links.horses, icon: Users },
+            { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
+            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
+            { name: 'Gửi yêu cầu khám', path: links.requests, icon: Stethoscope },
           ],
         },
       ];
@@ -162,17 +174,20 @@ function menuFor(role: string | undefined, zoneName: string): { group?: string; 
       return [
         {
           items: [
-            { name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard },
-            { name: 'Ngựa của tôi', path: '/horses', icon: Users },
-            { name: 'Duyệt đăng ký thi đấu', path: '/races/approvals', icon: Trophy },
-            { name: 'Báo cáo chi phí', path: '/reports', icon: BarChart3 },
+            { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard },
+            { name: 'Ngựa của tôi', path: links.horses, icon: Users },
+            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
+            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
+            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
           ],
         },
       ];
     default:
-      return [{ items: [{ name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard }] }];
+      return [{ items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] }];
   }
 }
+
+/* ===== Chuông thông báo ===== */
 
 function NotificationBell() {
   const notifications = useStore((state) => state.notifications);
@@ -201,80 +216,93 @@ function NotificationBell() {
   }, [notifications, toast]);
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((value) => !value)}
-        aria-label="Thông báo"
-        className="relative rounded-xl border border-gray-200 bg-white p-2.5 text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-      >
-        <Bell size={17} />
-        {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white tabular-nums">
-            {unread}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <>
-          <button className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute right-0 top-12 z-50 w-96 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_16px_48px_rgba(5,96,69,0.14)]">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <span className="text-sm font-semibold text-gray-900">Thông báo</span>
-              {unread > 0 && (
-                <button
-                  onClick={async () => {
-                    await markAllNotificationsRead();
-                    refresh();
-                  }}
-                  className="text-xs font-medium text-emerald-600 hover:text-emerald-700"
-                >
-                  Đánh dấu đã đọc hết
-                </button>
-              )}
-            </div>
-            <div className="max-h-96 overflow-y-auto custom-scrollbar">
-              {notifications.length === 0 && (
-                <p className="px-4 py-10 text-center text-sm font-light text-gray-400">Chưa có thông báo nào</p>
-              )}
-              {notifications.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={async () => {
-                    await markNotificationRead(item.id);
-                    refresh();
-                    setOpen(false);
-                    if (item.link) navigate(item.link);
-                  }}
-                  className={`flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50 ${
-                    item.readAt ? 'opacity-55' : ''
-                  }`}
-                >
-                  <span
-                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                      item.level === 'URGENT' ? 'bg-red-500' : 'bg-emerald-500'
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-gray-800">{item.title}</span>
-                    <span className="mt-0.5 block text-xs font-light text-gray-500">{item.body}</span>
-                    <span className="mt-1 block text-[11px] text-gray-400">
-                      {formatRelative(item.createdAt, now())}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          aria-label="Thông báo"
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-500 ring-1 ring-gray-200 transition hover:text-emerald-700 hover:ring-emerald-200"
+        >
+          <Bell size={17} />
+          {unread > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white tabular-nums">
+              {unread}
+            </span>
+          )}
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={8}
+          className="anim-pop z-50 w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-white shadow-float ring-1 ring-emerald-950/5"
+        >
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+            <span className="text-sm font-semibold text-gray-900">Thông báo</span>
+            {unread > 0 && (
+              <button
+                onClick={async () => {
+                  await markAllNotificationsRead();
+                  refresh();
+                }}
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+              >
+                Đánh dấu đã đọc hết
+              </button>
+            )}
           </div>
-        </>
-      )}
-    </div>
+          <div className="max-h-[26rem] overflow-y-auto custom-scrollbar">
+            {notifications.length === 0 && (
+              <p className="px-4 py-10 text-center text-sm font-light text-gray-400">Chưa có thông báo nào</p>
+            )}
+            {notifications.map((item) => (
+              <button
+                key={item.id}
+                onClick={async () => {
+                  await markNotificationRead(item.id);
+                  refresh();
+                  setOpen(false);
+                  if (item.link) navigate(item.link);
+                }}
+                className={cn(
+                  'flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-emerald-50/40',
+                  item.readAt && 'opacity-55',
+                )}
+              >
+                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', notificationTone[item.level].dot)} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="block text-sm font-semibold text-gray-800">{item.title}</span>
+                    {item.level !== 'NORMAL' && (
+                      <span
+                        className={cn(
+                          'rounded-md px-1.5 text-[10px] font-semibold',
+                          item.level === 'URGENT' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700',
+                        )}
+                      >
+                        {notificationTone[item.level].label}
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-xs font-light text-gray-500">{item.body}</span>
+                  <span className="mt-1 block text-[11px] text-gray-400">{formatRelative(item.createdAt, now())}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
 /** Chạy nền: sinh mẫu cho buổi đang diễn ra, ghi cảnh báo, tự kết thúc khi quá giờ. */
 function useSessionTicker() {
   useEffect(() => {
+    try {
+      runBackgroundChecks();
+    } catch {
+      // Kiểm tra nền không được làm hỏng giao diện.
+    }
     const tick = () => {
       syncRunningSessions().catch(() => undefined);
     };
@@ -284,11 +312,88 @@ function useSessionTicker() {
   }, []);
 }
 
+const COLLAPSE_KEY = 'horseracing_sidebar_collapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collapsed: boolean; onNavigate?: () => void }) {
+  return (
+    <nav className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
+      {groups.map((group, index) => (
+        <div key={group.group ?? index} className="space-y-0.5">
+          {group.group &&
+            (collapsed ? (
+              <div className="mx-auto my-2 h-px w-6 bg-emerald-950/10" />
+            ) : (
+              <p className="mb-1 px-3 text-xs font-medium text-emerald-900/40">{group.group}</p>
+            ))}
+          {group.items.map((item) => {
+            const link = (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === links.dashboard || item.path === links.stable}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    'group flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
+                    collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-[0_8px_20px_-12px_rgba(5,150,105,0.9)]'
+                      : 'text-gray-600 hover:bg-emerald-50 hover:text-emerald-800',
+                  )
+                }
+              >
+                <item.icon size={17} className="shrink-0" />
+                {!collapsed && <span className="truncate">{item.name}</span>}
+              </NavLink>
+            );
+            return collapsed ? (
+              <Tip key={item.path} content={item.name}>
+                {link}
+              </Tip>
+            ) : (
+              link
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+function Brand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <Link to={links.dashboard} className={cn('flex items-center gap-2.5', collapsed ? 'justify-center' : 'px-1')}>
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 shadow-[0_8px_20px_-10px_rgba(5,150,105,0.9)]">
+        <Flag size={17} className="text-white" />
+      </div>
+      {!collapsed && <span className="text-lg font-bold tracking-tight text-gray-900">HorseRacing</span>}
+    </Link>
+  );
+}
+
 function Shell() {
   const { currentUser, logout } = useStore();
   const navigate = useNavigate();
-  const [accountOpen, setAccountOpen] = useState(false);
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   useSessionTicker();
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
+    } catch {
+      // Trình duyệt chặn lưu trữ: chỉ mất ghi nhớ trạng thái thu gọn.
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     const container = document.getElementById('main-scroll');
@@ -297,7 +402,7 @@ function Shell() {
       wrapper: container,
       content: container.firstElementChild as HTMLElement,
       smoothWheel: true,
-      lerp: 0.08,
+      lerp: 0.1,
     });
     let frame = 0;
     const raf = (time: number) => {
@@ -311,156 +416,159 @@ function Shell() {
     };
   }, []);
 
-  const zoneName = currentUser?.zoneId === 'zone_a' ? 'Khu A' : currentUser?.zoneId === 'zone_b' ? 'Khu B' : 'khu';
-  const groups = useMemo(() => menuFor(currentUser?.role, zoneName), [currentUser?.role, zoneName]);
+  // Đổi trang thì cuộn về đầu.
+  useEffect(() => {
+    document.getElementById('main-scroll')?.scrollTo({ top: 0 });
+  }, [location.pathname]);
+
+  const groups = useMemo(() => menuFor(currentUser?.role), [currentUser?.role]);
 
   const scope = (() => {
     if (!currentUser) return '';
-    if (currentUser.role === 'HEAD_TRAINER') return zoneName;
+    if (currentUser.role === 'HEAD_TRAINER') {
+      const db = getDb();
+      const names = managedZoneIds(db, currentUser.id).map((id) => db.zones.find((zone) => zone.id === id)?.name);
+      return names.length ? names.join(', ') : 'Chưa được giao khu';
+    }
     if (currentUser.role === 'GROOM') return 'Ngựa được giao';
     if (currentUser.role === 'HORSE_OWNER') return 'Ngựa sở hữu';
     return 'Toàn câu lạc bộ';
   })();
 
+  const signOut = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
-    <div className="flex h-screen bg-[#f8faf8] font-sans">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-gray-100 bg-white p-5 lg:flex">
-        <Link to="/dashboard" className="mb-8 flex items-center gap-2.5 px-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-sm shadow-emerald-600/20">
-            <Flag size={16} className="text-white" />
-          </div>
-          <span className="text-lg font-bold tracking-tight text-gray-900">HorseRacing</span>
-        </Link>
-
-        <nav className="flex-1 space-y-5 overflow-y-auto custom-scrollbar pr-1">
-          {groups.map((group, index) => (
-            <div key={group.group ?? index} className="space-y-0.5">
-              {group.group && (
-                <p className="mb-1.5 px-4 text-[11px] font-semibold tracking-wide text-gray-300">{group.group}</p>
-              )}
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
-                      isActive
-                        ? 'ml-[-3px] border-l-[3px] border-emerald-600 bg-emerald-50 text-emerald-700'
-                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                    }`
-                  }
-                >
-                  <item.icon size={17} className="shrink-0" />
-                  <span className="truncate">{item.name}</span>
-                </NavLink>
-              ))}
+    <div className="flex h-dvh bg-canvas font-sans">
+      {/* Sidebar máy tính — thu gọn được thành rail icon */}
+      <aside
+        className={cn(
+          'hidden shrink-0 flex-col border-r border-emerald-950/[0.06] bg-white/80 py-5 backdrop-blur transition-[width] duration-300 lg:flex',
+          collapsed ? 'w-[72px] px-2' : 'w-60 px-3',
+        )}
+      >
+        <div className="mb-6">
+          <Brand collapsed={collapsed} />
+        </div>
+        <NavList groups={groups} collapsed={collapsed} />
+        <div className="mt-4 space-y-2 border-t border-emerald-950/[0.06] pt-4">
+          {!collapsed && (
+            <div className="flex items-center gap-3 px-1">
+              <Avatar name={currentUser?.name ?? '?'} size={36} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
+                <p className="truncate text-xs text-gray-400">{currentUser ? roleLabel[currentUser.role] : ''}</p>
+              </div>
             </div>
-          ))}
-        </nav>
-
-        <div className="mt-6 border-t border-gray-100 pt-5">
-          <div className="flex items-center gap-3">
-            <Avatar name={currentUser?.name ?? '?'} size={40} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
-              <p className="truncate text-xs text-gray-400">
-                {currentUser ? roleLabel[currentUser.role] : ''}
-              </p>
-            </div>
-          </div>
+          )}
           <button
-            onClick={() => {
-              logout();
-              navigate('/');
-            }}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 active:scale-[0.98]"
+            onClick={() => setCollapsed((value) => !value)}
+            className={cn(
+              'flex items-center gap-2 rounded-xl text-sm font-medium text-gray-400 transition hover:bg-emerald-50 hover:text-emerald-800',
+              collapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full px-3 py-2',
+            )}
+            aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
           >
-            <LogOut size={15} />
-            Đăng xuất
+            {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            {!collapsed && 'Thu gọn menu'}
           </button>
         </div>
       </aside>
 
-      <main className="flex h-screen flex-1 flex-col overflow-hidden">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-100 bg-white/80 px-5 backdrop-blur-md sm:px-8">
-          <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold text-gray-900">
-              {currentUser ? roleLabel[currentUser.role] : 'HorseRacing'}
-            </h1>
-            <p className="truncate text-xs text-gray-400">
-              {currentUser?.name} · Phạm vi: {scope}
-            </p>
+      {/* Drawer cho màn hình nhỏ */}
+      <Dialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-emerald-950/25 lg:hidden" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="anim-drawer fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-white px-3 py-5 shadow-float lg:hidden"
+          >
+            <Dialog.Title className="sr-only">Menu</Dialog.Title>
+            <div className="mb-6 flex items-center justify-between">
+              <Brand collapsed={false} />
+              <Dialog.Close className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
+                <X size={18} />
+              </Dialog.Close>
+            </div>
+            <NavList groups={groups} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+            <button
+              onClick={signOut}
+              className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
+            >
+              <LogOut size={16} />
+              Đăng xuất
+            </button>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <main className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-emerald-950/[0.06] bg-white/70 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 ring-1 ring-gray-200 lg:hidden"
+              aria-label="Mở menu"
+            >
+              <Menu size={18} />
+            </button>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-gray-900">
+                {currentUser ? roleLabel[currentUser.role] : 'HorseRacing'}
+              </p>
+              <p className="truncate text-xs text-gray-400">
+                {currentUser?.name} · Phạm vi: {scope}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2.5">
             <NotificationBell />
-            <div className="relative">
-              <button
-                onClick={() => setAccountOpen((value) => !value)}
-                className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white py-1.5 pl-1.5 pr-3 transition hover:bg-gray-50"
-              >
-                <Avatar name={currentUser?.name ?? '?'} size={26} />
-                <span className="hidden text-xs font-semibold text-gray-700 sm:inline">Tài khoản</span>
-              </button>
-              {accountOpen && (
-                <>
-                  <button className="fixed inset-0 z-40 cursor-default" onClick={() => setAccountOpen(false)} aria-hidden />
-                  <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white py-1.5 shadow-[0_16px_48px_rgba(5,96,69,0.14)]">
-                    <Link
-                      to="/profile"
-                      onClick={() => setAccountOpen(false)}
-                      className="block px-4 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50"
-                    >
-                      Hồ sơ cá nhân
-                    </Link>
-                    <Link
-                      to="/login"
-                      onClick={() => setAccountOpen(false)}
-                      className="block px-4 py-2.5 text-sm text-gray-600 transition hover:bg-gray-50"
-                    >
-                      Đổi tài khoản
-                    </Link>
-                    <button
-                      onClick={() => {
-                        logout();
-                        navigate('/');
-                      }}
-                      className="block w-full px-4 py-2.5 text-left text-sm text-red-500 transition hover:bg-red-50"
-                    >
-                      Đăng xuất
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <Dropdown.Root modal={false}>
+              <Dropdown.Trigger asChild>
+                <button className="flex h-10 items-center gap-2 rounded-xl bg-white py-1 pl-1 pr-3 ring-1 ring-gray-200 transition hover:ring-emerald-200">
+                  <Avatar name={currentUser?.name ?? '?'} size={30} />
+                  <span className="hidden text-xs font-semibold text-gray-700 sm:inline">Tài khoản</span>
+                </button>
+              </Dropdown.Trigger>
+              <Dropdown.Portal>
+                <Dropdown.Content
+                  align="end"
+                  sideOffset={8}
+                  className="anim-pop z-50 w-56 rounded-2xl bg-white p-1.5 shadow-float ring-1 ring-emerald-950/5"
+                >
+                  <Dropdown.Item
+                    onSelect={() => navigate(links.profile)}
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-emerald-50"
+                  >
+                    Hồ sơ cá nhân
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    onSelect={() => navigate('/login')}
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-emerald-50"
+                  >
+                    Đổi tài khoản
+                  </Dropdown.Item>
+                  <Dropdown.Separator className="my-1 h-px bg-gray-100" />
+                  <Dropdown.Item
+                    onSelect={signOut}
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-red-600 outline-none data-[highlighted]:bg-red-50"
+                  >
+                    Đăng xuất
+                  </Dropdown.Item>
+                </Dropdown.Content>
+              </Dropdown.Portal>
+            </Dropdown.Root>
           </div>
         </header>
 
         <div id="main-scroll" className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl p-5 pb-16 sm:p-8">
+          {/* Nội dung giãn toàn bộ bề ngang — không còn cột hẹp căn giữa */}
+          <div className="w-full px-4 pb-16 pt-6 sm:px-6 lg:px-8 2xl:px-10">
             <Outlet />
           </div>
         </div>
-
-        {/* Thanh điều hướng dưới cho màn hình nhỏ — ưu tiên cho nhân viên chăm sóc */}
-        <nav className="flex shrink-0 items-center justify-around border-t border-gray-100 bg-white px-2 py-1.5 lg:hidden">
-          {groups
-            .flatMap((group) => group.items)
-            .slice(0, 5)
-            .map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  `flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition ${
-                    isActive ? 'text-emerald-700' : 'text-gray-400'
-                  }`
-                }
-              >
-                <item.icon size={18} />
-                <span className="w-full truncate text-center">{item.name}</span>
-              </NavLink>
-            ))}
-        </nav>
       </main>
     </div>
   );

@@ -1,31 +1,33 @@
 // Nhãn tiếng Việt cho mọi mã enum. Mã giữ tiếng Anh, giao diện luôn đọc qua đây.
 import type {
+  AbsenceReason,
   AlertRule,
-  CancelCategory,
-  CareScheduleType,
-  CompletionLevel,
+  AttendanceStatus,
+  ClassStatus,
   DistancePreference,
-  EarlyEndReason,
-  ExpenseCategory,
+  EnrollmentCloseReason,
+  ExamRequestSource,
+  ExamRequestStatus,
+  ExamUrgency,
+  ExaminationKind,
+  GroomTaskKind,
   HealthStatus,
+  HorsePlacement,
   HorseSex,
-  IncidentType,
   LifecycleStatus,
-  MedicalReason,
-  MedicalRecordStatus,
-  PlanCloseReason,
-  PlanStatus,
-  RaceStatus,
-  RegistrationStatus,
+  LockLiftKind,
+  MedicalCaseStatus,
+  NotificationLevel,
+  SessionCancelKind,
+  SessionEndReason,
   SessionStatus,
-  Severity,
   SimScenario,
-  StallType,
-  SupplyGroup,
+  StallStatus,
   TrackSurface,
   TrainingIntensity,
   UserRole,
   WorkoutType,
+  ZoneStatus,
 } from '../types/domain';
 
 export const roleLabel: Record<UserRole, string> = {
@@ -43,6 +45,14 @@ export const roleShortLabel: Record<UserRole, string> = {
   GROOM: 'Chăm sóc',
   HORSE_OWNER: 'Chủ ngựa',
 };
+
+export const notificationLevelLabel: Record<NotificationLevel, string> = {
+  NORMAL: 'Thấp',
+  HIGH: 'Trung bình',
+  URGENT: 'Khẩn',
+};
+
+/* ===== Flow 1 ===== */
 
 export const sexLabel: Record<HorseSex, string> = {
   MALE: 'Đực',
@@ -69,17 +79,47 @@ export const healthLabel: Record<HealthStatus, string> = {
   QUARANTINED: 'Cách ly',
 };
 
+export const healthHint: Record<HealthStatus, string> = {
+  ELIGIBLE: 'Khỏe mạnh, tập và đua bình thường',
+  UNDER_OBSERVATION: 'Chỉ tập Nhẹ và Trung bình, không đăng ký đua',
+  INJURED: 'Không tập, không đua',
+  QUARANTINED: 'Không tập, không đua',
+};
+
 export const lifecycleLabel: Record<LifecycleStatus, string> = {
   ACTIVE: 'Đang hoạt động',
   RETIRED: 'Đã giải nghệ',
   TRANSFERRED: 'Đã chuyển nhượng',
 };
 
-export const stallTypeLabel: Record<StallType, string> = {
-  STANDARD: 'Ô thường',
-  ISOLATION: 'Ô cách ly',
-  RECOVERY: 'Ô phục hồi',
+export const zoneStatusLabel: Record<ZoneStatus, string> = {
+  ACTIVE: 'Đang hoạt động',
+  MAINTENANCE: 'Bảo trì',
+  CLOSED: 'Đóng',
 };
+
+export const stallStatusLabel: Record<StallStatus, string> = {
+  AVAILABLE: 'Trống',
+  OCCUPIED: 'Có ngựa',
+  MAINTENANCE: 'Bảo trì',
+};
+
+export const placementLabel: Record<HorsePlacement, string> = {
+  NO_ZONE: 'Chờ xếp khu',
+  WAITING_STALL: 'Chờ xếp ô',
+  WAITING_GROOM: 'Chờ phân công Groom',
+  PLACED: 'Đã xếp chỗ',
+  NONE: 'Không ở câu lạc bộ',
+};
+
+export const measurementLabel = {
+  WEIGHT: { name: 'Cân nặng', unit: 'kg', min: 400, max: 600, step: 1 },
+  HEIGHT: { name: 'Chiều cao', unit: 'cm', min: 150, max: 175, step: 1 },
+  BODY_CONDITION: { name: 'Điểm thể trạng', unit: '/9', min: 4, max: 6, step: 1 },
+  TEMPERATURE: { name: 'Thân nhiệt', unit: '°C', min: 37.2, max: 38.3, step: 0.1 },
+} as const;
+
+/* ===== Flow 2 ===== */
 
 export const workoutLabel: Record<WorkoutType, string> = {
   WALK: 'Đi bộ',
@@ -91,9 +131,9 @@ export const workoutLabel: Record<WorkoutType, string> = {
 
 export const intensityLabel: Record<TrainingIntensity, string> = {
   LIGHT: 'Nhẹ',
-  MODERATE: 'Trung bình',
+  MEDIUM: 'Trung bình',
   HEAVY: 'Nặng',
-  MAXIMUM: 'Tối đa',
+  MAX: 'Tối đa',
 };
 
 export const surfaceLabel: Record<TrackSurface, string> = {
@@ -102,9 +142,9 @@ export const surfaceLabel: Record<TrackSurface, string> = {
   SYNTHETIC: 'Tổng hợp',
 };
 
-export const planStatusLabel: Record<PlanStatus, string> = {
+export const classStatusLabel: Record<ClassStatus, string> = {
   SCHEDULED: 'Sắp tới',
-  ACTIVE: 'Đang áp dụng',
+  ACTIVE: 'Đang chạy',
   COMPLETED: 'Đã kết thúc',
   CANCELLED: 'Đã hủy',
 };
@@ -117,35 +157,41 @@ export const sessionStatusLabel: Record<SessionStatus, string> = {
   CANCELLED: 'Đã hủy',
 };
 
-export const cancelCategoryLabel: Record<CancelCategory, string> = {
-  TRAINER_CHANGED: 'Huấn luyện viên thay đổi kế hoạch',
-  GROOM_REPORTED: 'Không thực hiện được',
+export const sessionCancelLabel: Record<SessionCancelKind, string> = {
+  MANUAL: 'HT hủy buổi',
+  CLASS_CANCELLED: 'Lớp bị hủy',
+  CLASS_ENDED_EARLY: 'Lớp kết thúc sớm',
+};
+
+export const sessionEndLabel: Record<SessionEndReason, string> = {
+  NORMAL: 'Kết thúc bình thường',
+  EMERGENCY_STOP: 'Dừng khẩn',
+  AUTO_TIMEOUT: 'Tự kết thúc do quá giờ',
+};
+
+export const attendanceLabel: Record<AttendanceStatus, string> = {
+  EXPECTED: 'Dự kiến',
+  PRESENT: 'Có mặt',
+  ABSENT: 'Vắng',
+};
+
+export const absenceLabel: Record<AbsenceReason, string> = {
   MEDICAL_BLOCK: 'Chặn y tế',
-  PLAN_CLOSED: 'Theo giáo án',
+  GROOM_REPORTED: 'Groom báo không thực hiện được',
+  TRAINER_CHANGED: 'HT cho nghỉ buổi này',
   LIFECYCLE: 'Đổi vòng đời',
 };
 
-export const earlyEndLabel: Record<EarlyEndReason, string> = {
-  HORSE_UNWELL: 'Ngựa mệt hoặc có dấu hiệu bất thường',
-  TRAINER_ORDER: 'Theo chỉ đạo của huấn luyện viên',
-  WEATHER_TRACK: 'Thời tiết hoặc sân không dùng được',
-  OTHER: 'Khác',
+export const enrollmentCloseLabel: Record<EnrollmentCloseReason, string> = {
+  MANUAL: 'HT rút khỏi lớp',
+  ZONE_CHANGE: 'Đổi khu chuồng',
+  LIFECYCLE: 'Đổi vòng đời',
 };
 
-export const completionLabel: Record<CompletionLevel, string> = {
-  BELOW: 'Chưa đạt',
-  MET: 'Đạt',
-  EXCEEDED: 'Vượt',
-};
-
-export const planCloseLabel: Record<PlanCloseReason, string> = {
-  GOAL_REACHED: 'Đạt mục tiêu sớm',
-  NEW_PLAN: 'Chuyển sang giáo án mới',
-  INJURY_ILLNESS: 'Chấn thương hoặc bệnh kéo dài',
-  GOAL_CHANGED: 'Đổi mục tiêu thi đấu',
-  OWNER_REQUEST: 'Theo yêu cầu chủ ngựa',
-  LIFECYCLE: 'Hủy do đổi vòng đời',
-  OTHER: 'Khác',
+export const groomTaskLabel: Record<GroomTaskKind, string> = {
+  PREPARE: 'Chuẩn bị ngựa',
+  TO_TRACK: 'Đưa ra sân',
+  COOL_DOWN: 'Chăm sóc sau tập',
 };
 
 export const scenarioLabel: Record<SimScenario, string> = {
@@ -162,111 +208,6 @@ export const alertRuleLabel: Record<AlertRule, string> = {
   R6: 'Mất tín hiệu thiết bị',
 };
 
-export const severityLabel: Record<Severity, string> = {
-  MILD: 'Nhẹ',
-  MODERATE: 'Vừa',
-  SEVERE: 'Nặng',
-};
-
-export const medicalStatusLabel: Record<MedicalRecordStatus, string> = {
-  IN_TREATMENT: 'Đang điều trị',
-  RESOLVED: 'Đã khỏi',
-};
-
-export const medicalReasonLabel: Record<MedicalReason, string> = {
-  ROUTINE: 'Định kỳ',
-  INCIDENT: 'Theo sự cố',
-  RECHECK: 'Tái khám',
-  OTHER: 'Khác',
-};
-
-export const careTypeLabel: Record<CareScheduleType, string> = {
-  VACCINE: 'Tiêm phòng',
-  DEWORMING: 'Tẩy giun',
-  FARRIER: 'Kiểm tra móng',
-};
-
-export const careInterval: Record<CareScheduleType, number> = {
-  VACCINE: 180,
-  DEWORMING: 90,
-  FARRIER: 42,
-};
-
-export const incidentTypeLabel: Record<IncidentType, string> = {
-  NOT_EATING: 'Ngựa bỏ ăn',
-  COLIC_FEVER: 'Có dấu hiệu đau bụng hoặc sốt',
-  HOOF_DAMAGE: 'Móng bị xước',
-  OTHER: 'Khác',
-};
-
-export const supplyGroupLabel: Record<SupplyGroup, string> = {
-  FEED: 'Thức ăn',
-  MEDICINE: 'Thuốc',
-  TOOL: 'Dụng cụ',
-};
-
-export const raceStatusLabel: Record<RaceStatus, string> = {
-  OPEN: 'Mở đăng ký',
-  CLOSED: 'Đóng đăng ký',
-  FINISHED: 'Đã diễn ra',
-};
-
-export const registrationStatusLabel: Record<RegistrationStatus, string> = {
-  PENDING_OWNER: 'Chờ chủ ngựa duyệt',
-  REGISTERED: 'Đã đăng ký',
-  REJECTED: 'Chủ ngựa từ chối',
-  CANCELLED: 'Đã hủy',
-};
-
-export const expenseCategoryLabel: Record<ExpenseCategory, string> = {
-  BOARDING: 'Nuôi dưỡng',
-  MEDICAL: 'Y tế',
-  RACE_FEE: 'Phí đăng ký giải',
-  OPERATION: 'Vận hành',
-  OTHER: 'Khác',
-};
-
-export const mealLabel: Record<'MORNING' | 'NOON' | 'AFTERNOON' | 'EVENING', string> = {
-  MORNING: 'Bữa sáng',
-  NOON: 'Bữa trưa',
-  AFTERNOON: 'Bữa chiều',
-  EVENING: 'Bữa tối',
-};
-
-export const dietKindLabel: Record<'GRAIN' | 'HAY' | 'VITAMIN' | 'OTHER', string> = {
-  GRAIN: 'Ngũ cốc',
-  HAY: 'Cỏ',
-  VITAMIN: 'Vitamin',
-  OTHER: 'Khác',
-};
-
-export const measurementLabel = {
-  WEIGHT: { name: 'Cân nặng', unit: 'kg', min: 400, max: 600 },
-  HEIGHT: { name: 'Chiều cao', unit: 'cm', min: 150, max: 175 },
-  BODY_CONDITION: { name: 'Điểm thể trạng', unit: 'điểm', min: 4, max: 6 },
-  TEMPERATURE: { name: 'Thân nhiệt', unit: '°C', min: 37.2, max: 38.3 },
-} as const;
-
-export const bodyRegionLabel: Record<string, string> = {
-  HEAD: 'Đầu',
-  NECK: 'Cổ',
-  SHOULDER: 'Vai',
-  BACK: 'Lưng',
-  HIP: 'Hông',
-  CHEST: 'Ngực',
-  ABDOMEN: 'Bụng',
-  FORE_THIGH: 'Đùi trước',
-  FORE_CANNON: 'Cẳng trước',
-  FORE_FETLOCK: 'Khớp cổ chân trước',
-  FORE_HOOF: 'Móng trước',
-  HIND_THIGH: 'Đùi sau',
-  HIND_CANNON: 'Cẳng sau',
-  HIND_FETLOCK: 'Khớp cổ chân sau',
-  HIND_HOOF: 'Móng sau',
-};
-
-export const sideLabel: Record<string, string> = { LEFT: 'trái', RIGHT: 'phải' };
-
 export const dayOfWeekLabel: Record<number, string> = {
   1: 'Thứ 2',
   2: 'Thứ 3',
@@ -277,9 +218,39 @@ export const dayOfWeekLabel: Record<number, string> = {
   7: 'Chủ nhật',
 };
 
-export const dailyTaskLabel: Record<string, string> = {
-  FEED: 'Cho ăn',
-  CLEAN: 'Vệ sinh chuồng',
-  BATH: 'Tắm rửa',
-  CARE: 'Chăm sóc theo chỉ định',
+/* ===== Flow 3 ===== */
+
+export const examRequestSourceLabel: Record<ExamRequestSource, string> = {
+  GROOM_REPORT: 'Groom báo',
+  BODY_METRIC_ALERT: 'Cảnh báo chỉ số cơ thể',
+  TRAINING_ALERT: 'Cảnh báo buổi tập',
+  MANUAL: 'Gửi tay',
+  VET_SELF: 'Bác sĩ tự tạo',
+};
+
+export const examUrgencyLabel: Record<ExamUrgency, string> = {
+  NORMAL: 'Bình thường',
+  URGENT: 'Khẩn',
+};
+
+export const examRequestStatusLabel: Record<ExamRequestStatus, string> = {
+  PENDING: 'Chờ xử lý',
+  EXAMINED: 'Đã khám',
+  DISMISSED: 'Đã bỏ qua',
+};
+
+export const examKindLabel: Record<ExaminationKind, string> = {
+  PERIODIC: 'Khám định kỳ',
+  CASE: 'Khám trong bệnh án',
+};
+
+export const caseStatusLabel: Record<MedicalCaseStatus, string> = {
+  OPEN: 'Đang điều trị',
+  CLOSED: 'Đã đóng',
+};
+
+export const lockLiftLabel: Record<LockLiftKind, string> = {
+  MANUAL: 'Bác sĩ gỡ',
+  CASE_CLOSED: 'Gỡ khi đóng bệnh án',
+  TRANSFER: 'Gỡ do chuyển nhượng',
 };

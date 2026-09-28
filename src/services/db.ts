@@ -4,7 +4,7 @@ import type { BaseEntity, Database } from '../types/domain';
 import { buildSeed } from './seed';
 
 const STORAGE_KEY = 'horseracing_db_v1';
-const SCHEMA = 2;
+const SCHEMA = 3;
 
 type Listener = () => void;
 

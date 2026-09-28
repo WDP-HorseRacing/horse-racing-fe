@@ -1,5 +1,5 @@
 // Biểu đồ đường vẽ bằng SVG, không thêm thư viện ngoài.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export interface Series {
   key: string;
@@ -35,7 +35,19 @@ export function LineChart({
     null,
   );
 
-  const width = 720;
+  // Đo bề rộng thật của khung để biểu đồ giãn theo layout, không bị kẹt ở 720px.
+  const [box, boxRef] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(720);
+  useEffect(() => {
+    const node = box;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const next = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (next > 0) setWidth(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [box]);
   const padding = { top: 16, right: 16, bottom: 28, left: 46 };
 
   const bounds = useMemo(() => {
@@ -58,7 +70,7 @@ export function LineChart({
 
   if (!bounds) {
     return (
-      <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/50 text-sm font-light text-gray-400">
+      <div ref={boxRef} className="flex h-44 items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/50 text-sm font-light text-gray-400">
         Chưa có dữ liệu để vẽ biểu đồ
       </div>
     );
@@ -74,10 +86,11 @@ export function LineChart({
   const ticks = Array.from({ length: 4 }, (_, index) => bounds.minY + ((bounds.maxY - bounds.minY) / 3) * index);
 
   return (
-    <div className="w-full">
+    <div ref={boxRef} className="w-full">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
+        preserveAspectRatio="none"
+        className="block w-full"
         style={{ height }}
         onMouseLeave={() => setHover(null)}
         onMouseMove={(event) => {

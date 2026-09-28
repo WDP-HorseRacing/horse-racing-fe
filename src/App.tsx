@@ -1,47 +1,41 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
-import { I18nProvider } from './i18n/I18nContext';
 import { useStore } from './store/store';
 
 import LandingPage from './pages/LandingPage';
 import { Login } from './pages/Login';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './pages/dashboard/Dashboard';
 import Profile from './pages/Profile';
-import StableMap from './pages/StableMap';
 
 import HorseList from './pages/horses/HorseList';
 import HorseForm from './pages/horses/HorseForm';
 import HorseDetail from './pages/horses/HorseDetail';
+import StableMap from './pages/stable/StableMap';
+import ZoneCatalog from './pages/stable/ZoneCatalog';
 
-import ProgressBoard from './pages/training/ProgressBoard';
-import PlanList from './pages/training/PlanList';
-import PlanForm from './pages/training/PlanForm';
-import PlanDetail from './pages/training/PlanDetail';
+import SubjectList from './pages/training/subjects/SubjectList';
+import ProgramList from './pages/training/programs/ProgramList';
+import ProgramEditor from './pages/training/programs/ProgramEditor';
+import ProgramDetail from './pages/training/programs/ProgramDetail';
+import ClassList from './pages/training/classes/ClassList';
+import ClassForm from './pages/training/classes/ClassForm';
+import ClassDetail from './pages/training/classes/ClassDetail';
 import SchedulePage from './pages/training/SchedulePage';
 import TodaySessions from './pages/training/TodaySessions';
-import LiveSession, { LiveList } from './pages/training/LiveSession';
-import ReviewSession, { ReviewList } from './pages/training/ReviewSession';
+import SessionPage from './pages/training/SessionPage';
+import LiveList from './pages/training/LiveList';
+import ReviewList from './pages/training/ReviewList';
+import ProgressBoard from './pages/training/ProgressBoard';
+import HeartRatePage from './pages/training/HeartRatePage';
 
-import {
-  CareSchedules,
-  HealthBoard,
-  MaxHeartRateList,
-  MedicalRecords,
-  TrainingLocks,
-} from './pages/medical/MedicalPages';
+import MedicalBoard from './pages/medical/MedicalBoard';
+import ExamRequests from './pages/medical/ExamRequests';
+import CaseList from './pages/medical/CaseList';
+import CaseDetail from './pages/medical/CaseDetail';
+import PeriodicExams from './pages/medical/PeriodicExams';
+import TrainingLocks from './pages/medical/TrainingLocks';
 
-import {
-  CareInstructions,
-  DietPlans,
-  IncidentForm,
-  IncidentList,
-  Supplies,
-  TodayCare,
-} from './pages/care/CarePages';
-
-import { RaceApprovals, RaceList, RaceResults, Reports } from './pages/races/RacePages';
-
-import { AdminAudit, AdminPermissions, AdminSystem, AdminUsers, AdminZones } from './pages/admin/AdminPages';
+import { AdminAudit, AdminPermissions, AdminSystem, AdminUsers } from './pages/admin/AdminPages';
 import { NotFound } from './components/ui';
 
 const ProtectedRoute = () => {
@@ -49,72 +43,75 @@ const ProtectedRoute = () => {
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
+/** Đường dẫn cũ của buổi tập (live/review) chuyển sang trang buổi học mới. */
+function SessionRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/training/sessions/${id}`} replace />;
+}
+
 function App() {
   return (
-    <I18nProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<Login />} />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route element={<MainLayout />}>
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="stable" element={<StableMap />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<MainLayout />}>
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="profile" element={<Profile />} />
 
-              {/* Flow 1 — hồ sơ và lý lịch ngựa */}
-              <Route path="horses" element={<HorseList />} />
-              <Route path="horses/new" element={<HorseForm />} />
-              <Route path="horses/:id" element={<HorseDetail />} />
-              <Route path="horses/:id/edit" element={<HorseForm />} />
+            {/* Flow 1 — hồ sơ và lý lịch ngựa */}
+            <Route path="horses" element={<HorseList />} />
+            <Route path="horses/new" element={<HorseForm />} />
+            <Route path="horses/:id" element={<HorseDetail />} />
+            <Route path="horses/:id/edit" element={<HorseForm />} />
+            <Route path="stable" element={<StableMap />} />
+            <Route path="stable/zones" element={<ZoneCatalog />} />
 
-              {/* Flow 2 — giáo án và buổi tập */}
-              <Route path="training/progress" element={<ProgressBoard />} />
-              <Route path="training/plans" element={<PlanList />} />
-              <Route path="training/plans/new" element={<PlanForm />} />
-              <Route path="training/plans/:id" element={<PlanDetail />} />
-              <Route path="training/schedule" element={<SchedulePage />} />
-              <Route path="training/today" element={<TodaySessions />} />
-              <Route path="training/live" element={<LiveList />} />
-              <Route path="training/live/:id" element={<LiveSession />} />
-              <Route path="training/review" element={<ReviewList />} />
-              <Route path="training/review/:id" element={<ReviewSession />} />
+            {/* Flow 2 — lập và thực hiện giáo án huấn luyện (mô hình lớp học) */}
+            <Route path="training/subjects" element={<SubjectList />} />
+            <Route path="training/programs" element={<ProgramList />} />
+            <Route path="training/programs/new" element={<ProgramEditor />} />
+            <Route path="training/programs/:id" element={<ProgramDetail />} />
+            <Route path="training/programs/:id/edit" element={<ProgramEditor />} />
+            <Route path="training/classes" element={<ClassList />} />
+            <Route path="training/classes/new" element={<ClassForm />} />
+            <Route path="training/classes/:id" element={<ClassDetail />} />
+            <Route path="training/schedule" element={<SchedulePage />} />
+            <Route path="training/today" element={<TodaySessions />} />
+            <Route path="training/sessions/:id" element={<SessionPage />} />
+            <Route path="training/live" element={<LiveList />} />
+            <Route path="training/live/:id" element={<SessionRedirect />} />
+            <Route path="training/review" element={<ReviewList />} />
+            <Route path="training/review/:id" element={<SessionRedirect />} />
+            <Route path="training/progress" element={<ProgressBoard />} />
+            <Route path="training/heart-rate" element={<HeartRatePage />} />
+            <Route path="training/plans/*" element={<Navigate to="/training/classes" replace />} />
 
-              {/* Flow 3 — y tế và chấn thương */}
-              <Route path="medical/board" element={<HealthBoard />} />
-              <Route path="medical/records" element={<MedicalRecords />} />
-              <Route path="medical/locks" element={<TrainingLocks />} />
-              <Route path="medical/care" element={<CareSchedules />} />
-              <Route path="medical/heart-rate" element={<MaxHeartRateList />} />
+            {/* Flow 3 — y tế và xử lý chấn thương */}
+            <Route path="medical/board" element={<MedicalBoard />} />
+            <Route path="medical/requests" element={<ExamRequests />} />
+            <Route path="medical/cases" element={<CaseList />} />
+            <Route path="medical/cases/:id" element={<CaseDetail />} />
+            <Route path="medical/periodic" element={<PeriodicExams />} />
+            <Route path="medical/locks" element={<TrainingLocks />} />
+            <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />
+            <Route path="medical/care" element={<Navigate to="/medical/periodic" replace />} />
+            <Route path="medical/heart-rate" element={<Navigate to="/training/heart-rate" replace />} />
 
-              {/* Flow 4 — chăm sóc chuồng trại */}
-              <Route path="care/today" element={<TodayCare />} />
-              <Route path="care/instructions" element={<CareInstructions />} />
-              <Route path="care/diet" element={<DietPlans />} />
-              <Route path="care/incidents" element={<IncidentList />} />
-              <Route path="care/incidents/new" element={<IncidentForm />} />
-              <Route path="care/supplies" element={<Supplies />} />
+            {/* Quản trị */}
+            <Route path="admin/users" element={<AdminUsers />} />
+            <Route path="admin/permissions" element={<AdminPermissions />} />
+            <Route path="admin/zones" element={<Navigate to="/stable/zones" replace />} />
+            <Route path="admin/audit" element={<AdminAudit />} />
+            <Route path="admin/system" element={<AdminSystem />} />
 
-              {/* Flow 5 — thi đấu và báo cáo */}
-              <Route path="races" element={<RaceList />} />
-              <Route path="races/approvals" element={<RaceApprovals />} />
-              <Route path="races/results" element={<RaceResults />} />
-              <Route path="reports" element={<Reports />} />
-
-              {/* Quản trị */}
-              <Route path="admin/users" element={<AdminUsers />} />
-              <Route path="admin/permissions" element={<AdminPermissions />} />
-              <Route path="admin/zones" element={<AdminZones />} />
-              <Route path="admin/audit" element={<AdminAudit />} />
-              <Route path="admin/system" element={<AdminSystem />} />
-
-              <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />
-            </Route>
+            <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />
           </Route>
-        </Routes>
-      </BrowserRouter>
-    </I18nProvider>
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
