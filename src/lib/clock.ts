@@ -7,10 +7,8 @@
 import { getDb, mutate } from '../services/db';
 
 export function now(): Date {
-  const { settings } = getDb();
-  if (settings.clockMode === 'SHIFTED') {
-    return new Date(Date.now() + (settings.clockOffsetMs ?? 0));
-  }
+  // Dữ liệu thật đến từ backend nên luôn dùng giờ thực. Đồng hồ lệch giờ bên dưới
+  // chỉ còn phục vụ phần huấn luyện giả lập (Flow 2) đang tạm ẩn.
   return new Date();
 }
 

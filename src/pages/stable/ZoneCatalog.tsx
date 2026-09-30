@@ -1,8 +1,11 @@
-// F2.1 — danh mục khu và ô chuồng. CM thêm/sửa/xóa; HT, VET, GROOM chỉ xem.
+// Danh mục khu và ô chuồng. CM thêm/sửa/xóa, gán HT phụ trách; HT, VET, GROOM chỉ xem.
 import { useState } from 'react';
 import { Info, Plus, Warehouse, Wrench } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
-import { deleteStall, deleteZone, listZones, setStallMaintenance, type StallRow, type ZoneRow } from '../../services/horse.service';
+import { listAllHorses } from '../../api/horses';
+import { deleteBarn, deleteStall, listBarns, listStalls, updateStall } from '../../api/stable';
+import { listAllUsers } from '../../api/users';
+import type { BarnListItem, HorseListItem, Stall } from '../../api/types';
 import { useStore } from '../../store/store';
 import {
   ActionMenu,
@@ -24,17 +27,47 @@ import {
 } from '../../components/ui';
 import { ZoneStatusPill } from '../../components/ui/status';
 import { stallStatusLabel } from '../../lib/labels';
+import { stallTypeLabel } from '../../lib/api-labels';
 import { AddStallsDialog, HeadTrainerDialog, MaintenanceDialog, ZoneFormDialog, ZoneStatusDialog } from './components/ZoneDialogs';
 
-function freeTip(zone: ZoneRow) {
-  const c = zone.capacity;
-  return `Chỗ trống = (${c.total} ô − ${c.maintenance} bảo trì) − ${c.occupied} ngựa trong ô − ${c.waitingForStall} ngựa chờ xếp ô = ${c.free}`;
+interface ZoneRow {
+  barn: BarnListItem;
+  stalls: Stall[];
+  occupant: Map<string, HorseListItem>;
+  horseCount: number;
+  maintenance: number;
+  occupied: number;
+}
+
+async function loadCatalog(isManager: boolean) {
+  const [barns, stalls, horses, headTrainers] = await Promise.all([
+    listBarns(),
+    listStalls(),
+    listAllHorses(),
+    isManager ? listAllUsers({ role: 'HEAD_TRAINER', status: 'ACTIVE' }) : Promise.resolve([]),
+  ]);
+  const inClub = horses.filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED');
+  const zones: ZoneRow[] = barns
+    .map((barn) => {
+      const own = stalls.filter((stall) => stall.barnId === barn.id).sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true }));
+      const occupant = new Map(inClub.filter((horse) => horse.location.stall?.id && own.some((stall) => stall.id === horse.location.stall?.id)).map((horse) => [horse.location.stall!.id!, horse]));
+      return {
+        barn,
+        stalls: own,
+        occupant,
+        horseCount: inClub.filter((horse) => horse.location.barn?.id === barn.id).length,
+        maintenance: own.filter((stall) => stall.status === 'MAINTENANCE').length,
+        occupied: occupant.size,
+      };
+    })
+    .sort((a, b) => a.barn.name.localeCompare(b.barn.name, 'vi', { numeric: true }));
+  return { zones, headTrainers };
 }
 
 function zoneDeleteBlockers(zone: ZoneRow): string[] {
   const list: string[] = [];
-  if (zone.capacity.horseCount > 0) list.push(`Khu còn ${zone.capacity.horseCount} ngựa`);
-  if (zone.openClassCount > 0) list.push(`Khu còn ${zone.openClassCount} lớp chưa kết thúc`);
+  if (zone.horseCount > 0) list.push(`Khu còn ${zone.horseCount} ngựa`);
+  if (zone.stalls.length > 0) list.push(`Khu còn ${zone.stalls.length} ô — xóa hết ô trước`);
   return list;
 }
 
@@ -42,17 +75,18 @@ export default function ZoneCatalog() {
   const toast = useToast();
   const role = useStore((state) => state.currentUser?.role);
   const isOwner = role === 'HORSE_OWNER';
-  const { data, loading, error, reload } = useService(() => (isOwner ? Promise.resolve(undefined) : listZones()), [isOwner]);
+  const canManage = role === 'CLUB_MANAGER';
+  const { data, loading, error, reload } = useService(() => (isOwner ? Promise.resolve(undefined) : loadCatalog(canManage)), [isOwner, canManage]);
   const action = useAction();
 
   const [selectedId, setSelectedId] = useState<string>();
-  const [formOpen, setFormOpen] = useState<{ zone?: ZoneRow } | null>(null);
-  const [trainerZone, setTrainerZone] = useState<ZoneRow | null>(null);
-  const [statusZone, setStatusZone] = useState<ZoneRow | null>(null);
+  const [formOpen, setFormOpen] = useState<{ zone?: BarnListItem } | null>(null);
+  const [trainerZone, setTrainerZone] = useState<BarnListItem | null>(null);
+  const [statusZone, setStatusZone] = useState<BarnListItem | null>(null);
   const [stallsZone, setStallsZone] = useState<ZoneRow | null>(null);
   const [deletingZone, setDeletingZone] = useState<ZoneRow | null>(null);
-  const [maintStall, setMaintStall] = useState<StallRow | null>(null);
-  const [deletingStall, setDeletingStall] = useState<StallRow | null>(null);
+  const [maintStall, setMaintStall] = useState<Stall | null>(null);
+  const [deletingStall, setDeletingStall] = useState<Stall | null>(null);
 
   if (isOwner) {
     return (
@@ -65,72 +99,69 @@ export default function ZoneCatalog() {
   if (loading && !data) return <Skeleton rows={6} />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được danh mục khu'} />;
 
-  const { zones, canManage, headTrainers } = data;
-  const selected = zones.find((zone) => zone.id === selectedId) ?? zones[0];
+  const { zones, headTrainers } = data;
+  const selected = zones.find((zone) => zone.barn.id === selectedId) ?? zones[0];
 
   const zoneMenu = (zone: ZoneRow): MenuAction[] => {
     const blockers = zoneDeleteBlockers(zone);
     return [
-      { label: 'Sửa mã và tên', onSelect: () => setFormOpen({ zone }) },
-      { label: 'Đổi HT phụ trách', onSelect: () => setTrainerZone(zone) },
-      { label: 'Đổi trạng thái', onSelect: () => setStatusZone(zone) },
+      { label: 'Sửa tên, sức chứa, mô tả', onSelect: () => setFormOpen({ zone: zone.barn }) },
+      { label: 'Đổi HT phụ trách', onSelect: () => setTrainerZone(zone.barn) },
+      { label: 'Đổi trạng thái', onSelect: () => setStatusZone(zone.barn) },
       { label: 'Thêm ô', onSelect: () => setStallsZone(zone) },
-      {
-        label: blockers.length ? `Xóa khu (${blockers.join(', ').toLowerCase()})` : 'Xóa khu',
-        danger: true,
-        onSelect: () => setDeletingZone(zone),
-      },
+      { label: blockers.length ? `Xóa khu (${blockers[0].toLowerCase()})` : 'Xóa khu', danger: true, onSelect: () => setDeletingZone(zone) },
     ];
   };
 
   const columns: Column<ZoneRow>[] = [
-    {
-      key: 'zone',
-      header: 'Khu',
-      render: (zone) => (
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-700">{zone.code}</span>
-          <span className="font-semibold text-gray-900">{zone.name}</span>
-        </div>
-      ),
-    },
+    { key: 'zone', header: 'Khu', render: (zone) => <span className="font-semibold text-gray-900">{zone.barn.name}</span> },
     {
       key: 'ht',
       header: 'HT phụ trách',
-      render: (zone) => (zone.headTrainerName ? <span className="text-sm text-gray-700">{zone.headTrainerName}</span> : <span className="text-sm font-medium text-amber-700">Chưa có</span>),
+      render: (zone) =>
+        zone.barn.headTrainerFullName ? (
+          <span className={cn('text-sm', zone.barn.hasActiveHeadTrainer ? 'text-gray-700' : 'font-medium text-amber-700')}>
+            {zone.barn.headTrainerFullName}
+            {!zone.barn.hasActiveHeadTrainer && ' (không còn hoạt động)'}
+          </span>
+        ) : (
+          <span className="text-sm font-medium text-amber-700">Chưa có</span>
+        ),
     },
+    { key: 'status', header: 'Trạng thái', render: (zone) => <ZoneStatusPill status={zone.barn.status} /> },
     {
-      key: 'status',
-      header: 'Trạng thái',
+      key: 'total',
+      header: 'Số ô',
+      className: 'text-right tabular-nums',
       render: (zone) => (
-        <div>
-          <ZoneStatusPill status={zone.status} />
-          {zone.statusReason && <div className="mt-0.5 max-w-48 truncate text-xs text-gray-500">{zone.statusReason}</div>}
-        </div>
+        <span>
+          {zone.stalls.length}
+          {zone.barn.capacity ? <span className="text-gray-400">/{zone.barn.capacity}</span> : null}
+        </span>
       ),
     },
-    { key: 'total', header: 'Tổng ô', className: 'text-right tabular-nums', render: (zone) => zone.capacity.total },
-    { key: 'maint', header: 'Bảo trì', className: 'text-right tabular-nums', render: (zone) => zone.capacity.maintenance || <span className="text-gray-300">—</span> },
-    { key: 'occupied', header: 'Có ngựa', className: 'text-right tabular-nums', render: (zone) => zone.capacity.occupied },
+    { key: 'maint', header: 'Bảo trì', className: 'text-right tabular-nums', render: (zone) => zone.maintenance || <span className="text-gray-300">—</span> },
+    { key: 'occupied', header: 'Có ngựa', className: 'text-right tabular-nums', render: (zone) => zone.occupied },
     {
       key: 'waiting',
       header: 'Chờ xếp ô',
       className: 'text-right tabular-nums',
-      render: (zone) => (zone.capacity.waitingForStall ? <span className="font-semibold text-amber-700">{zone.capacity.waitingForStall}</span> : <span className="text-gray-300">—</span>),
+      render: (zone) =>
+        zone.barn.pendingStallHorseCount ? <span className="font-semibold text-amber-700">{zone.barn.pendingStallHorseCount}</span> : <span className="text-gray-300">—</span>,
     },
     {
       key: 'free',
-      header: 'Chỗ trống',
+      header: 'Còn nhận',
       className: 'text-right',
       render: (zone) => (
-        <Tip content={freeTip(zone)}>
+        <Tip content="Còn nhận = ô trống − ngựa của khu đang chờ xếp ô">
           <span
             className={cn(
               'inline-flex cursor-help items-center gap-1 text-sm tabular-nums',
-              zone.capacity.free <= 0 && zone.status === 'ACTIVE' ? 'font-semibold text-amber-700' : 'text-gray-900',
+              zone.barn.availableStallCount <= 0 && zone.barn.status === 'ACTIVE' ? 'font-semibold text-amber-700' : 'text-gray-900',
             )}
           >
-            {zone.capacity.free} <Info size={12} className="text-gray-400" />
+            {zone.barn.availableStallCount} <Info size={12} className="text-gray-400" />
           </span>
         </Tip>
       ),
@@ -151,18 +182,20 @@ export default function ZoneCatalog() {
       : []),
   ];
 
-  const stallMenu = (zone: ZoneRow, stall: StallRow): MenuAction[] => {
-    if (stall.horseId || stall.status === 'OCCUPIED') {
-      return [{ label: `Ô đang có ${stall.horseName ?? 'ngựa'} — chỉ đổi được khi ô trống`, disabled: true, onSelect: () => {} }];
+  const stallMenu = (zone: ZoneRow, stall: Stall): MenuAction[] => {
+    const horse = zone.occupant.get(stall.id);
+    if (horse || stall.status === 'OCCUPIED') {
+      return [{ label: `Ô đang có ${horse?.name ?? 'ngựa'} — chỉ đổi được khi ô trống`, disabled: true, onSelect: () => {} }];
     }
-    const short = zone.capacity.free - 1 < 0;
-    const shortReason = `khu sẽ thiếu chỗ cho ${zone.capacity.waitingForStall} ngựa chờ xếp ô`;
+    // Đưa một ô trống ra khỏi danh sách ô trống sẽ làm khu thiếu chỗ nếu đã hết chỗ nhận.
+    const short = stall.status === 'AVAILABLE' && zone.barn.availableStallCount <= 0 && zone.barn.pendingStallHorseCount > 0;
+    const shortReason = `khu sẽ thiếu ô cho ${zone.barn.pendingStallHorseCount} ngựa chờ xếp ô`;
     const items: MenuAction[] = [];
     if (stall.status === 'MAINTENANCE') {
       items.push({
         label: 'Kết thúc bảo trì',
         onSelect: async () => {
-          const done = await action.run(() => setStallMaintenance(stall.id, false));
+          const done = await action.run(() => updateStall(stall.id, { status: 'AVAILABLE' }));
           if (done) {
             toast.push(`Ô ${stall.code} trở lại trống`, 'success');
             reload();
@@ -170,19 +203,9 @@ export default function ZoneCatalog() {
         },
       });
     } else {
-      items.push({
-        label: short ? `Chuyển sang bảo trì (${shortReason})` : 'Chuyển sang bảo trì',
-        disabled: short,
-        onSelect: () => setMaintStall(stall),
-      });
+      items.push({ label: short ? `Chuyển sang bảo trì (${shortReason})` : 'Chuyển sang bảo trì', disabled: short, onSelect: () => setMaintStall(stall) });
     }
-    const deleteShort = stall.status === 'AVAILABLE' && short;
-    items.push({
-      label: deleteShort ? `Xóa ô (${shortReason})` : 'Xóa ô',
-      danger: true,
-      disabled: deleteShort,
-      onSelect: () => setDeletingStall(stall),
-    });
+    items.push({ label: short ? `Xóa ô (${shortReason})` : 'Xóa ô', danger: true, disabled: short, onSelect: () => setDeletingStall(stall) });
     return items;
   };
 
@@ -200,14 +223,14 @@ export default function ZoneCatalog() {
         }
       />
 
-      {action.error && <ErrorBox message={action.error} />}
+      {action.error && !deletingZone && <ErrorBox message={action.error} />}
 
       <DataTable
         rows={zones}
         columns={columns}
-        rowKey={(zone) => zone.id}
-        onRowClick={(zone) => setSelectedId(zone.id)}
-        rowClassName={(zone) => (zone.id === selected?.id ? 'bg-gray-50 [&>td:first-child]:shadow-[inset_2px_0_0_0_#047857]' : '')}
+        rowKey={(zone) => zone.barn.id}
+        onRowClick={(zone) => setSelectedId(zone.barn.id)}
+        rowClassName={(zone) => (zone.barn.id === selected?.barn.id ? 'bg-gray-50 [&>td:first-child]:shadow-[inset_2px_0_0_0_#047857]' : '')}
         emptyTitle="Chưa có khu chuồng nào"
       />
 
@@ -224,13 +247,14 @@ export default function ZoneCatalog() {
                 )
               }
             >
-              Ô chuồng của {selected.name}
+              Ô chuồng của {selected.barn.name}
             </SectionTitle>
             {selected.stalls.length === 0 ? (
               <EmptyState title="Khu chưa có ô" hint={canManage ? 'Bấm Thêm ô để sinh mã ô nối tiếp.' : undefined} />
             ) : (
               <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6">
                 {selected.stalls.map((stall) => {
+                  const horse = selected.occupant.get(stall.id);
                   const chip = (
                     <button
                       type="button"
@@ -239,16 +263,20 @@ export default function ZoneCatalog() {
                         'flex h-20 w-full flex-col justify-between rounded-xl border p-2.5 text-left transition disabled:cursor-default',
                         stall.status === 'OCCUPIED' && 'border-gray-200 bg-white',
                         stall.status === 'AVAILABLE' && 'border-dashed border-gray-300',
-                        stall.status === 'MAINTENANCE' &&
-                          'border-dashed border-gray-300 bg-[repeating-linear-gradient(135deg,rgba(17,24,39,0.045)_0_6px,transparent_6px_12px)]',
+                        stall.status === 'MAINTENANCE' && 'border-dashed border-gray-300 bg-[repeating-linear-gradient(135deg,rgba(17,24,39,0.045)_0_6px,transparent_6px_12px)]',
                         canManage && 'hover:border-gray-400',
                       )}
                     >
-                      <span className="font-mono text-xs font-semibold text-gray-600">{stall.code}</span>
+                      <span className="flex items-center justify-between gap-1">
+                        <span className="font-mono text-xs font-semibold text-gray-600">{stall.code}</span>
+                        {stall.type !== 'STANDARD' && <span className="text-[10px] text-gray-400">{stallTypeLabel[stall.type]}</span>}
+                      </span>
                       <span className={cn('truncate text-[11px]', stall.status === 'OCCUPIED' ? 'font-medium text-gray-800' : 'text-gray-500')}>
-                        {stall.status === 'OCCUPIED' ? stall.horseName : stall.status === 'MAINTENANCE' ? (
+                        {stall.status === 'OCCUPIED' ? (
+                          (horse?.name ?? stallStatusLabel.OCCUPIED)
+                        ) : stall.status === 'MAINTENANCE' ? (
                           <span className="flex items-center gap-1">
-                            <Wrench size={11} className="text-gray-400" /> {stall.maintenanceNote ?? stallStatusLabel.MAINTENANCE}
+                            <Wrench size={11} className="text-gray-400" /> {stall.description ?? stallStatusLabel.MAINTENANCE}
                           </span>
                         ) : (
                           stallStatusLabel.AVAILABLE
@@ -265,30 +293,35 @@ export default function ZoneCatalog() {
           <aside className="lg:col-span-4">
             <Card variant="flat" className="space-y-4 lg:sticky lg:top-6">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-gray-900">{selected.name}</p>
-                <ZoneStatusPill status={selected.status} />
+                <p className="font-semibold text-gray-900">{selected.barn.name}</p>
+                <ZoneStatusPill status={selected.barn.status} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-white p-3 ring-1 ring-gray-200/70">
-                  <p className={cn('text-2xl font-bold tabular-nums', selected.capacity.free <= 0 && selected.status === 'ACTIVE' ? 'text-amber-700' : 'text-gray-900')}>
-                    {selected.capacity.free}
+                  <p
+                    className={cn(
+                      'text-2xl font-bold tabular-nums',
+                      selected.barn.availableStallCount <= 0 && selected.barn.status === 'ACTIVE' ? 'text-amber-700' : 'text-gray-900',
+                    )}
+                  >
+                    {selected.barn.availableStallCount}
                   </p>
-                  <p className="text-xs text-gray-500">chỗ trống</p>
+                  <p className="text-xs text-gray-500">còn nhận</p>
                 </div>
                 <div className="rounded-xl bg-white p-3 ring-1 ring-gray-200/70">
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">{selected.capacity.horseCount}</p>
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">{selected.horseCount}</p>
                   <p className="text-xs text-gray-500">ngựa thuộc khu</p>
                 </div>
               </div>
-              <p className="text-xs text-gray-500">{freeTip(selected)}</p>
+              {selected.barn.description && <p className="text-sm text-gray-600">{selected.barn.description}</p>}
               <div className="flex flex-wrap gap-1.5">
-                <Pill tone="slate">HT: {selected.headTrainerName ?? 'chưa có'}</Pill>
-                {selected.openClassCount > 0 && <Pill tone="slate">{selected.openClassCount} lớp chưa kết thúc</Pill>}
+                <Pill tone="slate">HT: {selected.barn.headTrainerFullName ?? 'chưa có'}</Pill>
+                {selected.barn.capacity && <Pill tone="slate">Tối đa {selected.barn.capacity} ô</Pill>}
               </div>
               <ul className="space-y-1.5 border-t border-gray-200/70 pt-3 text-xs text-gray-500">
+                <li>Khu nhận ngựa khi đang hoạt động, có HT đang hoạt động và còn chỗ (ô trống trừ ngựa chờ xếp ô).</li>
                 <li>Khu còn ngựa thì không chuyển sang Đóng/Bảo trì, không gỡ HT, không xóa. Đổi sang HT khác luôn được.</li>
                 <li>Ô chỉ chuyển Trống ⇄ Bảo trì khi không có ngựa; trạng thái Có ngựa do hệ thống tự đặt.</li>
-                <li>Không chuyển ô sang bảo trì hay xóa ô nếu việc đó làm khu thiếu chỗ cho ngựa đang chờ xếp ô.</li>
               </ul>
             </Card>
           </aside>
@@ -298,17 +331,13 @@ export default function ZoneCatalog() {
       <ZoneFormDialog open={!!formOpen} zone={formOpen?.zone} headTrainers={headTrainers} onClose={() => setFormOpen(null)} onDone={reload} />
       <HeadTrainerDialog zone={trainerZone} headTrainers={headTrainers} onClose={() => setTrainerZone(null)} onDone={reload} />
       <ZoneStatusDialog zone={statusZone} onClose={() => setStatusZone(null)} onDone={reload} />
-      <AddStallsDialog zone={stallsZone} onClose={() => setStallsZone(null)} onDone={reload} />
+      <AddStallsDialog zone={stallsZone?.barn ?? null} stalls={stallsZone?.stalls ?? []} onClose={() => setStallsZone(null)} onDone={reload} />
       <MaintenanceDialog stall={maintStall} onClose={() => setMaintStall(null)} onDone={reload} />
 
       <ConfirmDialog
         open={!!deletingZone}
-        title={`Xóa ${deletingZone?.name ?? ''}`}
-        message={
-          deletingZone && zoneDeleteBlockers(deletingZone).length > 0
-            ? 'Không xóa được khu này:'
-            : 'Khu và toàn bộ ô của khu sẽ bị xóa mềm (vẫn giữ trong nhật ký).'
-        }
+        title={`Xóa ${deletingZone?.barn.name ?? ''}`}
+        message={deletingZone && zoneDeleteBlockers(deletingZone).length > 0 ? 'Không xóa được khu này:' : 'Khu sẽ bị xóa mềm (vẫn giữ trong nhật ký).'}
         consequences={deletingZone ? zoneDeleteBlockers(deletingZone) : []}
         confirmLabel="Xóa khu"
         disabled={!!deletingZone && zoneDeleteBlockers(deletingZone).length > 0}
@@ -319,9 +348,12 @@ export default function ZoneCatalog() {
         }}
         onConfirm={async () => {
           if (!deletingZone) return;
-          const done = await action.run(() => deleteZone(deletingZone.id));
+          const done = await action.run(async () => {
+            await deleteBarn(deletingZone.barn.id);
+            return true;
+          });
           if (done) {
-            toast.push(`Đã xóa ${deletingZone.name}`, 'success');
+            toast.push(`Đã xóa ${deletingZone.barn.name}`, 'success');
             setDeletingZone(null);
             setSelectedId(undefined);
             reload();
@@ -339,10 +371,14 @@ export default function ZoneCatalog() {
         onClose={() => setDeletingStall(null)}
         onConfirm={async () => {
           if (!deletingStall) return;
-          const done = await action.run(() => deleteStall(deletingStall.id));
+          const target = deletingStall;
+          const done = await action.run(async () => {
+            await deleteStall(target.id);
+            return true;
+          });
           setDeletingStall(null);
           if (done) {
-            toast.push(`Đã xóa ô ${deletingStall.code}`, 'success');
+            toast.push(`Đã xóa ô ${target.code}`, 'success');
             reload();
           }
         }}

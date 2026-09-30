@@ -4,29 +4,20 @@ import * as Popover from '@radix-ui/react-popover';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  Activity,
-  BookOpen,
-  ChevronRight,
   Bell,
-  CalendarCheck,
-  CalendarDays,
+  CalendarClock,
   ClipboardCheck,
-  ClipboardList,
   HeartPulse,
-  Layers,
   LayoutDashboard,
-  Lock,
   LogOut,
   MapPinned,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  ScrollText,
-  Settings,
+  ReceiptText,
   ShieldCheck,
   Stethoscope,
   Syringe,
-  TrendingUp,
   UserCog,
   Users,
   Warehouse,
@@ -36,13 +27,12 @@ import Lenis from 'lenis';
 import { useStore } from '../store/store';
 import { Avatar, ToastHost, Tip, cn, useToast } from '../components/ui';
 import { Logo } from '../components/Logo';
+import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
 import { links } from '../lib/links';
-import { markAllNotificationsRead, markNotificationRead, runBackgroundChecks } from '../services/system.service';
-import { syncRunningSessions } from '../services/session.service';
-import { getDb } from '../services/db';
-import { managedZoneIds } from '../services/selectors';
+import { useService } from '../hooks/useService';
+import { listBarns } from '../api/stable';
 import { formatRelative } from '../lib/format';
 import { now } from '../lib/clock';
 import { playAlertBeep } from '../lib/sound';
@@ -59,7 +49,9 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// Menu theo vai trò. Flow 2 (huấn luyện) đang tạm ẩn cho tới khi có API thật (config/features.ts).
 function menuFor(role: UserRole | undefined): NavGroup[] {
+  const medical = (items: NavItem[]): NavGroup => ({ group: 'Y tế', items });
   switch (role) {
     case 'CLUB_MANAGER':
       return [
@@ -72,34 +64,19 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
             { name: 'Khu và ô chuồng', path: links.zones, icon: Warehouse },
           ],
         },
-        {
-          group: 'Huấn luyện',
-          items: [
-            { name: 'Lớp học', path: links.classes, icon: Layers },
-            { name: 'Giáo án', path: links.programs, icon: ClipboardList },
-            { name: 'Môn học', path: links.subjects, icon: BookOpen },
-            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
-            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
-            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
-          ],
-        },
-        {
-          group: 'Y tế',
-          items: [
-            { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
-            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
-            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
-            { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
-            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
-          ],
-        },
+        medical([
+          { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
+          { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+          { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+          { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
+          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
+          { name: 'Báo cáo chi phí', path: links.costReport, icon: ReceiptText },
+        ]),
         {
           group: 'Quản trị',
           items: [
             { name: 'Nhân sự', path: links.adminUsers, icon: UserCog },
             { name: 'Phân quyền', path: links.adminPermissions, icon: ShieldCheck },
-            { name: 'Nhật ký thao tác', path: links.adminAudit, icon: ScrollText },
-            { name: 'Công cụ hệ thống', path: links.adminSystem, icon: Settings },
           ],
         },
       ];
@@ -113,61 +90,34 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
           ],
         },
-        {
-          group: 'Huấn luyện',
-          items: [
-            { name: 'Buổi tập hôm nay', path: links.today, icon: CalendarCheck },
-            { name: 'Lớp học', path: links.classes, icon: Layers },
-            { name: 'Giáo án', path: links.programs, icon: ClipboardList },
-            { name: 'Môn học', path: links.subjects, icon: BookOpen },
-            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
-            { name: 'Chờ đánh giá', path: links.review, icon: ClipboardCheck },
-            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
-            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
-          ],
-        },
-        {
-          group: 'Y tế',
-          items: [
-            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
-            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
-            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
-          ],
-        },
+        medical([
+          { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
+          { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+          { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
+        ]),
       ];
     case 'VETERINARIAN':
       return [
         { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
-        {
-          group: 'Y tế',
-          items: [
-            { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
-            { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
-            { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
-            { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
-            { name: 'Khóa huấn luyện', path: links.locks, icon: Lock },
-          ],
-        },
-        {
-          group: 'Huấn luyện',
-          items: [
-            { name: 'Nhịp tim tối đa', path: links.heartRate, icon: Activity },
-            { name: 'Theo dõi trực tiếp', path: links.live, icon: Activity },
-            { name: 'Lớp học', path: links.classes, icon: Layers },
-          ],
-        },
+        medical([
+          { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
+          { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
+          { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+          { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
+          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
+        ]),
         { group: 'Đàn ngựa', items: [{ name: 'Ngựa', path: links.horses, icon: Users }] },
       ];
     case 'GROOM':
       return [
-        { items: [{ name: 'Việc hôm nay', path: links.dashboard, icon: CalendarCheck }] },
+        { items: [{ name: 'Việc hôm nay', path: links.dashboard, icon: LayoutDashboard }] },
         {
           group: 'Ngựa được giao',
           items: [
             { name: 'Ngựa', path: links.horses, icon: Users },
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
-            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
-            { name: 'Gửi yêu cầu khám', path: links.requests, icon: Stethoscope },
+            { name: 'Yêu cầu khám', path: links.requests, icon: Stethoscope },
           ],
         },
       ];
@@ -177,8 +127,6 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
           items: [
             { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard },
             { name: 'Ngựa của tôi', path: links.horses, icon: Users },
-            { name: 'Lịch tập', path: links.schedule, icon: CalendarDays },
-            { name: 'Tiến độ', path: links.progress, icon: TrendingUp },
             { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
           ],
         },
@@ -193,7 +141,8 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
 function NotificationBell() {
   const notifications = useStore((state) => state.notifications);
   const unread = useStore((state) => state.unreadCount);
-  const refresh = useStore((state) => state.refresh);
+  const markRead = useStore((state) => state.markRead);
+  const markAllRead = useStore((state) => state.markAllRead);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
@@ -241,10 +190,7 @@ function NotificationBell() {
             <span className="text-sm font-semibold text-gray-900">Thông báo</span>
             {unread > 0 && (
               <button
-                onClick={async () => {
-                  await markAllNotificationsRead();
-                  refresh();
-                }}
+                onClick={markAllRead}
                 className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
               >
                 Đánh dấu đã đọc hết
@@ -253,14 +199,15 @@ function NotificationBell() {
           </div>
           <div className="max-h-[26rem] overflow-y-auto custom-scrollbar">
             {notifications.length === 0 && (
-              <p className="px-4 py-10 text-center text-sm font-light text-gray-400">Chưa có thông báo nào</p>
+              <p className="px-4 py-10 text-center text-sm font-light text-gray-400">
+                Chưa có thông báo mới. Thông báo đến trong lúc bạn đang đăng nhập sẽ hiện ở đây.
+              </p>
             )}
             {notifications.map((item) => (
               <button
                 key={item.id}
-                onClick={async () => {
-                  await markNotificationRead(item.id);
-                  refresh();
+                onClick={() => {
+                  markRead(item.id);
                   setOpen(false);
                   if (item.link) navigate(item.link);
                 }}
@@ -294,23 +241,6 @@ function NotificationBell() {
       </Popover.Portal>
     </Popover.Root>
   );
-}
-
-/** Chạy nền: sinh mẫu cho buổi đang diễn ra, ghi cảnh báo, tự kết thúc khi quá giờ. */
-function useSessionTicker() {
-  useEffect(() => {
-    try {
-      runBackgroundChecks();
-    } catch {
-      // Kiểm tra nền không được làm hỏng giao diện.
-    }
-    const tick = () => {
-      syncRunningSessions().catch(() => undefined);
-    };
-    tick();
-    const timer = window.setInterval(tick, 2000);
-    return () => window.clearInterval(timer);
-  }, []);
 }
 
 const COLLAPSE_KEY = 'horseracing_sidebar_collapsed';
@@ -383,7 +313,8 @@ function Shell() {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  useSessionTicker();
+  const isTrainer = currentUser?.role === 'HEAD_TRAINER';
+  const barns = useService(() => (isTrainer ? listBarns() : Promise.resolve([])), [isTrainer]);
 
   useEffect(() => {
     try {
@@ -421,24 +352,11 @@ function Shell() {
 
   const groups = useMemo(() => menuFor(currentUser?.role), [currentUser?.role]);
 
-  // Đường dẫn vị trí: nhóm menu › mục menu khớp dài nhất với URL hiện tại.
-  const crumb = useMemo(() => {
-    let best: { group?: string; name: string; length: number } | null = null;
-    groups.forEach((group) =>
-      group.items.forEach((item) => {
-        const hit = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
-        if (hit && (!best || item.path.length > best.length)) best = { group: group.group, name: item.name, length: item.path.length };
-      }),
-    );
-    return best as { group?: string; name: string; length: number } | null;
-  }, [groups, location.pathname]);
-  const isDetail = !!crumb && !groups.some((group) => group.items.some((item) => item.path === location.pathname));
-
   const scope = (() => {
     if (!currentUser) return '';
-    if (currentUser.role === 'HEAD_TRAINER') {
-      const db = getDb();
-      const names = managedZoneIds(db, currentUser.id).map((id) => db.zones.find((zone) => zone.id === id)?.name);
+    if (isTrainer) {
+      if (!barns.data) return '…';
+      const names = barns.data.filter((barn) => barn.headTrainerId === currentUser.id).map((barn) => barn.name);
       return names.length ? names.join(', ') : 'Chưa được giao khu';
     }
     if (currentUser.role === 'GROOM') return 'Ngựa được giao';
@@ -446,9 +364,9 @@ function Shell() {
     return 'Toàn câu lạc bộ';
   })();
 
-  const signOut = () => {
-    logout();
-    navigate('/');
+  const signOut = async (to = '/') => {
+    await logout();
+    navigate(to);
   };
 
   return (
@@ -508,7 +426,7 @@ function Shell() {
             </div>
             <NavList groups={groups} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
             <button
-              onClick={signOut}
+              onClick={() => signOut()}
               className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
             >
               <LogOut size={16} />
@@ -528,19 +446,7 @@ function Shell() {
             >
               <Menu size={18} />
             </button>
-            <div className="flex min-w-0 items-center gap-1.5 text-sm">
-              {crumb?.group && <span className="hidden truncate text-gray-500 sm:inline">{crumb.group}</span>}
-              {crumb?.group && <ChevronRight size={14} className="hidden shrink-0 text-gray-300 sm:inline" />}
-              <span className={cn('truncate font-semibold', isDetail ? 'text-gray-500' : 'text-gray-900')}>{crumb?.name ?? 'HorseRacing'}</span>
-              {isDetail && (
-                <>
-                  <ChevronRight size={14} className="shrink-0 text-gray-300" />
-                  <span className="truncate font-semibold text-gray-900">
-                    {location.pathname.endsWith('/new') ? 'Tạo mới' : location.pathname.endsWith('/edit') ? 'Chỉnh sửa' : 'Chi tiết'}
-                  </span>
-                </>
-              )}
-            </div>
+            <Breadcrumbs groups={groups} />
           </div>
           <div className="flex items-center gap-2.5">
             <NotificationBell />
@@ -564,14 +470,14 @@ function Shell() {
                     Hồ sơ cá nhân
                   </Dropdown.Item>
                   <Dropdown.Item
-                    onSelect={() => navigate('/login')}
+                    onSelect={() => signOut('/login')}
                     className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-gray-100"
                   >
                     Đổi tài khoản
                   </Dropdown.Item>
                   <Dropdown.Separator className="my-1 h-px bg-gray-100" />
                   <Dropdown.Item
-                    onSelect={signOut}
+                    onSelect={() => signOut()}
                     className="cursor-pointer rounded-lg px-3 py-2 text-sm text-red-600 outline-none data-[highlighted]:bg-red-50"
                   >
                     Đăng xuất

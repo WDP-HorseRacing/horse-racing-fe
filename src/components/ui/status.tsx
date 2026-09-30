@@ -33,6 +33,14 @@ import type {
   TrainingIntensity,
   ZoneStatus,
 } from '../../types/domain';
+import { careStatusLabel, caseStatusText, eligibilityReasonLabel, placementStatusLabel } from '../../lib/api-labels';
+import type {
+  CareStatus as ApiCareStatus,
+  CaseStatus as ApiCaseStatus,
+  CheckupDueStatus as ApiCheckupStatus,
+  Eligibility as ApiEligibility,
+  PlacementStatus as ApiPlacementStatus,
+} from '../../api/types';
 
 /* ===== Sức khỏe ===== */
 
@@ -313,3 +321,107 @@ export const stallBorder: Record<HealthStatus, string> = {
   INJURED: 'border-red-300 bg-white',
   QUARANTINED: 'border-red-300 bg-white',
 };
+
+/* ===== Dữ liệu từ backend ===== */
+
+/** Tình trạng xếp chỗ: chỉ nổi bật khi còn chờ xếp khu / chờ xếp ô. */
+export function PlacementStatusPill({ status }: { status: ApiPlacementStatus }) {
+  if (status === 'PLACED' || status === 'NOT_APPLICABLE') {
+    return <span className="text-xs text-gray-500">{placementStatusLabel[status]}</span>;
+  }
+  return <Pill tone="amber">{placementStatusLabel[status]}</Pill>;
+}
+
+/**
+ * Được tập / được đua theo mã lý do của backend, gộp thành một câu.
+ * Cần theo dõi: vẫn được tập nhưng không được đua (hổ phách). Chấn thương, cách ly, khóa: không tập, không đua (đỏ).
+ */
+export function EligibilityView({
+  eligibility,
+  lifecycle,
+  variant = 'line',
+  action,
+}: {
+  eligibility: ApiEligibility;
+  lifecycle?: LifecycleStatus;
+  variant?: 'line' | 'banner';
+  action?: React.ReactNode;
+}) {
+  if (lifecycle && lifecycle !== 'ACTIVE') {
+    if (variant === 'banner') return null;
+    return <span className="text-sm text-gray-500">{lifecycle === 'RETIRED' ? 'Không học lớp, không đua (đã giải nghệ)' : 'Đã rời câu lạc bộ'}</span>;
+  }
+  const train = eligibility.trainingEligible;
+  const race = eligibility.racingEligible;
+  if (train && race) {
+    if (variant === 'banner') return null;
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+        <Check size={13} strokeWidth={2.5} /> Được tập · Được đua
+      </span>
+    );
+  }
+  const severe = !train;
+  const title = severe ? 'Không được tập và không được đua' : 'Vẫn được tập · không được đua';
+  const reasons = (severe ? eligibility.trainingReasons : eligibility.racingReasons).map((code) => eligibilityReasonLabel[code]);
+  const reason = reasons.join(', ');
+  if (variant === 'line') {
+    return (
+      <Tip content={reason}>
+        <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', severe ? 'text-red-700' : 'text-amber-800')}>
+          <X size={13} strokeWidth={2.5} /> {title}
+        </span>
+      </Tip>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-xl bg-white px-4 py-3 ring-1',
+        severe ? 'shadow-[inset_3px_0_0_0_#ef4444] ring-red-200/70' : 'shadow-[inset_3px_0_0_0_#f59e0b] ring-amber-200/70',
+      )}
+    >
+      <div className="min-w-0 text-sm">
+        <span className={cn('font-semibold', severe ? 'text-red-700' : 'text-amber-800')}>{title}</span>
+        {reason && <span className="text-gray-700"> — {reason}</span>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** Mức khẩn của yêu cầu khám (backend dùng true/false). */
+export function UrgentPill({ urgent }: { urgent: boolean }) {
+  return urgent ? (
+    <Pill tone="red">
+      <Dot tone="danger" />
+      Khẩn
+    </Pill>
+  ) : (
+    <Pill tone="slate">Bình thường</Pill>
+  );
+}
+
+export function CaseStatusPill({ status }: { status: ApiCaseStatus }) {
+  if (status === 'OPEN') return <Pill tone="amber">{caseStatusText.OPEN}</Pill>;
+  return (
+    <Pill tone="gray" className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
+      {caseStatusText[status]}
+    </Pill>
+  );
+}
+
+export function CareStatusPill({ status, overdue = false }: { status: ApiCareStatus; overdue?: boolean }) {
+  if (status === 'SCHEDULED') return <Pill tone={overdue ? 'red' : 'amber'}>{overdue ? 'Quá hạn' : careStatusLabel.SCHEDULED}</Pill>;
+  return (
+    <Pill tone="gray" className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
+      {careStatusLabel[status]}
+    </Pill>
+  );
+}
+
+export function CheckupPill({ status, daysLeft }: { status: ApiCheckupStatus; daysLeft: number }) {
+  if (status === 'OK') return <span className="text-xs text-gray-500">Còn {daysLeft} ngày</span>;
+  if (status === 'DUE_SOON') return <Pill tone="amber">{daysLeft === 0 ? 'Đến hạn hôm nay' : `Còn ${daysLeft} ngày`}</Pill>;
+  return <Pill tone="red">{`Quá hạn ${-daysLeft} ngày`}</Pill>;
+}

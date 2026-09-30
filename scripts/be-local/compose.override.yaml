@@ -1,0 +1,5 @@
+# quay.io/minio và minio/minio trên Docker Hub đã ngừng phát hành công khai.
+# pgsty/minio là bản fork cộng đồng, cùng lệnh `minio server`.
+services:
+  minio:
+    image: pgsty/minio:latest

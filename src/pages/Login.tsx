@@ -1,36 +1,35 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, KeyRound, Mail, Users } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Navigate, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Clock, KeyRound, Mail } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { PasswordInput } from '../components/ui';
 import gsap from 'gsap';
 import { useStore } from '../store/store';
-import { listAccounts, SHARED_PASSWORD } from '../services/auth.service';
-import { roleLabel } from '../lib/labels';
-import { getDb } from '../services/db';
-import { managedZoneIds } from '../services/selectors';
-import { Avatar } from '../components/ui';
-import type { UserRole } from '../types/domain';
+import { safeInternalPath } from '../lib/links';
 
-const roleOrder: UserRole[] = ['CLUB_MANAGER', 'HEAD_TRAINER', 'VETERINARIAN', 'GROOM', 'HORSE_OWNER'];
+const REASON_TEXT: Record<string, string> = {
+  expired: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.',
+  elsewhere: 'Bạn đã đăng xuất ở một tab khác. Đăng nhập lại để tiếp tục.',
+};
+
+/** Trang quay lại sau khi đăng nhập: chỉ đường dẫn nội bộ, không quay lại chính trang đăng nhập. */
+function safeNext(value: string | null) {
+  const path = safeInternalPath(value);
+  return path && !path.startsWith('/login') ? path : '/dashboard';
+}
 
 export const Login = () => {
+  const [params] = useSearchParams();
+  const next = safeNext(params.get('next'));
+  const reason = REASON_TEXT[params.get('reason') ?? ''];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const login = useStore((state) => state.login);
+  const isAuthenticated = useStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
   const formRef = useRef<HTMLDivElement>(null);
-
-  const accounts = useMemo(() => listAccounts(), []);
-  const grouped = useMemo(
-    () =>
-      roleOrder.map((role) => ({
-        role,
-        users: accounts.filter((user) => user.role === role),
-      })),
-    [accounts],
-  );
 
   useEffect(() => {
     if (!formRef.current) return;
@@ -51,7 +50,7 @@ export const Login = () => {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate(next, { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không đăng nhập được, vui lòng thử lại.');
     } finally {
@@ -59,11 +58,7 @@ export const Login = () => {
     }
   };
 
-  const quickFill = (value: string) => {
-    setEmail(value);
-    setPassword(SHARED_PASSWORD);
-    setError('');
-  };
+  if (isAuthenticated && !isLoading) return <Navigate to={next} replace />;
 
   return (
     <div className="flex min-h-screen font-sans">
@@ -89,8 +84,7 @@ export const Login = () => {
             <Logo size={40} textClassName="text-xl text-white" />
           </div>
           <p className="max-w-sm text-base leading-relaxed text-white/85">
-            Hệ thống quản lý huấn luyện ngựa đua. Hồ sơ đàn ngựa, lớp huấn luyện theo giáo án và y tế trong
-            một nơi duy nhất.
+            Hệ thống quản lý câu lạc bộ ngựa đua. Hồ sơ đàn ngựa, chuồng trại và y tế trong một nơi duy nhất.
           </p>
         </div>
       </div>
@@ -112,6 +106,13 @@ export const Login = () => {
             <p className="text-gray-500">Dùng tài khoản câu lạc bộ cấp cho bạn.</p>
           </div>
 
+          {reason && (
+            <div className="mb-6 flex items-start gap-3 rounded-xl bg-amber-50/70 p-3.5 text-sm text-amber-900 ring-1 ring-amber-200/70" data-form-reveal role="status">
+              <Clock size={17} className="mt-0.5 shrink-0" />
+              {reason}
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-5" data-form-reveal>
             <div className="space-y-4">
               <div className="group relative">
@@ -120,6 +121,7 @@ export const Login = () => {
                 </div>
                 <input
                   type="email"
+                  autoComplete="username"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
@@ -129,14 +131,14 @@ export const Login = () => {
               </div>
 
               <div className="group relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-gray-500">
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-gray-500">
                   <KeyRound className="h-5 w-5" />
                 </div>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
+                  autoComplete="current-password"
+                  className="rounded-xl bg-gray-50 py-3.5 pl-12 text-base focus:bg-white focus:ring-emerald-500/10"
                   placeholder="••••••"
                   required
                 />
@@ -165,47 +167,9 @@ export const Login = () => {
             </button>
           </form>
 
-          <div className="mt-10 border-t border-gray-100 pt-8" data-form-reveal>
-            <div className="mb-4 flex items-center gap-2">
-              <Users className="h-3.5 w-3.5 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500">Chọn nhanh tài khoản</span>
-            </div>
-            <div className="max-h-72 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
-              {grouped.map((group) => (
-                <div key={group.role}>
-                  <p className="mb-1.5 text-xs font-medium text-gray-500">
-                    {roleLabel[group.role]}
-                  </p>
-                  <div className="space-y-1">
-                    {group.users.map((user) => (
-                      <button
-                        key={user.id}
-                        onClick={() => quickFill(user.email)}
-                        className={`group flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all duration-200 ${
-                          email === user.email
-                            ? 'border-emerald-600/40 bg-white ring-1 ring-emerald-600/15'
-                            : 'border-transparent hover:border-gray-100 hover:bg-gray-50'
-                        }`}
-                      >
-                        <Avatar name={user.name} size={30} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-gray-700">{user.name}</p>
-                          <p className="truncate font-mono text-xs text-gray-400">{user.email}</p>
-                        </div>
-                        {user.role === 'HEAD_TRAINER' && (
-                          <span className="rounded-lg bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500">
-                            {managedZoneIds(getDb(), user.id)
-                              .map((zoneId) => getDb().zones.find((zone) => zone.id === zoneId)?.code)
-                              .join(' · ') || 'Chưa có khu'}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <p className="mt-8 text-xs leading-relaxed text-gray-400" data-form-reveal>
+            Chưa có tài khoản hoặc quên mật khẩu? Liên hệ Quản lý câu lạc bộ để được cấp lại.
+          </p>
         </div>
       </div>
     </div>

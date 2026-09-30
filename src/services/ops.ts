@@ -218,14 +218,14 @@ export function applyHealthStatus(
         to === 'QUARANTINED'
           ? `${reason}. Ngựa không được tập và đua. Gợi ý: cân nhắc chuyển ngựa sang ô trống để tách đàn.`
           : `${reason}. Ngựa không được tập và đua cho tới khi bác sĩ đổi trạng thái.`,
-      link: links.horse(horse.id, 'medical'),
+      link: links.horseMedical(horse.id),
     });
   } else {
     notifyMany(db, at, [trainer], {
       level: 'NORMAL',
       title: `${horse.name}: ${healthLabel[from]} → ${healthLabel[to]}`,
       body: reason,
-      link: links.horse(horse.id, 'medical'),
+      link: links.horseMedical(horse.id),
     });
   }
 
@@ -268,7 +268,7 @@ export function placeLockInternal(
     level: 'HIGH',
     title: `Khóa huấn luyện: ${horse.name}`,
     body: `${input.reason}${input.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(input.expectedLiftDate)}` : ''}. Ngựa sẽ vắng các buổi học cho tới khi được gỡ khóa.`,
-    link: links.horse(horse.id, 'medical'),
+    link: links.horseMedical(horse.id),
   });
   stopHorseInRunningSessions(db, at, horse.id, 'Bác sĩ đặt khóa huấn luyện', actor.id);
   writeAudit(db, at, {
@@ -301,7 +301,7 @@ export function liftLockInternal(
       level: 'NORMAL',
       title: `Đã gỡ khóa huấn luyện: ${horse.name}`,
       body: reason,
-      link: links.horse(horse.id, 'medical'),
+      link: links.horseMedical(horse.id),
     });
   }
   writeAudit(db, at, {

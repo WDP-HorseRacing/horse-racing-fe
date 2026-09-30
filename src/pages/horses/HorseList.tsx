@@ -1,9 +1,13 @@
 // F1.1 — danh sách ngựa: hàng chip lọc theo sức khỏe, thanh lọc một hàng, bảng full width.
+// Lọc ở backend; câu lạc bộ ít ngựa nên lấy hết các trang rồi phân trang trên bảng.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useService } from '../../hooks/useService';
-import { getHorseListSummary, listHorses, listZoneOptions, type HorseFilters, type HorseRow } from '../../services/horse.service';
+import { useDebounced } from '../../hooks/useDebounced';
+import { countHorses, listAllHorses } from '../../api/horses';
+import { listBarns } from '../../api/stable';
+import type { Gender, HealthStatus, HorseListItem, HorseListQuery, LifecycleStatus, PlacementStatus, RaceAptitude } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import {
@@ -22,40 +26,51 @@ import {
   cn,
   type Column,
 } from '../../components/ui';
-import { DeletedPill, HealthPill, LifecyclePill, PlacementPill } from '../../components/ui/status';
+import { DeletedPill, HealthPill, LifecyclePill, PlacementStatusPill } from '../../components/ui/status';
 import { distanceLabel, healthLabel, lifecycleLabel, sexLabel } from '../../lib/labels';
+import { placementStatusLabel } from '../../lib/api-labels';
 import { links } from '../../lib/links';
-import type { DistancePreference, HealthStatus, HorseSex, LifecycleStatus } from '../../types/domain';
+import { breedLabel } from '../../lib/horse-options';
+import { now } from '../../lib/clock';
 
+type ChipValue = 'ALL' | HealthStatus;
+const HEALTH: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
 
-type ChipValue = 'ALL' | HealthStatus | 'WAITING';
+function ageOf(dateOfBirth: string | null): number | undefined {
+  if (!dateOfBirth) return undefined;
+  const born = new Date(`${dateOfBirth}T00:00:00`);
+  const today = now();
+  let age = today.getFullYear() - born.getFullYear();
+  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
+  return Math.max(0, age);
+}
 
 /**
- * Một cột "Tình trạng" thay cho hai cột Được tập / Được đua:
- * bình thường để "—", chỉ lên tiếng khi bị chặn; lý do đầy đủ nằm trong chú thích rê chuột.
+ * Một cột "Tình trạng" thay cho hai cột Được tập / Được đua: bình thường để "—", chỉ lên tiếng khi bị chặn.
+ * Danh sách của backend chỉ có cờ được đua; ngựa đang hoạt động, sức khỏe đủ điều kiện mà vẫn không được đua
+ * thì chỉ có thể là đang bị khóa huấn luyện.
  */
-function StandingCell({ row }: { row: HorseRow }) {
+function StandingCell({ row }: { row: HorseListItem }) {
   const quiet = <span className="text-sm text-gray-300">—</span>;
-  if (row.deleted || row.lifecycleStatus !== 'ACTIVE') return quiet;
-  if (!row.train.allowed) {
-    const text =
-      row.train.code === 'LOCK'
-        ? 'Khóa huấn luyện'
-        : row.healthStatus === 'INJURED' || row.healthStatus === 'QUARANTINED'
-          ? healthLabel[row.healthStatus]
-          : 'Không được tập';
+  if (row.isDeleted || row.lifecycleStatus !== 'ACTIVE') return quiet;
+  if (row.healthStatus === 'INJURED' || row.healthStatus === 'QUARANTINED') {
     return (
-      <Tip content={`${row.train.reason ?? text}. Không được tập, không được đua.`}>
-        <span className="cursor-help text-sm font-medium text-red-700">{text}</span>
+      <Tip content={`${healthLabel[row.healthStatus]}: không được tập, không được đua.`}>
+        <span className="cursor-help text-sm font-medium text-red-700">Không tập</span>
       </Tip>
     );
   }
-  if (!row.race.allowed) {
+  if (!row.canRegisterRace && row.healthStatus === 'ELIGIBLE') {
     return (
-      <Tip content={`${row.race.reason ?? 'Không được đua'}. Chỉ tập Nhẹ và Trung bình, không được đua.`}>
-        <span className="cursor-help text-sm font-medium text-amber-800">
-          {row.healthStatus === 'UNDER_OBSERVATION' ? 'Chỉ tập Nhẹ–TB' : 'Không được đua'}
-        </span>
+      <Tip content="Đang có lệnh khóa huấn luyện của bác sĩ: không được tập, không được đua.">
+        <span className="cursor-help text-sm font-medium text-red-700">Khóa huấn luyện</span>
+      </Tip>
+    );
+  }
+  if (row.healthStatus === 'UNDER_OBSERVATION') {
+    return (
+      <Tip content="Cần theo dõi: vẫn được tập, không được đăng ký đua.">
+        <span className="cursor-help text-sm font-medium text-amber-800">Không được đua</span>
       </Tip>
     );
   }
@@ -67,47 +82,66 @@ export default function HorseList() {
   const user = useStore((state) => state.currentUser);
   const role = user?.role;
   const isOwner = role === 'HORSE_OWNER';
-  const canScope = role === 'HEAD_TRAINER' || role === 'GROOM';
+  const isTrainer = role === 'HEAD_TRAINER';
+  const isGroom = role === 'GROOM';
 
   const [search, setSearch] = useState('');
-  const [health, setHealth] = useState('');
+  const [health, setHealth] = useState<HealthStatus | ''>('');
   const [lifecycle, setLifecycle] = useState('');
-  const [sex, setSex] = useState('');
-  const [distance, setDistance] = useState('');
-  const [zone, setZone] = useState('');
-  const [waiting, setWaiting] = useState(false);
-  const [mine, setMine] = useState(false);
+  const [gender, setGender] = useState('');
+  const [aptitude, setAptitude] = useState('');
+  const [barn, setBarn] = useState('');
+  const [placement, setPlacement] = useState('');
+  // HT và Groom mặc định chỉ xem ngựa mình phụ trách; bỏ chọn để xem toàn câu lạc bộ.
+  const [mine, setMine] = useState(isTrainer || isGroom);
   const [withDeleted, setWithDeleted] = useState(false);
+  // Gõ tìm kiếm: đợi ngừng gõ 300 ms mới gọi API.
+  const searchTerm = useDebounced(search.trim());
 
-  const filters: HorseFilters = useMemo(
+  const scope: HorseListQuery = useMemo(
     () => ({
-      search,
-      healthStatus: (health || undefined) as HealthStatus | undefined,
-      lifecycleStatus: (lifecycle || undefined) as LifecycleStatus | undefined,
-      sex: (sex || undefined) as HorseSex | undefined,
-      distancePreference: (distance || undefined) as DistancePreference | undefined,
-      zoneId: zone || undefined,
-      placement: waiting ? 'WAITING' : undefined,
-      mine,
-      includeDeleted: withDeleted,
+      myBarns: isTrainer && mine ? true : undefined,
+      myHorses: isGroom && mine ? true : undefined,
     }),
-    [search, health, lifecycle, sex, distance, zone, waiting, mine, withDeleted],
+    [isTrainer, isGroom, mine],
   );
 
-  const list = useService(() => listHorses(filters), [filters]);
-  const summary = useService(() => getHorseListSummary({ mine }), [mine]);
-  const zones = useService(() => (isOwner ? Promise.resolve([]) : listZoneOptions()), [isOwner]);
+  const query: HorseListQuery = useMemo(
+    () => ({
+      ...scope,
+      search: searchTerm || undefined,
+      healthStatus: health || undefined,
+      lifecycleStatus: (lifecycle || undefined) as LifecycleStatus | undefined,
+      gender: (gender || undefined) as Gender | undefined,
+      raceAptitude: (aptitude || undefined) as RaceAptitude | undefined,
+      barnId: barn || undefined,
+      placementStatus: (placement || undefined) as PlacementStatus | undefined,
+      includeDeleted: withDeleted || undefined,
+    }),
+    [scope, searchTerm, health, lifecycle, gender, aptitude, barn, placement, withDeleted],
+  );
 
-  const columns: Column<HorseRow>[] = [
+  const list = useService(() => listAllHorses(query), [query]);
+  // Số trên chip đếm theo phạm vi đang xem (không theo các bộ lọc còn lại).
+  const counts = useService(
+    async () => {
+      const values = await Promise.all([countHorses(scope), ...HEALTH.map((item) => countHorses({ ...scope, healthStatus: item }))]);
+      return { total: values[0], byHealth: Object.fromEntries(HEALTH.map((item, index) => [item, values[index + 1]])) as Record<HealthStatus, number> };
+    },
+    [scope],
+  );
+  const barns = useService(() => (isOwner ? Promise.resolve([]) : listBarns()), [isOwner]);
+
+  const columns: Column<HorseListItem>[] = [
     {
       key: 'horse',
       header: 'Ngựa',
       render: (row) => (
         <div className="flex min-w-[180px] items-center gap-3">
-          <Avatar src={row.avatar} name={row.name} size={40} />
+          <Avatar src={row.photoUrl ?? undefined} name={row.name} size={40} />
           <div className="min-w-0">
             <div className="truncate font-semibold text-gray-900">{row.name}</div>
-            <p className="font-mono text-[11px] text-gray-400">{row.chipNumber ?? 'chưa có chip'}</p>
+            <p className="font-mono text-[11px] text-gray-400">{row.microchipId ?? 'chưa có chip'}</p>
           </div>
         </div>
       ),
@@ -115,74 +149,61 @@ export default function HorseList() {
     {
       key: 'identity',
       header: 'Giới tính · giống · tuổi',
-      render: (row) => (
-        <div className="text-sm text-gray-700">
-          <p>{sexLabel[row.sex]}</p>
-          <p className="text-xs text-gray-500">
-            {row.breed ?? 'Chưa rõ giống'}
-            {row.age !== undefined ? ` · ${row.age} tuổi` : ''}
-          </p>
-        </div>
-      ),
+      render: (row) => {
+        const age = ageOf(row.dateOfBirth);
+        return (
+          <div className="text-sm text-gray-700">
+            <p>{row.gender ? sexLabel[row.gender] : <span className="text-gray-400">Chưa rõ</span>}</p>
+            <p className="text-xs text-gray-500">
+              {breedLabel(row.breed) ?? 'Chưa rõ giống'}
+              {age !== undefined ? ` · ${age} tuổi` : ''}
+            </p>
+          </div>
+        );
+      },
     },
     {
       key: 'distance',
       header: 'Sở trường',
       render: (row) =>
-        row.distancePreference ? (
-          <span className="text-sm text-gray-700">{distanceLabel[row.distancePreference]}</span>
-        ) : (
-          <span className="text-sm text-gray-300">—</span>
-        ),
+        row.raceAptitude ? <span className="text-sm text-gray-700">{distanceLabel[row.raceAptitude]}</span> : <span className="text-sm text-gray-300">—</span>,
     },
     {
       key: 'status',
       header: 'Sức khỏe',
       render: (row) => (
         <div className="flex flex-wrap items-center gap-1.5">
-          {row.deleted ? <DeletedPill /> : <HealthPill status={row.healthStatus} />}
-          {!row.deleted && <LifecyclePill status={row.lifecycleStatus} />}
+          {row.isDeleted ? <DeletedPill /> : <HealthPill status={row.healthStatus} />}
+          {!row.isDeleted && <LifecyclePill status={row.lifecycleStatus} />}
         </div>
       ),
     },
     {
       key: 'place',
-      header: 'Khu · ô · Groom',
-      render: (row) =>
-        row.placement === 'PLACED' ? (
-          <div className="text-sm text-gray-700">
-            <p>
-              {row.zoneName} · <span className="font-mono text-[13px]">{row.stallCode}</span>
+      header: 'Khu · ô',
+      render: (row) => {
+        const { barn: rowBarn, stall, placementStatus } = row.location;
+        if (placementStatus === 'PLACED') {
+          return (
+            <p className="text-sm text-gray-700">
+              {rowBarn?.name} · <span className="font-mono text-[13px]">{stall?.code}</span>
             </p>
-            <p className="text-xs text-gray-500">{row.groomName}</p>
-          </div>
-        ) : row.placement === 'NONE' ? (
-          <span className="text-sm text-gray-400">Không ở câu lạc bộ</span>
-        ) : (
+          );
+        }
+        if (placementStatus === 'NOT_APPLICABLE') return <span className="text-sm text-gray-400">{placementStatusLabel.NOT_APPLICABLE}</span>;
+        return (
           <div className="space-y-1">
-            <PlacementPill placement={row.placement} />
-            {row.zoneName && (
-              <p className="text-xs text-gray-500">
-                {row.zoneName}
-                {row.stallCode ? ` · ${row.stallCode}` : ''}
-              </p>
-            )}
+            <PlacementStatusPill status={placementStatus} />
+            {rowBarn && <p className="text-xs text-gray-500">{rowBarn.name}</p>}
           </div>
-        ),
+        );
+      },
     },
-    {
-      key: 'standing',
-      header: 'Tình trạng',
-      render: (row) => <StandingCell row={row} />,
-    },
+    { key: 'standing', header: 'Tình trạng', render: (row) => <StandingCell row={row} /> },
   ];
 
-  const stats = summary.data;
-  const chip: ChipValue = waiting ? 'WAITING' : ((health || 'ALL') as ChipValue);
-  const selectChip = (value: ChipValue) => {
-    setWaiting(value === 'WAITING');
-    setHealth(value === 'ALL' || value === 'WAITING' ? '' : value);
-  };
+  const stats = counts.data;
+  const chip: ChipValue = health || 'ALL';
 
   return (
     <div className="space-y-5">
@@ -201,14 +222,10 @@ export default function HorseList() {
       {stats ? (
         <ChipFilter<ChipValue>
           value={chip}
-          onChange={selectChip}
+          onChange={(value) => setHealth(value === 'ALL' ? '' : value)}
           options={[
             { value: 'ALL', label: 'Tất cả', count: stats.total },
-            { value: 'ELIGIBLE', label: healthLabel.ELIGIBLE, count: stats.byHealth.ELIGIBLE },
-            { value: 'UNDER_OBSERVATION', label: healthLabel.UNDER_OBSERVATION, count: stats.byHealth.UNDER_OBSERVATION, dot: 'warn' },
-            { value: 'INJURED', label: healthLabel.INJURED, count: stats.byHealth.INJURED, dot: 'danger' },
-            { value: 'QUARANTINED', label: healthLabel.QUARANTINED, count: stats.byHealth.QUARANTINED, dot: 'danger', hollow: true },
-            ...(isOwner ? [] : [{ value: 'WAITING' as const, label: 'Chờ xếp chỗ', count: stats.waitingPlacement, dot: 'warn' as const }]),
+            ...HEALTH.map((item) => ({ value: item, label: healthLabel[item], count: stats.byHealth[item] })),
           ]}
         />
       ) : (
@@ -225,36 +242,45 @@ export default function HorseList() {
             </option>
           ))}
         </FilterSelect>
-        <FilterSelect value={sex} onChange={setSex} label="Giới tính">
+        <FilterSelect value={gender} onChange={setGender} label="Giới tính">
           <option value="">Mọi giới tính</option>
-          {(Object.keys(sexLabel) as HorseSex[]).map((item) => (
+          {(Object.keys(sexLabel) as Gender[]).map((item) => (
             <option key={item} value={item}>
               {sexLabel[item]}
             </option>
           ))}
         </FilterSelect>
-        <FilterSelect value={distance} onChange={setDistance} label="Sở trường">
+        <FilterSelect value={aptitude} onChange={setAptitude} label="Sở trường">
           <option value="">Mọi sở trường</option>
-          {(Object.keys(distanceLabel) as DistancePreference[]).map((item) => (
+          {(Object.keys(distanceLabel) as RaceAptitude[]).map((item) => (
             <option key={item} value={item}>
               {distanceLabel[item]}
             </option>
           ))}
         </FilterSelect>
         {!isOwner && (
-          <FilterSelect value={zone} onChange={setZone} label="Khu chuồng">
-            <option value="">Mọi khu</option>
-            {(zones.data ?? []).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-            <option value="NONE">Chưa xếp khu</option>
-          </FilterSelect>
+          <>
+            <FilterSelect value={barn} onChange={setBarn} label="Khu chuồng">
+              <option value="">Mọi khu</option>
+              {(barns.data ?? []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect value={placement} onChange={setPlacement} label="Xếp chỗ">
+              <option value="">Mọi tình trạng xếp chỗ</option>
+              {(['PENDING_BARN', 'PENDING_STALL', 'PLACED'] as PlacementStatus[]).map((item) => (
+                <option key={item} value={item}>
+                  {placementStatusLabel[item]}
+                </option>
+              ))}
+            </FilterSelect>
+          </>
         )}
-        {canScope && (
+        {(isTrainer || isGroom) && (
           <ToggleChip checked={mine} onChange={setMine}>
-            Ngựa tôi phụ trách
+            {isTrainer ? 'Khu của tôi' : 'Ngựa tôi phụ trách'}
           </ToggleChip>
         )}
         {can(user, 'horse.viewDeleted') && (
@@ -275,8 +301,8 @@ export default function HorseList() {
           onRowClick={(row) => navigate(links.horse(row.id))}
           pageSize={12}
           emptyTitle={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
-          emptyHint={isOwner ? undefined : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
-          rowClassName={(row) => cn((row.deleted || row.lifecycleStatus === 'TRANSFERRED') && 'opacity-60')}
+          emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
+          rowClassName={(row) => cn((row.isDeleted || row.lifecycleStatus === 'TRANSFERRED') && 'opacity-60')}
         />
       )}
     </div>

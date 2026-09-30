@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppError } from '../services/db';
+import { AppError } from '../lib/errors';
 
 interface State<T> {
   data: T | undefined;

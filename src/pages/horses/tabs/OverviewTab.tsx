@@ -1,21 +1,23 @@
-// Tab Tổng quan của hồ sơ ngựa: thông tin hồ sơ, tình trạng hiện tại (lớp, bệnh án, khóa) và chuồng trại – phụ trách.
+// Tab Tổng quan của hồ sơ ngựa: thông tin hồ sơ, tình trạng hiện tại, chuồng trại – phụ trách, lịch sử Groom.
 // Trình bày dạng danh sách nhãn – giá trị trên nền trắng; chỉ điều cần xử lý mới có màu.
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useAction } from '../../../hooks/useService';
-import { unassignGroom, unassignStall, type HorseDetail } from '../../../services/horse.service';
-import { Button, Card, InfoGrid, SectionTitle, cn, useToast } from '../../../components/ui';
+import { Stethoscope } from 'lucide-react';
+import { useService } from '../../../hooks/useService';
+import { getPedigree } from '../../../api/horses';
+import { listGroomHistory } from '../../../api/stable';
+import { getCareInstructions } from '../../../api/medical';
+import type { HorseDetail, HorsePermissions } from '../../../api/types';
+import { Button, Card, InfoGrid, SectionTitle, Skeleton, cn } from '../../../components/ui';
+import { EligibilityView, HealthPill } from '../../../components/ui/status';
 import { distanceHint, distanceLabel, sexLabel } from '../../../lib/labels';
-import { formatDate } from '../../../lib/format';
+import { measurementSpec, placementStatusLabel } from '../../../lib/api-labels';
+import { formatDate, formatDateTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
+import { breedLabel, colorLabel } from '../../../lib/horse-options';
+import { useStore } from '../../../store/store';
 import OwnerDialog from '../components/OwnerDialog';
-import {
-  AssignStallDialog,
-  AssignZoneDialog,
-  GroomDialog,
-  ReasonDialog,
-  type PlacementHorse,
-} from '../../stable/components/PlacementDialogs';
+import { AssignStallDialog, AssignZoneDialog, GroomDialog, RemoveStallDialog, type PlacementHorse } from '../../stable/components/PlacementDialogs';
 
 /** Một dòng nhãn – giá trị – thao tác. `tone` chỉ dùng khi cần xử lý (hổ phách) hoặc nghiêm trọng (đỏ). */
 function Row({
@@ -48,58 +50,84 @@ function Row({
   );
 }
 
-export default function OverviewTab({ horse, onChanged }: { horse: HorseDetail; onChanged: () => void }) {
-  const toast = useToast();
-  const action = useAction();
+function ageText(dateOfBirth: string) {
+  const born = new Date(`${dateOfBirth}T00:00:00`);
+  const today = new Date();
+  let age = today.getFullYear() - born.getFullYear();
+  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
+  return `${formatDate(dateOfBirth)} · ${Math.max(0, age)} tuổi`;
+}
+
+export default function OverviewTab({
+  horse,
+  permissions,
+  onChanged,
+}: {
+  horse: HorseDetail;
+  permissions: HorsePermissions;
+  onChanged: () => void;
+}) {
+  const user = useStore((state) => state.currentUser);
   const [zoneOpen, setZoneOpen] = useState(false);
   const [stallOpen, setStallOpen] = useState(false);
   const [groomOpen, setGroomOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [ownerOpen, setOwnerOpen] = useState(false);
-  const [unassign, setUnassign] = useState<'stall' | 'groom' | null>(null);
 
+  const isOwner = user?.role === 'HORSE_OWNER';
+  const isHorseGroom = !!horse.groom && horse.groom.id === user?.id;
+  const canReadCare = permissions.canViewMedicalTab || isHorseGroom;
+  const pedigree = useService(() => getPedigree(horse.id), [horse.id, horse.version]);
+  const care = useService(() => (canReadCare && !horse.isDeleted ? getCareInstructions(horse.id) : Promise.resolve(undefined)), [horse.id, canReadCare]);
+  const grooms = useService(() => (isOwner ? Promise.resolve([]) : listGroomHistory(horse.id)), [horse.id, isOwner, horse.version]);
+
+  const { barn, stall, placementStatus } = horse.location;
   const placementHorse: PlacementHorse = {
     id: horse.id,
     name: horse.name,
-    zoneId: horse.zone?.id,
-    zoneName: horse.zone?.name,
-    stallCode: horse.stall?.code,
+    barnId: barn?.id,
+    barnName: barn?.name,
+    stallId: stall?.id,
+    stallCode: stall?.code,
     groomId: horse.groom?.id,
-    groomName: horse.groom?.name,
-    quarantined: horse.healthStatus === 'QUARANTINED',
+    groomName: horse.groom?.fullName,
+    placementStatus,
+    healthStatus: horse.healthStatus,
   };
 
-  const parentLink = (parent?: HorseDetail['sire']) =>
-    parent ? (
-      parent.id ? (
-        <Link className="text-emerald-700 hover:underline" to={links.horse(parent.id)}>
-          {parent.name}
-        </Link>
-      ) : (
-        parent.name
-      )
-    ) : undefined;
+  const parent = (role: 'SIRE' | 'DAM') => {
+    const node = pedigree.data?.ancestors.find((item) => item.generation === 1 && item.parentRole === role);
+    if (!node) return horse[role === 'SIRE' ? 'sireId' : 'damId'] ? '…' : undefined;
+    return node.canOpen ? (
+      <Link className="text-emerald-700 hover:underline" to={links.horse(node.id)}>
+        {node.name}
+      </Link>
+    ) : (
+      node.name
+    );
+  };
 
   const info = [
-    { label: 'Giới tính', value: sexLabel[horse.sex] },
-    { label: 'Giống', value: horse.breed },
-    { label: 'Màu lông', value: horse.color },
-    { label: 'Ngày sinh', value: horse.birthDate ? `${formatDate(horse.birthDate)}${horse.age !== undefined ? ` · ${horse.age} tuổi` : ''}` : undefined },
-    { label: 'Số chip', value: horse.chipNumber ? <span className="font-mono">{horse.chipNumber}</span> : undefined },
+    { label: 'Giới tính', value: horse.gender ? sexLabel[horse.gender] : undefined },
+    { label: 'Giống', value: breedLabel(horse.breed) },
+    { label: 'Màu lông', value: colorLabel(horse.color) },
+    { label: 'Ngày sinh', value: horse.dateOfBirth ? ageText(horse.dateOfBirth) : undefined },
+    { label: 'Số chip', value: horse.microchipId ? <span className="font-mono">{horse.microchipId}</span> : undefined },
     {
       label: 'Sở trường cự ly',
-      value: horse.distancePreference ? `${distanceLabel[horse.distancePreference]} (${distanceHint[horse.distancePreference]})` : 'Chưa xác định',
+      value: horse.raceAptitude ? `${distanceLabel[horse.raceAptitude]} (${distanceHint[horse.raceAptitude]})` : 'Chưa xác định',
     },
-    { label: 'Cha', value: parentLink(horse.sire) },
-    { label: 'Mẹ', value: parentLink(horse.dam) },
-    { label: 'Ngày tạo hồ sơ', value: formatDate(horse.createdAt) },
+    { label: 'Cha', value: parent('SIRE') },
+    { label: 'Mẹ', value: parent('DAM') },
   ];
 
-  const inClub = horse.placement !== 'NONE';
+  const inClub = placementStatus !== 'NOT_APPLICABLE' && !horse.isDeleted;
   const textButton = (label: ReactNode, onClick: () => void, primary = false) => (
     <Button size="sm" variant={primary ? 'secondary' : 'ghost'} onClick={onClick}>
       {label}
     </Button>
   );
+  const careNote = care.data?.current;
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-12">
@@ -110,167 +138,161 @@ export default function OverviewTab({ horse, onChanged }: { horse: HorseDetail; 
         </Card>
 
         <Card>
-          <SectionTitle>Tình trạng hiện tại</SectionTitle>
-          {horse.canViewTraining && (
-            <Row
-              label="Lớp đang học"
-              tone={horse.activeClassCount ? 'default' : 'muted'}
-              actions={
-                <Link
-                  to={links.horse(horse.id, 'training')}
-                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-                >
-                  Lịch tập và kết quả
+          <SectionTitle
+            action={
+              canReadCare &&
+              !horse.isDeleted && (
+                <Link to={links.horseMedical(horse.id)} className="text-sm font-medium text-emerald-700 hover:underline">
+                  {permissions.canViewMedicalTab ? 'Hồ sơ y tế' : 'Lịch chăm sóc'} →
                 </Link>
-              }
-            >
-              {horse.activeClassCount ? `${horse.activeClassCount} lớp` : 'Chưa học lớp nào'}
-            </Row>
-          )}
-          {horse.canViewMedical ? (
-            <>
-              <Row label="Bệnh án" tone={horse.openCase ? 'waiting' : 'muted'}>
-                {horse.openCase ? (
-                  <Link to={links.case(horse.openCase.id)} className="hover:underline">
-                    Đang điều trị: {horse.openCase.title}
+              )
+            }
+          >
+            Tình trạng hiện tại
+          </SectionTitle>
+          <Row label="Sức khỏe">
+            <HealthPill status={horse.healthStatus} className="text-sm" />
+          </Row>
+          <Row label="Tập và đua">
+            <EligibilityView eligibility={horse.eligibility} lifecycle={horse.lifecycleStatus} />
+          </Row>
+          <Row label="Khóa huấn luyện" tone={horse.activeTrainingLock ? 'danger' : 'muted'}>
+            {horse.activeTrainingLock ? (
+              <>
+                Đang có lệnh khóa của bác sĩ
+                {permissions.canViewMedicalTab && (
+                  <Link to={links.horseMedical(horse.id)} className="ml-2 text-xs font-normal text-gray-500 hover:text-gray-800 hover:underline">
+                    Xem chi tiết
                   </Link>
-                ) : (
-                  'Không có bệnh án đang mở'
                 )}
-              </Row>
-              <Row label="Khóa huấn luyện" tone={horse.activeLock ? 'danger' : 'muted'}>
-                {horse.activeLock ? (
-                  <>
-                    {horse.activeLock.reason}
-                    <span className="block text-xs font-normal text-gray-500">
-                      Từ {formatDate(horse.activeLock.placedAt)}
-                      {horse.activeLock.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(horse.activeLock.expectedLiftDate)}` : ''}
-                    </span>
-                  </>
-                ) : (
-                  'Không có'
-                )}
-              </Row>
-            </>
-          ) : (
-            <Row label="Y tế" tone="muted">
-              Thông tin y tế chi tiết dành cho bác sĩ, huấn luyện viên và quản lý.
+              </>
+            ) : (
+              'Không có'
+            )}
+          </Row>
+          {canReadCare && (
+            <Row label="Bác sĩ dặn" tone={careNote ? 'default' : 'muted'}>
+              {care.loading ? (
+                <Skeleton rows={1} />
+              ) : careNote ? (
+                <>
+                  <span className="flex items-start gap-2 whitespace-pre-line">
+                    <Stethoscope size={14} className="mt-0.5 shrink-0 text-emerald-700" />
+                    {careNote.careInstructions}
+                  </span>
+                  <span className="mt-1 block text-xs font-normal text-gray-500">Từ buổi khám ngày {formatDate(careNote.examDate)}</span>
+                </>
+              ) : (
+                'Chưa có ghi chú chăm sóc từ buổi khám gần nhất'
+              )}
             </Row>
           )}
-          {horse.quarantineHint && (
-            <Row label="Gợi ý" tone="waiting">
-              Ngựa đang cách ly — HT của khu có thể cân nhắc chuyển ngựa sang ô trống để tách đàn.
+          <Row label="Chỉ số mới nhất" tone={horse.latestMeasurements.length ? 'default' : 'muted'}>
+            {horse.latestMeasurements.length ? (
+              <span className="flex flex-wrap gap-x-5 gap-y-1">
+                {horse.latestMeasurements.map((item) => (
+                  <span key={item.type} className={cn(item.isAbnormal && 'text-amber-800')} title={`Đo lúc ${formatDateTime(item.measuredAt)}`}>
+                    <span className="font-normal text-gray-500">{measurementSpec[item.type].name}</span>{' '}
+                    <span className="tabular-nums">{Number(item.value).toLocaleString('vi-VN')}</span>
+                    {measurementSpec[item.type].unit === '/9' ? '/9' : ` ${measurementSpec[item.type].unit}`}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              'Chưa ghi chỉ số nào'
+            )}
+          </Row>
+          {horse.lifecycleReason && (
+            <Row label="Đổi vòng đời gần nhất" tone="muted">
+              {horse.lifecycleChangedAt ? `${formatDate(horse.lifecycleChangedAt)} — ` : ''}
+              {horse.lifecycleReason}
             </Row>
           )}
         </Card>
       </div>
 
-      <Card className="lg:col-span-5 xl:col-span-4">
-        <SectionTitle>Chuồng trại và phụ trách</SectionTitle>
-        {!inClub ? (
-          <p className="text-sm text-gray-500">Ngựa không còn ở câu lạc bộ nên không có chỗ ở.</p>
-        ) : (
-          <>
-            <Row
-              label="Khu chuồng"
-              tone={horse.zone ? 'default' : 'waiting'}
-              actions={horse.canAssignZone && textButton(horse.zone ? 'Đổi khu' : 'Xếp khu', () => setZoneOpen(true), !horse.zone)}
-            >
-              {horse.zone ? (
-                <>
-                  {horse.zone.name}
-                  {horse.zone.headTrainerName && <span className="block text-xs font-normal text-gray-500">HT {horse.zone.headTrainerName}</span>}
-                </>
-              ) : (
-                'Chờ xếp khu'
-              )}
-            </Row>
-            <Row
-              label="Ô chuồng"
-              tone={horse.stall ? 'default' : horse.zone ? 'waiting' : 'muted'}
-              actions={
-                horse.canAssignStall && (
-                  <>
-                    {textButton(horse.stall ? 'Đổi ô' : 'Xếp ô', () => setStallOpen(true), !horse.stall)}
-                    {horse.stall && textButton('Gỡ', () => setUnassign('stall'))}
-                  </>
-                )
-              }
-            >
-              {horse.stall ? <span className="font-mono">{horse.stall.code}</span> : horse.zone ? 'Chờ xếp ô' : 'Chưa có khu'}
-            </Row>
-            <Row
-              label="Groom"
-              tone={horse.groom ? 'default' : horse.stall ? 'waiting' : 'muted'}
-              actions={
-                horse.canAssignGroom &&
-                (horse.groom || horse.stall) && (
-                  <>
-                    {textButton(horse.groom ? 'Đổi' : 'Phân công', () => setGroomOpen(true), !horse.groom)}
-                    {horse.groom && textButton('Gỡ', () => setUnassign('groom'))}
-                  </>
-                )
-              }
-            >
-              {horse.groom ? `${horse.groom.name}${horse.groom.active ? '' : ' (tài khoản bị khóa)'}` : horse.stall ? 'Chờ phân công Groom' : 'Phân công khi xếp ô'}
-            </Row>
-          </>
-        )}
-        <Row
-          label="Chủ sở hữu"
-          tone={horse.owner ? 'default' : 'muted'}
-          actions={horse.canAssignOwner && textButton(horse.owner ? 'Đổi chủ' : 'Gán chủ', () => setOwnerOpen(true))}
-        >
-          {horse.owner ? (
-            <>
-              {horse.owner.name}
-              {!horse.owner.active && <span className="block text-xs font-normal text-amber-700">Tài khoản đang bị khóa — vẫn giữ quyền sở hữu</span>}
-              {horse.owner.active && !horse.owner.isOwnerRole && (
-                <span className="block text-xs font-normal text-amber-700">Tài khoản không còn vai trò Chủ ngựa</span>
-              )}
-              {horse.lifecycleStatus === 'TRANSFERRED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm chuyển nhượng</span>}
-            </>
+      <div className="space-y-5 lg:col-span-5 xl:col-span-4">
+        <Card>
+          <SectionTitle>Chuồng trại và phụ trách</SectionTitle>
+          {!inClub ? (
+            <p className="text-sm text-gray-500">
+              {horse.isDeleted ? 'Hồ sơ đã xóa nên không có chỗ ở.' : 'Ngựa không còn ở câu lạc bộ nên không có chỗ ở.'}
+            </p>
           ) : (
-            'Chưa có chủ sở hữu'
+            <>
+              <Row
+                label="Khu chuồng"
+                tone={barn ? 'default' : 'waiting'}
+                actions={permissions.canAssignBarn && textButton(barn ? 'Đổi khu' : 'Xếp khu', () => setZoneOpen(true), !barn)}
+              >
+                {barn ? barn.name : placementStatusLabel.PENDING_BARN}
+              </Row>
+              <Row
+                label="Ô chuồng"
+                tone={stall ? 'default' : barn ? 'waiting' : 'muted'}
+                actions={
+                  permissions.canAssignStallAndGroom && (
+                    <>
+                      {textButton(stall ? 'Chuyển ô' : 'Xếp ô', () => setStallOpen(true), !stall)}
+                      {stall && textButton('Gỡ', () => setRemoveOpen(true))}
+                    </>
+                  )
+                }
+              >
+                {stall ? <span className="font-mono">{stall.code}</span> : barn ? placementStatusLabel.PENDING_STALL : 'Chưa có khu'}
+              </Row>
+              <Row
+                label="Groom"
+                tone={horse.groom ? 'default' : stall ? 'waiting' : 'muted'}
+                actions={permissions.canAssignStallAndGroom && horse.groom && textButton('Đổi', () => setGroomOpen(true))}
+              >
+                {horse.groom ? horse.groom.fullName : stall ? 'Chưa có Groom' : 'Phân công khi xếp ô'}
+              </Row>
+            </>
           )}
-        </Row>
-        {inClub && !horse.zone && !horse.canAssignZone && (
-          <p className="mt-3 text-xs text-gray-500">Ngựa chưa xếp khu thì chỉ Quản lý câu lạc bộ xử lý.</p>
+          <Row
+            label="Chủ sở hữu"
+            tone={horse.owner ? 'default' : 'muted'}
+            actions={permissions.canEditProfile && textButton(horse.owner ? 'Đổi chủ' : 'Gán chủ', () => setOwnerOpen(true))}
+          >
+            {horse.owner ? (
+              <>
+                {horse.owner.fullName}
+                {horse.lifecycleStatus === 'TRANSFERRED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm chuyển nhượng</span>}
+              </>
+            ) : (
+              'Chưa có chủ sở hữu'
+            )}
+          </Row>
+          {inClub && !barn && !permissions.canAssignBarn && <p className="mt-3 text-xs text-gray-500">Ngựa chưa xếp khu thì chỉ Quản lý câu lạc bộ xử lý.</p>}
+        </Card>
+
+        {!isOwner && (grooms.data?.length ?? 0) > 0 && (
+          <Card variant="flat">
+            <SectionTitle>Lịch sử phân công Groom</SectionTitle>
+            <ul className="space-y-2">
+              {(grooms.data ?? []).map((item) => (
+                <li key={item.id} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className={cn('truncate', item.endAt ? 'text-gray-500' : 'font-medium text-gray-900')}>{item.groom?.fullName ?? 'Groom'}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-gray-500">
+                    {formatDate(item.startAt)} – {item.endAt ? formatDate(item.endAt) : 'nay'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
         )}
-      </Card>
+      </div>
 
       <AssignZoneDialog horse={zoneOpen ? placementHorse : null} onClose={() => setZoneOpen(false)} onDone={onChanged} />
       <AssignStallDialog horse={stallOpen ? placementHorse : null} onClose={() => setStallOpen(false)} onDone={onChanged} />
       <GroomDialog horse={groomOpen ? placementHorse : null} onClose={() => setGroomOpen(false)} onDone={onChanged} />
+      <RemoveStallDialog horse={removeOpen ? placementHorse : null} onClose={() => setRemoveOpen(false)} onDone={onChanged} />
       <OwnerDialog
         open={ownerOpen}
-        horse={{ id: horse.id, name: horse.name }}
-        currentOwnerId={horse.owner?.id}
+        horse={{ id: horse.id, name: horse.name, version: horse.version, ownerId: horse.ownerId }}
         onClose={() => setOwnerOpen(false)}
         onDone={onChanged}
-      />
-      <ReasonDialog
-        open={unassign !== null}
-        title={unassign === 'stall' ? `Gỡ ${horse.name} khỏi ô ${horse.stall?.code ?? ''}` : `Gỡ Groom của ${horse.name}`}
-        message={
-          unassign === 'stall'
-            ? 'Ngựa về danh sách "Chờ xếp ô" của khu, ô trở về trống. Groom được giữ nguyên.'
-            : 'Ngựa về danh sách "Chờ phân công Groom". Groom hiện tại nhận thông báo kết thúc phân công.'
-        }
-        confirmLabel={unassign === 'stall' ? 'Gỡ khỏi ô' : 'Gỡ Groom'}
-        error={action.error}
-        onClose={() => {
-          setUnassign(null);
-          action.clearError();
-        }}
-        onSubmit={async (reason) => {
-          const done = await action.run(() => (unassign === 'stall' ? unassignStall(horse.id, reason) : unassignGroom(horse.id, reason)));
-          if (done) {
-            toast.push(unassign === 'stall' ? 'Đã gỡ ngựa khỏi ô' : 'Đã gỡ Groom', 'success');
-            onChanged();
-          }
-          return !!done;
-        }}
       />
     </div>
   );

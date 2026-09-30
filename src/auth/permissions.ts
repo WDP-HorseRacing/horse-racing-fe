@@ -36,11 +36,11 @@ export const CAPABILITIES: Capability[] = [
   { key: 'groom.assign', code: 'F1.7', group: 'Hồ sơ ngựa', feature: 'Phân công Groom', roles: { HEAD_TRAINER: Z } },
   { key: 'horse.lifecycle', code: 'F1.8', group: 'Hồ sơ ngựa', feature: 'Đổi trạng thái vòng đời', roles: { CLUB_MANAGER: A } },
   { key: 'horse.delete', code: 'F1.8', group: 'Hồ sơ ngựa', feature: 'Xóa và khôi phục hồ sơ', roles: { CLUB_MANAGER: A } },
+  { key: 'facility.view', code: 'F1.7', group: 'Hồ sơ ngựa', feature: 'Xem khu chuồng và ô chuồng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
+  { key: 'zone.manage', code: 'F1.6', group: 'Hồ sơ ngựa', feature: 'Quản lý danh mục khu chuồng, gán HT phụ trách', roles: { CLUB_MANAGER: A } },
+  { key: 'stall.manage', code: 'F1.7', group: 'Hồ sơ ngựa', feature: 'Quản lý ô chuồng và bảo trì', roles: { CLUB_MANAGER: A } },
 
   // ===== Flow 2 — lập và thực hiện giáo án huấn luyện =====
-  { key: 'facility.view', code: 'F2.1', group: 'Huấn luyện', feature: 'Xem khu chuồng và ô chuồng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
-  { key: 'zone.manage', code: 'F2.1', group: 'Huấn luyện', feature: 'Quản lý danh mục khu chuồng', roles: { CLUB_MANAGER: A } },
-  { key: 'stall.manage', code: 'F2.1', group: 'Huấn luyện', feature: 'Quản lý ô chuồng và bảo trì', roles: { CLUB_MANAGER: A } },
   { key: 'subject.view', code: 'F2.2', group: 'Huấn luyện', feature: 'Xem môn học', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
   { key: 'subject.manage', code: 'F2.2', group: 'Huấn luyện', feature: 'Thêm, sửa, xóa môn học', roles: { HEAD_TRAINER: A } },
   { key: 'program.view', code: 'F2.3', group: 'Huấn luyện', feature: 'Xem giáo án', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
@@ -60,23 +60,28 @@ export const CAPABILITIES: Capability[] = [
 
   // ===== Flow 3 — y tế và xử lý chấn thương =====
   { key: 'medical.board', code: 'F3.1', group: 'Y tế', feature: 'Xem bảng điều khiển y tế', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
-  { key: 'exam.cycle.set', code: 'F3.2', group: 'Y tế', feature: 'Đặt chu kỳ khám định kỳ chung', roles: { CLUB_MANAGER: A } },
-  { key: 'exam.record', code: 'F3.3', group: 'Y tế', feature: 'Ghi buổi khám định kỳ và buổi khám trong bệnh án', roles: { VETERINARIAN: A } },
-  { key: 'examRequest.view', code: 'F3.4', group: 'Y tế', feature: 'Xem yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G } },
+  { key: 'checkup.view', code: 'F3.2', group: 'Y tế', feature: 'Xem lịch khám định kỳ (chu kỳ cố định 30 ngày)', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
+  { key: 'checkup.appointment', code: 'F3.2', group: 'Y tế', feature: 'Đặt và dời ngày hẹn khám định kỳ', roles: { VETERINARIAN: A } },
+  { key: 'exam.record', code: 'F3.3', group: 'Y tế', feature: 'Ghi buổi khám (định kỳ, theo yêu cầu, tái khám)', roles: { VETERINARIAN: A } },
+  { key: 'examRequest.view', code: 'F3.4', group: 'Y tế', feature: 'Xem hàng đợi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G } },
   { key: 'examRequest.create', code: 'F3.4', group: 'Y tế', feature: 'Gửi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
-  { key: 'examRequest.dismiss', code: 'F3.4', group: 'Y tế', feature: 'Bỏ qua yêu cầu khám', roles: { VETERINARIAN: A } },
+  { key: 'examRequest.dismiss', code: 'F3.4', group: 'Y tế', feature: 'Đổi mức khẩn, bỏ qua yêu cầu khám', roles: { VETERINARIAN: A } },
   { key: 'case.open', code: 'F3.5', group: 'Y tế', feature: 'Mở bệnh án', roles: { VETERINARIAN: A } },
+  { key: 'exam.void', code: 'F3.6', group: 'Y tế', feature: 'Hủy buổi khám ghi sai và ghi buổi thay thế', roles: { VETERINARIAN: A } },
   { key: 'health.status.edit', code: 'F3.7', group: 'Y tế', feature: 'Cập nhật trạng thái sức khỏe', roles: { VETERINARIAN: A } },
   { key: 'lock.view', code: 'F3.8', group: 'Y tế', feature: 'Xem khóa huấn luyện', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, HORSE_OWNER: O } },
   { key: 'lock.manage', code: 'F3.8', group: 'Y tế', feature: 'Đặt và gỡ khóa huấn luyện', roles: { VETERINARIAN: A } },
-  { key: 'case.close', code: 'F3.9', group: 'Y tế', feature: 'Đóng bệnh án và chốt chi phí', roles: { VETERINARIAN: A } },
-  { key: 'medical.view', code: 'F3.10', group: 'Y tế', feature: 'Xem bệnh án và báo cáo y tế', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, HORSE_OWNER: O } },
+  { key: 'case.close', code: 'F3.9', group: 'Y tế', feature: 'Đóng bệnh án, chốt và điều chỉnh chi phí', roles: { VETERINARIAN: A } },
+  { key: 'medical.view', code: 'F3.10', group: 'Y tế', feature: 'Xem bệnh án, buổi khám, chấn thương, lịch sử sức khỏe', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, HORSE_OWNER: O } },
   { key: 'medical.cost.view', code: 'F3.10', group: 'Y tế', feature: 'Xem chi phí y tế', roles: { CLUB_MANAGER: A, VETERINARIAN: A, HORSE_OWNER: O } },
+  { key: 'medical.cost.report', code: 'F3.10', group: 'Y tế', feature: 'Báo cáo chi phí y tế theo khoảng ngày', roles: { CLUB_MANAGER: A } },
+  { key: 'careInstructions.view', code: 'F3.10', group: 'Y tế', feature: 'Xem ghi chú chăm sóc của bác sĩ', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
+  { key: 'care.view', code: 'F3.11', group: 'Y tế', feature: 'Xem lịch tiêm phòng, tẩy giun, kiểm tra móng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
+  { key: 'care.manage', code: 'F3.11', group: 'Y tế', feature: 'Tạo, dời, hủy lịch chăm sóc', roles: { VETERINARIAN: A } },
+  { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc được giao', roles: { VETERINARIAN: A, GROOM: G } },
 
   // ===== Quản trị =====
-  { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự và phân quyền', roles: { CLUB_MANAGER: A } },
-  { key: 'admin.audit', code: 'QT', group: 'Quản trị', feature: 'Xem nhật ký thao tác', roles: { CLUB_MANAGER: A } },
-  { key: 'admin.system', code: 'QT', group: 'Quản trị', feature: 'Công cụ hệ thống', roles: { CLUB_MANAGER: A } },
+  { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự: tạo tài khoản, đổi vai trò, khóa tài khoản', roles: { CLUB_MANAGER: A } },
 ];
 
 const byKey = new Map(CAPABILITIES.map((capability) => [capability.key, capability]));

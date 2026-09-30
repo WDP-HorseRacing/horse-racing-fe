@@ -1,438 +1,242 @@
-// Các hộp thoại ngắn của Flow 3: đổi sức khỏe, đặt/gỡ khóa, gửi/bỏ qua yêu cầu khám,
-// đóng bệnh án, ghi chú đính chính.
-import { useState } from 'react';
-import { Lock, Unlock } from 'lucide-react';
-import { useAction, useService } from '../../../hooks/useService';
+// Các hộp thoại ngắn của Flow 3: gửi / đổi mức / bỏ qua yêu cầu khám, đổi sức khỏe,
+// đặt / gỡ khóa huấn luyện, hủy buổi khám, điều chỉnh chi phí, hẹn khám định kỳ. Đóng bệnh án là trang riêng (CaseClose).
+// Lỗi hiển thị nguyên văn câu của backend.
+import { useState, type ReactNode } from 'react';
+import { CheckCircle2, Lock, RotateCcw, Unlock } from 'lucide-react';
+import { useAction } from '../../../hooks/useService';
 import {
-  addExamCorrection,
+  adjustCaseCost,
   changeHealthStatus,
-  closeCase,
+  changeRequestUrgency,
   createExamRequest,
   dismissExamRequest,
-  liftTrainingLock,
-  listMedicalHorseOptions,
-  placeTrainingLock,
-} from '../../../services/medical.service';
-import {
-  Button,
-  Dot,
-  ErrorBox,
-  Field,
-  Input,
-  Modal,
-  Notice,
-  Select,
-  Skeleton,
-  Textarea,
-  cn,
-  useToast,
-} from '../../../components/ui';
-import { HealthPill, LockPill } from '../../../components/ui/status';
+  placeLock,
+  releaseLock,
+  setCheckupAppointment,
+  voidRecord,
+} from '../../../api/medical';
+import type { CheckupItem, ExamRequest, HealthStatus, MedicalCase, MedicalRecord, TrainingLock } from '../../../api/types';
+import { Button, Dot, ErrorBox, Field, Input, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { HealthPill, UrgentPill } from '../../../components/ui/status';
 import { healthLabel } from '../../../lib/labels';
-import { formatDate, formatMoney, toDateKey } from '../../../lib/format';
+import { visitKindLabel } from '../../../lib/api-labels';
+import { formatDate, formatDateTime, formatMoney } from '../../../lib/format';
 import { now } from '../../../lib/clock';
-import type { ExamUrgency, HealthStatus } from '../../../types/domain';
-import { HealthPicker, RequestLines } from './parts';
+import { horsePlace, useMedicalHorses, useRequestScope } from './horses';
+import type { People } from './people';
+import { HealthPicker, RequestMeta, RequestText } from './parts';
+import { MAX_COST, dateToIso, formatMoneyInput, localToIso, parseMoney, toLocalInput, todayKey } from './utils';
 
-function useFieldError() {
-  const action = useAction();
-  const fieldError = (field: string) => (action.field === field ? action.error : undefined);
-  return { action, fieldError };
-}
-
-/* ===== Đổi trạng thái sức khỏe trực tiếp (F3.7) ===== */
-
-export function HealthChangeModal({
-  horseId: fixedHorseId,
-  onClose,
-  onDone,
-}: {
-  horseId?: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const toast = useToast();
-  const options = useService(() => listMedicalHorseOptions(), []);
-  const { action, fieldError } = useFieldError();
-  const [horseId, setHorseId] = useState(fixedHorseId ?? '');
-  const [to, setTo] = useState<HealthStatus | ''>('');
-  const [reason, setReason] = useState('');
-  const horse = options.data?.find((item) => item.id === horseId);
-
-  const submit = () =>
-    action.run(
-      () => changeHealthStatus({ horseId, to: to as HealthStatus, reason }),
-      (result) => {
-        toast.push(`${horse?.name ?? 'Ngựa'}: đã chuyển sang ${healthLabel[to as HealthStatus]}`, 'success');
-        if (result.lockStillActive) {
-          toast.push('Ngựa vẫn còn khóa huấn luyện — đổi sức khỏe không tự gỡ khóa.', 'info');
-        }
-        onDone();
-      },
-    );
-
+function Counter({ value, max }: { value: string; max: number }) {
   return (
-    <Modal
-      open
-      onClose={onClose}
-      width="max-w-xl"
-      title="Đổi trạng thái sức khỏe"
-      description="Bác sĩ đổi trực tiếp, không cần buổi khám. Lý do được ghi vào nhật ký đổi trạng thái."
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !horseId || !to || to === horse?.healthStatus}>
-            {action.pending ? 'Đang lưu…' : 'Đổi trạng thái'}
-          </Button>
-        </>
-      }
-    >
-      {options.loading ? (
-        <Skeleton rows={3} />
-      ) : (
-        <div className="space-y-4">
-          {!fixedHorseId ? (
-            <Field label="Ngựa" required error={fieldError('horseId')}>
-              <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
-                <option value="">Chọn ngựa…</option>
-                {options.data?.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {healthLabel[item.healthStatus]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          ) : (
-            horse && (
-              <p className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="font-semibold text-gray-900">{horse.name}</span> hiện đang
-                <HealthPill status={horse.healthStatus} />
-              </p>
-            )
-          )}
-          {horse && (
-            <>
-              <HealthPicker value={to} onChange={setTo} current={horse.healthStatus} error={fieldError('to')} />
-              <Field label="Lý do" required error={fieldError('reason')}>
-                <Textarea
-                  rows={3}
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Ví dụ: Nghi cúm ngựa, cách ly theo dõi 14 ngày"
-                />
-              </Field>
-              {to === 'ELIGIBLE' && horse.activeLock && (
-                <Notice tone="warning" icon={<Lock size={15} />}>
-                  Ngựa còn khóa huấn luyện "{horse.activeLock.reason}". Chuyển Đủ điều kiện không tự gỡ khóa — ngựa vẫn chưa được tập cho tới khi gỡ khóa.
-                </Notice>
-              )}
-              {(to === 'INJURED' || to === 'QUARANTINED') && to !== horse.healthStatus && (
-                <Notice tone="info">
-                  Ngựa mất quyền tập và đua; HT khu và quản lý nhận thông báo mức Trung bình. Ngựa không bị rút khỏi lớp — sẽ được đánh dấu vắng khi buổi học bắt đầu.
-                  {to === 'QUARANTINED' && ' Không có "ô cách ly": HT được gợi ý chuyển ngựa sang ô trống nếu cần tách đàn.'}
-                </Notice>
-              )}
-            </>
-          )}
-          {action.error && !['horseId', 'to', 'reason'].includes(action.field ?? '') && <ErrorBox message={action.error} />}
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-/* ===== Đặt khóa huấn luyện (F3.8) ===== */
-
-export function PlaceLockModal({
-  horseId: fixedHorseId,
-  caseId: suggestedCaseId,
-  onClose,
-  onDone,
-}: {
-  horseId?: string;
-  caseId?: string;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const toast = useToast();
-  const options = useService(() => listMedicalHorseOptions(), []);
-  const { action, fieldError } = useFieldError();
-  const [horseId, setHorseId] = useState(fixedHorseId ?? '');
-  const [reason, setReason] = useState('');
-  const [date, setDate] = useState('');
-  const [linkCase, setLinkCase] = useState(true);
-  const horse = options.data?.find((item) => item.id === horseId);
-  const candidates = options.data?.filter((item) => !item.activeLock) ?? [];
-  const openCase = horse?.openCase;
-  const caseId = openCase && linkCase ? openCase.id : undefined;
-
-  const submit = () =>
-    action.run(
-      () => placeTrainingLock({ horseId, reason, expectedLiftDate: date || undefined, caseId }),
-      () => {
-        toast.push(`Đã đặt khóa huấn luyện cho ${horse?.name ?? 'ngựa'}`, 'success');
-        onDone();
-      },
-    );
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Đặt khóa huấn luyện"
-      description="Khóa là lệnh riêng của bác sĩ, độc lập với trạng thái sức khỏe. Mỗi ngựa tối đa một khóa hiệu lực."
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button variant="danger" onClick={submit} disabled={action.pending || !horseId || !!horse?.activeLock}>
-            <Lock size={15} />
-            {action.pending ? 'Đang lưu…' : 'Đặt khóa'}
-          </Button>
-        </>
-      }
-    >
-      {options.loading ? (
-        <Skeleton rows={3} />
-      ) : (
-        <div className="space-y-4">
-          {fixedHorseId ? (
-            horse && (
-              <p className="text-sm text-gray-600">
-                Ngựa: <span className="font-semibold text-gray-900">{horse.name}</span>
-              </p>
-            )
-          ) : (
-            <Field label="Ngựa" required error={fieldError('horseId')} hint="Chỉ hiện ngựa chưa có khóa hiệu lực">
-              <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
-                <option value="">Chọn ngựa…</option>
-                {candidates.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {healthLabel[item.healthStatus]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          {horse?.activeLock && <LockPill reason={horse.activeLock.reason} />}
-          <Field label="Lý do" required error={fieldError('reason')}>
-            <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Viêm gân — cấm vận động mạnh" />
-          </Field>
-          <Field
-            label="Ngày dự kiến gỡ"
-            error={fieldError('expectedLiftDate')}
-            hint="Không bắt buộc. Tới ngày này hệ thống KHÔNG tự gỡ — chỉ nhắc chờ bác sĩ xác nhận."
-          >
-            <Input type="date" value={date} min={toDateKey(now())} onChange={(event) => setDate(event.target.value)} />
-          </Field>
-          {openCase && (
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white p-3 text-sm ring-1 ring-gray-200">
-              <input
-                type="checkbox"
-                checked={linkCase}
-                onChange={(event) => setLinkCase(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-emerald-600"
-              />
-              <span>
-                Gắn với bệnh án đang mở <span className="font-semibold">"{openCase.title}"</span>
-                {suggestedCaseId && suggestedCaseId !== openCase.id && ' (bệnh án khác bệnh án đang xem)'}
-                <span className="block text-xs text-gray-500">Khi đóng bệnh án, bác sĩ phải chọn gỡ hoặc giữ khóa này.</span>
-              </span>
-            </label>
-          )}
-          <p className="text-xs text-gray-500">
-            HT khu và quản lý nhận thông báo mức Trung bình. Ngựa đang tập trong buổi đang diễn ra sẽ được dừng; các buổi sau ngựa được đánh dấu vắng.
-          </p>
-          {action.error && !['horseId', 'reason', 'expectedLiftDate'].includes(action.field ?? '') && <ErrorBox message={action.error} />}
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-/* ===== Gỡ khóa huấn luyện (F3.8) ===== */
-
-export function LiftLockModal({
-  lock,
-  onClose,
-  onDone,
-}: {
-  lock: { id: string; horseName: string; reason: string; placedAt: string };
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const toast = useToast();
-  const { action, fieldError } = useFieldError();
-  const [reason, setReason] = useState('');
-  const submit = () =>
-    action.run(
-      () => liftTrainingLock(lock.id, reason),
-      () => {
-        toast.push(`Đã gỡ khóa huấn luyện cho ${lock.horseName}`, 'success');
-        onDone();
-      },
-    );
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Gỡ khóa huấn luyện — ${lock.horseName}`}
-      description={`Khóa từ ${formatDate(lock.placedAt)}: ${lock.reason}`}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending}>
-            <Unlock size={15} />
-            {action.pending ? 'Đang lưu…' : 'Gỡ khóa'}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <Field label="Lý do gỡ" required error={fieldError('reason')}>
-          <Textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ" />
-        </Field>
-        <p className="text-xs text-gray-500">
-          Gỡ khóa không đổi trạng thái sức khỏe. Ngựa chỉ được tập khi sức khỏe là Đủ điều kiện hoặc Cần theo dõi.
-        </p>
-        {action.error && action.field !== 'reason' && <ErrorBox message={action.error} />}
-      </div>
-    </Modal>
+    <span className={cn('tabular-nums', value.length > max && 'font-medium text-red-600')}>
+      {value.length}/{max}
+    </span>
   );
 }
 
 /* ===== Gửi yêu cầu khám (F3.4) ===== */
 
 export function RequestForm({
-  horseId: fixedHorseId,
+  horse,
   onDone,
   onCancel,
-  submitLabel = 'Gửi yêu cầu',
 }: {
-  horseId?: string;
-  onDone: () => void;
+  horse?: { id: string; name: string };
+  onDone?: (request: ExamRequest) => void;
   onCancel?: () => void;
-  submitLabel?: string;
 }) {
   const toast = useToast();
-  const options = useService(() => listMedicalHorseOptions(), []);
-  const { action, fieldError } = useFieldError();
-  const [horseId, setHorseId] = useState(fixedHorseId ?? '');
-  const [urgency, setUrgency] = useState<ExamUrgency>('NORMAL');
+  const action = useAction();
+  const scope = useRequestScope();
+  const options = useMedicalHorses(scope, !horse);
+  const [horseId, setHorseId] = useState(horse?.id ?? '');
+  const [urgent, setUrgent] = useState(false);
   const [description, setDescription] = useState('');
-  const horse = options.data?.find((item) => item.id === horseId);
+  const picked = horse ?? (horseId ? options.byId.get(horseId) : undefined);
+  const text = description.trim();
 
   const submit = () =>
     action.run(
-      () => createExamRequest({ horseId, urgency, description }),
+      () => createExamRequest(horseId, text, urgent),
       (result) => {
-        toast.push(
-          result.merged
-            ? `Đã bổ sung vào yêu cầu đang chờ của ${horse?.name ?? 'ngựa'}`
-            : `Đã gửi yêu cầu khám cho ${horse?.name ?? 'ngựa'}`,
-          'success',
-        );
+        toast.push(`Đã gửi yêu cầu khám cho ${picked?.name ?? result.horseName}`, 'success');
         setDescription('');
-        setUrgency('NORMAL');
-        if (!fixedHorseId) setHorseId('');
-        onDone();
+        setUrgent(false);
+        if (!horse) setHorseId('');
+        onDone?.(result);
       },
     );
 
-  if (options.loading) return <Skeleton rows={3} />;
-  if (!options.data?.length) {
-    return <Notice tone="info">Không có ngựa nào trong phạm vi của bạn để gửi yêu cầu khám.</Notice>;
+  if (!horse && options.loading && !options.data) return <Skeleton rows={3} />;
+  if (!horse && options.error) return <ErrorBox message={options.error} />;
+  if (!horse && options.data?.length === 0) {
+    return (
+      <Notice tone="info">
+        {scope === 'myHorses'
+          ? 'Bạn chưa được phân công chăm sóc ngựa nào, nên chưa gửi được yêu cầu khám.'
+          : scope === 'myBarns'
+            ? 'Khu bạn phụ trách chưa có ngựa nào.'
+            : 'Không có ngựa nào đang ở câu lạc bộ.'}
+      </Notice>
+    );
   }
 
   return (
     <div className="space-y-4">
-      {!fixedHorseId && (
-        <Field label="Ngựa" required error={fieldError('horseId')}>
+      {!horse && (
+        <Field
+          label="Ngựa"
+          required
+          hint={scope === 'myBarns' ? 'Ngựa thuộc khu bạn phụ trách' : scope === 'myHorses' ? 'Ngựa bạn đang được phân công chăm sóc' : undefined}
+        >
           <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
             <option value="">Chọn ngựa…</option>
-            {options.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-                {item.stallCode ? ` · ô ${item.stallCode}` : item.zoneName ? ` · ${item.zoneName}` : ''}
-                {item.pendingRequestCount ? ` · đang có ${item.pendingRequestCount} yêu cầu chờ` : ''}
-              </option>
-            ))}
+            {options.data?.map((item) => {
+              const place = horsePlace(item);
+              return (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                  {place ? ` · ${place}` : ''}
+                  {item.healthStatus !== 'ELIGIBLE' ? ` · ${healthLabel[item.healthStatus]}` : ''}
+                </option>
+              );
+            })}
           </Select>
         </Field>
       )}
       <div>
         <span className="mb-1.5 block text-sm font-medium text-gray-600">Mức độ</span>
         <div className="grid grid-cols-2 gap-2">
-          {(['NORMAL', 'URGENT'] as ExamUrgency[]).map((value) => (
+          {[false, true].map((value) => (
             <button
-              key={value}
+              key={String(value)}
               type="button"
-              onClick={() => setUrgency(value)}
-              aria-pressed={urgency === value}
+              onClick={() => setUrgent(value)}
+              aria-pressed={urgent === value}
               className={cn(
                 'flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 transition',
-                urgency === value ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300',
+                urgent === value ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300',
               )}
             >
-              <Dot tone={urgency === value && value === 'URGENT' ? 'danger' : 'neutral'} />
-              {value === 'URGENT' ? 'Khẩn' : 'Bình thường'}
+              <Dot tone={urgent === value && value ? 'danger' : 'neutral'} />
+              {value ? 'Khẩn' : 'Bình thường'}
             </button>
           ))}
         </div>
         <p className="mt-1.5 text-xs text-gray-500">
-          {urgency === 'URGENT' ? 'Bác sĩ nhận thông báo mức Khẩn ngay lập tức.' : 'Bác sĩ nhận thông báo và xử lý theo thứ tự.'}
+          {urgent ? 'Mọi bác sĩ nhận thông báo Khẩn ngay khi gửi.' : 'Yêu cầu vào hàng đợi, bác sĩ xử lý theo thứ tự.'}
         </p>
       </div>
-      <Field label="Mô tả tình trạng" required error={fieldError('description')}>
+      <Field label="Mô tả tình trạng" required hint={<Counter value={text} max={2000} />}>
         <Textarea
           rows={4}
           value={description}
+          maxLength={2000}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Ví dụ: Ngựa đi hơi khập khiễng chân trước trái sau buổi tập, cổ chân hơi nóng"
         />
       </Field>
-      {horse && horse.pendingRequestCount > 0 && (
-        <p className="text-xs text-gray-500">
-          {horse.name} đã có yêu cầu đang chờ. Yêu cầu cùng nguồn sẽ được gộp thêm một dòng vào yêu cầu cũ.
-        </p>
-      )}
-      {action.error && !['horseId', 'description'].includes(action.field ?? '') && <ErrorBox message={action.error} />}
+      {action.error && <ErrorBox message={action.error} />}
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
             Hủy
           </Button>
         )}
-        <Button variant={urgency === 'URGENT' ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || !horseId}>
-          {action.pending ? 'Đang gửi…' : submitLabel}
+        <Button variant={urgent ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || !horseId || !text || text.length > 2000}>
+          {action.pending ? 'Đang gửi…' : 'Gửi yêu cầu'}
         </Button>
       </div>
     </div>
   );
 }
 
-/* ===== Bỏ qua yêu cầu khám (F3.4) ===== */
-
-export function DismissRequestModal({
-  request,
+export function CreateRequestModal({
+  open,
   onClose,
+  horse,
   onDone,
 }: {
-  request: { id: string; horseName: string; lines: string[] };
+  open: boolean;
   onClose: () => void;
-  onDone: () => void;
+  horse?: { id: string; name: string };
+  onDone?: () => void;
 }) {
+  if (!open) return null;
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={horse ? `Gửi yêu cầu khám — ${horse.name}` : 'Gửi yêu cầu khám'}
+      description="Báo bác sĩ khi ngựa có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay."
+    >
+      <RequestForm
+        horse={horse}
+        onCancel={onClose}
+        onDone={() => {
+          onDone?.();
+          onClose();
+        }}
+      />
+    </Modal>
+  );
+}
+
+/* ===== Đổi mức khẩn (F3.4, VET) ===== */
+
+export function UrgencyModal({ request, onClose, onDone }: { request: ExamRequest; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const { action, fieldError } = useFieldError();
+  const action = useAction();
+  const [reason, setReason] = useState('');
+  const next = !request.urgent;
+  const submit = () =>
+    action.run(
+      () => changeRequestUrgency(request.id, next, reason.trim()),
+      () => {
+        toast.push(`${request.horseName}: đã chuyển yêu cầu sang ${next ? 'Khẩn' : 'Bình thường'}`, 'success');
+        onDone();
+      },
+    );
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={next ? 'Nâng lên Khẩn' : 'Hạ xuống Bình thường'}
+      description={`Yêu cầu khám của ${request.horseName}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Quay lại
+          </Button>
+          <Button variant={next ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || !reason.trim()}>
+            {action.pending ? 'Đang lưu…' : next ? 'Nâng lên Khẩn' : 'Hạ mức'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-xl bg-gray-50 p-3">
+          <RequestText text={request.description} />
+        </div>
+        <Field label="Lý do" required hint={next ? 'Mọi bác sĩ nhận thông báo Khẩn.' : 'Hạ mức không gửi thông báo.'}>
+          <Textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
+        </Field>
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Bỏ qua yêu cầu khám (F3.4, VET) ===== */
+
+export function DismissRequestModal({ request, onClose, onDone }: { request: ExamRequest; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
   const [reason, setReason] = useState('');
   const submit = () =>
     action.run(
-      () => dismissExamRequest(request.id, reason),
+      () => dismissExamRequest(request.id, reason.trim()),
       () => {
         toast.push(`Đã bỏ qua yêu cầu khám của ${request.horseName}`, 'success');
         onDone();
@@ -448,7 +252,7 @@ export function DismissRequestModal({
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button variant="danger" onClick={submit} disabled={action.pending}>
+          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim()}>
             {action.pending ? 'Đang lưu…' : 'Bỏ qua yêu cầu'}
           </Button>
         </>
@@ -456,65 +260,65 @@ export function DismissRequestModal({
     >
       <div className="space-y-4">
         <div className="rounded-xl bg-gray-50 p-3">
-          <RequestLines lines={request.lines} />
+          <RequestText text={request.description} />
         </div>
-        <Field label="Lý do bỏ qua" required error={fieldError('reason')} hint="Người gửi nhận thông báo kèm lý do này.">
+        <Field label="Lý do bỏ qua" required hint="Yêu cầu chuyển sang Đã bỏ qua, không mở lại được.">
           <Textarea
             rows={3}
+            maxLength={500}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Ví dụ: Đã kiểm tra tại chuồng, chỉ là vết xước bề mặt"
           />
         </Field>
-        {action.error && action.field !== 'reason' && <ErrorBox message={action.error} />}
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-/* ===== Đóng bệnh án và chốt chi phí (F3.9) ===== */
+/* ===== Đổi trạng thái sức khỏe trực tiếp (F3.7, VET) ===== */
 
-export function CloseCaseModal({
-  caseId,
-  title,
-  horseName,
-  lock,
+export function HealthChangeModal({
+  open,
+  onClose,
+  horse,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  horse: { id: string; name: string; healthStatus: HealthStatus };
+  onDone?: () => void;
+}) {
+  if (!open) return null;
+  return <HealthChangeBody horse={horse} onClose={onClose} onDone={onDone} />;
+}
+
+function HealthChangeBody({
+  horse,
   onClose,
   onDone,
 }: {
-  caseId: string;
-  title: string;
-  horseName: string;
-  lock?: { reason: string; expectedLiftDate?: string; linkedToCase: boolean };
+  horse: { id: string; name: string; healthStatus: HealthStatus };
   onClose: () => void;
-  onDone: () => void;
+  onDone?: () => void;
 }) {
   const toast = useToast();
-  const { action, fieldError } = useFieldError();
-  const [cost, setCost] = useState('');
-  const [note, setNote] = useState('');
-  const [decision, setDecision] = useState<'LIFT' | 'KEEP' | ''>('');
-  const [liftReason, setLiftReason] = useState('');
-  const [keepDate, setKeepDate] = useState(lock?.expectedLiftDate ?? '');
-  const costValue = cost.trim() === '' ? NaN : Number(cost.replace(/[.\s]/g, ''));
+  const action = useAction();
+  const [to, setTo] = useState<HealthStatus | ''>('');
+  const [reason, setReason] = useState('');
+  const changed = !!to && to !== horse.healthStatus;
 
   const submit = () =>
     action.run(
-      () =>
-        closeCase(caseId, {
-          cost: costValue,
-          closeNote: note,
-          lockDecision: !lock
-            ? undefined
-            : decision === 'LIFT'
-              ? { action: 'LIFT', reason: liftReason }
-              : decision === 'KEEP'
-                ? { action: 'KEEP', expectedLiftDate: keepDate }
-                : undefined,
-        }),
-      () => {
-        toast.push(`Đã đóng bệnh án "${title}"`, 'success');
-        onDone();
+      () => changeHealthStatus(horse.id, to as HealthStatus, reason.trim()),
+      (result) => {
+        toast.push(
+          result.changed ? `${horse.name}: đã chuyển sang ${healthLabel[result.to]}` : `${horse.name} đã ở trạng thái ${healthLabel[result.to]}`,
+          'success',
+        );
+        onDone?.();
+        onClose();
       },
     );
 
@@ -523,108 +327,134 @@ export function CloseCaseModal({
       open
       onClose={onClose}
       width="max-w-xl"
-      title="Đóng bệnh án"
-      description={`${horseName} · ${title}`}
+      title="Đổi trạng thái sức khỏe"
+      description="Đổi trực tiếp, không cần buổi khám. Lý do được ghi vào lịch sử sức khỏe."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button onClick={submit} disabled={action.pending || Number.isNaN(costValue) || (!!lock && !decision)}>
-            {action.pending ? 'Đang lưu…' : 'Đóng bệnh án'}
+          <Button onClick={submit} disabled={action.pending || !changed || !reason.trim()}>
+            {action.pending ? 'Đang lưu…' : 'Đổi trạng thái'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field
-          label="Chi phí điều trị (đồng)"
-          required
-          error={fieldError('cost')}
-          hint={Number.isFinite(costValue) && costValue >= 0 ? `= ${formatMoney(costValue)}` : 'Nhập một lần khi đóng, không sửa được sau đó'}
-        >
-          <Input inputMode="numeric" value={cost} onChange={(event) => setCost(event.target.value)} placeholder="Ví dụ: 12500000" />
+        <p className="flex items-center gap-2 text-sm text-gray-600">
+          <span className="font-semibold text-gray-900">{horse.name}</span> hiện đang
+          <HealthPill status={horse.healthStatus} />
+        </p>
+        <HealthPicker value={to} onChange={setTo} current={horse.healthStatus} />
+        <Field label="Lý do" required>
+          <Textarea
+            rows={3}
+            maxLength={500}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ví dụ: Nghi cúm ngựa, cách ly theo dõi 14 ngày"
+          />
         </Field>
-        <Field label="Kết luận khi đóng" required error={fieldError('closeNote')}>
-          <Textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Hồi phục hoàn toàn sau 2 tuần giảm tải" />
-        </Field>
-
-        {lock && (
-          <div
-            className={cn(
-              'space-y-3 rounded-xl bg-white p-4 shadow-[inset_3px_0_0_0_#f59e0b] ring-1',
-              fieldError('lockDecision') ? 'ring-red-300' : 'ring-gray-200',
-            )}
-          >
-            <p className="flex items-start gap-2 text-sm text-gray-800">
-              <Lock size={15} className="mt-0.5 shrink-0 text-gray-400" />
-              <span>
-                Ngựa còn khóa huấn luyện{lock.linkedToCase ? ' gắn với bệnh án này' : ''}: <span className="font-semibold">{lock.reason}</span>. Chọn gỡ khóa hoặc giữ khóa kèm ngày dự kiến gỡ.
-              </span>
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {(['LIFT', 'KEEP'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setDecision(value)}
-                  className={cn(
-                    'rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-900 ring-1 transition',
-                    decision === value ? 'bg-white ring-2 ring-gray-900' : 'bg-white ring-gray-200 hover:ring-gray-300',
-                  )}
-                >
-                  {value === 'LIFT' ? 'Gỡ khóa' : 'Giữ khóa'}
-                  <span className="block text-xs font-normal text-gray-500">
-                    {value === 'LIFT' ? 'Ghi "Gỡ khi đóng bệnh án"' : 'Khóa vẫn hiệu lực sau khi đóng'}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {decision === 'LIFT' && (
-              <Field label="Lý do gỡ" required error={fieldError('lockReason')}>
-                <Input value={liftReason} onChange={(event) => setLiftReason(event.target.value)} placeholder="Ví dụ: Đã hồi phục khi đóng bệnh án" />
-              </Field>
-            )}
-            {decision === 'KEEP' && (
-              <Field label="Ngày dự kiến gỡ" required error={fieldError('lockExpectedLiftDate')}>
-                <Input type="date" value={keepDate} min={toDateKey(now())} onChange={(event) => setKeepDate(event.target.value)} />
-              </Field>
-            )}
-          </div>
+        {changed && (to === 'INJURED' || to === 'QUARANTINED') && (
+          <Notice tone="info">
+            Ngựa mất quyền tập và đua. HT khu, quản lý và chủ ngựa nhận thông báo. Ngựa không bị rút khỏi lớp, không tự chuyển ô.
+          </Notice>
         )}
-
-        <Notice tone="warning">
-          Bệnh án đã đóng không mở lại được. Tái phát thì mở bệnh án mới. Chủ ngựa và quản lý nhận thông báo kèm chi phí.
-        </Notice>
-        {action.error && !['cost', 'closeNote', 'lockReason', 'lockExpectedLiftDate'].includes(action.field ?? '') && (
-          <ErrorBox message={action.error} />
-        )}
+        {changed && to === 'UNDER_OBSERVATION' && <p className="text-xs text-gray-500">Ngựa vẫn được tập nhưng không được đua. HT khu nhận thông báo.</p>}
+        {changed && to === 'ELIGIBLE' && <p className="text-xs text-gray-500">Đổi sang Đủ điều kiện không tự gỡ khóa huấn luyện (nếu có).</p>}
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-/* ===== Ghi chú đính chính buổi khám ===== */
+/* ===== Đặt khóa huấn luyện (F3.8, VET) ===== */
 
-export function CorrectionModal({
-  examinationId,
-  examLabel,
+export function PlaceLockModal({
+  horse,
+  onClose,
+  onDone,
+  intro,
+}: {
+  horse: { id: string; name: string };
+  onClose: () => void;
+  onDone: (lock: TrainingLock) => void;
+  /** Dòng mở đầu, ví dụ sau khi vừa mở bệnh án. */
+  intro?: ReactNode;
+}) {
+  const toast = useToast();
+  const action = useAction();
+  const [reason, setReason] = useState('');
+  const [date, setDate] = useState('');
+  const submit = () =>
+    action.run(
+      () => placeLock(horse.id, reason.trim(), dateToIso(date)),
+      (lock) => {
+        toast.push(`Đã đặt khóa huấn luyện cho ${horse.name}`, 'success');
+        onDone(lock);
+      },
+    );
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Đặt khóa huấn luyện — ${horse.name}`}
+      description="Lệnh riêng của bác sĩ, độc lập với sức khỏe. Mỗi ngựa tối đa một khóa hiệu lực."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            {intro ? 'Để sau' : 'Hủy'}
+          </Button>
+          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim()}>
+            <Lock size={15} />
+            {action.pending ? 'Đang lưu…' : 'Đặt khóa'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {intro}
+        <Field label="Lý do" required>
+          <Input
+            value={reason}
+            maxLength={1000}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ví dụ: Viêm gân, cấm vận động mạnh"
+          />
+        </Field>
+        <Field label="Ngày dự kiến gỡ" hint="Không bắt buộc. Tới ngày này hệ thống không tự gỡ khóa.">
+          <Input type="date" value={date} min={todayKey()} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <p className="text-xs text-gray-500">
+          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HT khu và quản lý nhận thông báo. Lượt tập đã xếp không bị hủy.
+        </p>
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Gỡ khóa huấn luyện (F3.8, VET) ===== */
+
+export function ReleaseLockModal({
+  lock,
+  horseName,
   onClose,
   onDone,
 }: {
-  examinationId: string;
-  examLabel: string;
+  lock: TrainingLock;
+  horseName: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const toast = useToast();
-  const { action, fieldError } = useFieldError();
-  const [note, setNote] = useState('');
+  const action = useAction();
+  const [conclusion, setConclusion] = useState('');
   const submit = () =>
     action.run(
-      () => addExamCorrection(examinationId, note),
+      () => releaseLock(lock.id, conclusion.trim()),
       () => {
-        toast.push('Đã thêm ghi chú đính chính', 'success');
+        toast.push(`Đã gỡ khóa huấn luyện cho ${horseName}`, 'success');
         onDone();
       },
     );
@@ -632,26 +462,319 @@ export function CorrectionModal({
     <Modal
       open
       onClose={onClose}
-      title="Thêm ghi chú đính chính"
-      description={examLabel}
+      title={`Gỡ khóa huấn luyện — ${horseName}`}
+      description={`Khóa từ ${formatDate(lock.lockStart)}: ${lock.reason}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button onClick={submit} disabled={action.pending}>
-            {action.pending ? 'Đang lưu…' : 'Thêm ghi chú'}
+          <Button onClick={submit} disabled={action.pending || !conclusion.trim()}>
+            <Unlock size={15} />
+            {action.pending ? 'Đang lưu…' : 'Gỡ khóa'}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
-        <Notice tone="info">Buổi khám đã lưu không sửa, không xóa. Ghi chú đính chính được lưu kèm tên bạn và thời điểm ghi.</Notice>
-        <Field label="Nội dung đính chính" required error={fieldError('note')}>
-          <Textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Bổ sung: siêu âm xác nhận tổn thương độ 1, không rách" />
+        <Field label="Lý do gỡ" required>
+          <Textarea
+            rows={3}
+            maxLength={1000}
+            value={conclusion}
+            onChange={(event) => setConclusion(event.target.value)}
+            placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ"
+          />
         </Field>
-        {action.error && action.field !== 'note' && <ErrorBox message={action.error} />}
+        <p className="text-xs text-gray-500">Gỡ khóa không đổi sức khỏe. HT khu và quản lý nhận thông báo.</p>
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
+  );
+}
+
+/* ===== Hủy buổi khám (F3.6, VET) ===== */
+
+export function VoidVisitModal({
+  record,
+  horseName,
+  caseInfo,
+  onClose,
+  onVoided,
+  onReRecord,
+}: {
+  record: MedicalRecord;
+  horseName: string;
+  /** Bệnh án của buổi khám (nếu có) và số buổi khác chưa hủy trong bệnh án đó. */
+  caseInfo?: { status: MedicalCase['status']; otherActiveVisits: number };
+  onClose: () => void;
+  onVoided: () => void;
+  onReRecord?: (record: MedicalRecord) => void;
+}) {
+  const toast = useToast();
+  const action = useAction();
+  const [reason, setReason] = useState('');
+  const [voided, setVoided] = useState<MedicalRecord | null>(null);
+  const opening = !!record.caseId && record.conclusion === 'ISSUE';
+
+  const consequences = [
+    'Số đo ghi trong buổi này bị gỡ khỏi bảng chỉ số cơ thể.',
+    'Trạng thái sức khỏe không tự quay lại như trước buổi khám.',
+    'Yêu cầu khám đã gắn vẫn giữ trạng thái Đã khám.',
+    'Buổi khám không còn được tính vào hạn khám định kỳ.',
+  ];
+  let blocked: string | undefined;
+  if (opening && caseInfo) {
+    if (caseInfo.status === 'CLOSED') blocked = 'Bệnh án đã đóng nên không hủy được buổi mở bệnh án.';
+    else if (caseInfo.otherActiveVisits > 0) blocked = 'Bệnh án còn buổi khám khác chưa hủy. Hủy các buổi tái khám trước rồi mới hủy buổi mở bệnh án.';
+    else if (caseInfo.status === 'OPEN') consequences.unshift('Đây là buổi mở bệnh án: bệnh án chuyển sang Đã hủy. Khóa huấn luyện đang gắn được tách ra, vẫn hiệu lực.');
+  }
+
+  const submit = () =>
+    action.run(
+      () => voidRecord(record.id, reason.trim()),
+      (result) => {
+        toast.push('Đã hủy buổi khám', 'success');
+        setVoided(result);
+        onVoided();
+      },
+    );
+
+  if (voided) {
+    return (
+      <Modal
+        open
+        onClose={onClose}
+        title="Đã hủy buổi khám"
+        footer={
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Đóng
+            </Button>
+            {onReRecord && (
+              <Button onClick={() => onReRecord(voided)}>
+                <RotateCcw size={15} /> Ghi lại buổi thay thế
+              </Button>
+            )}
+          </>
+        }
+      >
+        <p className="flex items-start gap-2 text-sm text-gray-700">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+          Buổi khám {formatDateTime(record.examDate)} vẫn hiện trong hồ sơ, được đánh dấu đã hủy kèm lý do.
+        </p>
+        {onReRecord && <p className="mt-3 text-sm text-gray-500">Nếu ghi sai, bạn có thể ghi lại buổi thay thế với nội dung được điền sẵn.</p>}
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Hủy buổi khám"
+      description={`${horseName} · ${visitKindLabel[record.kind]} ${formatDateTime(record.examDate)}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Quay lại
+          </Button>
+          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim() || !!blocked}>
+            {action.pending ? 'Đang hủy…' : 'Hủy buổi khám'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-gray-600">Buổi khám đã lưu không sửa, không xóa. Ghi sai thì hủy buổi đó rồi ghi lại buổi thay thế.</p>
+        {blocked ? (
+          <Notice tone="warning">{blocked}</Notice>
+        ) : (
+          <ul className="space-y-1.5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
+            {consequences.map((item) => (
+              <li key={item} className="flex gap-2">
+                <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
+        <Field label="Lý do hủy" required>
+          <Textarea
+            rows={3}
+            maxLength={500}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ví dụ: Ghi nhầm sang ngựa khác"
+          />
+        </Field>
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Điều chỉnh chi phí bệnh án đã đóng (F3.9, VET) ===== */
+
+export function AdjustCostModal({
+  medicalCase,
+  horseName,
+  onClose,
+  onDone,
+}: {
+  medicalCase: MedicalCase;
+  horseName: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const action = useAction();
+  const [cost, setCost] = useState(formatMoneyInput(String(medicalCase.totalCost ?? '')));
+  const [reason, setReason] = useState('');
+  const costValue = parseMoney(cost);
+  const costOk = Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST;
+  const submit = () =>
+    action.run(
+      () => adjustCaseCost(medicalCase.id, costValue, reason.trim()),
+      () => {
+        toast.push(`Đã điều chỉnh chi phí bệnh án của ${horseName}`, 'success');
+        onDone();
+      },
+    );
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Điều chỉnh chi phí"
+      description={`${horseName} · chi phí hiện tại ${formatMoney(medicalCase.totalCost)}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button onClick={submit} disabled={action.pending || !costOk || !reason.trim()}>
+            {action.pending ? 'Đang lưu…' : 'Lưu chi phí'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field
+          label="Chi phí mới (đồng)"
+          required
+          error={cost && !costOk ? 'Nhập số nguyên từ 0 đến 10 tỷ đồng' : undefined}
+          hint={costOk ? `= ${formatMoney(costValue)}` : undefined}
+        >
+          <Input inputMode="numeric" value={cost} onChange={(event) => setCost(formatMoneyInput(event.target.value))} />
+        </Field>
+        <Field label="Lý do điều chỉnh" required>
+          <Textarea
+            rows={3}
+            maxLength={500}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ví dụ: Bổ sung hóa đơn siêu âm"
+          />
+        </Field>
+        <p className="text-xs text-gray-500">Chủ ngựa và quản lý nhận thông báo chi phí cũ và mới.</p>
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Đặt / dời ngày hẹn khám định kỳ (F3.2, VET) ===== */
+
+export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
+  const rescheduling = !!item.appointment;
+  const [value, setValue] = useState(() => {
+    if (item.appointment) return toLocalInput(item.appointment.scheduledAt);
+    const date = now();
+    date.setDate(date.getDate() + 1);
+    date.setHours(8, 0, 0, 0);
+    return toLocalInput(date);
+  });
+  const [reason, setReason] = useState('');
+  const today = todayKey();
+  const overdue = item.dueStatus === 'OVERDUE';
+  const day = value.slice(0, 10);
+  const dayError = !day
+    ? undefined
+    : day < today
+      ? 'Ngày hẹn khám không được ở quá khứ'
+      : !overdue && day > item.dueDate
+        ? `Ngày hẹn không được muộn hơn hạn khám ${formatDate(item.dueDate)}`
+        : undefined;
+
+  const submit = () =>
+    action.run(
+      () => setCheckupAppointment(item.horseId, localToIso(value)!, reason.trim() || undefined),
+      () => {
+        toast.push(`${item.horseName}: đã ${rescheduling ? 'dời' : 'đặt'} ngày hẹn khám`, 'success');
+        onDone();
+      },
+    );
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={rescheduling ? 'Dời ngày hẹn khám' : 'Đặt ngày hẹn khám'}
+      description={`${item.horseName} · hạn khám ${formatDate(item.dueDate)}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button onClick={submit} disabled={action.pending || !value || !!dayError || (rescheduling && !reason.trim())}>
+            {action.pending ? 'Đang lưu…' : rescheduling ? 'Dời lịch' : 'Đặt lịch'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {item.appointment && (
+          <p className="text-sm text-gray-600">
+            Đang hẹn <span className="font-semibold text-gray-900">{formatDateTime(item.appointment.scheduledAt)}</span>
+          </p>
+        )}
+        <Field
+          label="Ngày giờ hẹn"
+          required
+          error={dayError}
+          hint={overdue ? 'Ngựa đã quá hạn: chọn ngày bất kỳ từ hôm nay.' : `Từ hôm nay đến hạn khám ${formatDate(item.dueDate)}.`}
+        >
+          <Input
+            type="datetime-local"
+            value={value}
+            min={`${today}T00:00`}
+            max={overdue ? undefined : `${item.dueDate}T23:59`}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </Field>
+        <Field label="Lý do" required={rescheduling} hint={rescheduling ? undefined : 'Không bắt buộc khi đặt lần đầu'}>
+          <Input maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Trùng lịch thi đấu" />
+        </Field>
+        <p className="text-xs text-gray-500">Ngày hẹn chỉ là kế hoạch. Ghi bất kỳ buổi khám nào cho ngựa thì ngày hẹn tự chuyển sang Đã thực hiện.</p>
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/** Một yêu cầu khám dạng dòng gọn (dùng trong danh sách phụ). */
+export function RequestRow({ request, people }: { request: ExamRequest; people: People }) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        {request.urgent && request.status === 'PENDING' && <UrgentPill urgent />}
+        <RequestMeta request={request} people={people} showUrgent={false} />
+      </div>
+      <div className="mt-1">
+        <RequestText text={request.description} compact />
+      </div>
+    </div>
   );
 }
