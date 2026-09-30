@@ -12,6 +12,7 @@ import {
   ErrorBox,
   Meter,
   NotFound,
+  Notice,
   PageHeader,
   Pill,
   SectionTitle,
@@ -19,7 +20,7 @@ import {
   Tip,
   useToast,
 } from '../../../components/ui';
-import { ClassPill, IntensityPill } from '../../../components/ui/status';
+import { ClassPill, IntensityMeter } from '../../../components/ui/status';
 import { surfaceLabel, workoutLabel } from '../../../lib/labels';
 import { formatDate } from '../../../lib/format';
 import { links } from '../../../lib/links';
@@ -51,11 +52,10 @@ export default function ProgramDetail() {
     <div className="space-y-6">
       <PageHeader
         back={
-          <Link to={links.programs} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 transition hover:text-gray-700">
+          <Link to={links.programs} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-800">
             <ArrowLeft size={15} /> Danh sách giáo án
           </Link>
         }
-        eyebrow="Giáo án · khuôn mẫu không ngày, không gắn ngựa"
         title={data.name}
         description={data.description}
         actions={
@@ -95,7 +95,7 @@ export default function ProgramDetail() {
               </div>
               {summary.maxIntensity && (
                 <span className="flex items-center gap-2 text-sm text-gray-500">
-                  Cường độ cao nhất <IntensityPill intensity={summary.maxIntensity} />
+                  Cường độ cao nhất <IntensityMeter intensity={summary.maxIntensity} />
                 </span>
               )}
             </div>
@@ -109,11 +109,9 @@ export default function ProgramDetail() {
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4">
           {data.warnings.length > 0 && (
-            <div className="space-y-2 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 shadow-amber ring-1 ring-amber-100">
-              <p className="flex items-center gap-2 font-semibold">
-                <AlertTriangle size={15} /> Lưu ý khi dùng giáo án
-              </p>
-              <ul className="space-y-1.5">
+            <Notice tone="warning" icon={<AlertTriangle size={15} />}>
+              <p className="font-semibold">Lưu ý khi dùng giáo án</p>
+              <ul className="mt-1.5 space-y-1.5">
                 {data.warnings.map((warning) => (
                   <li key={warning} className="flex gap-2">
                     <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
@@ -121,11 +119,11 @@ export default function ProgramDetail() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
 
           <Card variant="flat">
-            <SectionTitle action={<span className="text-xs text-gray-400 tabular-nums">{data.classes.length} lớp</span>}>
+            <SectionTitle action={<span className="text-xs text-gray-500 tabular-nums">{data.classes.length} lớp</span>}>
               Các lớp đang dùng giáo án này
             </SectionTitle>
             {data.classes.length === 0 ? (
@@ -136,7 +134,7 @@ export default function ProgramDetail() {
                   <li key={cls.id}>
                     <Link
                       to={links.class(cls.id)}
-                      className="block rounded-xl bg-white p-3 ring-1 ring-emerald-950/[0.05] transition hover:ring-emerald-300"
+                      className="block rounded-xl bg-white p-3 ring-1 ring-gray-200 transition hover:ring-gray-300"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate font-semibold text-gray-900">{cls.name}</span>
@@ -157,13 +155,13 @@ export default function ProgramDetail() {
               </ul>
             )}
             {data.openClassCount > 0 && (
-              <p className="mt-3 text-xs font-light text-gray-500">
+              <p className="mt-3 text-xs text-gray-500">
                 Sửa giáo án không làm đổi buổi đã sinh của {data.openClassCount} lớp đang chạy hoặc sắp tới.
               </p>
             )}
           </Card>
 
-          <p className="px-1 text-xs font-light text-gray-400">
+          <p className="px-1 text-xs text-gray-500">
             Soạn bởi {data.createdByName} · cập nhật {formatDate(data.updatedAt)}
           </p>
         </aside>
@@ -192,8 +190,8 @@ export default function ProgramDetail() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-light text-gray-400">{label}</p>
-      <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-xl font-semibold text-gray-900 tabular-nums">{value}</p>
     </div>
   );
 }
@@ -204,35 +202,37 @@ function PhaseTable({ phase, index }: { phase: ProgramPhaseDetail; index: number
       <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-4 sm:px-6">
         <span className={cn('h-8 w-1.5 rounded-full', phaseTone(index).split(' ')[0])} />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-light text-gray-400">Giai đoạn {phase.no}</p>
+          <p className="text-xs text-gray-500">Giai đoạn {phase.no}</p>
           <p className="font-semibold text-gray-900">{phase.name}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
-          <Pill tone="slate">{phase.weeks} tuần</Pill>
-          <Pill tone="green">{phase.sessionsPerWeek} buổi/tuần</Pill>
-          <Pill tone="slate">{volumeLabel(phase.weeklyVolumeM)}/tuần</Pill>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600 tabular-nums">
+          <span>{phase.weeks} tuần</span>
+          <span className="text-gray-300">·</span>
+          <span>{phase.sessionsPerWeek} buổi/tuần</span>
+          <span className="text-gray-300">·</span>
+          <span>{volumeLabel(phase.weeklyVolumeM)}/tuần</span>
           {phase.restDays === 0 && <Pill tone="amber">Không có ngày nghỉ</Pill>}
         </div>
       </div>
       <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead>
-            <tr className="bg-emerald-50/30 text-xs text-gray-500">
-              <th className="px-5 py-2.5 font-semibold sm:px-6">Môn học</th>
-              <th className="px-3 py-2.5 font-semibold">Loại</th>
-              <th className="px-3 py-2.5 font-semibold">Cự ly × lặp</th>
-              <th className="px-3 py-2.5 font-semibold">Cường độ</th>
-              <th className="px-3 py-2.5 font-semibold">Mặt sân</th>
-              <th className="px-5 py-2.5 text-right font-semibold sm:px-6">Buổi/tuần</th>
+            <tr className="text-xs text-gray-500">
+              <th className="px-5 py-2.5 font-medium sm:px-6">Môn học</th>
+              <th className="px-3 py-2.5 font-medium">Loại</th>
+              <th className="px-3 py-2.5 font-medium">Cự ly × lặp</th>
+              <th className="px-3 py-2.5 font-medium">Cường độ</th>
+              <th className="px-3 py-2.5 font-medium">Mặt sân</th>
+              <th className="px-5 py-2.5 text-right font-medium sm:px-6">Buổi/tuần</th>
             </tr>
           </thead>
           <tbody>
             {phase.items.map((item) => (
-              <tr key={item.id} className="border-t border-gray-50">
+              <tr key={item.id} className="border-t border-gray-100">
                 <td className="px-5 py-3 sm:px-6">
                   <span className="font-medium text-gray-900">{item.name}</span>
                   {item.deleted && (
-                    <Pill tone="red" className="ml-2">
+                    <Pill tone="gray" className="ml-2">
                       Môn đã xóa
                     </Pill>
                   )}
@@ -240,7 +240,7 @@ function PhaseTable({ phase, index }: { phase: ProgramPhaseDetail; index: number
                 <td className="px-3 py-3 text-gray-600">{workoutLabel[item.workoutType]}</td>
                 <td className="px-3 py-3 text-gray-700 tabular-nums">{workoutLine(item.distanceM, item.repetitions)}</td>
                 <td className="px-3 py-3">
-                  <IntensityPill intensity={item.intensity} />
+                  <IntensityMeter intensity={item.intensity} />
                 </td>
                 <td className="px-3 py-3 text-gray-600">{surfaceLabel[item.surface]}</td>
                 <td className="px-5 py-3 text-right font-semibold text-gray-900 tabular-nums sm:px-6">× {item.sessionsPerWeek}</td>

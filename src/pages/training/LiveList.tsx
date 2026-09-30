@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertOctagon, ArrowUpRight, Radio, Timer } from 'lucide-react';
 import { Avatar, Button, Card, EmptyState, ErrorBox, PageHeader, Pill, Skeleton, cn } from '../../components/ui';
-import { IntensityPill } from '../../components/ui/status';
+import { IntensityMeter } from '../../components/ui/status';
 import { useService } from '../../hooks/useService';
 import { listLiveSessions, type LiveSessionRow } from '../../services/session.service';
 import { links } from '../../lib/links';
@@ -26,7 +26,7 @@ export default function LiveList() {
     <div className="space-y-6">
       <PageHeader
         title="Đang diễn ra"
-        description="Các buổi học đang chạy. Cảnh báo đỏ (vượt nhịp tim tối đa, nghi chấn thương) cần HT của khu hoặc bác sĩ xác nhận."
+        description="Cảnh báo đỏ (vượt nhịp tim tối đa, nghi chấn thương) cần HT của khu hoặc bác sĩ xác nhận."
         actions={
           <Button variant="secondary" onClick={() => navigate(links.today)}>
             Buổi tập hôm nay
@@ -35,7 +35,7 @@ export default function LiveList() {
       />
 
       {alarms > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl bg-red-600 px-5 py-3.5 text-white shadow-red">
+        <div className="flex items-center gap-3 rounded-2xl bg-red-600 px-5 py-3.5 text-white">
           <AlertOctagon size={20} className="animate-pulse" />
           <p className="font-semibold">{alarms} cảnh báo đỏ đang chờ xác nhận</p>
         </div>
@@ -77,31 +77,31 @@ function LiveCard({ row, className, onOpen }: { row: LiveSessionRow; className: 
   return (
     <button type="button" onClick={onOpen} className={cn('group text-left', className)}>
       <Card
-        tone={alarm ? 'danger' : 'success'}
-        className={cn('h-full transition-all duration-200 group-hover:-translate-y-0.5', alarm && 'ring-2 ring-red-400')}
+        tone={alarm ? 'danger' : 'default'}
+        className={cn('h-full transition-colors duration-200 group-hover:ring-gray-300', alarm && 'ring-2 ring-red-400')}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm text-emerald-700">
-              <Radio size={14} className="animate-pulse" /> {row.slotLabel}
+            <p className="flex items-center gap-2 text-sm text-gray-500 tabular-nums">
+              <Radio size={14} className="animate-pulse text-emerald-600" /> {row.slotLabel}
               {row.zoneName ? ` · ${row.zoneName}` : ''}
             </p>
             <p className="mt-1 truncate text-xl font-bold tracking-tight text-gray-900">{row.className}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-gray-500">
               <span>{workoutText(row)}</span>
-              <IntensityPill intensity={row.intensity} />
+              <IntensityMeter intensity={row.intensity} />
             </div>
           </div>
-          <ArrowUpRight size={20} className="shrink-0 text-gray-300 transition group-hover:text-emerald-600" />
+          <ArrowUpRight size={20} className="shrink-0 text-gray-400 transition group-hover:text-gray-700" />
         </div>
 
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="flex items-center gap-1.5 text-xs text-gray-400">
-              <Timer size={13} /> Đã chạy
+            <p className="flex items-center gap-1.5 text-xs text-gray-500">
+              <Timer size={13} className="text-gray-400" /> Đã chạy
             </p>
             <p className="text-3xl font-bold tabular-nums text-gray-900">{secondText(row.second)}</p>
-            <p className="text-xs font-light text-gray-400">
+            <p className="text-xs text-gray-500 tabular-nums">
               từ {formatTime(row.startedAt)} · mô phỏng ×{row.simSpeed}
             </p>
           </div>
@@ -122,11 +122,11 @@ function LiveCard({ row, className, onOpen }: { row: LiveSessionRow; className: 
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-emerald-950/[0.05] pt-3">
-          <Pill tone="green">{row.horses.length} ngựa có mặt</Pill>
-          {row.absentCount > 0 && <Pill tone="orange">{row.absentCount} vắng</Pill>}
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-gray-100 pt-3 text-sm text-gray-600 tabular-nums">
+          <span>{row.horses.length} ngựa có mặt</span>
+          {row.absentCount > 0 && <span className="text-amber-700">{row.absentCount} vắng</span>}
           {row.horses.some((horse) => horse.stopped) && (
-            <Pill tone="gray">{row.horses.filter((horse) => horse.stopped).length} đã dừng</Pill>
+            <span>{row.horses.filter((horse) => horse.stopped).length} đã dừng</span>
           )}
           {alarm && (
             <Pill tone="red" pulse>

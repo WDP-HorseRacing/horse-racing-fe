@@ -103,16 +103,16 @@ export default function LifecycleDialog({
           )}
 
           {data.allowed && data.consequences.length > 0 && (
-            <div className="overflow-hidden rounded-xl ring-1 ring-amber-200/70">
-              <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900">
-                <ListChecks size={15} /> Hệ quả sẽ được thực hiện trong một lần
+            <div className="overflow-hidden rounded-xl bg-white shadow-[inset_3px_0_0_0_#f59e0b] ring-1 ring-gray-200">
+              <div className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-gray-900">
+                <ListChecks size={15} className="text-gray-400" /> Hệ quả sẽ được thực hiện trong một lần
               </div>
               <table className="w-full text-sm">
                 <tbody>
                   {data.consequences.map((item) => (
-                    <tr key={item} className="border-t border-amber-100/80 bg-white">
+                    <tr key={item} className="border-t border-gray-100">
                       <td className="w-8 py-2.5 pl-4 align-top">
-                        <span className="mt-1.5 block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                        <span className="mt-1.5 block h-1.5 w-1.5 rounded-full bg-gray-400" />
                       </td>
                       <td className="py-2.5 pr-4 text-gray-700">{item}</td>
                     </tr>

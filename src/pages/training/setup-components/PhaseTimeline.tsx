@@ -25,7 +25,7 @@ export function PhaseTimeline({
 }) {
   const total = phases.reduce((sum, phase) => sum + Math.max(0, phase.weeks || 0), 0);
   if (phases.length === 0) {
-    return <div className={cn('h-3 rounded-full bg-emerald-950/[0.05]', className)} />;
+    return <div className={cn('h-3 rounded-full bg-gray-100', className)} />;
   }
   return (
     <div className={cn('w-full', className)}>
@@ -45,7 +45,7 @@ export function PhaseTimeline({
                 style={{ flexGrow: Math.max(phase.weeks || 0, 0.4), flexBasis: 0 }}
                 className={cn(
                   'min-w-0 overflow-hidden transition-[flex-grow] duration-300',
-                  size === 'sm' ? 'h-2.5 rounded-full' : 'rounded-xl px-3',
+                  size === 'sm' ? 'h-2.5 rounded-full' : 'rounded-lg px-3',
                   size === 'md' && 'py-2',
                   size === 'lg' && 'py-3',
                   phaseTone(index),
@@ -69,7 +69,7 @@ export function PhaseTimeline({
         })}
       </div>
       {showRuler && total > 0 && (
-        <div className="mt-1.5 flex justify-between text-[11px] font-light text-gray-400 tabular-nums">
+        <div className="mt-1.5 flex justify-between text-[11px] text-gray-500 tabular-nums">
           <span>Tuần 1</span>
           {total > 2 && <span>Tuần {Math.ceil(total / 2)}</span>}
           <span>Tuần {total}</span>

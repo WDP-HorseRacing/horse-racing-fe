@@ -25,15 +25,8 @@ export function volumeLabel(meters: number): string {
   return `${meters.toLocaleString('vi-VN')} m`;
 }
 
-/** Màu các giai đoạn trên thanh thời gian — sắc xanh cỏ, không dùng xanh dương-tím. */
-export const PHASE_TONES = [
-  'bg-emerald-600 text-white',
-  'bg-lime-300 text-lime-950',
-  'bg-teal-600 text-white',
-  'bg-emerald-200 text-emerald-950',
-  'bg-amber-300 text-amber-950',
-  'bg-green-800 text-white',
-];
+/** Màu các giai đoạn trên thanh thời gian — chỉ các sắc độ xanh cỏ xen kẽ, không màu nào khác. */
+export const PHASE_TONES = ['bg-emerald-800 text-white', 'bg-emerald-600 text-white', 'bg-emerald-700 text-white'];
 
 export function phaseTone(index: number): string {
   return PHASE_TONES[index % PHASE_TONES.length];

@@ -1,7 +1,7 @@
 // F3.4 — Tiếp nhận yêu cầu khám. VET xử lý (khám ngay / bỏ qua); GROOM, HT, CM gửi.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertOctagon, CheckCircle2, FolderOpen, Plus, Send, Stethoscope, XCircle } from 'lucide-react';
+import { CheckCircle2, FolderOpen, Plus, Send, Stethoscope, XCircle } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listExamRequests, type ExamRequestRow } from '../../services/medical.service';
 import { useStore } from '../../store/store';
@@ -9,17 +9,16 @@ import { can } from '../../auth/permissions';
 import {
   Button,
   Card,
+  ChipFilter,
   DataTable,
   EmptyState,
   ErrorBox,
   FilterSelect,
   PageHeader,
   SearchInput,
-  Segmented,
   SectionTitle,
   Sheet,
   Skeleton,
-  Stat,
   Toolbar,
   cn,
 } from '../../components/ui';
@@ -36,14 +35,14 @@ function Outcome({ row }: { row: ExamRequestRow }) {
   if (row.status === 'EXAMINED') {
     return (
       <div className="space-y-1 text-xs text-gray-500">
-        <p className="flex items-center gap-1.5 text-emerald-700">
-          <CheckCircle2 size={13} /> Đã khám {row.examinedAt ? formatDateTime(row.examinedAt) : formatDateTime(row.resolvedAt)}
+        <p className="flex items-center gap-1.5 text-gray-700">
+          <CheckCircle2 size={13} className="text-emerald-600" /> Đã khám {row.examinedAt ? formatDateTime(row.examinedAt) : formatDateTime(row.resolvedAt)}
         </p>
         {row.caseId && (
           <Link
             to={links.case(row.caseId)}
             onClick={(event) => event.stopPropagation()}
-            className="inline-flex items-center gap-1 font-medium text-amber-800 hover:underline"
+            className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline"
           >
             <FolderOpen size={12} /> {row.caseTitle}
           </Link>
@@ -56,7 +55,7 @@ function Outcome({ row }: { row: ExamRequestRow }) {
     return (
       <div className="max-w-xs space-y-1 text-xs text-gray-500">
         <p className="flex items-center gap-1.5">
-          <XCircle size={13} /> {row.dismissedByName} · {formatDateTime(row.resolvedAt)}
+          <XCircle size={13} className="text-gray-400" /> {row.dismissedByName} · {formatDateTime(row.resolvedAt)}
         </p>
         <p className="text-gray-600">{row.dismissReason}</p>
       </div>
@@ -74,7 +73,7 @@ function GroomView() {
     <div className="space-y-6">
       <PageHeader
         title="Gửi yêu cầu khám"
-        description="Báo bác sĩ khi ngựa bạn chăm sóc có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay."
+        description="Báo bác sĩ khi ngựa bạn chăm sóc có dấu hiệu bất thường — chọn Khẩn nếu cần bác sĩ tới ngay."
       />
       <div className="grid gap-5 lg:grid-cols-12">
         <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
@@ -94,26 +93,26 @@ function GroomView() {
               <article
                 key={row.id}
                 className={cn(
-                  'rounded-2xl bg-white p-4 ring-1',
-                  row.status === 'PENDING' && row.urgency === 'URGENT' ? 'shadow-red ring-red-100' : 'shadow-grass ring-emerald-950/5',
+                  'rounded-2xl bg-white p-4 shadow-card ring-1 ring-gray-200/80',
+                  row.status === 'PENDING' && row.urgency === 'URGENT' && 'shadow-[inset_3px_0_0_0_#ef4444]',
                 )}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <HorseChip horse={row.horse} size={36} tab="" />
                   <div className="flex items-center gap-2">
-                    <UrgencyPill urgency={row.urgency} />
+                    {row.urgency === 'URGENT' && <UrgencyPill urgency={row.urgency} />}
                     <RequestPill status={row.status} />
                   </div>
                 </div>
                 <div className="mt-3">
                   <RequestLines lines={row.descriptionLines} />
                 </div>
-                <p className="mt-2 text-xs text-gray-400">Gửi {formatRelative(row.createdAt, now())}</p>
+                <p className="mt-2 text-xs text-gray-500">Gửi {formatRelative(row.createdAt, now())}</p>
                 {row.status !== 'PENDING' && (
-                  <div className="mt-3 rounded-xl bg-gray-50 p-3">
+                  <div className="mt-3 border-t border-gray-100 pt-3">
                     {row.status === 'EXAMINED' ? (
-                      <p className="flex items-center gap-1.5 text-xs text-emerald-700">
-                        <CheckCircle2 size={13} /> Bác sĩ đã khám {formatDateTime(row.examinedAt ?? row.resolvedAt)}
+                      <p className="flex items-center gap-1.5 text-xs text-gray-700">
+                        <CheckCircle2 size={13} className="text-emerald-600" /> Bác sĩ đã khám {formatDateTime(row.examinedAt ?? row.resolvedAt)}
                       </p>
                     ) : (
                       <Outcome row={row} />
@@ -182,50 +181,34 @@ function StaffView() {
         title="Yêu cầu khám"
         description={
           isVet
-            ? 'Xử lý yêu cầu: khám ngay (gắn các yêu cầu vào buổi khám) hoặc bỏ qua kèm lý do.'
-            : 'Theo dõi yêu cầu khám toàn câu lạc bộ và gửi yêu cầu cho ngựa trong phạm vi của bạn.'
+            ? 'Khám ngay (gắn yêu cầu vào buổi khám) hoặc bỏ qua kèm lý do.'
+            : 'Theo dõi yêu cầu khám và gửi yêu cầu cho ngựa trong phạm vi của bạn.'
         }
         actions={
           canCreate && (
-            <Button variant={isVet ? 'secondary' : 'primary'} onClick={() => setCreating(true)}>
+            <Button variant="secondary" onClick={() => setCreating(true)}>
               <Plus size={16} /> Gửi yêu cầu khám
             </Button>
           )
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
-        <Stat
-          className="lg:col-span-5"
-          tone={counts.URGENT > 0 ? 'danger' : 'default'}
-          icon={<AlertOctagon size={20} />}
-          value={counts.PENDING}
-          label="Đang chờ xử lý"
-          hint={
-            counts.PENDING
-              ? `${counts.URGENT} khẩn · cũ nhất ${oldestPending ? formatRelative(oldestPending, now()) : '—'}`
-              : 'Không còn yêu cầu nào chờ'
-          }
-          active={status === 'PENDING'}
-          onClick={() => setStatus('PENDING')}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <ChipFilter<ExamRequestStatus>
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: 'PENDING', label: 'Chờ xử lý', count: counts.PENDING },
+            { value: 'EXAMINED', label: 'Đã khám', count: counts.EXAMINED },
+            { value: 'DISMISSED', label: 'Đã bỏ qua', count: counts.DISMISSED },
+          ]}
         />
-        <Stat
-          className="lg:col-span-4"
-          tone="success"
-          icon={<CheckCircle2 size={20} />}
-          value={counts.EXAMINED}
-          label="Đã khám"
-          active={status === 'EXAMINED'}
-          onClick={() => setStatus('EXAMINED')}
-        />
-        <Stat
-          className="lg:col-span-3"
-          icon={<XCircle size={20} />}
-          value={counts.DISMISSED}
-          label="Đã bỏ qua"
-          active={status === 'DISMISSED'}
-          onClick={() => setStatus('DISMISSED')}
-        />
+        {counts.PENDING > 0 && (
+          <span className="text-sm text-gray-500">
+            {counts.URGENT > 0 && <span className="font-medium text-red-700">{counts.URGENT} khẩn</span>}
+            {counts.URGENT > 0 && ' · '}yêu cầu cũ nhất gửi {oldestPending ? formatRelative(oldestPending, now()) : '—'}
+          </span>
+        )}
       </div>
 
       <Toolbar>
@@ -235,15 +218,6 @@ function StaffView() {
           <option value="URGENT">Khẩn</option>
           <option value="NORMAL">Bình thường</option>
         </FilterSelect>
-        <Segmented
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: 'PENDING', label: 'Chờ xử lý', badge: counts.PENDING },
-            { value: 'EXAMINED', label: 'Đã khám', badge: counts.EXAMINED },
-            { value: 'DISMISSED', label: 'Đã bỏ qua', badge: counts.DISMISSED },
-          ]}
-        />
       </Toolbar>
 
       <DataTable
@@ -251,7 +225,6 @@ function StaffView() {
         rowKey={(row) => row.id}
         pageSize={15}
         emptyTitle={status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
-        rowClassName={(row) => (row.status === 'PENDING' && row.urgency === 'URGENT' ? 'bg-red-50/50' : '')}
         columns={[
           { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={row.horse} /> },
           {
@@ -259,8 +232,8 @@ function StaffView() {
             header: 'Nguồn · mức',
             render: (row) => (
               <div className="space-y-1">
-                <UrgencyPill urgency={row.urgency} />
-                <p className="text-xs text-gray-500">{row.sourceLabel}</p>
+                {row.urgency === 'URGENT' && <UrgencyPill urgency={row.urgency} />}
+                <p className="text-xs text-gray-600">{row.sourceLabel}</p>
               </div>
             ),
           },
@@ -276,13 +249,13 @@ function StaffView() {
             render: (row) => (
               <div className="text-xs">
                 <p className="font-medium text-gray-700">{row.createdByName}</p>
-                <p className="text-gray-400" title={formatDateTime(row.createdAt)}>
+                <p className="text-gray-500" title={formatDateTime(row.createdAt)}>
                   {formatRelative(row.createdAt, now())}
                 </p>
               </div>
             ),
           },
-          { key: 'outcome', header: 'Kết quả', render: (row) => <Outcome row={row} /> },
+          ...(status === 'PENDING' ? [] : [{ key: 'outcome', header: 'Kết quả', render: (row: ExamRequestRow) => <Outcome row={row} /> }]),
           {
             key: 'actions',
             header: '',
@@ -291,7 +264,7 @@ function StaffView() {
               row.status === 'PENDING' && (row.canExamine || row.canDismiss) ? (
                 <div className="flex justify-end gap-2">
                   {row.canExamine && (
-                    <Button size="sm" variant={row.urgency === 'URGENT' ? 'danger' : 'primary'} onClick={() => setExamHorse(row.horse.id)}>
+                    <Button size="sm" variant={row.urgency === 'URGENT' ? 'primary' : 'secondary'} onClick={() => setExamHorse(row.horse.id)}>
                       <Stethoscope size={14} /> Khám ngay
                     </Button>
                   )}

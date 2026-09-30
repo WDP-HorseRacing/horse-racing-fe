@@ -117,7 +117,7 @@ export function LineChart({
             y={scaleY(band.to)}
             width={innerWidth}
             height={Math.max(0, scaleY(band.from) - scaleY(band.to))}
-            fill="rgb(16 185 129 / 0.07)"
+            fill="rgb(107 114 128 / 0.07)"
           />
         )}
 
@@ -212,10 +212,11 @@ export function LineChart({
   );
 }
 
+/** Màu biểu đồ trong bảng màu 2 + 1. Tên cũ (sky, violet) giữ lại nhưng quy về sắc xám. Đỏ chỉ dùng cho đường ngưỡng. */
 export const chartColors = {
-  emerald: '#059669',
-  amber: '#d97706',
-  sky: '#0284c7',
+  emerald: '#047857',
+  amber: '#b45309',
+  sky: '#4b5563',
   red: '#dc2626',
-  violet: '#7c3aed',
+  violet: '#9ca3af',
 };

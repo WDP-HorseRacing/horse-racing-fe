@@ -16,7 +16,6 @@ import {
 import {
   Button,
   Card,
-  cn,
   ErrorBox,
   Field,
   Input,
@@ -29,7 +28,7 @@ import {
   Tabs,
   useToast,
 } from '../../../components/ui';
-import { ClassPill, IntensityPill, intensityDot } from '../../../components/ui/status';
+import { ClassPill, IntensityMeter } from '../../../components/ui/status';
 import { now } from '../../../lib/clock';
 import { formatDate, formatDateShort, formatDateTime, toDateKey } from '../../../lib/format';
 import { links } from '../../../lib/links';
@@ -114,11 +113,10 @@ export default function ClassDetail() {
     <div className="space-y-6">
       <PageHeader
         back={
-          <Link to={links.classes} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 transition hover:text-gray-700">
+          <Link to={links.classes} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-800">
             <ArrowLeft size={15} /> Danh sách lớp
           </Link>
         }
-        eyebrow={`Lớp huấn luyện · ${data.zoneName}`}
         title={
           <span className="flex flex-wrap items-center gap-3">
             {data.name} <ClassPill status={data.status} />
@@ -137,7 +135,7 @@ export default function ClassDetail() {
                 {data.programName}
               </Link>
             )}{' '}
-            · HT phụ trách {data.trainerName}
+            · {data.zoneName} · HT {data.trainerName}
           </>
         }
         actions={
@@ -148,7 +146,7 @@ export default function ClassDetail() {
               </Button>
             )}
             {data.canCancelClass && (
-              <Button variant="ghost" onClick={() => openDialog(() => setClassAction('cancel'))} className="hover:bg-red-50 hover:text-red-600">
+              <Button variant="ghost" onClick={() => openDialog(() => setClassAction('cancel'))}>
                 <Ban size={15} /> Hủy lớp
               </Button>
             )}
@@ -158,7 +156,7 @@ export default function ClassDetail() {
               </Button>
             )}
             {data.canAddSession && (
-              <Button onClick={() => setAddOpen(true)}>
+              <Button variant="secondary" onClick={() => setAddOpen(true)}>
                 <CalendarPlus size={16} /> Thêm buổi
               </Button>
             )}
@@ -167,7 +165,7 @@ export default function ClassDetail() {
       />
 
       {data.cancelledAt && (
-        <Notice tone="danger">
+        <Notice tone="info">
           Lớp đã bị hủy lúc {formatDateTime(data.cancelledAt)} bởi {data.cancelledByName}. Lý do: {data.cancelReason}
         </Notice>
       )}
@@ -177,69 +175,36 @@ export default function ClassDetail() {
         </Notice>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-5">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-            <div>
-              <dt className="text-xs font-light text-gray-400">Khung giờ cố định</dt>
-              <dd className="font-mono text-lg font-semibold text-gray-900">{data.slotLabel}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-light text-gray-400">Khu chuồng</dt>
-              <dd className="text-lg font-semibold text-gray-900">{data.zoneName}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-light text-gray-400">Bắt đầu</dt>
-              <dd className="font-medium text-gray-800 tabular-nums">
-                {weekdayShort(data.startDate)} {formatDate(data.startDate)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-light text-gray-400">Kết thúc ({data.totalWeeks} tuần)</dt>
-              <dd className="font-medium text-gray-800 tabular-nums">
-                {weekdayShort(data.endDate)} {formatDate(data.endDate)}
-              </dd>
-            </div>
-          </dl>
-        </Card>
-
-        <Card variant="flat" className="lg:col-span-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-light text-gray-500">Sĩ số</p>
-              <p className="text-3xl font-bold text-gray-900 tabular-nums">
-                {data.enrolled}
-                <span className="text-lg font-medium text-gray-400">/{data.capacity}</span>
-              </p>
-            </div>
-            {data.maxIntensity && (
-              <div className="text-right">
-                <p className="mb-1 text-xs font-light text-gray-500">Cường độ cao nhất còn lại</p>
-                <IntensityPill intensity={data.maxIntensity} />
-              </div>
-            )}
-          </div>
-          <Meter
-            value={data.enrolled}
-            max={data.capacity}
-            tone={data.enrolled >= data.capacity ? 'amber' : 'green'}
-            className="mt-3 h-2"
-          />
-          <p className="mt-2 text-xs font-light text-gray-500">
-            {data.enrolled >= data.capacity ? 'Lớp đã đủ sĩ số — đăng ký mới bị chặn' : `Còn ${data.capacity - data.enrolled} chỗ`}
+      <Card className="grid gap-x-8 gap-y-5 sm:grid-cols-2 xl:grid-cols-[1.1fr_1fr_1.3fr_0.9fr]">
+        <div className="min-w-0">
+          <p className="text-xs text-gray-500">Khung giờ cố định</p>
+          <p className="mt-0.5 text-lg font-semibold text-gray-900 tabular-nums">{data.slotLabel}</p>
+          <p className="mt-1 text-xs text-gray-500 tabular-nums">
+            {weekdayShort(data.startDate)} {formatDate(data.startDate)} → {weekdayShort(data.endDate)} {formatDate(data.endDate)} ·{' '}
+            {data.totalWeeks} tuần
           </p>
-        </Card>
-
-        <Card variant="outline" className="lg:col-span-3">
-          <p className="text-xs font-light text-gray-500">Tiến độ buổi học</p>
-          <p className="text-3xl font-bold text-gray-900 tabular-nums">
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-gray-500">Sĩ số</p>
+          <p className="mt-0.5 text-lg font-semibold text-gray-900 tabular-nums">
+            {data.enrolled}
+            <span className="font-normal text-gray-400">/{data.capacity}</span>
+          </p>
+          <Meter value={data.enrolled} max={data.capacity} className="mt-1.5" />
+          <p className="mt-1.5 text-xs text-gray-500">
+            {data.enrolled >= data.capacity ? 'Đủ sĩ số — đăng ký mới bị chặn' : `Còn ${data.capacity - data.enrolled} chỗ`}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-gray-500">Tiến độ buổi học</p>
+          <p className="mt-0.5 text-lg font-semibold text-gray-900 tabular-nums">
             {data.sessionsDone}
-            <span className="text-lg font-medium text-gray-400">/{data.sessionsTotal}</span>
+            <span className="font-normal text-gray-400">/{data.sessionsTotal} buổi</span>
           </p>
-          <Meter value={data.sessionsDone} max={data.sessionsTotal} className="mt-3 h-2" />
+          <Meter value={data.sessionsDone} max={data.sessionsTotal} className="mt-1.5" />
           {data.nextSession && (data.status === 'ACTIVE' || data.status === 'SCHEDULED') ? (
-            <Link to={links.session(data.nextSession.id)} className="mt-3 flex items-center gap-2 text-xs text-gray-600 hover:text-emerald-800">
-              <span className={cn('h-2 w-2 shrink-0 rounded-full', intensityDot[data.nextSession.intensity])} />
+            <Link to={links.session(data.nextSession.id)} className="mt-1.5 flex items-center gap-2 text-xs text-gray-600 hover:text-emerald-700">
+              <IntensityMeter intensity={data.nextSession.intensity} showLabel={false} />
               <span className="truncate">
                 Kế tiếp {data.nextSession.date === today ? 'hôm nay' : `${weekdayLong(data.nextSession.date)} ${formatDateShort(data.nextSession.date)}`}
                 {' · '}
@@ -247,12 +212,16 @@ export default function ClassDetail() {
               </span>
             </Link>
           ) : (
-            <p className="mt-3 text-xs font-light text-gray-400">
+            <p className="mt-1.5 text-xs text-gray-500">
               {data.sessionsCancelled > 0 ? `${data.sessionsCancelled} buổi đã hủy` : 'Không còn buổi sắp tới'}
             </p>
           )}
-        </Card>
-      </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-gray-500">Cường độ cao nhất còn lại</p>
+          <div className="mt-1.5">{data.maxIntensity ? <IntensityMeter intensity={data.maxIntensity} /> : <span className="text-sm text-gray-500">—</span>}</div>
+        </div>
+      </Card>
 
       <Tabs
         tabs={tabs}

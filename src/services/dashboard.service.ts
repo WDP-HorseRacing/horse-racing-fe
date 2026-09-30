@@ -25,6 +25,7 @@ import {
 import { canRace, canTrain, canTrainAtAll, type RuleCheck } from '../lib/rules';
 import { now } from '../lib/clock';
 import { addDays, toDateKey } from '../lib/format';
+import { links } from '../lib/links';
 
 const HEALTH: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
 
@@ -109,6 +110,62 @@ function sessionBrief(db: Database, session: ClassSession, at: Date, horseFilter
     horseCount: roster.length,
     blocked,
   };
+}
+
+export interface WeekItem {
+  id: string;
+  time?: string;
+  title: string;
+  detail?: string;
+  intensity?: ClassSession['intensity'];
+  status?: ClassSession['status'];
+  tone?: 'warn' | 'danger';
+  to: string;
+}
+
+export interface WeekDay {
+  date: string;
+  isToday: boolean;
+  items: WeekItem[];
+}
+
+function emptyWeek(at: Date): WeekDay[] {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = toDateKey(addDays(at, index));
+    return { date, isToday: index === 0, items: [] };
+  });
+}
+
+/** Các buổi học 7 ngày tới (trừ buổi đã hủy) theo bộ lọc phạm vi. */
+function weekSessions(
+  db: Database,
+  at: Date,
+  filter: (session: ClassSession) => boolean,
+  horseFilter?: (session: ClassSession, horseId: string) => boolean,
+): WeekDay[] {
+  const days = emptyWeek(at);
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  db.sessions
+    .filter((session) => byDate.has(session.date) && session.status !== 'CANCELLED' && filter(session))
+    .sort((a, b) => a.slotId.localeCompare(b.slotId))
+    .forEach((session) => {
+      const roster = sessionRoster(db, session).filter((entry) => !horseFilter || horseFilter(session, entry.horseId));
+      if (horseFilter && roster.length === 0) return;
+      const cls = classOf(db, session.classId);
+      byDate.get(session.date)!.items.push({
+        id: session.id,
+        time: slotLabel(db, session.slotId).split('–')[0],
+        title: cls?.name ?? '—',
+        detail: horseFilter
+          ? roster.map((entry) => db.horses.find((horse) => horse.id === entry.horseId)?.name).filter(Boolean).join(', ')
+          : `${session.subjectName} · ${roster.length} ngựa`,
+        intensity: session.intensity,
+        status: session.status,
+        tone: session.status === 'AWAITING_REVIEW' ? 'warn' : undefined,
+        to: links.session(session.id),
+      });
+    });
+  return days;
 }
 
 function todaySessions(db: Database, at: Date, filter: (session: ClassSession) => boolean) {
@@ -254,6 +311,7 @@ export function getManagerDashboard() {
       cases: openCases(db, all, true),
       locks: activeLocks(db, all),
       classes: activeClassesOf(db, null, at),
+      week: weekSessions(db, at, () => true),
     };
   });
 }
@@ -289,6 +347,15 @@ export function getTrainerDashboard() {
         (alert) => alert.level === 'RED' && alert.at >= weekAgo && horses.some((horse) => horse.id === alert.horseId),
       ).length,
       requests: pendingRequests(db, mine),
+      week: weekSessions(db, at, (session) => zoneIds.includes(classOf(db, session.classId)?.zoneId ?? '')),
+      zoneHorses: horses
+        .map((horse) => ({
+          ...brief(db, horse),
+          groomName: findUser(db, horse.groomId)?.name,
+          classCount: db.enrollments.filter((item) => item.horseId === horse.id && !item.withdrawnAt).length,
+          placement: placementOf(horse),
+        }))
+        .sort((a, b) => Number(a.train.allowed && a.race.allowed) - Number(b.train.allowed && b.race.allowed) || a.name.localeCompare(b.name)),
     };
   });
 }
@@ -316,6 +383,48 @@ export function getVetDashboard() {
       missingMaxHr: horses
         .filter((horse) => horse.lifecycleStatus === 'ACTIVE' && maxHeartRateOf(db, horse.id) === undefined)
         .map((horse) => ({ id: horse.id, name: horse.name })),
+      recentExams: [...db.examinations]
+        .sort((a, b) => b.examinedAt.localeCompare(a.examinedAt))
+        .slice(0, 6)
+        .map((exam) => ({
+          id: exam.id,
+          horseId: exam.horseId,
+          horseName: db.horses.find((horse) => horse.id === exam.horseId)?.name ?? '—',
+          kind: exam.kind,
+          caseId: exam.caseId,
+          examinedAt: exam.examinedAt,
+          vetName: findUser(db, exam.vetId)?.name,
+          before: exam.healthStatusBefore,
+          after: exam.healthStatusAfter,
+        })),
+      week: (() => {
+        // Lịch y tế 7 ngày: hạn khám định kỳ + hẹn tái khám trong bệnh án.
+        const days = emptyWeek(at);
+        const byDate = new Map(days.map((day) => [day.date, day]));
+        horses.forEach((horse) => {
+          const status = periodicStatus(db, horse, at);
+          const day = byDate.get(status.dueDate);
+          if (day) day.items.push({ id: `due-${horse.id}`, title: horse.name, detail: 'Tới hạn khám định kỳ', to: links.periodic });
+        });
+        db.medicalCases
+          .filter((item) => item.status === 'OPEN')
+          .forEach((item) => {
+            const next = db.examinations
+              .filter((exam) => exam.caseId === item.id)
+              .sort((a, b) => b.examinedAt.localeCompare(a.examinedAt))[0]?.nextAppointment;
+            const day = next ? byDate.get(next) : undefined;
+            if (day) {
+              day.items.push({
+                id: `appt-${item.id}`,
+                title: db.horses.find((horse) => horse.id === item.horseId)?.name ?? '—',
+                detail: `Tái khám · ${item.title ?? 'bệnh án'}`,
+                tone: 'warn',
+                to: links.case(item.id),
+              });
+            }
+          });
+        return days;
+      })(),
     };
   });
 }
@@ -351,6 +460,12 @@ export function getGroomDashboard() {
     return {
       today,
       horses: myHorses.map((horse) => ({ ...brief(db, horse), groomNote: undefined as string | undefined })),
+      week: weekSessions(
+        db,
+        at,
+        () => true,
+        (session, horseId) => effectiveGroomId(db, session, horseId) === user.id,
+      ),
       myRequests: db.examRequests
         .filter((item) => item.createdBy === user.id)
         .slice(0, 5)
@@ -418,6 +533,7 @@ export function getOwnerDashboard() {
         openCase: openCaseOf(db, horse.id)?.title,
       })),
       upcoming,
+      week: weekSessions(db, at, () => true, (_session, horseId) => ids.has(horseId)),
       notes,
       medicalCost: closedCases.reduce((sum, item) => sum + (item.cost ?? 0), 0),
       closedCases: closedCases.map((item) => ({
@@ -428,5 +544,25 @@ export function getOwnerDashboard() {
         cost: item.cost,
       })),
     };
+  });
+}
+
+/** Lịch buổi học 7 ngày tới theo phạm vi của người dùng hiện tại (dùng ở trang Buổi tập hôm nay). */
+export function getMyWeek() {
+  return query((db) => {
+    const user = requireUser();
+    const at = now();
+    if (user.role === 'HEAD_TRAINER') {
+      const zoneIds = managedZoneIds(db, user.id);
+      return weekSessions(db, at, (session) => zoneIds.includes(classOf(db, session.classId)?.zoneId ?? ''));
+    }
+    if (user.role === 'GROOM') {
+      return weekSessions(db, at, () => true, (session, horseId) => effectiveGroomId(db, session, horseId) === user.id);
+    }
+    if (user.role === 'HORSE_OWNER') {
+      const ids = new Set(db.horses.filter((horse) => horse.ownerId === user.id && !horse.deletedAt).map((horse) => horse.id));
+      return weekSessions(db, at, () => true, (_session, horseId) => ids.has(horseId));
+    }
+    return weekSessions(db, at, () => true);
   });
 }

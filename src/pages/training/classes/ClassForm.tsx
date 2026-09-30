@@ -27,7 +27,7 @@ import {
   Skeleton,
   useToast,
 } from '../../../components/ui';
-import { IntensityPill } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { useStore } from '../../../store/store';
 import { can } from '../../../auth/permissions';
 import { now } from '../../../lib/clock';
@@ -122,12 +122,12 @@ function ClassFormBody({
     <div className="space-y-6">
       <PageHeader
         back={
-          <Link to={links.classes} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 transition hover:text-gray-700">
+          <Link to={links.classes} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-800">
             <ArrowLeft size={15} /> Danh sách lớp
           </Link>
         }
         title="Mở lớp huấn luyện"
-        description="Chọn giáo án, khu và khung giờ cố định. Hệ thống sinh toàn bộ buổi học của lớp ngay khi mở; ngựa được đăng ký sau ở trang chi tiết lớp."
+        description="Chọn giáo án, khu và khung giờ cố định — hệ thống sinh toàn bộ buổi học ngay khi mở lớp."
         actions={
           <Button onClick={submit} disabled={action.pending || !programId || !zoneId || !slotId || !validDate || pastDate}>
             <CalendarCheck size={16} /> {action.pending ? 'Đang mở lớp…' : 'Mở lớp'}
@@ -158,7 +158,7 @@ function ClassFormBody({
                       onClick={() => setProgramId(option.id)}
                       className={cn(
                         'block w-full rounded-xl p-3.5 text-left ring-1 transition',
-                        selected ? 'bg-emerald-50/70 ring-2 ring-emerald-500' : 'bg-white ring-gray-200 hover:ring-emerald-300',
+                        selected ? 'bg-white ring-2 ring-emerald-600' : 'bg-white ring-gray-200 hover:ring-gray-300',
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -169,11 +169,11 @@ function ClassFormBody({
                           </p>
                         </div>
                         <span className="flex items-center gap-2">
-                          {option.summary.maxIntensity && <IntensityPill intensity={option.summary.maxIntensity} />}
+                          {option.summary.maxIntensity && <IntensityMeter intensity={option.summary.maxIntensity} />}
                           <span
                             className={cn(
                               'flex h-5 w-5 items-center justify-center rounded-full ring-1',
-                              selected ? 'bg-emerald-600 text-white ring-emerald-600' : 'ring-gray-300',
+                              selected ? 'bg-emerald-700 text-white ring-emerald-700' : 'ring-gray-300',
                             )}
                           >
                             {selected && <Check size={12} strokeWidth={3} />}
@@ -214,10 +214,10 @@ function ClassFormBody({
                       type="button"
                       onClick={() => setSlotId(slot.id)}
                       className={cn(
-                        'rounded-xl py-2.5 font-mono text-sm font-medium ring-1 transition',
+                        'rounded-lg py-2.5 text-sm font-medium tabular-nums ring-1 transition',
                         slot.id === slotId
-                          ? 'bg-emerald-600 text-white ring-emerald-600'
-                          : 'bg-white text-gray-600 ring-gray-200 hover:ring-emerald-300',
+                          ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
+                          : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
                       )}
                     >
                       {slot.startTime}
@@ -288,9 +288,9 @@ function ClassFormBody({
 
 function Figure({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={cn('rounded-xl px-3 py-2.5', strong ? 'bg-emerald-600 text-white' : 'bg-emerald-50/60')}>
-      <p className={cn('text-[11px]', strong ? 'text-emerald-100' : 'font-light text-gray-500')}>{label}</p>
-      <p className={cn('font-semibold tabular-nums', strong ? 'text-white' : 'text-gray-900')}>{value}</p>
+    <div className="rounded-xl bg-gray-50 px-3 py-2.5">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className={cn('font-semibold tabular-nums', strong ? 'text-emerald-800' : 'text-gray-900')}>{value}</p>
     </div>
   );
 }

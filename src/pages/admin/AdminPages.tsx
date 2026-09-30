@@ -110,9 +110,9 @@ export function AdminUsers() {
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-semibold text-gray-900">
                     {row.name}
-                    {!row.active && <Pill tone="red">Đã khóa</Pill>}
+                    {!row.active && <Pill tone="gray">Đã khóa</Pill>}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-500">
                     {row.email} · {row.phone}
                   </p>
                 </div>
@@ -260,7 +260,7 @@ export function AdminPermissions() {
           </div>
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
-              <tr className="border-y border-emerald-950/[0.06] bg-emerald-50/30">
+              <tr className="border-y border-gray-200/80 bg-gray-50/70">
                 <th className="w-16 px-5 py-2.5 text-xs font-semibold text-gray-500">Mã</th>
                 <th className="px-3 py-2.5 text-xs font-semibold text-gray-500">Chức năng</th>
                 {data.roles.map((item) => (
@@ -272,14 +272,14 @@ export function AdminPermissions() {
             </thead>
             <tbody>
               {group.rows.map((row) => (
-                <tr key={row.key} className="border-b border-gray-50 last:border-0">
+                <tr key={row.key} className="border-b border-gray-100 last:border-0">
                   <td className="px-5 py-2.5 font-mono text-xs text-gray-400">{row.code}</td>
                   <td className="px-3 py-2.5 text-gray-700">{row.feature}</td>
                   {row.cells.map((cell) => (
                     <td key={cell.role} className="px-3 py-2.5 text-center" title={cell.scopeLabel ?? 'Không có quyền'}>
                       {cell.allowed ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                          <Check size={12} />
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700">
+                          <Check size={12} strokeWidth={2.5} className="text-gray-900" />
                           {cell.scopeLabel}
                         </span>
                       ) : (
@@ -375,11 +375,11 @@ export function AdminSystem() {
       <div className="grid gap-5 lg:grid-cols-12">
         <Card className="lg:col-span-7">
           <SectionTitle icon={<Clock size={16} />}>Giờ hệ thống</SectionTitle>
-          <p className="mb-4 text-sm font-light text-gray-500">
+          <p className="mb-4 text-sm text-gray-500">
             Mọi quy tắc thời gian đọc từ đây. Đặt lệch giờ chỉ dùng khi cần kiểm thử theo mốc thời gian — đồng hồ vẫn chạy
             tiếp, không đứng yên.
           </p>
-          <p className="mb-4 rounded-xl bg-emerald-50/60 p-3 font-mono text-sm text-gray-700">
+          <p className="mb-4 rounded-xl bg-gray-50 p-3 text-sm tabular-nums text-gray-800 ring-1 ring-gray-200/70">
             {formatDateTime(now())} · {offsetLabel(settings.data?.clockMode, settings.data?.clockOffsetMs)}
           </p>
           <div className="flex flex-wrap items-end gap-3">
@@ -428,7 +428,7 @@ export function AdminSystem() {
 
         <Card variant="flat" className="lg:col-span-5">
           <SectionTitle icon={<Play size={16} />}>Thiết bị đeo mô phỏng</SectionTitle>
-          <p className="mb-4 text-sm font-light text-gray-500">
+          <p className="mb-4 text-sm text-gray-500">
             Buổi tập nhận nhịp tim và tốc độ từ bộ mô phỏng chạy trong ứng dụng. Tốc độ mới áp dụng cho các buổi bắt đầu sau
             khi đổi.
           </p>
@@ -444,7 +444,7 @@ export function AdminSystem() {
 
         <Card variant="flat" className="lg:col-span-5">
           <SectionTitle icon={<RefreshCw size={16} />}>Tác vụ định kỳ</SectionTitle>
-          <p className="mb-4 text-sm font-light text-gray-500">
+          <p className="mb-4 text-sm text-gray-500">
             Quét ngựa quá hạn khám định kỳ trên 7 ngày để gửi cảnh báo cho bác sĩ và quản lý (mỗi ngựa một lần cho tới
             khi được khám).
           </p>
@@ -460,7 +460,7 @@ export function AdminSystem() {
           {log && (
             <div className="mt-4 rounded-xl bg-white p-4 text-sm">
               {log.length === 0 ? (
-                <p className="font-light text-gray-400">Không có việc nào cần xử lý.</p>
+                <p className="text-gray-500">Không có việc nào cần xử lý.</p>
               ) : (
                 <ul className="space-y-1 text-gray-600">
                   {log.map((line, index) => (
@@ -474,7 +474,7 @@ export function AdminSystem() {
 
         <Card tone="danger" className="lg:col-span-7">
           <SectionTitle icon={<Database size={16} />}>Khôi phục dữ liệu khởi tạo</SectionTitle>
-          <p className="mb-4 text-sm font-light text-gray-500">
+          <p className="mb-4 text-sm text-gray-500">
             Xóa toàn bộ dữ liệu đang có và tạo lại bộ dữ liệu mẫu cho buổi demo. Thao tác này không hoàn tác được.
           </p>
           <Button variant="danger" onClick={() => setResetOpen(true)}>

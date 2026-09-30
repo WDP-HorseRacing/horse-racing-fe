@@ -2,16 +2,14 @@
 import { Link } from 'react-router-dom';
 import type { ClassResults } from '../../../services/training.service';
 import { Avatar, Card, cn, EmptyState, Tip } from '../../../components/ui';
-import { intensityDot } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { absenceLabel, intensityLabel } from '../../../lib/labels';
 import { formatDateShort, formatNumber, formatPercent } from '../../../lib/format';
 import { links } from '../../../lib/links';
 
+/** Điểm bình thường để chữ mực; chỉ điểm thấp (≤ 5) mới tô hổ phách để HT chú ý. */
 function scoreTone(score: number) {
-  if (score >= 8) return 'bg-emerald-600 text-white';
-  if (score >= 7) return 'bg-emerald-100 text-emerald-900';
-  if (score >= 6) return 'bg-lime-50 text-lime-900 ring-1 ring-lime-200';
-  return 'bg-amber-50 text-amber-900 ring-1 ring-amber-200';
+  return score <= 5 ? 'bg-amber-50 text-amber-800' : 'text-gray-900';
 }
 
 export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassResults; ownerFiltered: boolean }) {
@@ -31,48 +29,37 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
         <p className="text-sm text-gray-600">
           {results.sessions.length} buổi đã qua · ô là điểm đánh giá (thang 10); "Vắng" rê chuột để xem lý do
         </p>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded bg-emerald-600" /> ≥ 8
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded bg-emerald-100" /> 7
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded bg-lime-50 ring-1 ring-lime-200" /> 6
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded bg-amber-50 ring-1 ring-amber-200" /> ≤ 5
-          </span>
-        </div>
+        <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+          <span className="h-3 w-3 rounded bg-amber-100" /> điểm ≤ 5
+        </span>
       </div>
       <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-y border-emerald-950/[0.06] bg-emerald-50/30">
-              <th className="sticky left-0 z-10 min-w-[180px] bg-[#f6faf7] px-5 py-2.5 text-left text-xs font-semibold text-gray-500">Ngựa</th>
+            <tr className="border-y border-gray-200">
+              <th className="sticky left-0 z-10 min-w-[180px] bg-white px-5 py-2.5 text-left text-xs font-medium text-gray-500">Ngựa</th>
               {results.sessions.map((session) => (
                 <th key={session.id} className="min-w-[64px] px-1.5 py-2 text-center align-bottom">
                   <Tip content={`${session.subjectName} · ${intensityLabel[session.intensity]}`}>
                     <Link to={links.session(session.id)} className="inline-flex flex-col items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-emerald-700">
-                      <span className={cn('h-1.5 w-1.5 rounded-full', intensityDot[session.intensity])} />
+                      <IntensityMeter intensity={session.intensity} showLabel={false} />
                       <span className="tabular-nums">{formatDateShort(session.date)}</span>
                     </Link>
                   </Tip>
                 </th>
               ))}
-              <th className="min-w-[90px] px-3 py-2.5 text-right text-xs font-semibold text-gray-500">Có mặt</th>
-              <th className="min-w-[90px] px-5 py-2.5 text-right text-xs font-semibold text-gray-500">Điểm TB</th>
+              <th className="min-w-[90px] px-3 py-2.5 text-right text-xs font-medium text-gray-500">Có mặt</th>
+              <th className="min-w-[90px] px-5 py-2.5 text-right text-xs font-medium text-gray-500">Điểm TB</th>
             </tr>
           </thead>
           <tbody>
             {results.rows.map((row) => (
-              <tr key={row.horseId} className="border-b border-gray-50 last:border-0">
+              <tr key={row.horseId} className="border-b border-gray-100 last:border-0">
                 <td className="sticky left-0 z-10 bg-white px-5 py-2.5">
                   <Link to={links.horse(row.horseId, 'training')} className="flex items-center gap-2.5">
                     <Avatar src={row.horseAvatar} name={row.horseName} size={30} />
                     <span className={cn('font-medium', row.withdrawn ? 'text-gray-400' : 'text-gray-900')}>{row.horseName}</span>
-                    {row.withdrawn && <span className="text-[11px] font-light text-gray-400">đã rút</span>}
+                    {row.withdrawn && <span className="text-[11px] text-gray-500">đã rút</span>}
                   </Link>
                 </td>
                 {results.sessions.map((session) => {
@@ -95,7 +82,7 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
                             </span>
                           }
                         >
-                          <span className="inline-flex h-7 min-w-[44px] cursor-help items-center justify-center rounded-lg bg-orange-50 px-1.5 text-[11px] font-semibold text-orange-700 ring-1 ring-orange-100">
+                          <span className="inline-flex h-7 min-w-[44px] cursor-help items-center justify-center rounded-md bg-amber-50 px-1.5 text-[11px] font-medium text-amber-800">
                             Vắng
                           </span>
                         </Tip>
@@ -107,7 +94,7 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
                       {cell.score !== undefined ? (
                         <span
                           className={cn(
-                            'inline-flex h-7 w-9 items-center justify-center rounded-lg text-xs font-bold tabular-nums',
+                            'inline-flex h-7 w-9 items-center justify-center rounded-md text-sm font-semibold tabular-nums',
                             scoreTone(cell.score),
                           )}
                         >
@@ -115,7 +102,7 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
                         </span>
                       ) : (
                         <Tip content={session.status === 'AWAITING_REVIEW' ? 'Có mặt, chờ HT đánh giá' : 'Có mặt, chưa có điểm'}>
-                          <span className="inline-flex h-7 w-9 cursor-help items-center justify-center rounded-lg bg-gray-50 text-[11px] text-gray-400 ring-1 ring-gray-100">
+                          <span className="inline-flex h-7 w-9 cursor-help items-center justify-center rounded-md text-[11px] text-gray-400">
                             ✓
                           </span>
                         </Tip>
@@ -125,13 +112,13 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
                 })}
                 <td className="px-3 py-2 text-right tabular-nums">
                   {row.attendanceRate !== undefined ? (
-                    <span className={cn('font-semibold', row.attendanceRate < 0.8 ? 'text-orange-700' : 'text-gray-800')}>
+                    <span className={cn('font-semibold', row.attendanceRate < 0.8 ? 'text-amber-700' : 'text-gray-800')}>
                       {formatPercent(row.attendanceRate)}
                     </span>
                   ) : (
                     '—'
                   )}
-                  <span className="block text-[11px] font-light text-gray-400">
+                  <span className="block text-[11px] text-gray-500">
                     {row.presentCount}/{row.presentCount + row.absentCount} buổi
                   </span>
                 </td>

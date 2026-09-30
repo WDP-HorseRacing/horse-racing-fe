@@ -59,20 +59,20 @@ function Switch({ checked, onChange, label, hint }: { checked: boolean; onChange
       onClick={() => onChange(!checked)}
       className={cn(
         'flex w-full items-start gap-3 rounded-xl p-3 text-left ring-1 transition',
-        checked ? 'bg-amber-50 ring-amber-200' : 'bg-white ring-gray-200 hover:ring-gray-300',
+        checked ? 'bg-white ring-gray-400' : 'bg-white ring-gray-200 hover:ring-gray-300',
       )}
     >
       <span
         className={cn(
           'mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition',
-          checked ? 'bg-amber-500' : 'bg-gray-200',
+          checked ? 'bg-emerald-700' : 'bg-gray-200',
         )}
       >
         <span className={cn('h-4 w-4 rounded-full bg-white shadow transition', checked && 'translate-x-4')} />
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-gray-800">{label}</span>
-        {hint && <span className="mt-0.5 block text-xs font-light text-gray-500">{hint}</span>}
+        {hint && <span className="mt-0.5 block text-xs text-gray-500">{hint}</span>}
       </span>
     </button>
   );
@@ -83,7 +83,7 @@ function Step({ icon, title, children, aside }: { icon: ReactNode; title: string
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">{icon}</span>
+          <span className="text-gray-400">{icon}</span>
           {title}
         </h4>
         {aside}
@@ -233,7 +233,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
           <Step icon={<Stethoscope size={14} />} title="Ngựa được khám">
             {fixedHorseId ? (
               horse ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50/50 p-3 ring-1 ring-emerald-100">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-3 ring-1 ring-gray-200">
                   <HorseChip horse={horse} plain />
                   <div className="flex flex-wrap items-center gap-2">
                     <HealthPill status={horse.healthStatus} />
@@ -277,8 +277,8 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
           {horse && (
             <Step icon={<FolderOpen size={14} />} title="Loại buổi khám">
               {fixedCaseId ? (
-                <div className="rounded-xl bg-amber-50/60 p-3 text-sm ring-1 ring-amber-100">
-                  <p className="text-xs text-amber-700">Thêm vào bệnh án đang mở</p>
+                <div className="rounded-xl bg-white p-3 text-sm ring-1 ring-gray-200">
+                  <p className="text-xs text-gray-500">Thêm vào bệnh án đang mở</p>
                   <p className="font-semibold text-gray-900">{openCase?.title ?? 'Bệnh án'}</p>
                 </div>
               ) : (
@@ -309,12 +309,12 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                         className={cn(
                           'rounded-xl p-3 text-left ring-1 transition disabled:cursor-not-allowed disabled:opacity-50',
                           caseModeEffective === 'EXISTING' && openCase
-                            ? 'bg-emerald-50 ring-2 ring-emerald-500'
+                            ? 'bg-white ring-2 ring-gray-900'
                             : 'bg-white ring-gray-200 hover:ring-gray-300',
                         )}
                       >
                         <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                          <FolderOpen size={14} className="text-emerald-600" /> Bệnh án đang mở
+                          <FolderOpen size={14} className="text-gray-400" /> Bệnh án đang mở
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-gray-500">
                           {openCase ? openCase.title : 'Ngựa chưa có bệnh án mở'}
@@ -326,12 +326,12 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                         className={cn(
                           'rounded-xl p-3 text-left ring-1 transition',
                           caseModeEffective === 'NEW'
-                            ? 'bg-amber-50 ring-2 ring-amber-400'
+                            ? 'bg-white ring-2 ring-gray-900'
                             : 'bg-white ring-gray-200 hover:ring-gray-300',
                         )}
                       >
                         <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                          <FolderPlus size={14} className="text-amber-600" /> Mở bệnh án mới
+                          <FolderPlus size={14} className="text-gray-400" /> Mở bệnh án mới
                         </span>
                         <span className="mt-0.5 block text-xs text-gray-500">Buổi này là buổi khám đầu tiên</span>
                       </button>
@@ -371,7 +371,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
               title="Yêu cầu khám được xử lý"
               aside={
                 pendingRows.length > 0 && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     Đã chọn {selectedIds.length}/{pendingRows.length}
                   </span>
                 )
@@ -393,11 +393,8 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                         key={row.id}
                         className={cn(
                           'flex cursor-pointer gap-3 rounded-xl p-3 ring-1 transition',
-                          checked
-                            ? row.urgency === 'URGENT'
-                              ? 'bg-red-50/60 ring-red-200'
-                              : 'bg-emerald-50/50 ring-emerald-200'
-                            : 'bg-white ring-gray-200',
+                          checked ? 'bg-white ring-gray-400' : 'bg-white ring-gray-200',
+                          row.urgency === 'URGENT' && 'shadow-[inset_3px_0_0_0_#ef4444]',
                         )}
                       >
                         <input
@@ -414,7 +411,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                         />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                            <UrgencyPill urgency={row.urgency} />
+                            {row.urgency === 'URGENT' && <UrgencyPill urgency={row.urgency} />}
                             {row.sourceLabel} · {row.createdByName} · {formatDateTime(row.createdAt)}
                           </span>
                           <span className="mt-1 block">
@@ -424,7 +421,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                       </label>
                     );
                   })}
-                  <p className="text-xs font-light text-gray-400">
+                  <p className="text-xs text-gray-500">
                     Các yêu cầu được tích sẽ chuyển sang "Đã khám" và gắn với buổi khám này.
                   </p>
                 </div>
@@ -456,7 +453,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
               </div>
 
               {/* Chỉ số */}
-              <Step icon={<Activity size={14} />} title="Chỉ số đo được" aside={<span className="text-xs text-gray-400">Không bắt buộc</span>}>
+              <Step icon={<Activity size={14} />} title="Chỉ số đo được" aside={<span className="text-xs text-gray-500">Không bắt buộc</span>}>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {metricChecks.map(({ type, check }) => {
                     const meta = measurementLabel[type];
@@ -475,7 +472,7 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                           value={metrics[type]}
                           onChange={(event) => setMetrics({ ...metrics, [type]: event.target.value })}
                           placeholder={`${meta.min}–${meta.max}`}
-                          className={cn(check?.valid && check.abnormal && 'border-amber-400 bg-amber-50/40')}
+                          className={cn(check?.valid && check.abnormal && 'border-amber-400')}
                         />
                         {check?.valid && check.abnormal && (
                           <span className="mt-1.5 flex items-center gap-1 text-xs font-medium text-amber-700">
@@ -487,12 +484,8 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                   })}
                 </div>
                 {anyAbnormal && (
-                  <label
-                    className={cn(
-                      'flex cursor-pointer items-start gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 ring-1',
-                      fieldError('confirmAbnormal') ? 'ring-red-300' : 'ring-amber-200',
-                    )}
-                  >
+                  <Notice tone={fieldError('confirmAbnormal') ? 'danger' : 'warning'}>
+                  <label className="flex cursor-pointer items-start gap-3">
                     <input
                       type="checkbox"
                       checked={confirmAbnormal}
@@ -506,8 +499,9 @@ export default function ExaminationSheet({ onClose, onDone, horseId: fixedHorseI
                       )}
                     </span>
                   </label>
+                  </Notice>
                 )}
-                <p className="text-xs font-light text-gray-400">
+                <p className="text-xs text-gray-500">
                   Chỉ số ghi vào bảng chỉ số cơ thể của ngựa kèm nguồn "từ buổi khám này" và không xóa được ở hồ sơ.
                 </p>
               </Step>

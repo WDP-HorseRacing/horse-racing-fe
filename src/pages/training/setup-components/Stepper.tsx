@@ -23,13 +23,13 @@ export function Stepper({
 }) {
   const clamp = (next: number) => Math.min(max, Math.max(min, next));
   const button = cn(
-    'flex items-center justify-center rounded-lg text-gray-500 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-30',
+    'flex items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30',
     size === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
   );
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-xl bg-white p-1 ring-1 ring-gray-200',
+        'inline-flex items-center gap-0.5 rounded-lg bg-white p-1 ring-1 ring-gray-200',
         disabled && 'opacity-60',
       )}
     >
@@ -58,7 +58,7 @@ export function Stepper({
           size === 'sm' ? 'text-sm' : 'text-base',
         )}
       />
-      {suffix && <span className="pr-1 text-xs text-gray-400">{suffix}</span>}
+      {suffix && <span className="pr-1 text-xs text-gray-500">{suffix}</span>}
       <button
         type="button"
         aria-label={label ? `Tăng ${label}` : 'Tăng'}

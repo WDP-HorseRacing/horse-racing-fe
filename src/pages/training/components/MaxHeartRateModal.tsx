@@ -72,7 +72,7 @@ export default function MaxHeartRateModal({
             placeholder="Ví dụ: kết quả khám tim mạch đầu mùa; ngựa lớn tuổi, hạ ngưỡng an toàn"
           />
         </Field>
-        <p className="text-xs font-light text-gray-500">
+        <p className="text-xs text-gray-500">
           Ngưỡng mới áp dụng từ buổi bắt đầu sau khi lưu. Buổi đang diễn ra vẫn dùng giá trị đã chốt lúc bắt đầu.
         </p>
         {action.error && action.field !== 'value' && action.field !== 'reason' && (

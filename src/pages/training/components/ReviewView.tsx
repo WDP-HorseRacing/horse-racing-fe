@@ -1,10 +1,11 @@
 // Đánh giá từng ngựa sau buổi (F2.9): danh sách ngựa bên trái, bên phải là kế hoạch–thực tế và phiếu chấm.
 import { useEffect, useRef, useState } from 'react';
-import { AlertOctagon, CheckCircle2, Film, Lock, Save, Timer, UserX } from 'lucide-react';
+import { AlertOctagon, Check, Film, Lock, Save, Timer, UserX } from 'lucide-react';
 import {
   Avatar,
   Button,
   Card,
+  Dot,
   Field,
   Input,
   Notice,
@@ -36,13 +37,13 @@ export default function ReviewView({ detail, onChanged }: { detail: SessionDetai
   return (
     <div className="grid gap-5 lg:grid-cols-12">
       <aside className="space-y-3 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
-        <Card tone={detail.header.status === 'COMPLETED' ? 'success' : 'warning'} className="p-5">
+        <Card className="p-5">
           <p className="text-sm text-gray-500">Đã chấm</p>
           <p className="mt-1 text-4xl font-bold tabular-nums text-gray-900">
             {scored.length}
             <span className="text-lg font-medium text-gray-400">/{present.length} ngựa có mặt</span>
           </p>
-          <p className="mt-1 text-xs font-light text-gray-400">
+          <p className="mt-1 text-xs text-gray-500">
             {detail.header.status === 'COMPLETED'
               ? `Hoàn thành ${formatDateTime(detail.header.completedAt)}`
               : 'Buổi chuyển sang Hoàn thành khi mọi ngựa có mặt đã được chấm.'}
@@ -58,14 +59,14 @@ export default function ReviewView({ detail, onChanged }: { detail: SessionDetai
                 type="button"
                 onClick={() => setSelected(row.horseId)}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition',
-                  active ? 'bg-emerald-600 text-white shadow-grass' : 'bg-white ring-1 ring-emerald-950/[0.05] hover:bg-emerald-50/60',
+                  'flex w-full items-center gap-3 rounded-xl bg-white px-3 py-2.5 text-left ring-1 transition',
+                  active ? 'bg-gray-50 ring-gray-400' : 'ring-gray-200/80 hover:ring-gray-300',
                 )}
               >
                 <Avatar src={row.avatar} name={row.horseName} size={34} className={cn(row.status === 'ABSENT' && 'grayscale')} />
                 <div className="min-w-0 flex-1">
-                  <p className={cn('truncate text-sm font-semibold', active ? 'text-white' : 'text-gray-900')}>{row.horseName}</p>
-                  <p className={cn('truncate text-xs', active ? 'text-emerald-100' : 'text-gray-500')}>
+                  <p className="truncate text-sm font-semibold text-gray-900">{row.horseName}</p>
+                  <p className="truncate text-xs text-gray-500">
                     {row.status === 'ABSENT'
                       ? `Vắng — ${row.absenceLabel ?? ''}`
                       : row.evaluation
@@ -78,19 +79,24 @@ export default function ReviewView({ detail, onChanged }: { detail: SessionDetai
                   <span
                     className={cn(
                       'flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-bold',
-                      active ? 'bg-white/20 text-white' : 'bg-red-50 text-red-600',
+                      'bg-red-50 text-red-700',
                     )}
                     title="Cảnh báo đỏ trong buổi"
                   >
                     {row.redAlertCount}
                   </span>
                 )}
-                {row.evaluation && <CheckCircle2 size={16} className={active ? 'text-white' : 'text-emerald-600'} />}
+                {row.status === 'PRESENT' &&
+                  (row.evaluation ? (
+                    <Check size={15} strokeWidth={2.5} className="shrink-0 text-emerald-600" aria-label="Đã chấm" />
+                  ) : (
+                    <Dot tone="warn" className="mr-1" />
+                  ))}
               </button>
             );
           })}
           {detail.hiddenCount > 0 && (
-            <p className="px-1 pt-1 text-xs font-light text-gray-400">Bạn chỉ xem được ngựa của mình trong buổi này.</p>
+            <p className="px-1 pt-1 text-xs text-gray-500">Bạn chỉ xem được ngựa của mình trong buổi này.</p>
           )}
         </div>
       </aside>
@@ -100,14 +106,14 @@ export default function ReviewView({ detail, onChanged }: { detail: SessionDetai
           current.status === 'ABSENT' ? (
             <Card tone="warning">
               <div className="flex items-start gap-3">
-                <UserX size={20} className="mt-0.5 shrink-0 text-orange-600" />
+                <UserX size={20} className="mt-0.5 shrink-0 text-gray-400" />
                 <div>
                   <p className="font-semibold text-gray-900">{current.horseName} vắng buổi này</p>
                   <div className="mt-2">
                     <AttendancePill status="ABSENT" reason={current.absenceReason} />
                   </div>
                   {current.absenceNote && <p className="mt-2 text-sm text-gray-700">{current.absenceNote}</p>}
-                  <p className="mt-2 text-xs font-light text-gray-400">
+                  <p className="mt-2 text-xs text-gray-500">
                     Đánh dấu bởi {current.markedByName ?? 'Hệ thống'} · {formatDateTime(current.markedAt)}. Ngựa vắng không
                     có chỉ số và không cần chấm.
                   </p>
@@ -162,37 +168,37 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-400">
-                  <th className="py-2 pr-3 font-semibold">Chỉ tiêu</th>
-                  <th className="py-2 pr-3 font-semibold">Kế hoạch</th>
-                  <th className="py-2 font-semibold">Thực tế</th>
+                <tr className="border-b border-gray-100 text-xs text-gray-500">
+                  <th className="py-2 pr-3 font-medium">Chỉ tiêu</th>
+                  <th className="py-2 pr-3 font-medium">Kế hoạch</th>
+                  <th className="py-2 font-medium">Thực tế</th>
                 </tr>
               </thead>
-              <tbody className="[&_td]:py-2.5 [&_td]:pr-3 [&_tr]:border-b [&_tr]:border-gray-50">
+              <tbody className="[&_td]:py-2.5 [&_td]:pr-3 [&_tr]:border-b [&_tr]:border-gray-100 [&_tr:last-child]:border-0">
                 <tr>
                   <td className="text-gray-600">Khối lượng chạy nhanh</td>
                   <td className="tabular-nums text-gray-800">{formatDistance(detail.plannedVolumeM)}</td>
                   <td className="tabular-nums font-medium text-gray-900">
                     {formatDistance(summary.fastDistanceM)} ·{' '}
-                    <span className={ratio >= 0.9 ? 'text-emerald-600' : 'text-amber-600'}>{formatPercent(ratio)}</span>
+                    <span className={ratio >= 0.9 ? 'text-gray-900' : 'text-amber-700'}>{formatPercent(ratio)}</span>
                   </td>
                 </tr>
                 <tr>
                   <td className="text-gray-600">Tốc độ phần chính</td>
                   <td className="text-gray-500">Chạy nhanh ≥ {detail.fastThreshold} m/s</td>
                   <td className="tabular-nums font-medium text-gray-900">
-                    {speedText(summary.mainAvgSpeedMps)} <span className="text-gray-400">· cao nhất {speedText(summary.maxSpeedMps)}</span>
+                    {speedText(summary.mainAvgSpeedMps)} <span className="font-normal text-gray-500">· cao nhất {speedText(summary.maxSpeedMps)}</span>
                   </td>
                 </tr>
                 <tr>
                   <td className="text-gray-600">Nhịp tim TB / cao nhất</td>
-                  <td className={row.maxHeartRate ? 'text-gray-500' : 'text-amber-600'}>
+                  <td className={row.maxHeartRate ? 'text-gray-500' : 'text-amber-700'}>
                     {row.maxHeartRate ? `Ngưỡng ${row.maxHeartRate}` : 'Chưa đặt ngưỡng — R1 không chạy'}
                   </td>
                   <td
                     className={cn(
                       'tabular-nums font-medium',
-                      row.maxHeartRate && summary.maxHeartRate > row.maxHeartRate ? 'text-red-600' : 'text-gray-900',
+                      row.maxHeartRate && summary.maxHeartRate > row.maxHeartRate ? 'text-red-700' : 'text-gray-900',
                     )}
                   >
                     {summary.avgHeartRate} / {summary.maxHeartRate} nhịp/phút
@@ -220,20 +226,20 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
         )}
 
         {row.stopped?.reason && (
-          <p className="mt-4 rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          <p className="mt-4 text-sm text-red-700">
             Dừng bởi {row.stopped.byName}: {row.stopped.reason}
           </p>
         )}
 
         {alerts.length > 0 && (
-          <div className="mt-4 space-y-1.5 rounded-xl bg-red-50/70 p-4">
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-red-600">
+          <div className="mt-4 space-y-1.5 border-l-2 border-red-400 pl-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700">
               <AlertOctagon size={13} /> Cảnh báo của ngựa trong buổi
             </p>
             {alerts.map((alert) => (
-              <p key={alert.id} className="text-sm text-red-800">
+              <p key={alert.id} className="text-sm text-gray-800">
                 {alert.ruleLabel} ở giây {secondText(alert.atSecond)} — {alert.text}.{' '}
-                <span className="text-red-600/80">
+                <span className={alert.acknowledgedByName ? 'text-gray-500' : 'font-medium text-red-700'}>
                   {alert.acknowledgedByName
                     ? `${alert.acknowledgedByName} ${alert.ackAction === 'STOP_HORSE' ? 'đã dừng ngựa' : 'cho tiếp tục theo dõi'}`
                     : 'Chưa xác nhận'}
@@ -244,8 +250,8 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
         )}
 
         {row.canDoTasks && (
-          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-50 pt-4">
-            <span className="text-xs text-gray-400">Việc của Groom</span>
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
+            <span className="text-xs text-gray-500">Việc của Groom</span>
             <GroomTaskChecklist sessionId={header.id} horseId={row.horseId} tasks={row.tasks} onChanged={onChanged} />
           </div>
         )}
@@ -254,11 +260,11 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
       {row.canScore ? (
         <ScoreForm row={row} detail={detail} onChanged={onChanged} />
       ) : row.evaluation ? (
-        <Card variant="flat">
+        <Card>
           <div className="flex flex-wrap items-start gap-5">
-            <div className="rounded-2xl bg-white px-5 py-4 text-center shadow-grass">
-              <p className="text-4xl font-bold tabular-nums text-emerald-700">{row.evaluation.score}</p>
-              <p className="text-xs text-gray-400">/10 điểm</p>
+            <div className="rounded-xl px-4 py-3 text-center ring-1 ring-gray-200">
+              <p className="text-4xl font-bold tabular-nums text-gray-900">{row.evaluation.score}</p>
+              <p className="text-xs text-gray-500">/10 điểm</p>
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-gray-800">Nhận xét của HT</p>
@@ -268,7 +274,7 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
                   Thời gian chạy thử: <span className="font-semibold">{trialText(row.evaluation.trialTimeSeconds, row.evaluation.trialNotCompleted)}</span>
                 </p>
               )}
-              <p className="mt-2 text-xs font-light text-gray-400">
+              <p className="mt-2 text-xs text-gray-500">
                 {row.evaluation.evaluatedByName} · {formatDateTime(row.evaluation.evaluatedAt)}
                 {row.evaluation.editedAt ? ` · sửa lúc ${formatDateTime(row.evaluation.editedAt)}` : ''}
               </p>
@@ -340,11 +346,11 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
   };
 
   return (
-    <Card tone={row.evaluation ? 'default' : 'warning'}>
+    <Card>
       <SectionTitle
         action={
           row.scoreEditableUntil ? (
-            <span className="text-xs text-gray-400">Sửa được tới {formatDateTime(row.scoreEditableUntil)}</span>
+            <span className="text-xs text-gray-500">Sửa được tới {formatDateTime(row.scoreEditableUntil)}</span>
           ) : undefined
         }
       >
@@ -359,14 +365,10 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
                 type="button"
                 onClick={() => setForm({ ...form, score: value })}
                 className={cn(
-                  'h-10 w-10 rounded-xl text-sm font-bold tabular-nums transition',
+                  'h-10 w-10 rounded-lg text-sm font-semibold tabular-nums ring-1 transition',
                   form.score === value
-                    ? value >= 7
-                      ? 'bg-emerald-600 text-white shadow-grass'
-                      : value >= 5
-                        ? 'bg-amber-500 text-white shadow-amber'
-                        : 'bg-red-600 text-white shadow-red'
-                    : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:ring-emerald-300',
+                    ? 'bg-emerald-700 text-white ring-emerald-700'
+                    : 'bg-white text-gray-700 ring-gray-200 hover:ring-gray-400',
                 )}
               >
                 {value}
@@ -389,7 +391,7 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
         </Field>
 
         {isTrial && (
-          <div className="grid gap-4 rounded-xl bg-emerald-50/40 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-4 rounded-xl bg-gray-50 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
             <Field
               label="Thời gian chạy thử (giây)"
               required={!form.notCompleted}
@@ -437,7 +439,7 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
               <Button size="sm" variant="secondary" onClick={() => videoRef.current?.click()}>
                 <Film size={14} /> {form.videoSrc ? 'Đổi video chạy thử' : 'Tải video chạy thử'}
               </Button>
-              <p className="mt-1.5 text-xs font-light text-gray-400">MP4, MOV hoặc WebM, tối đa 40 MB.</p>
+              <p className="mt-1.5 text-xs text-gray-500">MP4, MOV hoặc WebM, tối đa 40 MB.</p>
               {videoError && <p className="mt-1 text-xs font-medium text-red-600">{videoError}</p>}
               {form.videoSrc && <video src={form.videoSrc} controls className="mt-3 w-full max-w-md rounded-xl" />}
             </div>
@@ -453,7 +455,7 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
             <Save size={15} /> {action.pending ? 'Đang lưu…' : row.evaluation ? 'Lưu thay đổi' : 'Lưu đánh giá'}
           </Button>
           {detail.header.status === 'COMPLETED' && (
-            <span className="text-xs text-gray-400">Chỉ sửa được trong 24 giờ kể từ lúc chấm lần đầu.</span>
+            <span className="text-xs text-gray-500">Chỉ sửa được trong 24 giờ kể từ lúc chấm lần đầu.</span>
           )}
         </div>
       </div>

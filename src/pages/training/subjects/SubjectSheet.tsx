@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
 import { Button, cn, ErrorBox, Field, Input, Notice, Sheet, Textarea } from '../../../components/ui';
-import { intensityDot } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { checkDistance, checkSubject, checkWorkoutIntensity, isHeavy } from '../../../lib/rules';
 import { intensityLabel, surfaceLabel, workoutLabel } from '../../../lib/labels';
 import type { TrackSurface, TrainingIntensity, WorkoutType } from '../../../types/domain';
@@ -128,10 +128,10 @@ export function SubjectSheet({
                 type="button"
                 onClick={() => setWorkout(key)}
                 className={cn(
-                  'rounded-xl px-3 py-2.5 text-sm font-medium ring-1 transition',
+                  'rounded-lg px-3 py-2.5 text-sm font-medium ring-1 transition',
                   form.workoutType === key
-                    ? 'bg-emerald-600 text-white ring-emerald-600'
-                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-emerald-300',
+                    ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
+                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
                 )}
               >
                 {workoutLabel[key]}
@@ -152,14 +152,13 @@ export function SubjectSheet({
                   title={allowed ? undefined : checkWorkoutIntensity(form.workoutType, key).reason}
                   onClick={() => setForm({ ...form, intensity: key })}
                   className={cn(
-                    'flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium ring-1 transition disabled:cursor-not-allowed disabled:opacity-35',
+                    'flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ring-1 transition disabled:cursor-not-allowed disabled:opacity-35',
                     form.intensity === key
-                      ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500'
-                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-emerald-300',
+                      ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
+                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
                   )}
                 >
-                  <span className={cn('h-2 w-2 rounded-full', intensityDot[key])} />
-                  {intensityLabel[key]}
+                  <IntensityMeter intensity={key} />
                 </button>
               );
             })}
@@ -211,10 +210,10 @@ export function SubjectSheet({
                 type="button"
                 onClick={() => setForm({ ...form, surface: key })}
                 className={cn(
-                  'rounded-xl px-4 py-2 text-sm font-medium ring-1 transition',
+                  'rounded-lg px-4 py-2 text-sm font-medium ring-1 transition',
                   form.surface === key
-                    ? 'bg-emerald-600 text-white ring-emerald-600'
-                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-emerald-300',
+                    ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
+                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
                 )}
               >
                 Sân {surfaceLabel[key].toLowerCase()}
@@ -231,9 +230,9 @@ export function SubjectSheet({
           />
         </Field>
 
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50/60 px-4 py-3 text-sm">
+        <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 text-sm">
           <span className="text-gray-500">Khối lượng mỗi buổi</span>
-          <span className="font-semibold text-emerald-900 tabular-nums">
+          <span className="font-semibold text-gray-900 tabular-nums">
             {Number.isFinite(form.distanceM * form.repetitions) ? volumeLabel(form.distanceM * form.repetitions) : '—'}
           </span>
         </div>

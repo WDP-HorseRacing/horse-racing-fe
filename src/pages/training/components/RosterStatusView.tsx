@@ -17,7 +17,7 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
     <div className="grid gap-5 lg:grid-cols-12">
       <div className="space-y-4 lg:col-span-8">
         {unacked.map((alert) => (
-          <div key={alert.id} className="flex items-start gap-3 rounded-2xl bg-red-600 px-5 py-4 text-white shadow-red">
+          <div key={alert.id} className="flex items-start gap-3 rounded-2xl bg-red-600 px-5 py-4 text-white">
             <AlertOctagon size={22} className="mt-0.5 shrink-0 animate-pulse" />
             <div>
               <p className="font-bold">Dừng ngựa ngay: {alert.horseName}</p>
@@ -37,9 +37,8 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
               <div
                 key={row.horseId}
                 className={cn(
-                  'rounded-2xl bg-white p-4 ring-1 sm:p-5',
-                  mineAlert ? 'ring-2 ring-red-400 shadow-red' : absent ? 'bg-orange-50/40 ring-orange-100' : 'ring-emerald-950/[0.06]',
-                  row.mine && !mineAlert && 'shadow-grass',
+                  'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 sm:p-5',
+                  mineAlert && 'ring-2 ring-red-500 shadow-[inset_4px_0_0_0_#ef4444]',
                 )}
               >
                 <div className="flex flex-wrap items-center gap-3">
@@ -47,12 +46,12 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-gray-900">
                       {row.horseName}
-                      {row.mine && <span className="ml-2 text-xs font-medium text-emerald-700">bạn dắt</span>}
+                      {row.mine && <span className="ml-2 text-xs font-normal text-gray-500">· bạn dắt</span>}
                     </p>
                     <p className="text-xs text-gray-500">{row.groomName ? `Groom ${row.groomName}` : 'Chưa có Groom'}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <AttendancePill status={row.status} reason={row.absenceReason} />
+                    {row.status !== 'PRESENT' && <AttendancePill status={row.status} reason={row.absenceReason} />}
                     {row.stopped && (
                       <Pill tone="red">
                         Đã dừng {secondText(row.stopped.atSecond)}
@@ -60,16 +59,16 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
                       </Pill>
                     )}
                     {running && !absent && !row.stopped && (
-                      <Pill tone="blue" pulse>
+                      <Pill tone="green" pulse>
                         Đang tập
                       </Pill>
                     )}
                   </div>
                 </div>
-                {absent && row.absenceNote && <p className="mt-2 text-sm text-orange-800">{row.absenceNote}</p>}
+                {absent && row.absenceNote && <p className="mt-2 text-sm text-gray-600">{row.absenceNote}</p>}
                 {row.stopped?.reason && <p className="mt-2 text-sm text-red-700">Lý do dừng: {row.stopped.reason}</p>}
                 {!absent && (isGroom || row.canDoTasks) && (
-                  <div className="mt-3 border-t border-gray-50 pt-3">
+                  <div className="mt-3 border-t border-gray-100 pt-3">
                     <GroomTaskChecklist
                       sessionId={detail.header.id}
                       horseId={row.horseId}
@@ -96,9 +95,9 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
         {detail.alerts.length > 0 && (
           <Card variant="outline">
             <SectionTitle className="mb-3">Cảnh báo trong buổi</SectionTitle>
-            <ul className="space-y-2 text-sm">
+            <ul className="divide-y divide-gray-100 text-sm">
               {detail.alerts.map((alert) => (
-                <li key={alert.id} className={cn('rounded-xl px-3 py-2', alert.level === 'RED' ? 'bg-red-50' : 'bg-gray-50')}>
+                <li key={alert.id} className="py-2 first:pt-0 last:pb-0">
                   <p className={cn('font-semibold', alert.level === 'RED' ? 'text-red-700' : 'text-gray-600')}>
                     {alert.horseName} · {alert.ruleLabel}
                   </p>

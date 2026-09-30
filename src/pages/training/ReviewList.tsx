@@ -1,8 +1,9 @@
 // Buổi chờ đánh giá — HT chấm từng ngựa có mặt; quá 48 giờ chưa chấm được tô hổ phách.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Clock, Hourglass } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import {
+  ChipFilter,
   DataTable,
   ErrorBox,
   Meter,
@@ -10,12 +11,10 @@ import {
   Pill,
   SearchInput,
   Skeleton,
-  Stat,
-  ToggleChip,
   Toolbar,
   type Column,
 } from '../../components/ui';
-import { IntensityPill } from '../../components/ui/status';
+import { IntensityMeter } from '../../components/ui/status';
 import { useService } from '../../hooks/useService';
 import { listAwaitingReview, type ReviewRow } from '../../services/session.service';
 import { links } from '../../lib/links';
@@ -61,11 +60,11 @@ export default function ReviewList() {
       render: (row) => (
         <div className="tabular-nums">
           <p className="text-gray-800">{formatDate(row.date)}</p>
-          <p className="text-xs text-gray-400">{row.slotLabel}</p>
+          <p className="text-xs text-gray-500">{row.slotLabel}</p>
         </div>
       ),
     },
-    { key: 'intensity', header: 'Cường độ', render: (row) => <IntensityPill intensity={row.intensity} /> },
+    { key: 'intensity', header: 'Cường độ', render: (row) => <IntensityMeter intensity={row.intensity} /> },
     {
       key: 'progress',
       header: 'Đã chấm',
@@ -74,7 +73,7 @@ export default function ReviewList() {
         <div>
           <p className="text-sm font-semibold tabular-nums text-gray-800">
             {row.scoredCount}/{row.presentCount} ngựa
-            {row.absentCount > 0 && <span className="ml-1 font-normal text-gray-400">· {row.absentCount} vắng</span>}
+            {row.absentCount > 0 && <span className="ml-1 font-normal text-gray-500">· {row.absentCount} vắng</span>}
           </p>
           <Meter value={row.scoredCount} max={row.presentCount || 1} className="mt-1.5" />
         </div>
@@ -111,7 +110,7 @@ export default function ReviewList() {
       header: '',
       className: 'text-right',
       render: (row) => (
-        <span className="text-sm font-semibold text-emerald-700">{row.canReview ? 'Chấm điểm' : 'Xem'}</span>
+        <span className="text-sm font-medium text-gray-600">{row.canReview ? 'Chấm điểm →' : 'Xem →'}</span>
       ),
     },
   ];
@@ -120,7 +119,7 @@ export default function ReviewList() {
     <div className="space-y-6">
       <PageHeader
         title="Chờ đánh giá"
-        description="Buổi đã kết thúc, chỉ số từng ngựa đã chốt. Buổi chuyển sang Hoàn thành khi HT chấm đủ mọi ngựa có mặt."
+        description="Chỉ số đã chốt — buổi chuyển sang Hoàn thành khi HT chấm đủ mọi ngựa có mặt."
       />
 
       {error && <ErrorBox message={error} />}
@@ -128,32 +127,21 @@ export default function ReviewList() {
 
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-12">
-            <Stat
-              className="lg:col-span-5"
-              value={total}
-              label="Buổi chờ đánh giá"
-              icon={<ClipboardCheck size={18} />}
-              active={!overdueOnly}
-              onClick={() => setOverdueOnly(false)}
-            />
-            <Stat
-              className="lg:col-span-4"
-              value={overdue}
-              label="Quá 48 giờ chưa chấm xong"
-              tone={overdue > 0 ? 'warning' : 'success'}
-              icon={<Clock size={18} />}
-              active={overdueOnly}
-              onClick={() => setOverdueOnly(true)}
-            />
-            <Stat className="lg:col-span-3" value={pendingHorses} label="Ngựa chưa chấm" icon={<Hourglass size={18} />} />
-          </div>
-
           <Toolbar>
-            <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo lớp hoặc môn học…" className="flex-1" />
-            <ToggleChip checked={overdueOnly} onChange={setOverdueOnly}>
-              Chỉ buổi quá 48 giờ
-            </ToggleChip>
+            <ChipFilter<'all' | 'overdue'>
+              value={overdueOnly ? 'overdue' : 'all'}
+              onChange={(value) => setOverdueOnly(value === 'overdue')}
+              options={[
+                { value: 'all', label: 'Tất cả buổi', count: total },
+                { value: 'overdue', label: 'Quá 48 giờ', count: overdue, dot: 'warn' },
+              ]}
+            />
+            {pendingHorses > 0 && (
+              <span className="px-1 text-sm text-gray-500 tabular-nums">
+                <span className="font-medium text-gray-900">{pendingHorses}</span> ngựa chưa chấm
+              </span>
+            )}
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo lớp hoặc môn học…" className="min-w-[220px] flex-1" />
           </Toolbar>
 
           <DataTable
@@ -161,7 +149,6 @@ export default function ReviewList() {
             columns={columns}
             rowKey={(row) => row.id}
             onRowClick={(row) => navigate(links.session(row.id))}
-            rowClassName={(row) => (row.overdue ? 'bg-amber-50/60 hover:bg-amber-50' : '')}
             emptyTitle={total === 0 ? 'Không có buổi nào chờ đánh giá' : 'Không có buổi khớp bộ lọc'}
             emptyHint={total === 0 ? 'Mọi buổi đã kết thúc đều được chấm đủ.' : undefined}
           />

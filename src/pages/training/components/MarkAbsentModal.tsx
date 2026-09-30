@@ -79,7 +79,7 @@ export default function MarkAbsentModal({
           />
         </Field>
 
-        <div className="rounded-xl bg-emerald-50/50 p-4">
+        <div className="rounded-xl bg-gray-50 p-4">
           <ToggleChip checked={exam} onChange={setExam}>
             <Stethoscope size={14} /> Gửi kèm yêu cầu khám
           </ToggleChip>

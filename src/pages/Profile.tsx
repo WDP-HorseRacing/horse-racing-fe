@@ -46,7 +46,7 @@ export default function Profile() {
             <div className="mt-5 border-t border-gray-100 pt-3">
               <InfoRow label="Email" value={user.email} />
               <InfoRow label="Điện thoại" value={user.phone} />
-              <InfoRow label="Trạng thái" value={<Pill tone="green">Đang hoạt động</Pill>} />
+              <InfoRow label="Trạng thái" value="Đang hoạt động" />
               {user.role === 'HEAD_TRAINER' && (
                 <InfoRow label="Khu phụ trách" value={zoneNames.length ? zoneNames.join(', ') : 'Chưa được giao khu'} />
               )}
@@ -54,8 +54,8 @@ export default function Profile() {
           </Card>
           <Card variant="flat">
             <p className="text-sm font-medium text-gray-700">Phạm vi dữ liệu</p>
-            <p className="mt-1 text-sm font-light text-gray-500">{SCOPE_TEXT[user.role]}</p>
-            <p className="mt-4 text-xs font-light text-gray-400">
+            <p className="mt-1 text-sm text-gray-500">{SCOPE_TEXT[user.role]}</p>
+            <p className="mt-4 text-xs text-gray-500">
               Cần đổi vai trò hoặc khu phụ trách? Liên hệ quản lý câu lạc bộ — vai trò gán ở mục Nhân sự, khu gán ở danh
               mục khu chuồng.
             </p>
@@ -79,12 +79,12 @@ export default function Profile() {
           <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
             {groups.map((group) => (
               <div key={group.group}>
-                <p className="mb-2 text-sm font-semibold text-emerald-800">{group.group}</p>
+                <p className="mb-2 text-sm font-semibold text-gray-900">{group.group}</p>
                 <div className="space-y-1">
                   {group.rows.map((item) => (
-                    <div key={item.feature} className="flex items-center justify-between gap-2 border-b border-gray-50 py-1.5 last:border-0">
+                    <div key={item.feature} className="flex items-center justify-between gap-2 border-b border-gray-100 py-1.5 last:border-0">
                       <p className="text-sm text-gray-700">
-                        <span className="mr-2 font-mono text-[11px] text-gray-300">{item.code}</span>
+                        <span className="mr-2 font-mono text-[11px] text-gray-400">{item.code}</span>
                         {item.feature}
                       </p>
                       {item.scope && <Pill tone="slate">{item.scope}</Pill>}

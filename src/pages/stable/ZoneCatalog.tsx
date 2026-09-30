@@ -89,7 +89,7 @@ export default function ZoneCatalog() {
       header: 'Khu',
       render: (zone) => (
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 font-bold text-white">{zone.code}</span>
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 font-bold text-gray-700">{zone.code}</span>
           <span className="font-semibold text-gray-900">{zone.name}</span>
         </div>
       ),
@@ -97,7 +97,7 @@ export default function ZoneCatalog() {
     {
       key: 'ht',
       header: 'HT phụ trách',
-      render: (zone) => (zone.headTrainerName ? <span className="text-sm text-gray-700">{zone.headTrainerName}</span> : <span className="text-sm text-amber-600">Chưa có</span>),
+      render: (zone) => (zone.headTrainerName ? <span className="text-sm text-gray-700">{zone.headTrainerName}</span> : <span className="text-sm font-medium text-amber-700">Chưa có</span>),
     },
     {
       key: 'status',
@@ -105,18 +105,18 @@ export default function ZoneCatalog() {
       render: (zone) => (
         <div>
           <ZoneStatusPill status={zone.status} />
-          {zone.statusReason && <div className="mt-0.5 max-w-48 truncate text-xs text-gray-400">{zone.statusReason}</div>}
+          {zone.statusReason && <div className="mt-0.5 max-w-48 truncate text-xs text-gray-500">{zone.statusReason}</div>}
         </div>
       ),
     },
     { key: 'total', header: 'Tổng ô', className: 'text-right tabular-nums', render: (zone) => zone.capacity.total },
-    { key: 'maint', header: 'Bảo trì', className: 'text-right tabular-nums', render: (zone) => zone.capacity.maintenance || '—' },
+    { key: 'maint', header: 'Bảo trì', className: 'text-right tabular-nums', render: (zone) => zone.capacity.maintenance || <span className="text-gray-300">—</span> },
     { key: 'occupied', header: 'Có ngựa', className: 'text-right tabular-nums', render: (zone) => zone.capacity.occupied },
     {
       key: 'waiting',
       header: 'Chờ xếp ô',
       className: 'text-right tabular-nums',
-      render: (zone) => (zone.capacity.waitingForStall ? <span className="font-semibold text-amber-600">{zone.capacity.waitingForStall}</span> : '—'),
+      render: (zone) => (zone.capacity.waitingForStall ? <span className="font-semibold text-amber-700">{zone.capacity.waitingForStall}</span> : <span className="text-gray-300">—</span>),
     },
     {
       key: 'free',
@@ -126,11 +126,11 @@ export default function ZoneCatalog() {
         <Tip content={freeTip(zone)}>
           <span
             className={cn(
-              'inline-flex cursor-help items-center gap-1 rounded-md px-2 py-0.5 text-sm font-semibold tabular-nums',
-              zone.capacity.free > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-gray-100 text-gray-500',
+              'inline-flex cursor-help items-center gap-1 text-sm tabular-nums',
+              zone.capacity.free <= 0 && zone.status === 'ACTIVE' ? 'font-semibold text-amber-700' : 'text-gray-900',
             )}
           >
-            {zone.capacity.free} <Info size={12} className="opacity-50" />
+            {zone.capacity.free} <Info size={12} className="text-gray-400" />
           </span>
         </Tip>
       ),
@@ -187,10 +187,10 @@ export default function ZoneCatalog() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Khu và ô chuồng"
-        description={canManage ? 'Quản lý danh mục khu, HT phụ trách và ô chuồng. Mọi chặn đều nêu lý do.' : 'Danh mục khu và ô chuồng của câu lạc bộ (chỉ xem).'}
+        description={canManage ? 'Danh mục khu, HT phụ trách và ô chuồng; bấm một khu để xem ô.' : 'Danh mục khu và ô chuồng của câu lạc bộ (chỉ xem).'}
         actions={
           canManage && (
             <Button onClick={() => setFormOpen({})}>
@@ -207,7 +207,7 @@ export default function ZoneCatalog() {
         columns={columns}
         rowKey={(zone) => zone.id}
         onRowClick={(zone) => setSelectedId(zone.id)}
-        rowClassName={(zone) => (zone.id === selected?.id ? 'bg-emerald-50/60' : '')}
+        rowClassName={(zone) => (zone.id === selected?.id ? 'bg-gray-50 [&>td:first-child]:shadow-[inset_2px_0_0_0_#047857]' : '')}
         emptyTitle="Chưa có khu chuồng nào"
       />
 
@@ -237,18 +237,18 @@ export default function ZoneCatalog() {
                       disabled={!canManage}
                       className={cn(
                         'flex h-20 w-full flex-col justify-between rounded-xl border p-2.5 text-left transition disabled:cursor-default',
-                        stall.status === 'OCCUPIED' && 'border-sky-200 bg-sky-50/60',
-                        stall.status === 'AVAILABLE' && 'border-dashed border-emerald-300 bg-white',
+                        stall.status === 'OCCUPIED' && 'border-gray-200 bg-white',
+                        stall.status === 'AVAILABLE' && 'border-dashed border-gray-300',
                         stall.status === 'MAINTENANCE' &&
-                          'border-dashed border-amber-300 bg-[repeating-linear-gradient(135deg,rgba(251,191,36,0.12)_0_7px,transparent_7px_14px)]',
-                        canManage && 'hover:-translate-y-0.5 hover:shadow-grass',
+                          'border-dashed border-gray-300 bg-[repeating-linear-gradient(135deg,rgba(17,24,39,0.045)_0_6px,transparent_6px_12px)]',
+                        canManage && 'hover:border-gray-400',
                       )}
                     >
                       <span className="font-mono text-xs font-semibold text-gray-600">{stall.code}</span>
-                      <span className="truncate text-[11px] text-gray-500">
+                      <span className={cn('truncate text-[11px]', stall.status === 'OCCUPIED' ? 'font-medium text-gray-800' : 'text-gray-500')}>
                         {stall.status === 'OCCUPIED' ? stall.horseName : stall.status === 'MAINTENANCE' ? (
-                          <span className="flex items-center gap-1 text-amber-700">
-                            <Wrench size={11} /> {stall.maintenanceNote ?? stallStatusLabel.MAINTENANCE}
+                          <span className="flex items-center gap-1">
+                            <Wrench size={11} className="text-gray-400" /> {stall.maintenanceNote ?? stallStatusLabel.MAINTENANCE}
                           </span>
                         ) : (
                           stallStatusLabel.AVAILABLE
@@ -269,11 +269,13 @@ export default function ZoneCatalog() {
                 <ZoneStatusPill status={selected.status} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-white p-3">
-                  <p className="text-2xl font-bold tabular-nums text-emerald-700">{selected.capacity.free}</p>
+                <div className="rounded-xl bg-white p-3 ring-1 ring-gray-200/70">
+                  <p className={cn('text-2xl font-bold tabular-nums', selected.capacity.free <= 0 && selected.status === 'ACTIVE' ? 'text-amber-700' : 'text-gray-900')}>
+                    {selected.capacity.free}
+                  </p>
                   <p className="text-xs text-gray-500">chỗ trống</p>
                 </div>
-                <div className="rounded-xl bg-white p-3">
+                <div className="rounded-xl bg-white p-3 ring-1 ring-gray-200/70">
                   <p className="text-2xl font-bold tabular-nums text-gray-900">{selected.capacity.horseCount}</p>
                   <p className="text-xs text-gray-500">ngựa thuộc khu</p>
                 </div>
@@ -281,9 +283,9 @@ export default function ZoneCatalog() {
               <p className="text-xs text-gray-500">{freeTip(selected)}</p>
               <div className="flex flex-wrap gap-1.5">
                 <Pill tone="slate">HT: {selected.headTrainerName ?? 'chưa có'}</Pill>
-                {selected.openClassCount > 0 && <Pill tone="blue">{selected.openClassCount} lớp chưa kết thúc</Pill>}
+                {selected.openClassCount > 0 && <Pill tone="slate">{selected.openClassCount} lớp chưa kết thúc</Pill>}
               </div>
-              <ul className="space-y-1.5 border-t border-emerald-900/5 pt-3 text-xs text-gray-500">
+              <ul className="space-y-1.5 border-t border-gray-200/70 pt-3 text-xs text-gray-500">
                 <li>Khu còn ngựa thì không chuyển sang Đóng/Bảo trì, không gỡ HT, không xóa. Đổi sang HT khác luôn được.</li>
                 <li>Ô chỉ chuyển Trống ⇄ Bảo trì khi không có ngựa; trạng thái Có ngựa do hệ thống tự đặt.</li>
                 <li>Không chuyển ô sang bảo trì hay xóa ô nếu việc đó làm khu thiếu chỗ cho ngựa đang chờ xếp ô.</li>

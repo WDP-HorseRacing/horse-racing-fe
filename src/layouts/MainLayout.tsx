@@ -6,12 +6,12 @@ import * as Dialog from '@radix-ui/react-dialog';
 import {
   Activity,
   BookOpen,
+  ChevronRight,
   Bell,
   CalendarCheck,
   CalendarDays,
   ClipboardCheck,
   ClipboardList,
-  Flag,
   HeartPulse,
   Layers,
   LayoutDashboard,
@@ -35,6 +35,7 @@ import {
 import Lenis from 'lenis';
 import { useStore } from '../store/store';
 import { Avatar, ToastHost, Tip, cn, useToast } from '../components/ui';
+import { Logo } from '../components/Logo';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
 import { links } from '../lib/links';
@@ -50,7 +51,7 @@ import type { UserRole } from '../types/domain';
 interface NavItem {
   name: string;
   path: string;
-  icon: typeof Flag;
+  icon: typeof Bell;
 }
 
 interface NavGroup {
@@ -234,7 +235,7 @@ function NotificationBell() {
         <Popover.Content
           align="end"
           sideOffset={8}
-          className="anim-pop z-50 w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-white shadow-float ring-1 ring-emerald-950/5"
+          className="anim-pop z-50 w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-white shadow-float ring-1 ring-gray-200"
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <span className="text-sm font-semibold text-gray-900">Thông báo</span>
@@ -264,7 +265,7 @@ function NotificationBell() {
                   if (item.link) navigate(item.link);
                 }}
                 className={cn(
-                  'flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-emerald-50/40',
+                  'flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50',
                   item.readAt && 'opacity-55',
                 )}
               >
@@ -329,9 +330,9 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
         <div key={group.group ?? index} className="space-y-0.5">
           {group.group &&
             (collapsed ? (
-              <div className="mx-auto my-2 h-px w-6 bg-emerald-950/10" />
+              <div className="mx-auto my-2 h-px w-6 bg-gray-200" />
             ) : (
-              <p className="mb-1 px-3 text-xs font-medium text-emerald-900/40">{group.group}</p>
+              <p className="mb-1 px-3 text-xs font-medium text-gray-400">{group.group}</p>
             ))}
           {group.items.map((item) => {
             const link = (
@@ -342,11 +343,11 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(
-                    'group flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200',
+                    'group flex items-center gap-3 rounded-lg text-sm font-medium transition-colors duration-150',
                     collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
                     isActive
-                      ? 'bg-emerald-600 text-white shadow-[0_8px_20px_-12px_rgba(5,150,105,0.9)]'
-                      : 'text-gray-600 hover:bg-emerald-50 hover:text-emerald-800',
+                      ? 'bg-emerald-50 font-semibold text-emerald-800'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
                   )
                 }
               >
@@ -371,10 +372,7 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
 function Brand({ collapsed }: { collapsed: boolean }) {
   return (
     <Link to={links.dashboard} className={cn('flex items-center gap-2.5', collapsed ? 'justify-center' : 'px-1')}>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 shadow-[0_8px_20px_-10px_rgba(5,150,105,0.9)]">
-        <Flag size={17} className="text-white" />
-      </div>
-      {!collapsed && <span className="text-lg font-bold tracking-tight text-gray-900">HorseRacing</span>}
+      <Logo size={36} withText={!collapsed} />
     </Link>
   );
 }
@@ -423,6 +421,19 @@ function Shell() {
 
   const groups = useMemo(() => menuFor(currentUser?.role), [currentUser?.role]);
 
+  // Đường dẫn vị trí: nhóm menu › mục menu khớp dài nhất với URL hiện tại.
+  const crumb = useMemo(() => {
+    let best: { group?: string; name: string; length: number } | null = null;
+    groups.forEach((group) =>
+      group.items.forEach((item) => {
+        const hit = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+        if (hit && (!best || item.path.length > best.length)) best = { group: group.group, name: item.name, length: item.path.length };
+      }),
+    );
+    return best as { group?: string; name: string; length: number } | null;
+  }, [groups, location.pathname]);
+  const isDetail = !!crumb && !groups.some((group) => group.items.some((item) => item.path === location.pathname));
+
   const scope = (() => {
     if (!currentUser) return '';
     if (currentUser.role === 'HEAD_TRAINER') {
@@ -445,7 +456,7 @@ function Shell() {
       {/* Sidebar máy tính — thu gọn được thành rail icon */}
       <aside
         className={cn(
-          'hidden shrink-0 flex-col border-r border-emerald-950/[0.06] bg-white/80 py-5 backdrop-blur transition-[width] duration-300 lg:flex',
+          'hidden shrink-0 flex-col border-r border-gray-200/80 bg-white/80 py-5 backdrop-blur transition-[width] duration-300 lg:flex',
           collapsed ? 'w-[72px] px-2' : 'w-60 px-3',
         )}
       >
@@ -453,20 +464,23 @@ function Shell() {
           <Brand collapsed={collapsed} />
         </div>
         <NavList groups={groups} collapsed={collapsed} />
-        <div className="mt-4 space-y-2 border-t border-emerald-950/[0.06] pt-4">
+        <div className="mt-4 space-y-2 border-t border-gray-200/80 pt-4">
           {!collapsed && (
             <div className="flex items-center gap-3 px-1">
               <Avatar name={currentUser?.name ?? '?'} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
-                <p className="truncate text-xs text-gray-400">{currentUser ? roleLabel[currentUser.role] : ''}</p>
+                <p className="truncate text-xs text-gray-500">{currentUser ? roleLabel[currentUser.role] : ''}</p>
+                <p className="truncate text-xs text-gray-400" title={scope}>
+                  Phạm vi: {scope}
+                </p>
               </div>
             </div>
           )}
           <button
             onClick={() => setCollapsed((value) => !value)}
             className={cn(
-              'flex items-center gap-2 rounded-xl text-sm font-medium text-gray-400 transition hover:bg-emerald-50 hover:text-emerald-800',
+              'flex items-center gap-2 rounded-xl text-sm font-medium text-gray-400 transition hover:bg-gray-100 hover:text-gray-900',
               collapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full px-3 py-2',
             )}
             aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
@@ -505,7 +519,7 @@ function Shell() {
       </Dialog.Root>
 
       <main className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-emerald-950/[0.06] bg-white/70 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200/80 bg-white/70 px-4 backdrop-blur-md sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={() => setDrawerOpen(true)}
@@ -514,13 +528,18 @@ function Shell() {
             >
               <Menu size={18} />
             </button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-gray-900">
-                {currentUser ? roleLabel[currentUser.role] : 'HorseRacing'}
-              </p>
-              <p className="truncate text-xs text-gray-400">
-                {currentUser?.name} · Phạm vi: {scope}
-              </p>
+            <div className="flex min-w-0 items-center gap-1.5 text-sm">
+              {crumb?.group && <span className="hidden truncate text-gray-500 sm:inline">{crumb.group}</span>}
+              {crumb?.group && <ChevronRight size={14} className="hidden shrink-0 text-gray-300 sm:inline" />}
+              <span className={cn('truncate font-semibold', isDetail ? 'text-gray-500' : 'text-gray-900')}>{crumb?.name ?? 'HorseRacing'}</span>
+              {isDetail && (
+                <>
+                  <ChevronRight size={14} className="shrink-0 text-gray-300" />
+                  <span className="truncate font-semibold text-gray-900">
+                    {location.pathname.endsWith('/new') ? 'Tạo mới' : location.pathname.endsWith('/edit') ? 'Chỉnh sửa' : 'Chi tiết'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2.5">
@@ -536,17 +555,17 @@ function Shell() {
                 <Dropdown.Content
                   align="end"
                   sideOffset={8}
-                  className="anim-pop z-50 w-56 rounded-2xl bg-white p-1.5 shadow-float ring-1 ring-emerald-950/5"
+                  className="anim-pop z-50 w-56 rounded-2xl bg-white p-1.5 shadow-float ring-1 ring-gray-200"
                 >
                   <Dropdown.Item
                     onSelect={() => navigate(links.profile)}
-                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-emerald-50"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-gray-100"
                   >
                     Hồ sơ cá nhân
                   </Dropdown.Item>
                   <Dropdown.Item
                     onSelect={() => navigate('/login')}
-                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-emerald-50"
+                    className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-gray-100"
                   >
                     Đổi tài khoản
                   </Dropdown.Item>

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowUpRight, CalendarPlus, XCircle } from 'lucide-react';
 import type { ClassDetail, ClassSessionRow } from '../../../services/training.service';
 import { Button, Card, cn, EmptyState, Pill, Segmented, Tip } from '../../../components/ui';
-import { IntensityPill, SessionPill } from '../../../components/ui/status';
+import { IntensityMeter, SessionPill } from '../../../components/ui/status';
 import { sessionCancelLabel, surfaceLabel } from '../../../lib/labels';
 import { formatDateShort } from '../../../lib/format';
 import { links } from '../../../lib/links';
@@ -74,14 +74,14 @@ export function ClassSessionsTab({
         const phase = rows.find((row) => row.phaseName)?.phaseName;
         const current = rows.some((row) => row.date === today);
         return (
-          <Card key={week} variant={current ? 'raised' : 'outline'} className="p-0 sm:p-0">
+          <Card key={week} className="p-0 sm:p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-3">
               <span className="font-semibold text-gray-900">{week > 0 ? `Tuần ${week}` : 'Ngoài tuần'}</span>
               {phase && <span className="text-sm text-gray-500">{phase}</span>}
-              {current && <Pill tone="green">Tuần này</Pill>}
-              <span className="ml-auto text-xs text-gray-400 tabular-nums">{rows.length} buổi</span>
+              {current && <span className="text-sm font-medium text-emerald-700">· tuần này</span>}
+              <span className="ml-auto text-xs text-gray-500 tabular-nums">{rows.length} buổi</span>
             </div>
-            <ul className="divide-y divide-gray-50">
+            <ul className="divide-y divide-gray-100">
               {rows.map((row) => (
                 <SessionLine key={row.id} row={row} today={today} onCancel={() => onCancel(row)} />
               ))}
@@ -100,32 +100,35 @@ function SessionLine({ row, today, onCancel }: { row: ClassSessionRow; today: st
     <li
       className={cn(
         'grid items-center gap-x-4 gap-y-2 px-5 py-3 text-sm md:grid-cols-12',
-        row.date === today && 'bg-emerald-50/50',
+        row.date === today && 'bg-gray-50',
         cancelled && 'opacity-70',
       )}
     >
       <div className="md:col-span-2">
-        <p className="font-semibold text-gray-900 tabular-nums">{formatDateShort(row.date)}</p>
-        <p className="text-xs font-light text-gray-500">
-          {weekdayLong(row.date)} · <span className="font-mono">{row.slotLabel}</span>
+        <p className={cn('font-semibold tabular-nums', row.date === today ? 'text-emerald-800' : 'text-gray-900')}>
+          {formatDateShort(row.date)}
+          {row.date === today && <span className="ml-1 text-xs font-medium">hôm nay</span>}
+        </p>
+        <p className="text-xs text-gray-500 tabular-nums">
+          {weekdayLong(row.date)} · {row.slotLabel}
         </p>
       </div>
       <div className="min-w-0 md:col-span-4">
         <p className={cn('font-medium text-gray-900', cancelled && 'line-through decoration-gray-300')}>
           {row.subjectName}
           {row.isExtra && (
-            <Pill tone="orange" className="ml-2">
+            <Pill tone="gray" className="ml-2">
               Buổi thêm
             </Pill>
           )}
         </p>
-        <p className="text-xs font-light text-gray-500">
+        <p className="text-xs text-gray-500">
           {workoutLine(row.distanceM, row.repetitions)} · sân {surfaceLabel[row.surface].toLowerCase()}
           {row.note && ` · ${row.note}`}
         </p>
       </div>
       <div className="md:col-span-1">
-        <IntensityPill intensity={row.intensity} />
+        <IntensityMeter intensity={row.intensity} />
       </div>
       <div className="md:col-span-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -133,7 +136,7 @@ function SessionLine({ row, today, onCancel }: { row: ClassSessionRow; today: st
           {row.derivedLabel && <Pill tone="amber">{row.derivedLabel}</Pill>}
         </div>
         {cancelled ? (
-          <p className="mt-1 text-xs text-red-600">
+          <p className="mt-1 text-xs text-gray-500">
             {row.cancelKind ? `${sessionCancelLabel[row.cancelKind]}: ` : ''}
             {row.cancelReason}
           </p>
@@ -143,8 +146,8 @@ function SessionLine({ row, today, onCancel }: { row: ClassSessionRow; today: st
             {started && (
               <>
                 {' · '}
-                <span className="text-emerald-700">{row.presentCount} có mặt</span>
-                {row.absentCount > 0 && <span className="text-orange-700"> · {row.absentCount} vắng</span>}
+                <span>{row.presentCount} có mặt</span>
+                {row.absentCount > 0 && <span className="text-amber-700"> · {row.absentCount} vắng</span>}
               </>
             )}
           </p>
@@ -166,7 +169,7 @@ function SessionLine({ row, today, onCancel }: { row: ClassSessionRow; today: st
         {!cancelled && (
           <Link
             to={links.session(row.id)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
           >
             Mở buổi <ArrowUpRight size={13} />
           </Link>

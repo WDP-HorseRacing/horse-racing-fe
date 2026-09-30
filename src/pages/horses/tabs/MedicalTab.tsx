@@ -18,8 +18,8 @@ import {
 import { useService } from '../../../hooks/useService';
 import { getHorseMedical, type ExamCard, type LockRow } from '../../../services/medical.service';
 import { ERR_FORBIDDEN } from '../../../services/db';
-import { Button, Card, EmptyState, ErrorBox, Notice, Pill, SectionTitle, Sheet, Skeleton, cn } from '../../../components/ui';
-import { CasePill, RequestPill, UrgencyPill } from '../../../components/ui/status';
+import { Button, Card, Dot, EmptyState, ErrorBox, Notice, SectionTitle, Sheet, Skeleton, cn } from '../../../components/ui';
+import { CasePill, RequestPill, UrgencyPill, healthDot } from '../../../components/ui/status';
 import { healthHint, healthLabel } from '../../../lib/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../../lib/format';
 import { links } from '../../../lib/links';
@@ -33,7 +33,7 @@ import {
   RequestForm,
 } from '../../medical/components/modals';
 import { HealthShift, PeriodicPill, RequestLines } from '../../medical/components/parts';
-import { healthSwatch } from '../../medical/components/utils';
+import { healthText } from '../../medical/components/utils';
 
 type Dialog =
   | { kind: 'exam' }
@@ -70,9 +70,9 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs text-gray-400">Sức khỏe hiện tại</p>
-              <p className={cn('mt-1 flex items-center gap-2 text-2xl font-bold tracking-tight', healthSwatch[data.horse.healthStatus].text)}>
-                <span className={cn('h-3 w-3 rounded-full', healthSwatch[data.horse.healthStatus].dot)} />
+              <p className="text-xs text-gray-500">Sức khỏe hiện tại</p>
+              <p className={cn('mt-1 flex items-center gap-2 text-lg font-semibold', healthText[data.horse.healthStatus])}>
+                <Dot tone={healthDot[data.horse.healthStatus]} hollow={data.horse.healthStatus === 'QUARANTINED'} className="h-2.5 w-2.5" />
                 {healthLabel[data.horse.healthStatus]}
               </p>
               <p className="mt-1 text-sm text-gray-500">{healthHint[data.horse.healthStatus]}</p>
@@ -83,26 +83,26 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
               </Button>
             )}
           </div>
-          <div className="mt-5 border-t border-gray-50 pt-4">
-            <p className="mb-3 flex items-center gap-1.5 text-xs font-medium text-gray-400">
-              <History size={13} /> Nhật ký đổi trạng thái sức khỏe
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <p className="mb-3 flex items-center gap-1.5 text-xs text-gray-500">
+              <History size={13} className="text-gray-400" /> Nhật ký đổi trạng thái sức khỏe
             </p>
             {data.healthLogs.length === 0 ? (
-              <p className="text-sm text-gray-400">Chưa có lần đổi trạng thái nào.</p>
+              <p className="text-sm text-gray-500">Chưa có lần đổi trạng thái nào.</p>
             ) : (
               <ol className="space-y-3">
                 {data.healthLogs.map((log) => (
                   <li key={log.id} className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
-                    <span className="w-32 shrink-0 text-xs tabular-nums text-gray-400">{formatDateTime(log.changedAt)}</span>
+                    <span className="w-32 shrink-0 text-xs tabular-nums text-gray-500">{formatDateTime(log.changedAt)}</span>
                     <div className="min-w-0 flex-1">
                       <HealthShift from={log.fromStatus} to={log.toStatus} />
                       <p className="mt-1 text-sm text-gray-700">{log.reason}</p>
-                      <p className="mt-0.5 text-xs text-gray-400">
+                      <p className="mt-0.5 text-xs text-gray-500">
                         {log.changedByName} ·{' '}
                         {log.direct ? (
                           'đổi trực tiếp, không qua buổi khám'
                         ) : log.caseId ? (
-                          <Link to={links.case(log.caseId)} className="text-amber-700 hover:underline">
+                          <Link to={links.case(log.caseId)} className="text-emerald-700 hover:underline">
                             trong buổi khám của bệnh án "{log.caseTitle}"
                           </Link>
                         ) : (
@@ -118,44 +118,36 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
         </Card>
 
         {/* Bệnh án */}
-        <Card variant="flat">
+        <Card>
           <SectionTitle icon={<FolderOpen size={16} />}>Bệnh án ({data.cases.length})</SectionTitle>
           {data.cases.length === 0 ? (
             <p className="text-sm text-gray-500">Ngựa chưa có bệnh án nào.</p>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {data.cases.map((item, index) => (
-                <Link
-                  key={item.id}
-                  to={links.case(item.id)}
-                  className={cn(
-                    'block rounded-2xl bg-white p-4 ring-1 transition hover:-translate-y-0.5',
-                    item.status === 'OPEN' ? 'shadow-amber ring-amber-100' : 'ring-emerald-950/5 hover:shadow-grass',
-                    index === 0 && data.cases.length % 2 === 1 && 'md:col-span-2',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-semibold text-gray-900">{item.title}</p>
-                    <CasePill status={item.status} />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Mở {formatDate(item.openedAt)} · {item.openedByName}
-                    {item.closedAt && ` · đóng ${formatDate(item.closedAt)}`} · {item.examCount} buổi khám
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                    {item.activeLock && (
-                      <Pill tone="red">
-                        <Lock size={11} /> Khóa còn hiệu lực
-                      </Pill>
-                    )}
-                    {item.nextAppointment && <span className="text-gray-500">Hẹn khám tiếp {formatDate(item.nextAppointment)}</span>}
-                    {item.costVisible && item.cost !== undefined && (
-                      <span className="ml-auto font-semibold tabular-nums text-gray-900">{formatMoney(item.cost)}</span>
-                    )}
-                  </div>
-                </Link>
+            <ul className="-mx-2 -my-1 space-y-0.5">
+              {data.cases.map((item) => (
+                <li key={item.id}>
+                  <Link to={links.case(item.id)} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 rounded-xl p-2 transition hover:bg-gray-50">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-2 font-semibold text-gray-900">
+                        {item.title}
+                        {item.activeLock && <Lock size={13} className="shrink-0 text-red-600" aria-label="Khóa còn hiệu lực" />}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        Mở {formatDate(item.openedAt)} · {item.openedByName}
+                        {item.closedAt && ` · đóng ${formatDate(item.closedAt)}`} · {item.examCount} buổi khám
+                        {item.nextAppointment && item.status === 'OPEN' && ` · hẹn khám tiếp ${formatDate(item.nextAppointment)}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {item.costVisible && item.cost !== undefined && (
+                        <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(item.cost)}</span>
+                      )}
+                      <CasePill status={item.status} />
+                    </div>
+                  </Link>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </Card>
 
@@ -189,14 +181,14 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
       {/* ===== Cột phụ ===== */}
       <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
         {hasVetActions && (
-          <Card variant="flat" tone="success">
+          <Card>
             <SectionTitle icon={<Stethoscope size={16} />}>Thao tác bác sĩ</SectionTitle>
             <div className="grid gap-2">
               {data.canExamine && (
                 <Button onClick={() => setDialog({ kind: 'exam' })} className="justify-start">
                   <Stethoscope size={15} /> Ghi buổi khám
                   {data.pendingRequestCount > 0 && (
-                    <span className="ml-auto rounded-md bg-white/20 px-1.5 text-xs">{data.pendingRequestCount} yêu cầu chờ</span>
+                    <span className="ml-auto rounded-md bg-white/15 px-1.5 text-xs font-medium">{data.pendingRequestCount} yêu cầu chờ</span>
                   )}
                 </Button>
               )}
@@ -215,11 +207,12 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
         )}
 
         {/* Khóa */}
-        <Card tone={data.activeLock ? 'danger' : 'default'}>
+        <Card tone={data.activeLock ? 'danger' : 'default'} className={data.activeLock ? '!shadow-[inset_3px_0_0_0_#ef4444]' : ''}>
           <SectionTitle icon={<Lock size={16} />}>Khóa huấn luyện</SectionTitle>
           {data.activeLock ? (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-red-800">{data.activeLock.reason}</p>
+              <p className="text-sm font-semibold text-red-700">Đang khóa huấn luyện</p>
+              <p className="text-sm text-gray-800">{data.activeLock.reason}</p>
               <p className="text-xs text-gray-500">
                 Từ {formatDate(data.activeLock.placedAt)} · {data.activeLock.placedByName}
                 {data.activeLock.expectedLiftDate
@@ -227,10 +220,10 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
                   : ' · chưa đặt ngày dự kiến gỡ'}
               </p>
               {data.activeLock.pastExpected && (
-                <p className="text-xs font-medium text-amber-700">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>
+                <p className="text-xs font-medium text-amber-800">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>
               )}
               {data.activeLock.caseId && (
-                <Link to={links.case(data.activeLock.caseId)} className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline">
+                <Link to={links.case(data.activeLock.caseId)} className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline">
                   <FolderOpen size={12} /> {data.activeLock.caseTitle}
                 </Link>
               )}
@@ -246,8 +239,8 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
             <p className="text-sm text-gray-500">Không có khóa hiệu lực.</p>
           )}
           {data.lockHistory.length > 0 && (
-            <div className="mt-4 space-y-2 border-t border-gray-50 pt-3">
-              <p className="text-xs font-medium text-gray-400">Lịch sử khóa</p>
+            <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
+              <p className="text-xs text-gray-500">Lịch sử khóa</p>
               {data.lockHistory.map((lock) => (
                 <div key={lock.id} className="text-xs text-gray-500">
                   <p className="text-gray-700">{lock.reason}</p>
@@ -262,11 +255,11 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
 
         {/* Khám định kỳ */}
         {data.periodic && (
-          <Card variant="outline">
+          <Card>
             <SectionTitle icon={<CalendarClock size={16} />}>Khám định kỳ</SectionTitle>
-            <p className="text-2xl font-bold tabular-nums text-gray-900">{formatDate(data.periodic.dueDate)}</p>
-            <p className="text-xs text-gray-400">Hạn kế tiếp</p>
-            <div className="mt-3">
+            <p className="text-xs text-gray-500">Hạn kế tiếp</p>
+            <p className="text-lg font-semibold tabular-nums text-gray-900">{formatDate(data.periodic.dueDate)}</p>
+            <div className="mt-1">
               <PeriodicPill
                 state={data.periodic.state}
                 label={data.periodic.stateLabel}
@@ -284,9 +277,9 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
 
         {/* Chi phí */}
         {data.costVisible && (
-          <Card variant="flat">
+          <Card>
             <SectionTitle icon={<Wallet size={16} />}>Tổng chi phí y tế</SectionTitle>
-            <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(data.totalCost ?? 0)}</p>
+            <p className="text-lg font-semibold tabular-nums text-gray-900">{formatMoney(data.totalCost ?? 0)}</p>
             <p className="mt-1 text-xs text-gray-500">
               Tổng chi phí {data.closedCaseCount} bệnh án đã đóng. Bệnh án đang mở chưa có chi phí; khám định kỳ không tính phí.
             </p>
@@ -295,13 +288,13 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
 
         {/* Yêu cầu khám */}
         {data.requestsVisible && (
-        <Card variant="outline">
+        <Card>
           <SectionTitle
             icon={<ClipboardList size={16} />}
             action={
               data.canRequest &&
               !data.canExamine && (
-                <Button size="sm" variant="soft" onClick={() => setDialog({ kind: 'request' })}>
+                <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'request' })}>
                   <Send size={13} /> Gửi yêu cầu
                 </Button>
               )
@@ -312,18 +305,18 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
           {data.requests.length === 0 ? (
             <p className="text-sm text-gray-500">Chưa có yêu cầu khám nào.</p>
           ) : (
-            <ul className="space-y-3">
+            <ul className="-my-3 divide-y divide-gray-100">
               {data.requests.slice(0, 5).map((request) => (
-                <li key={request.id} className="text-sm">
+                <li key={request.id} className="py-3 text-sm">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <UrgencyPill urgency={request.urgency} />
+                    {request.urgency === 'URGENT' && <UrgencyPill urgency={request.urgency} />}
                     <RequestPill status={request.status} />
-                    <span className="text-xs text-gray-400">{request.sourceLabel}</span>
+                    <span className="text-xs text-gray-500">{request.sourceLabel}</span>
                   </div>
                   <div className="mt-1">
                     <RequestLines lines={request.descriptionLines} compact />
                   </div>
-                  <p className="mt-0.5 text-[11px] text-gray-400">
+                  <p className="mt-0.5 text-xs text-gray-500">
                     {request.createdByName} · {formatDateTime(request.createdAt)}
                     {request.status === 'DISMISSED' && request.dismissReason && ` · bỏ qua: ${request.dismissReason}`}
                   </p>
@@ -335,8 +328,8 @@ export default function MedicalTab({ horseId }: { horseId: string }) {
         )}
 
         {data.cases.some((item) => item.status === 'CLOSED') && !data.costVisible && (
-          <p className="flex items-center gap-1.5 px-1 text-xs text-gray-400">
-            <FolderCheck size={13} /> Chi phí y tế không hiển thị với vai trò của bạn.
+          <p className="flex items-center gap-1.5 px-1 text-xs text-gray-500">
+            <FolderCheck size={13} className="text-gray-400" /> Chi phí y tế không hiển thị với vai trò của bạn.
           </p>
         )}
       </aside>

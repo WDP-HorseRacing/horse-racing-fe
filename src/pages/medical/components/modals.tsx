@@ -1,7 +1,7 @@
 // Các hộp thoại ngắn của Flow 3: đổi sức khỏe, đặt/gỡ khóa, gửi/bỏ qua yêu cầu khám,
 // đóng bệnh án, ghi chú đính chính.
 import { useState } from 'react';
-import { AlertOctagon, Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
 import {
   addExamCorrection,
@@ -15,6 +15,7 @@ import {
 } from '../../../services/medical.service';
 import {
   Button,
+  Dot,
   ErrorBox,
   Field,
   Input,
@@ -228,7 +229,7 @@ export function PlaceLockModal({
             <Input type="date" value={date} min={toDateKey(now())} onChange={(event) => setDate(event.target.value)} />
           </Field>
           {openCase && (
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-amber-50/60 p-3 text-sm ring-1 ring-amber-100">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-white p-3 text-sm ring-1 ring-gray-200">
               <input
                 type="checkbox"
                 checked={linkCase}
@@ -242,7 +243,7 @@ export function PlaceLockModal({
               </span>
             </label>
           )}
-          <p className="text-xs font-light text-gray-400">
+          <p className="text-xs text-gray-500">
             HT khu và quản lý nhận thông báo mức Trung bình. Ngựa đang tập trong buổi đang diễn ra sẽ được dừng; các buổi sau ngựa được đánh dấu vắng.
           </p>
           {action.error && !['horseId', 'reason', 'expectedLiftDate'].includes(action.field ?? '') && <ErrorBox message={action.error} />}
@@ -296,7 +297,7 @@ export function LiftLockModal({
         <Field label="Lý do gỡ" required error={fieldError('reason')}>
           <Textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ" />
         </Field>
-        <p className="text-xs font-light text-gray-400">
+        <p className="text-xs text-gray-500">
           Gỡ khóa không đổi trạng thái sức khỏe. Ngựa chỉ được tập khi sức khỏe là Đủ điều kiện hoặc Cần theo dõi.
         </p>
         {action.error && action.field !== 'reason' && <ErrorBox message={action.error} />}
@@ -372,21 +373,18 @@ export function RequestForm({
               key={value}
               type="button"
               onClick={() => setUrgency(value)}
+              aria-pressed={urgency === value}
               className={cn(
-                'flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition',
-                urgency === value
-                  ? value === 'URGENT'
-                    ? 'bg-red-600 text-white ring-red-600 shadow-[0_10px_24px_-12px_rgba(220,38,38,0.9)]'
-                    : 'bg-emerald-600 text-white ring-emerald-600'
-                  : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
+                'flex items-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 transition',
+                urgency === value ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300',
               )}
             >
-              {value === 'URGENT' && <AlertOctagon size={15} />}
+              <Dot tone={urgency === value && value === 'URGENT' ? 'danger' : 'neutral'} />
               {value === 'URGENT' ? 'Khẩn' : 'Bình thường'}
             </button>
           ))}
         </div>
-        <p className="mt-1.5 text-xs font-light text-gray-400">
+        <p className="mt-1.5 text-xs text-gray-500">
           {urgency === 'URGENT' ? 'Bác sĩ nhận thông báo mức Khẩn ngay lập tức.' : 'Bác sĩ nhận thông báo và xử lý theo thứ tự.'}
         </p>
       </div>
@@ -552,9 +550,14 @@ export function CloseCaseModal({
         </Field>
 
         {lock && (
-          <div className={cn('space-y-3 rounded-xl p-4 ring-1', fieldError('lockDecision') ? 'bg-red-50/60 ring-red-200' : 'bg-amber-50/60 ring-amber-100')}>
-            <p className="flex items-start gap-2 text-sm text-amber-900">
-              <Lock size={15} className="mt-0.5 shrink-0" />
+          <div
+            className={cn(
+              'space-y-3 rounded-xl bg-white p-4 shadow-[inset_3px_0_0_0_#f59e0b] ring-1',
+              fieldError('lockDecision') ? 'ring-red-300' : 'ring-gray-200',
+            )}
+          >
+            <p className="flex items-start gap-2 text-sm text-gray-800">
+              <Lock size={15} className="mt-0.5 shrink-0 text-gray-400" />
               <span>
                 Ngựa còn khóa huấn luyện{lock.linkedToCase ? ' gắn với bệnh án này' : ''}: <span className="font-semibold">{lock.reason}</span>. Chọn gỡ khóa hoặc giữ khóa kèm ngày dự kiến gỡ.
               </span>
@@ -566,8 +569,8 @@ export function CloseCaseModal({
                   type="button"
                   onClick={() => setDecision(value)}
                   className={cn(
-                    'rounded-xl px-3 py-2.5 text-left text-sm font-semibold ring-1 transition',
-                    decision === value ? 'bg-white ring-2 ring-emerald-500' : 'bg-white/70 ring-gray-200 hover:ring-gray-300',
+                    'rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-900 ring-1 transition',
+                    decision === value ? 'bg-white ring-2 ring-gray-900' : 'bg-white ring-gray-200 hover:ring-gray-300',
                   )}
                 >
                   {value === 'LIFT' ? 'Gỡ khóa' : 'Giữ khóa'}

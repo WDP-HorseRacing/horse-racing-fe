@@ -1,22 +1,20 @@
 // F3.8 — Đặt và gỡ khóa huấn luyện (VET). CM, HT xem; OWNER xem ngựa của mình.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarX, FolderOpen, Info, Lock, Unlock } from 'lucide-react';
+import { FolderOpen, Info, Lock, Unlock } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listTrainingLocks, type LockRow } from '../../services/medical.service';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import {
   Button,
-  Card,
+  ChipFilter,
   DataTable,
   ErrorBox,
   PageHeader,
   Pill,
   SearchInput,
-  Segmented,
   Skeleton,
-  Stat,
   Toolbar,
   type Column,
 } from '../../components/ui';
@@ -26,9 +24,9 @@ import { LiftLockModal, PlaceLockModal } from './components/modals';
 import { HorseChip } from './components/parts';
 
 function CaseLink({ row }: { row: LockRow }) {
-  if (!row.caseId) return <span className="text-xs text-gray-300">—</span>;
+  if (!row.caseId) return <span className="text-xs text-gray-400">—</span>;
   return (
-    <Link to={links.case(row.caseId)} className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:underline">
+    <Link to={links.case(row.caseId)} className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline">
       <FolderOpen size={12} /> {row.caseTitle}
     </Link>
   );
@@ -72,7 +70,7 @@ export default function TrainingLocks() {
       render: (row) => (
         <div className="text-xs">
           <p className="font-medium text-gray-700">{formatDate(row.placedAt)}</p>
-          <p className="text-gray-400">{row.placedByName}</p>
+          <p className="text-gray-500">{row.placedByName}</p>
         </div>
       ),
     },
@@ -87,10 +85,10 @@ export default function TrainingLocks() {
         row.expectedLiftDate ? (
           <div className="space-y-1 text-xs">
             <p className="font-medium text-gray-700">{formatDate(row.expectedLiftDate)}</p>
-            {row.pastExpected && <Pill tone="amber">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</Pill>}
+            {row.pastExpected && <Pill tone="amber">Đã qua ngày dự kiến</Pill>}
           </div>
         ) : (
-          <span className="text-xs text-gray-400">Chưa đặt</span>
+          <span className="text-xs text-gray-500">Chưa đặt</span>
         ),
     },
     { key: 'case', header: 'Bệnh án liên quan', render: (row) => <CaseLink row={row} /> },
@@ -100,7 +98,7 @@ export default function TrainingLocks() {
       className: 'text-right',
       render: (row) =>
         row.canLift ? (
-          <Button size="sm" variant="secondary" onClick={() => setLifting(row)}>
+          <Button size="sm" variant="ghost" onClick={() => setLifting(row)}>
             <Unlock size={14} /> Gỡ khóa
           </Button>
         ) : null,
@@ -117,7 +115,7 @@ export default function TrainingLocks() {
           <p className="font-medium text-gray-700">
             {formatDate(row.liftedAt)} · {row.liftedByName}
           </p>
-          {row.liftKindLabel && <Pill tone={row.liftKind === 'TRANSFER' ? 'gray' : row.liftKind === 'CASE_CLOSED' ? 'green' : 'blue'}>{row.liftKindLabel}</Pill>}
+          {row.liftKindLabel && <p className="text-gray-500">{row.liftKindLabel}</p>}
         </div>
       ),
     },
@@ -134,56 +132,32 @@ export default function TrainingLocks() {
     <div className="space-y-6">
       <PageHeader
         title="Khóa huấn luyện"
-        description="Lệnh riêng của bác sĩ: ngựa bị khóa không được tập và không được đua, bất kể trạng thái sức khỏe."
+        description="Lệnh riêng của bác sĩ: ngựa bị khóa không được tập, không được đua, bất kể sức khỏe."
         actions={
           canManage && (
-            <Button variant="danger" onClick={() => setPlacing(true)}>
+            <Button onClick={() => setPlacing(true)}>
               <Lock size={16} /> Đặt khóa
             </Button>
           )
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
-        <Stat
-          className="lg:col-span-3"
-          tone={active.length ? 'danger' : 'default'}
-          icon={<Lock size={20} />}
-          value={active.length}
-          label="Đang hiệu lực"
-          active={tab === 'active'}
-          onClick={() => setTab('active')}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ChipFilter<'active' | 'history'>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'active', label: 'Đang hiệu lực', count: active.length, dot: 'danger' },
+            { value: 'history', label: 'Lịch sử', count: history.length },
+          ]}
         />
-        <Stat
-          className="lg:col-span-3"
-          tone={pastExpected ? 'warning' : 'default'}
-          icon={<CalendarX size={20} />}
-          value={pastExpected}
-          label="Đã qua ngày dự kiến gỡ"
-          hint="Chờ bác sĩ xác nhận gỡ"
-        />
-        <Card variant="outline" className="sm:col-span-2 lg:col-span-6">
-          <p className="flex items-start gap-2 text-sm text-gray-600">
-            <Info size={16} className="mt-0.5 shrink-0 text-emerald-600" />
-            <span>
-              Khóa độc lập với trạng thái sức khỏe: đổi sức khỏe về Đủ điều kiện không tự gỡ khóa. Mỗi ngựa tối đa một khóa hiệu lực. Tới ngày
-              dự kiến gỡ hệ thống <span className="font-semibold">không tự gỡ</span> — chỉ gỡ khi bác sĩ xác nhận, khi đóng bệnh án chọn gỡ, hoặc khi
-              ngựa được chuyển nhượng.
-            </span>
-          </p>
-        </Card>
+        {pastExpected > 0 && (
+          <span className="text-sm font-medium text-amber-800">{pastExpected} khóa đã qua ngày dự kiến gỡ — chờ bác sĩ xác nhận</span>
+        )}
       </div>
 
       <Toolbar>
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc lý do…" className="min-w-60 flex-1" />
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'active', label: 'Đang hiệu lực', badge: active.length },
-            { value: 'history', label: 'Lịch sử', badge: history.length },
-          ]}
-        />
       </Toolbar>
 
       <DataTable
@@ -193,6 +167,14 @@ export default function TrainingLocks() {
         pageSize={15}
         emptyTitle={tab === 'active' ? 'Không có khóa nào đang hiệu lực' : 'Chưa có khóa nào được gỡ'}
       />
+
+      <p className="flex max-w-4xl items-start gap-2 text-xs text-gray-500">
+        <Info size={14} className="mt-px shrink-0 text-gray-400" />
+        <span>
+          Khóa độc lập với trạng thái sức khỏe: đổi sức khỏe về Đủ điều kiện không tự gỡ khóa. Mỗi ngựa tối đa một khóa hiệu lực. Tới ngày dự kiến
+          gỡ hệ thống không tự gỡ — chỉ gỡ khi bác sĩ xác nhận, khi đóng bệnh án chọn gỡ, hoặc khi ngựa được chuyển nhượng.
+        </span>
+      </p>
 
       {placing && (
         <PlaceLockModal

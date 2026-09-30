@@ -102,7 +102,7 @@ export function AssignZoneDialog({
                     'rounded-xl border px-4 py-3 text-left transition',
                     zoneId === zone.id
                       ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
-                      : 'border-gray-200 bg-white hover:border-emerald-300',
+                      : 'border-gray-200 bg-white hover:border-gray-400',
                     disabled && 'cursor-not-allowed border-dashed bg-gray-50/60 opacity-70 hover:border-gray-200',
                   )}
                 >
@@ -110,8 +110,8 @@ export function AssignZoneDialog({
                     <span className="font-semibold text-gray-900">{zone.name}</span>
                     <span
                       className={cn(
-                        'rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums',
-                        zone.free > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500',
+                        'text-xs tabular-nums',
+                        zone.free > 0 ? 'text-gray-600' : 'font-medium text-amber-700',
                       )}
                     >
                       Chỗ trống {Math.max(0, zone.free)}
@@ -119,7 +119,7 @@ export function AssignZoneDialog({
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500">HT: {zone.headTrainerName ?? 'chưa có'}</p>
                   {current && <p className="mt-1 text-xs font-medium text-gray-500">Khu hiện tại</p>}
-                  {!current && zone.reason && <p className="mt-1 text-xs font-medium text-red-500">{zone.reason}</p>}
+                  {!current && zone.reason && <p className="mt-1 text-xs text-gray-500">{zone.reason}</p>}
                 </button>
               );
             })}
@@ -136,9 +136,9 @@ export function AssignZoneDialog({
                 ))}
               </Notice>
             )}
-            <div className="rounded-xl bg-emerald-50/50 p-4 text-sm text-gray-700">
+            <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700 ring-1 ring-gray-200/70">
               <p className="mb-2 flex items-center gap-2 font-semibold text-gray-900">
-                {data.fromZoneName ?? 'Chờ xếp khu'} <ArrowRight size={14} className="text-emerald-600" /> {data.zoneName}
+                {data.fromZoneName ?? 'Chờ xếp khu'} <ArrowRight size={14} className="text-gray-400" /> {data.zoneName}
               </p>
               <ul className="space-y-1.5">
                 <li>Ngựa vào danh sách "Chờ xếp ô" của {data.zoneName}; HT của khu sẽ xếp ô và nhận thông báo.</li>
@@ -254,8 +254,8 @@ export function AssignStallDialog({
                   className={cn(
                     'rounded-xl border px-3 py-3 font-mono text-sm font-semibold transition',
                     stallId === stall.id
-                      ? 'border-emerald-500 bg-emerald-600 text-white shadow-[0_8px_20px_-12px_rgba(5,150,105,0.9)]'
-                      : 'border-dashed border-emerald-300 bg-emerald-50/40 text-emerald-800 hover:bg-emerald-50',
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500/20'
+                      : 'border-dashed border-gray-300 bg-white text-gray-700 hover:border-gray-400',
                   )}
                 >
                   {stall.code}
