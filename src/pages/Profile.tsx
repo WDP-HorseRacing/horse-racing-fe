@@ -1,21 +1,31 @@
-import { Link } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { KeyRound, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store/store';
-import { useService } from '../hooks/useService';
-import { getPermissionMatrix } from '../services/system.service';
-import { getDb } from '../services/db';
-import { managedZoneIds } from '../services/selectors';
-import { Avatar, Card, InfoRow, PageHeader, Pill, SectionTitle, Skeleton } from '../components/ui';
+import { useAction, useService } from '../hooks/useService';
+import { getPermissionMatrix } from '../auth/permission-matrix';
+import { listBarns } from '../api/stable';
+import { changePassword } from '../api/auth';
+import { Avatar, Button, Card, ErrorBox, Field, InfoRow, Notice, PageHeader, PasswordInput, Pill, SectionTitle, Skeleton, useToast } from '../components/ui';
 import { roleLabel, SCOPE_TEXT } from '../lib/profile-labels';
 
 export default function Profile() {
   const user = useStore((state) => state.currentUser);
+  const logout = useStore((state) => state.logout);
+  const navigate = useNavigate();
+  const toast = useToast();
   const { data, loading } = useService(() => getPermissionMatrix(), []);
+  const isTrainer = user?.role === 'HEAD_TRAINER';
+  const barns = useService(() => (isTrainer ? listBarns() : Promise.resolve([])), [isTrainer]);
+  const action = useAction();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
 
   if (!user) return null;
 
-  const db = getDb();
-  const zoneNames = managedZoneIds(db, user.id).map((id) => db.zones.find((zone) => zone.id === id)?.name ?? id);
+  const zoneNames = (barns.data ?? []).filter((barn) => barn.headTrainerId === user.id).map((barn) => barn.name);
+  const otherRoles = (user.roles ?? []).filter((role) => role !== user.role);
 
   const groups = (data?.groups ?? [])
     .map((group) => ({
@@ -29,9 +39,23 @@ export default function Profile() {
     }))
     .filter((group) => group.rows.length > 0);
 
+  const mismatch = confirm.length > 0 && confirm !== next;
+  const tooShort = next.length > 0 && next.length < 8;
+
+  const submitPassword = async () => {
+    const done = await action.run(async () => {
+      await changePassword(current, next);
+      return true;
+    });
+    if (!done) return;
+    toast.push('Đã đổi mật khẩu. Vui lòng đăng nhập lại bằng mật khẩu mới.', 'success');
+    await logout();
+    navigate('/login');
+  };
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Hồ sơ cá nhân" description="Thông tin tài khoản và phạm vi quyền của bạn trong hệ thống." />
+      <PageHeader title="Hồ sơ cá nhân" description="Thông tin tài khoản, phạm vi quyền và đổi mật khẩu." />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:sticky lg:top-6 lg:col-span-4">
@@ -45,10 +69,10 @@ export default function Profile() {
             </div>
             <div className="mt-5 border-t border-gray-100 pt-3">
               <InfoRow label="Email" value={user.email} />
-              <InfoRow label="Điện thoại" value={user.phone} />
-              <InfoRow label="Trạng thái" value="Đang hoạt động" />
-              {user.role === 'HEAD_TRAINER' && (
-                <InfoRow label="Khu phụ trách" value={zoneNames.length ? zoneNames.join(', ') : 'Chưa được giao khu'} />
+              <InfoRow label="Trạng thái" value={user.active ? 'Đang hoạt động' : 'Đã khóa'} />
+              {otherRoles.length > 0 && <InfoRow label="Kiêm nhiệm" value={otherRoles.map((role) => roleLabel[role]).join(', ')} />}
+              {isTrainer && (
+                <InfoRow label="Khu phụ trách" value={barns.loading ? '…' : zoneNames.length ? zoneNames.join(', ') : 'Chưa được giao khu'} />
               )}
             </div>
           </Card>
@@ -56,9 +80,31 @@ export default function Profile() {
             <p className="text-sm font-medium text-gray-700">Phạm vi dữ liệu</p>
             <p className="mt-1 text-sm text-gray-500">{SCOPE_TEXT[user.role]}</p>
             <p className="mt-4 text-xs text-gray-500">
-              Cần đổi vai trò hoặc khu phụ trách? Liên hệ quản lý câu lạc bộ — vai trò gán ở mục Nhân sự, khu gán ở danh
-              mục khu chuồng.
+              Cần đổi vai trò hoặc khu phụ trách? Liên hệ Quản lý câu lạc bộ — vai trò gán ở mục Nhân sự, khu gán ở danh mục khu chuồng.
             </p>
+          </Card>
+          <Card>
+            <SectionTitle icon={<KeyRound size={16} />}>Đổi mật khẩu</SectionTitle>
+            <div className="space-y-3">
+              {action.error && <ErrorBox message={action.error} />}
+              <Field label="Mật khẩu hiện tại">
+                <PasswordInput value={current} onChange={(event) => setCurrent(event.target.value)} autoComplete="current-password" />
+              </Field>
+              <Field label="Mật khẩu mới" error={tooShort ? 'Tối thiểu 8 ký tự' : undefined}>
+                <PasswordInput value={next} onChange={(event) => setNext(event.target.value)} autoComplete="new-password" />
+              </Field>
+              <Field label="Nhập lại mật khẩu mới" error={mismatch ? 'Hai lần nhập chưa khớp' : undefined}>
+                <PasswordInput value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
+              </Field>
+              <Notice tone="info">Đổi xong, mọi phiên đăng nhập của bạn bị đăng xuất.</Notice>
+              <Button
+                className="w-full"
+                disabled={action.pending || !current || next.length < 8 || next !== confirm}
+                onClick={submitPassword}
+              >
+                {action.pending ? 'Đang đổi…' : 'Đổi mật khẩu'}
+              </Button>
+            </div>
           </Card>
         </div>
 

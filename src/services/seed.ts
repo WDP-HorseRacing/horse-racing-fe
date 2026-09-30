@@ -998,20 +998,20 @@ export function buildSeed(today: Date, schema: number): Database {
   const c2Name = c2.name;
 
   notify('u_cm', 'HIGH', 'Quá hạn khám định kỳ: Thiên Mã', 'Hạn khám đã quá 10 ngày.', links.periodic, iso(0, 7));
-  notify('u_cm', 'HIGH', 'Hoàng Kim: Cách ly', 'Nghi cúm ngựa, cách ly theo dõi 14 ngày. Gợi ý: cân nhắc chuyển ngựa sang ô trống để tách đàn.', links.horse('h_hoang_kim', 'medical'), iso(-3, 10));
-  notify('u_cm', 'HIGH', 'Khóa huấn luyện: Hắc Phong', 'Viêm gân gấp — cấm vận động mạnh.', links.horse('h_hac_phong', 'medical'), at(hpExamDay, '09:00'), true);
+  notify('u_cm', 'HIGH', 'Hoàng Kim: Cách ly', 'Nghi cúm ngựa, cách ly theo dõi 14 ngày. Gợi ý: cân nhắc chuyển ngựa sang ô trống để tách đàn.', links.horseMedical('h_hoang_kim'), iso(-3, 10));
+  notify('u_cm', 'HIGH', 'Khóa huấn luyện: Hắc Phong', 'Viêm gân gấp — cấm vận động mạnh.', links.horseMedical('h_hac_phong'), at(hpExamDay, '09:00'), true);
   notify('u_cm', 'NORMAL', 'Mở bệnh án: Hắc Phong', 'Viêm gân gấp chân trước trái.', links.case('case_hp'), at(hpExamDay, '08:30'), true);
   notify('u_cm', 'NORMAL', 'Đóng bệnh án: Ánh Dương', 'Co cứng cơ lưng — chi phí 12.500.000 đ.', links.case('case_ad'), iso(-35, 10), true);
 
   notify('u_ht_a', 'URGENT', 'Thân nhiệt cao: Bạch Long', '38,8 °C (ngưỡng 38,6 °C). Đã gửi yêu cầu khám khẩn.', links.horse('h_bach_long', 'body'), iso(-1, 6, 21));
   notify('u_ht_a', 'HIGH', 'Cân nặng giảm: Gió Bấc', 'Giảm 5,3% trong 14 ngày (505 → 478 kg).', links.horse('h_gio_bac', 'body'), iso(-1, 7, 5));
-  notify('u_ht_a', 'NORMAL', 'Bạch Long: Đủ điều kiện → Cần theo dõi', 'Chỉ được tập Nhẹ và Trung bình cho tới khi bác sĩ đổi trạng thái.', links.horse('h_bach_long', 'medical'), iso(-1, 8));
-  notify('u_ht_a', 'HIGH', 'Hoàng Kim: Cách ly', 'Nghi cúm ngựa. Gợi ý: cân nhắc chuyển ngựa sang ô trống để tách đàn.', links.horse('h_hoang_kim', 'medical'), iso(-3, 10));
+  notify('u_ht_a', 'NORMAL', 'Bạch Long: Đủ điều kiện → Cần theo dõi', 'Chỉ được tập Nhẹ và Trung bình cho tới khi bác sĩ đổi trạng thái.', links.horseMedical('h_bach_long'), iso(-1, 8));
+  notify('u_ht_a', 'HIGH', 'Hoàng Kim: Cách ly', 'Nghi cúm ngựa. Gợi ý: cân nhắc chuyển ngựa sang ô trống để tách đàn.', links.horseMedical('h_hoang_kim'), iso(-3, 10));
   notify('u_ht_a', 'NORMAL', `Lửa Rừng rời lớp ${c1Name}`, 'Ngựa được đổi sang Khu B nên tự động rút khỏi lớp của khu cũ.', links.class('cls_a1', 'horses'), iso(-1, 9), true);
 
   notify('u_ht_b', 'NORMAL', 'Xếp khu: Lửa Rừng vào Khu B', 'Ngựa đang chờ xếp ô. Groom Nguyễn Văn Bình được giữ nguyên.', links.stable, iso(-1, 9));
-  notify('u_ht_b', 'HIGH', 'Khóa huấn luyện: Hắc Phong', 'Viêm gân gấp — cấm vận động mạnh.', links.horse('h_hac_phong', 'medical'), at(hpExamDay, '09:00'), true);
-  notify('u_ht_b', 'HIGH', 'Hắc Phong: Chấn thương', 'Viêm gân gấp chân trước trái. Ngựa không được tập và đua.', links.horse('h_hac_phong', 'medical'), at(hpExamDay, '08:30'), true);
+  notify('u_ht_b', 'HIGH', 'Khóa huấn luyện: Hắc Phong', 'Viêm gân gấp — cấm vận động mạnh.', links.horseMedical('h_hac_phong'), at(hpExamDay, '09:00'), true);
+  notify('u_ht_b', 'HIGH', 'Hắc Phong: Chấn thương', 'Viêm gân gấp chân trước trái. Ngựa không được tập và đua.', links.horseMedical('h_hac_phong'), at(hpExamDay, '08:30'), true);
   if (c2Yesterday) notify('u_ht_b', 'NORMAL', `Buổi ${c2Name} chờ đánh giá`, 'Còn 2 ngựa chưa được chấm điểm.', links.session(c2Yesterday.id), iso(-1, 16, 20));
 
   ['u_vet_1', 'u_vet_2'].forEach((vet) => {
@@ -1027,8 +1027,8 @@ export function buildSeed(today: Date, schema: number): Database {
   notify('u_gr_4', 'NORMAL', 'Phân công Groom: Hoàng Kim', 'Bạn được giao chăm sóc Hoàng Kim tại ô C-01.', links.horse('h_hoang_kim'), iso(-80, 9), true);
 
   notify('u_ow_1', 'NORMAL', 'Sao Mai có nhận xét mới', 'Huấn luyện viên đã chấm điểm buổi tập gần nhất.', links.horse('h_sao_mai', 'training'), iso(-1, 11));
-  notify('u_ow_2', 'NORMAL', 'Mở bệnh án: Hắc Phong', 'Bác sĩ đã mở bệnh án viêm gân gấp chân trước trái.', links.horse('h_hac_phong', 'medical'), at(hpExamDay, '08:30'), true);
-  notify('u_ow_2', 'NORMAL', 'Đóng bệnh án: Ánh Dương', 'Chi phí điều trị 12.500.000 đ.', links.horse('h_anh_duong', 'medical'), iso(-35, 10), true);
+  notify('u_ow_2', 'NORMAL', 'Mở bệnh án: Hắc Phong', 'Bác sĩ đã mở bệnh án viêm gân gấp chân trước trái.', links.horseMedical('h_hac_phong'), at(hpExamDay, '08:30'), true);
+  notify('u_ow_2', 'NORMAL', 'Đóng bệnh án: Ánh Dương', 'Chi phí điều trị 12.500.000 đ.', links.horseMedical('h_anh_duong'), iso(-35, 10), true);
   notify('u_ow_2', 'NORMAL', `Ngọc Tuyết được đăng ký vào lớp ${c2Name}`, 'Ngựa vào lớp giữa chừng, tập các buổi từ hôm nay trở đi.', links.horse('h_ngoc_tuyet', 'training'), iso(-10, 10));
   notify('u_ow_3', 'NORMAL', 'Hồ sơ Tia Chớp đã được tạo', 'Ngựa đang chờ xếp khu chuồng.', links.horse('h_tia_chop'), iso(-2, 10));
 

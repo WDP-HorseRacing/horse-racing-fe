@@ -1,27 +1,25 @@
 // Hộp thoại xếp chỗ dùng chung cho sơ đồ chuồng và hồ sơ ngựa (F1.6, F1.7).
+// CM xếp/đổi khu; HT của khu xếp ô + Groom (một lần), chuyển ô, đổi Groom, gỡ khỏi ô.
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
-import {
-  assignStall,
-  assignZone,
-  listAvailableStalls,
-  listGrooms,
-  listZoneOptions,
-  previewZoneAssignment,
-  setGroom,
-} from '../../../services/horse.service';
+import { assignBarn, previewBarn } from '../../../api/horses';
+import { assignGroom, listBarns, listGroomWorkload, listStalls, moveStall, placeHorse, removeFromStall } from '../../../api/stable';
+import type { HealthStatus, PlacementStatus } from '../../../api/types';
+import { barnBlocker } from './barn';
 import { Button, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 
 export interface PlacementHorse {
   id: string;
   name: string;
-  zoneId?: string;
-  zoneName?: string;
+  barnId?: string;
+  barnName?: string;
+  stallId?: string;
   stallCode?: string;
   groomId?: string;
   groomName?: string;
-  quarantined?: boolean;
+  placementStatus?: PlacementStatus;
+  healthStatus?: HealthStatus;
 }
 
 /* ===== CM xếp / đổi khu ===== */
@@ -37,30 +35,29 @@ export function AssignZoneDialog({
 }) {
   const toast = useToast();
   const action = useAction();
-  const [zoneId, setZoneId] = useState('');
+  const [barnId, setBarnId] = useState('');
   const [reason, setReason] = useState('');
-  const zones = useService(() => (horse ? listZoneOptions() : Promise.resolve([])), [horse?.id]);
-  const preview = useService(
-    () => (horse && zoneId ? previewZoneAssignment(horse.id, zoneId) : Promise.resolve(undefined)),
-    [horse?.id, zoneId],
-  );
+  const barns = useService(() => (horse ? listBarns() : Promise.resolve([])), [horse?.id]);
+  const preview = useService(() => (horse && barnId ? previewBarn(horse.id, barnId) : Promise.resolve(undefined)), [horse?.id, barnId]);
 
   useEffect(() => {
-    setZoneId('');
+    setBarnId('');
     setReason('');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id]);
 
-  const isChange = !!horse?.zoneId;
+  // Xếp khu lần đầu không cần lý do; đổi khu thì bắt buộc (BA chốt 30/09).
+  const isChange = !!horse?.barnId;
   const data = preview.data;
-  const blocked = !data || data.blockers.length > 0;
+  const chosen = barns.data?.find((item) => item.id === barnId);
+  const blocked = !data || !data.allowed || (!!chosen && !!barnBlocker(chosen));
 
   const submit = async () => {
     if (!horse) return;
-    const done = await action.run(() => assignZone(horse.id, zoneId, reason));
+    const done = await action.run(() => assignBarn(horse.id, barnId, isChange ? reason.trim() : undefined));
     if (done) {
-      toast.push(`${horse.name} đã được xếp vào ${data?.zoneName ?? 'khu mới'}`, 'success');
+      toast.push(`${horse.name} đã được xếp vào ${data?.toBarnName ?? 'khu mới'}`, 'success');
       onDone();
       onClose();
     }
@@ -72,105 +69,98 @@ export function AssignZoneDialog({
       onClose={onClose}
       width="max-w-2xl"
       title={isChange ? `Đổi khu cho ${horse?.name ?? ''}` : `Xếp khu cho ${horse?.name ?? ''}`}
-      description={isChange ? `Đang ở ${horse?.zoneName}${horse?.stallCode ? `, ô ${horse.stallCode}` : ''}` : 'Ngựa đang chờ xếp khu'}
+      description={isChange ? `Đang ở ${horse?.barnName}${horse?.stallCode ? `, ô ${horse.stallCode}` : ''}` : 'Ngựa đang chờ xếp khu'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!zoneId || blocked || action.pending || (isChange && !reason.trim())}>
+          <Button onClick={submit} disabled={!barnId || blocked || action.pending || (isChange && !reason.trim())}>
             {action.pending ? 'Đang xếp…' : isChange ? 'Xác nhận đổi khu' : 'Xếp vào khu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        {zones.loading ? (
+        {barns.loading ? (
           <Skeleton rows={2} />
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
-            {(zones.data ?? []).map((zone) => {
-              const current = zone.id === horse?.zoneId;
-              const disabled = !zone.available || current;
+            {(barns.data ?? []).map((barn) => {
+              const current = barn.id === horse?.barnId;
+              const blocker = barnBlocker(barn);
+              const disabled = !!blocker || current;
               return (
                 <button
-                  key={zone.id}
+                  key={barn.id}
                   type="button"
                   disabled={disabled}
-                  onClick={() => setZoneId(zone.id)}
+                  onClick={() => setBarnId(barn.id)}
                   className={cn(
                     'rounded-xl border px-4 py-3 text-left transition',
-                    zoneId === zone.id
-                      ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
-                      : 'border-gray-200 bg-white hover:border-gray-400',
+                    barnId === barn.id ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20' : 'border-gray-200 bg-white hover:border-gray-400',
                     disabled && 'cursor-not-allowed border-dashed bg-gray-50/60 opacity-70 hover:border-gray-200',
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-gray-900">{zone.name}</span>
-                    <span
-                      className={cn(
-                        'text-xs tabular-nums',
-                        zone.free > 0 ? 'text-gray-600' : 'font-medium text-amber-700',
-                      )}
-                    >
-                      Chỗ trống {Math.max(0, zone.free)}
+                    <span className="font-semibold text-gray-900">{barn.name}</span>
+                    <span className={cn('text-xs tabular-nums', barn.availableStallCount > 0 ? 'text-gray-600' : 'font-medium text-amber-700')}>
+                      Còn nhận {barn.availableStallCount}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-500">HT: {zone.headTrainerName ?? 'chưa có'}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">HT: {barn.headTrainerFullName ?? 'chưa có'}</p>
                   {current && <p className="mt-1 text-xs font-medium text-gray-500">Khu hiện tại</p>}
-                  {!current && zone.reason && <p className="mt-1 text-xs text-gray-500">{zone.reason}</p>}
+                  {!current && blocker && <p className="mt-1 text-xs text-gray-500">{blocker}</p>}
                 </button>
               );
             })}
           </div>
         )}
 
-        {zoneId && preview.loading && <Skeleton rows={1} />}
+        {barnId && preview.loading && <Skeleton rows={1} />}
+        {preview.error && <ErrorBox message={preview.error} />}
         {data && (
           <div className="space-y-3">
-            {data.blockers.length > 0 && (
+            {!data.allowed && data.blockedReason && (
               <Notice tone="danger" icon={<AlertTriangle size={16} />}>
-                {data.blockers.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
+                {data.blockedReason}
               </Notice>
             )}
             <div className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700 ring-1 ring-gray-200/70">
               <p className="mb-2 flex items-center gap-2 font-semibold text-gray-900">
-                {data.fromZoneName ?? 'Chờ xếp khu'} <ArrowRight size={14} className="text-gray-400" /> {data.zoneName}
+                {data.fromBarnName ?? 'Chờ xếp khu'} <ArrowRight size={14} className="text-gray-400" /> {data.toBarnName}
               </p>
               <ul className="space-y-1.5">
-                <li>Ngựa vào danh sách "Chờ xếp ô" của {data.zoneName}; HT của khu sẽ xếp ô và nhận thông báo.</li>
-                {data.stallToFree && <li>Ô {data.stallToFree} được trả về trống.</li>}
-                {data.isChange && (
-                  <li className={data.classesToLeave.length ? 'font-medium text-amber-700' : ''}>
-                    {data.classesToLeave.length
-                      ? `Rút khỏi ${data.classesToLeave.length} lớp của khu cũ: ${data.classesToLeave.join(', ')}`
-                      : 'Không có lớp nào của khu cũ phải rút'}
+                <li>
+                  Ngựa vào danh sách "Chờ xếp ô" của {data.toBarnName}
+                  {data.newHeadTrainerName ? `; HT ${data.newHeadTrainerName} xếp ô và nhận thông báo.` : '.'}
+                </li>
+                {data.stallReleased && <li>Ô {data.stallReleased} được trả về trống.</li>}
+                {isChange && (
+                  <li className={data.classesWithdrawn ? 'font-medium text-amber-700' : ''}>
+                    {data.classesWithdrawn
+                      ? `Rút khỏi ${data.classesWithdrawn} lớp không do HT khu mới phụ trách`
+                      : 'Không phải rút khỏi lớp nào (khu mới cùng HT hoặc ngựa chưa học lớp)'}
                   </li>
                 )}
                 <li>{data.groomKept ? `Giữ nguyên Groom ${data.groomKept}` : 'Chưa có Groom — HT phân công khi xếp ô'}</li>
-                <li>
-                  Sau khi xếp, chỗ trống của {data.zoneName} còn {Math.max(0, data.free - 1)}.
-                </li>
               </ul>
             </div>
           </div>
         )}
 
         {isChange && (
-          <Field label="Lý do đổi khu" required error={action.field === 'reason' ? action.error : undefined}>
-            <Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: cân đối số ngựa giữa hai khu" />
+          <Field label="Lý do đổi khu" required>
+            <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: cân đối số ngựa giữa hai khu" />
           </Field>
         )}
-        {action.error && action.field !== 'reason' && <ErrorBox message={action.error} />}
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-/* ===== HT xếp / đổi ô (kèm Groom bắt buộc) ===== */
+/* ===== HT xếp ô (kèm Groom bắt buộc) hoặc chuyển ô ===== */
 
 export function AssignStallDialog({
   horse,
@@ -188,10 +178,12 @@ export function AssignStallDialog({
   const [stallId, setStallId] = useState('');
   const [groomId, setGroomId] = useState('');
   const stalls = useService(
-    () => (horse?.zoneId ? listAvailableStalls(horse.zoneId) : Promise.resolve([])),
-    [horse?.id, horse?.zoneId],
+    () => (horse?.barnId ? listStalls({ barnId: horse.barnId, status: 'AVAILABLE' }) : Promise.resolve([])),
+    [horse?.id, horse?.barnId],
   );
-  const grooms = useService(() => (horse ? listGrooms() : Promise.resolve([])), [horse?.id]);
+  const moving = !!horse?.stallId;
+  // Chuyển ô không đổi Groom; xếp ô lần đầu bắt buộc chọn Groom (một lần gửi).
+  const grooms = useService(() => (horse && !moving ? listGroomWorkload() : Promise.resolve([])), [horse?.id, moving]);
 
   useEffect(() => {
     setStallId(presetStallId ?? '');
@@ -200,10 +192,13 @@ export function AssignStallDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id, presetStallId]);
 
-  const moving = !!horse?.stallCode;
   const submit = async () => {
     if (!horse) return;
-    const done = await action.run(() => assignStall(horse.id, stallId, groomId));
+    const done = await action.run(async () => {
+      if (moving) await moveStall(horse.id, stallId);
+      else await placeHorse(horse.id, stallId, groomId);
+      return true;
+    });
     if (done) {
       const code = stalls.data?.find((item) => item.id === stallId)?.code;
       toast.push(`${horse.name} đã vào ô ${code ?? ''}`, 'success');
@@ -212,28 +207,30 @@ export function AssignStallDialog({
     }
   };
 
+  const sortedGrooms = [...(grooms.data ?? [])].sort((a, b) => a.activeHorseCount - b.activeHorseCount || a.fullName.localeCompare(b.fullName, 'vi'));
+
   return (
     <Modal
       open={!!horse}
       onClose={onClose}
       width="max-w-2xl"
-      title={moving ? `Đổi ô cho ${horse?.name ?? ''}` : `Xếp ô cho ${horse?.name ?? ''}`}
-      description={`${horse?.zoneName ?? ''}${moving ? ` · đang ở ô ${horse?.stallCode}` : ' · đang chờ xếp ô'}`}
+      title={moving ? `Chuyển ô cho ${horse?.name ?? ''}` : `Xếp ô cho ${horse?.name ?? ''}`}
+      description={`${horse?.barnName ?? ''}${moving ? ` · đang ở ô ${horse?.stallCode}` : ' · đang chờ xếp ô'}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!stallId || !groomId || action.pending}>
+          <Button onClick={submit} disabled={!stallId || (!moving && !groomId) || action.pending}>
             {action.pending ? 'Đang lưu…' : moving ? 'Chuyển sang ô này' : 'Xếp vào ô'}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        {horse?.quarantined && (
+        {horse?.healthStatus === 'QUARANTINED' && (
           <Notice tone="warning" icon={<Info size={16} />}>
-            Ngựa đang cách ly. Cân nhắc chuyển sang ô trống cách xa các ngựa khác để tách đàn.
+            Ngựa đang cách ly. Có thể chọn ô cách xa các ngựa khác để tách đàn.
           </Notice>
         )}
         <div>
@@ -243,7 +240,7 @@ export function AssignStallDialog({
           {stalls.loading ? (
             <Skeleton rows={1} />
           ) : (stalls.data ?? []).length === 0 ? (
-            <Notice tone="warning">Khu không còn ô trống. Quản lý câu lạc bộ cần thêm ô hoặc kết thúc bảo trì một ô.</Notice>
+            <Notice tone="warning">Khu không còn ô trống. Quản lý câu lạc bộ cần thêm ô, kết thúc bảo trì một ô, hoặc đổi khu cho ngựa.</Notice>
           ) : (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {(stalls.data ?? []).map((stall) => (
@@ -263,33 +260,28 @@ export function AssignStallDialog({
               ))}
             </div>
           )}
-          {action.field === 'stallId' && <p className="mt-1.5 text-xs font-medium text-red-600">{action.error}</p>}
         </div>
-        <Field
-          label="Groom phụ trách"
-          required
-          hint="Bắt buộc khi xếp ô. Groom được phân công theo con ngựa, không theo ô."
-          error={action.field === 'groomId' ? action.error : undefined}
-        >
-          <Select value={groomId} onChange={(event) => setGroomId(event.target.value)}>
-            <option value="">— Chọn Groom —</option>
-            {(grooms.data ?? []).map((groom) => (
-              <option key={groom.id} value={groom.id}>
-                {groom.name} · đang phụ trách {groom.horseCount} ngựa
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {horse?.groomId && groomId && groomId !== horse.groomId && (
-          <Notice tone="info">Groom {horse.groomName} sẽ kết thúc phân công; cả Groom cũ và mới đều nhận thông báo.</Notice>
+        {moving ? (
+          <p className="text-sm text-gray-500">Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}; ô cũ được trả về trống.</p>
+        ) : (
+          <Field label="Groom phụ trách" required hint="Bắt buộc khi xếp ô. Groom được phân công theo con ngựa, không theo ô.">
+            <Select value={groomId} onChange={(event) => setGroomId(event.target.value)}>
+              <option value="">— Chọn Groom —</option>
+              {sortedGrooms.map((groom) => (
+                <option key={groom.groomId} value={groom.groomId}>
+                  {groom.fullName} · đang phụ trách {groom.activeHorseCount} ngựa
+                </option>
+              ))}
+            </Select>
+          </Field>
         )}
-        {action.error && action.field !== 'stallId' && action.field !== 'groomId' && <ErrorBox message={action.error} />}
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-/* ===== HT phân công / đổi Groom ===== */
+/* ===== HT đổi Groom ===== */
 
 export function GroomDialog({
   horse,
@@ -303,19 +295,17 @@ export function GroomDialog({
   const toast = useToast();
   const action = useAction();
   const [groomId, setGroomId] = useState('');
-  const [reason, setReason] = useState('');
-  const grooms = useService(() => (horse ? listGrooms() : Promise.resolve([])), [horse?.id]);
+  const grooms = useService(() => (horse ? listGroomWorkload() : Promise.resolve([])), [horse?.id]);
 
   useEffect(() => {
     setGroomId('');
-    setReason('');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id]);
 
   const submit = async () => {
     if (!horse) return;
-    const done = await action.run(() => setGroom(horse.id, groomId, reason));
+    const done = await action.run(() => assignGroom(horse.id, groomId));
     if (done) {
       toast.push(`Đã phân công Groom cho ${horse.name}`, 'success');
       onDone();
@@ -341,22 +331,75 @@ export function GroomDialog({
       }
     >
       <div className="space-y-4">
-        <Field label="Groom" required error={action.field === 'groomId' ? action.error : undefined}>
+        <Field label="Groom" required>
           <Select value={groomId} onChange={(event) => setGroomId(event.target.value)}>
             <option value="">— Chọn Groom —</option>
             {(grooms.data ?? [])
-              .filter((groom) => groom.id !== horse?.groomId)
+              .filter((groom) => groom.groomId !== horse?.groomId)
               .map((groom) => (
-                <option key={groom.id} value={groom.id}>
-                  {groom.name} · đang phụ trách {groom.horseCount} ngựa
+                <option key={groom.groomId} value={groom.groomId}>
+                  {groom.fullName} · đang phụ trách {groom.activeHorseCount} ngựa
                 </option>
               ))}
           </Select>
         </Field>
-        <Field label="Ghi chú" hint="Việc của các buổi chưa diễn ra chuyển sang Groom mới; việc đã xong giữ tên người làm.">
-          <Textarea value={reason} onChange={(event) => setReason(event.target.value)} className="min-h-16" />
-        </Field>
-        {action.error && action.field !== 'groomId' && <ErrorBox message={action.error} />}
+        {horse?.groomId && (
+          <Notice tone="info">Groom cũ và Groom mới đều nhận thông báo. Groom cũ vẫn xem được hồ sơ nhưng không thao tác được nữa.</Notice>
+        )}
+        {action.error && <ErrorBox message={action.error} />}
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== HT gỡ ngựa khỏi ô ===== */
+
+export function RemoveStallDialog({
+  horse,
+  onClose,
+  onDone,
+}: {
+  horse: PlacementHorse | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const action = useAction();
+  useEffect(() => {
+    action.clearError();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [horse?.id]);
+  return (
+    <Modal
+      open={!!horse}
+      onClose={onClose}
+      title={`Gỡ ${horse?.name ?? ''} khỏi ô ${horse?.stallCode ?? ''}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Quay lại
+          </Button>
+          <Button
+            variant="danger"
+            disabled={action.pending}
+            onClick={async () => {
+              if (!horse) return;
+              const done = await action.run(() => removeFromStall(horse.id));
+              if (done) {
+                toast.push(`Đã gỡ ${horse.name} khỏi ô`, 'success');
+                onDone();
+                onClose();
+              }
+            }}
+          >
+            {action.pending ? 'Đang gỡ…' : 'Gỡ khỏi ô'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-gray-600">
+        <p>Ngựa về danh sách "Chờ xếp ô" của khu, ô trở về trống. Groom phụ trách được giữ nguyên.</p>
+        {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
@@ -418,7 +461,7 @@ export function ReasonDialog({
       <div className="space-y-4">
         <div className="text-sm text-gray-600">{message}</div>
         <Field label="Lý do" required>
-          <Textarea value={reason} onChange={(event) => setReason(event.target.value)} autoFocus />
+          <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus />
         </Field>
         {error && <ErrorBox message={error} />}
       </div>

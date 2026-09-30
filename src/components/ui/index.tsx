@@ -14,7 +14,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Inbox, MoreHorizontal, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Inbox, MoreHorizontal, Search, X } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import gsap from 'gsap';
@@ -301,18 +301,31 @@ export function Field({
   children,
   error,
   hint,
+  counter,
   required,
+  name,
   className = '',
 }: {
   label?: ReactNode;
   children: ReactNode;
   error?: string;
   hint?: ReactNode;
+  /** Bộ đếm ký tự ở góc phải dưới ô, ví dụ <CharCount value={name} max={160} />. */
+  counter?: ReactNode;
   required?: boolean;
+  /** Tên ô — để cuộn tới ô lỗi đầu tiên khi bấm lưu (xem scrollToFirstError). */
+  name?: string;
   className?: string;
 }) {
+  const note = error ? (
+    <span role="alert" className="block text-xs font-medium text-red-600">
+      {error}
+    </span>
+  ) : hint ? (
+    <span className="block text-xs font-light text-gray-400">{hint}</span>
+  ) : null;
   return (
-    <label className={cn('block', className)}>
+    <label className={cn('block', className)} data-field={name} data-invalid={error ? 'true' : undefined}>
       {label && (
         <span className="mb-1.5 block text-sm font-medium text-gray-600">
           {label}
@@ -320,17 +333,64 @@ export function Field({
         </span>
       )}
       {children}
-      {hint && !error && <span className="mt-1.5 block text-xs font-light text-gray-400">{hint}</span>}
-      {error && <span className="mt-1.5 block text-xs font-medium text-red-600">{error}</span>}
+      {(note || counter) && (
+        <span className="mt-1.5 flex items-start justify-between gap-3">
+          <span className="min-w-0">{note}</span>
+          {counter}
+        </span>
+      )}
     </label>
   );
 }
+
+/** Bộ đếm ký tự: xám bình thường, hổ phách khi gần chạm giới hạn. */
+export function CharCount({ value, max }: { value: string; max: number }) {
+  const length = value.length;
+  return (
+    <span className={cn('shrink-0 text-xs tabular-nums', length >= max ? 'font-medium text-amber-700' : 'text-gray-400')}>
+      {length}/{max}
+    </span>
+  );
+}
+
+/** Cuộn tới ô đang báo lỗi đầu tiên trong vùng chứa và đặt con trỏ vào đó. */
+export function scrollToFirstError(root: ParentNode = document) {
+  window.requestAnimationFrame(() => {
+    const field = root.querySelector<HTMLElement>('[data-invalid="true"]');
+    if (!field) return;
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+  });
+}
+
+/** Viền đỏ nhạt cho ô đang lỗi. */
+export const invalidClass = 'border-red-300 focus:border-red-400 focus:ring-red-500/15';
 
 const inputClass =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-70';
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(inputClass, props.className)} />;
+}
+
+/** Ô mật khẩu có nút con mắt bên phải để hiện / ẩn mật khẩu. */
+export function PasswordInput({ className, wrapperClassName = '', ...props }: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> & { wrapperClassName?: string }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className={cn('relative', wrapperClassName)}>
+      <input {...props} type={visible ? 'text' : 'password'} className={cn(inputClass, className, 'pr-11')} />
+      <button
+        type="button"
+        onClick={() => setVisible((value) => !value)}
+        aria-label={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+        aria-pressed={visible}
+        title={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-gray-400 transition hover:text-gray-700 focus-visible:text-emerald-700 focus-visible:outline-none"
+      >
+        {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+      </button>
+    </div>
+  );
 }
 
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {

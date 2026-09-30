@@ -1,8 +1,11 @@
 // Kiểm tra tệp bằng byte đầu, không tin phần mở rộng.
+// Ảnh xem trước dùng object URL (blob:) trỏ vào tệp trên máy — không đổi ảnh sang chuỗi base64.
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
-const INLINE_LIMIT = 1024 * 1024;
+
+/** Định dạng ảnh được nhận (khớp backend: JPEG, PNG, WebP). Dùng cho thuộc tính accept của ô chọn tệp. */
+export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp';
 
 async function magic(file: File, length = 12): Promise<Uint8Array> {
   const buffer = await file.slice(0, length).arrayBuffer();
@@ -23,23 +26,23 @@ function isWebp(bytes: Uint8Array) {
   return text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP';
 }
 
-/** Đọc ảnh và trả về nguồn hiển thị. Ảnh nhỏ lưu dạng data URL, ảnh lớn giữ bằng object URL. */
-export async function readImageFile(file: File): Promise<string> {
+/** Chặn tệp không phải ảnh JPEG/PNG/WebP thật (xét byte đầu) hoặc lớn hơn 10 MB. */
+export async function validateImageFile(file: File): Promise<void> {
   if (file.size > MAX_IMAGE_BYTES) {
     throw new Error('Ảnh vượt quá 10 MB');
   }
   const bytes = await magic(file);
   if (!isJpeg(bytes) && !isPng(bytes) && !isWebp(bytes)) {
-    throw new Error('Tệp không phải ảnh JPEG, PNG hoặc WebP');
+    throw new Error('Chỉ nhận ảnh JPG, PNG hoặc WebP');
   }
-  if (file.size <= INLINE_LIMIT) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error('Không đọc được tệp ảnh'));
-      reader.readAsDataURL(file);
-    });
-  }
+}
+
+/**
+ * Kiểm tra ảnh và trả về object URL để xem trước.
+ * Người gọi thu hồi bằng URL.revokeObjectURL khi đổi ảnh hoặc rời trang (xem useObjectUrl).
+ */
+export async function readImageFile(file: File): Promise<string> {
+  await validateImageFile(file);
   return URL.createObjectURL(file);
 }
 

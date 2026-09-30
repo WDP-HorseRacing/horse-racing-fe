@@ -1,6 +1,8 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
+import { FEATURES } from './config/features';
 
 import LandingPage from './pages/LandingPage';
 import { Login } from './pages/Login';
@@ -33,14 +35,33 @@ import ExamRequests from './pages/medical/ExamRequests';
 import CaseList from './pages/medical/CaseList';
 import CaseDetail from './pages/medical/CaseDetail';
 import PeriodicExams from './pages/medical/PeriodicExams';
-import TrainingLocks from './pages/medical/TrainingLocks';
+import CareSchedules from './pages/medical/CareSchedules';
+import CostReport from './pages/medical/CostReport';
+import HorseMedical from './pages/medical/HorseMedical';
+import VisitNew from './pages/medical/VisitNew';
+import CaseClose from './pages/medical/CaseClose';
+import CareNew from './pages/medical/CareNew';
 
-import { AdminAudit, AdminPermissions, AdminSystem, AdminUsers } from './pages/admin/AdminPages';
-import { NotFound } from './components/ui';
+import { AdminPermissions, AdminUsers } from './pages/admin/AdminPages';
+import { NotFound, Skeleton } from './components/ui';
 
 const ProtectedRoute = () => {
   const isAuthenticated = useStore((state) => state.isAuthenticated);
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  const booting = useStore((state) => state.booting);
+  const sessionEnded = useStore((state) => state.sessionEnded);
+  const location = useLocation();
+  if (booting) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-canvas p-8">
+        <Skeleton rows={3} className="w-full max-w-md" />
+      </div>
+    );
+  }
+  if (isAuthenticated) return <Outlet />;
+  // Chưa đăng nhập hoặc vừa hết phiên: về đăng nhập, nhớ trang đang xem để quay lại sau khi đăng nhập.
+  const params = new URLSearchParams({ next: `${location.pathname}${location.search}` });
+  if (sessionEnded) params.set('reason', sessionEnded);
+  return <Navigate to={`/login?${params.toString()}`} replace />;
 };
 
 /** Đường dẫn cũ của buổi tập (live/review) chuyển sang trang buổi học mới. */
@@ -49,7 +70,39 @@ function SessionRedirect() {
   return <Navigate to={`/training/sessions/${id}`} replace />;
 }
 
+/** Flow 2 (huấn luyện) — chỉ gắn route khi bật cờ; code giữ nguyên để gắn API sau. */
+function trainingRoutes() {
+  if (!FEATURES.training) return <Route path="training/*" element={<Navigate to="/dashboard" replace />} />;
+  return (
+    <>
+      <Route path="training/subjects" element={<SubjectList />} />
+      <Route path="training/programs" element={<ProgramList />} />
+      <Route path="training/programs/new" element={<ProgramEditor />} />
+      <Route path="training/programs/:id" element={<ProgramDetail />} />
+      <Route path="training/programs/:id/edit" element={<ProgramEditor />} />
+      <Route path="training/classes" element={<ClassList />} />
+      <Route path="training/classes/new" element={<ClassForm />} />
+      <Route path="training/classes/:id" element={<ClassDetail />} />
+      <Route path="training/schedule" element={<SchedulePage />} />
+      <Route path="training/today" element={<TodaySessions />} />
+      <Route path="training/sessions/:id" element={<SessionPage />} />
+      <Route path="training/live" element={<LiveList />} />
+      <Route path="training/live/:id" element={<SessionRedirect />} />
+      <Route path="training/review" element={<ReviewList />} />
+      <Route path="training/review/:id" element={<SessionRedirect />} />
+      <Route path="training/progress" element={<ProgressBoard />} />
+      <Route path="training/heart-rate" element={<HeartRatePage />} />
+      <Route path="training/plans/*" element={<Navigate to="/training/classes" replace />} />
+    </>
+  );
+}
+
 function App() {
+  const bootstrap = useStore((state) => state.bootstrap);
+  useEffect(() => {
+    void bootstrap();
+  }, [bootstrap]);
+
   return (
     <BrowserRouter>
       <Routes>
@@ -69,43 +122,29 @@ function App() {
             <Route path="stable" element={<StableMap />} />
             <Route path="stable/zones" element={<ZoneCatalog />} />
 
-            {/* Flow 2 — lập và thực hiện giáo án huấn luyện (mô hình lớp học) */}
-            <Route path="training/subjects" element={<SubjectList />} />
-            <Route path="training/programs" element={<ProgramList />} />
-            <Route path="training/programs/new" element={<ProgramEditor />} />
-            <Route path="training/programs/:id" element={<ProgramDetail />} />
-            <Route path="training/programs/:id/edit" element={<ProgramEditor />} />
-            <Route path="training/classes" element={<ClassList />} />
-            <Route path="training/classes/new" element={<ClassForm />} />
-            <Route path="training/classes/:id" element={<ClassDetail />} />
-            <Route path="training/schedule" element={<SchedulePage />} />
-            <Route path="training/today" element={<TodaySessions />} />
-            <Route path="training/sessions/:id" element={<SessionPage />} />
-            <Route path="training/live" element={<LiveList />} />
-            <Route path="training/live/:id" element={<SessionRedirect />} />
-            <Route path="training/review" element={<ReviewList />} />
-            <Route path="training/review/:id" element={<SessionRedirect />} />
-            <Route path="training/progress" element={<ProgressBoard />} />
-            <Route path="training/heart-rate" element={<HeartRatePage />} />
-            <Route path="training/plans/*" element={<Navigate to="/training/classes" replace />} />
+            {/* Flow 2 — huấn luyện (tạm ẩn) */}
+            {trainingRoutes()}
 
             {/* Flow 3 — y tế và xử lý chấn thương */}
             <Route path="medical/board" element={<MedicalBoard />} />
             <Route path="medical/requests" element={<ExamRequests />} />
             <Route path="medical/cases" element={<CaseList />} />
             <Route path="medical/cases/:id" element={<CaseDetail />} />
+            <Route path="medical/cases/:id/close" element={<CaseClose />} />
+            <Route path="medical/horses/:id" element={<HorseMedical />} />
+            <Route path="medical/visits/new" element={<VisitNew />} />
             <Route path="medical/periodic" element={<PeriodicExams />} />
-            <Route path="medical/locks" element={<TrainingLocks />} />
+            <Route path="medical/care" element={<CareSchedules />} />
+            <Route path="medical/care/new" element={<CareNew />} />
+            <Route path="medical/costs" element={<CostReport />} />
+            <Route path="medical/locks" element={<Navigate to="/medical/board" replace />} />
             <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />
-            <Route path="medical/care" element={<Navigate to="/medical/periodic" replace />} />
-            <Route path="medical/heart-rate" element={<Navigate to="/training/heart-rate" replace />} />
 
             {/* Quản trị */}
             <Route path="admin/users" element={<AdminUsers />} />
             <Route path="admin/permissions" element={<AdminPermissions />} />
             <Route path="admin/zones" element={<Navigate to="/stable/zones" replace />} />
-            <Route path="admin/audit" element={<AdminAudit />} />
-            <Route path="admin/system" element={<AdminSystem />} />
+            <Route path="admin/*" element={<Navigate to="/dashboard" replace />} />
 
             <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />
           </Route>

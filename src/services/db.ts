@@ -100,15 +100,9 @@ export function touch<T extends BaseEntity>(entity: T, now: Date): T {
   return entity;
 }
 
-/** Lỗi nghiệp vụ có thông báo tiếng Việt, hiển thị thẳng cho người dùng. */
-export class AppError extends Error {
-  field?: string;
-  constructor(message: string, field?: string) {
-    super(message);
-    this.name = 'AppError';
-    this.field = field;
-  }
-}
+// Lỗi nghiệp vụ dùng chung cho cả dữ liệu giả lẫn API thật.
+import { AppError } from '../lib/errors';
+export { AppError };
 
 export const ERR_FORBIDDEN = 'Bạn không có quyền thực hiện thao tác này';
 export const ERR_NOT_FOUND = 'Không tìm thấy dữ liệu';

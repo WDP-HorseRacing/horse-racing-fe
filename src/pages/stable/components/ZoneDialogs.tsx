@@ -1,20 +1,14 @@
-// Hộp thoại quản lý danh mục khu và ô (F2.1, chỉ CM).
+// Hộp thoại của danh mục khu và ô chuồng (CM). Backend kiểm lại mọi luật: khu còn ngựa không đóng/bảo trì/gỡ HT/xóa,
+// khu còn ô không xóa, ô có ngựa không bảo trì/xóa, không làm khu thiếu ô cho ngựa đang chờ xếp ô.
 import { useEffect, useState } from 'react';
 import { useAction } from '../../../hooks/useService';
-import {
-  createStalls,
-  createZone,
-  setStallMaintenance,
-  setZoneHeadTrainer,
-  setZoneStatus,
-  updateZone,
-  type PersonOption,
-  type StallRow,
-  type ZoneRow,
-} from '../../../services/horse.service';
+import { createBarn, createStall, updateBarn, updateStall } from '../../../api/stable';
+import type { BarnListItem, BarnStatus, Stall, StallType, UserAccount } from '../../../api/types';
 import { Button, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToast } from '../../../components/ui';
 import { zoneStatusLabel } from '../../../lib/labels';
-import type { ZoneStatus } from '../../../types/domain';
+import { stallTypeLabel } from '../../../lib/api-labels';
+
+/* ===== Thêm / sửa khu ===== */
 
 export function ZoneFormDialog({
   open,
@@ -24,77 +18,93 @@ export function ZoneFormDialog({
   onDone,
 }: {
   open: boolean;
-  /** Không có = thêm khu mới. */
-  zone?: ZoneRow;
-  headTrainers: PersonOption[];
+  zone?: BarnListItem;
+  headTrainers: UserAccount[];
   onClose: () => void;
   onDone: () => void;
 }) {
   const toast = useToast();
   const action = useAction();
-  const [form, setForm] = useState({ code: '', name: '', headTrainerId: '' });
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [capacity, setCapacity] = useState('');
+  const [headTrainerId, setHeadTrainerId] = useState('');
+
   useEffect(() => {
     if (!open) return;
-    setForm({ code: zone?.code ?? '', name: zone?.name ?? '', headTrainerId: '' });
+    setName(zone?.name ?? '');
+    setDescription(zone?.description ?? '');
+    setCapacity(zone?.capacity ? String(zone.capacity) : '');
+    setHeadTrainerId('');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, zone?.id]);
 
+  const capacityValue = capacity.trim() ? Number(capacity) : undefined;
+  const capacityInvalid = capacityValue !== undefined && (!Number.isInteger(capacityValue) || capacityValue < 1);
+
   const submit = async () => {
     const done = await action.run(async () => {
-      if (zone) await updateZone(zone.id, { code: form.code, name: form.name });
-      else await createZone(form);
-      return true;
+      const input = { name: name.trim(), description: description.trim() || undefined, capacity: capacityValue };
+      if (zone) return updateBarn(zone.id, input);
+      const created = await createBarn(input);
+      // Khu mới chưa có HT; gán luôn nếu CM đã chọn.
+      if (headTrainerId) await updateBarn(created.id, { headTrainerId });
+      return created;
     });
     if (done) {
-      toast.push(zone ? 'Đã cập nhật khu' : `Đã thêm ${form.name}`, 'success');
+      toast.push(zone ? `Đã lưu ${name.trim()}` : `Đã tạo ${name.trim()}`, 'success');
       onDone();
       onClose();
     }
   };
-  const err = (key: string) => (action.field === key ? action.error : undefined);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={zone ? `Sửa ${zone.name}` : 'Thêm khu chuồng'}
-      description={zone ? undefined : 'Khu mới ở trạng thái Đang hoạt động. Thêm ô chuồng sau khi tạo khu.'}
+      description="Tên khu không trùng với khu khác đang dùng. Sức chứa là số ô tối đa; để trống nếu không giới hạn."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || !form.code.trim() || !form.name.trim()}>
-            {action.pending ? 'Đang lưu…' : zone ? 'Lưu' : 'Thêm khu'}
+          <Button onClick={submit} disabled={!name.trim() || capacityInvalid || action.pending}>
+            {action.pending ? 'Đang lưu…' : zone ? 'Lưu' : 'Tạo khu'}
           </Button>
         </>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Mã khu" required error={err('code')} hint="Dùng làm tiền tố mã ô, ví dụ E → E-01">
-          <Input value={form.code} maxLength={4} className="font-mono uppercase" onChange={(event) => setForm({ ...form, code: event.target.value })} />
+      <div className="space-y-4">
+        <Field label="Tên khu" required>
+          <Input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Khu D" />
         </Field>
-        <Field label="Tên khu" required error={err('name')} className="sm:col-span-2">
-          <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Khu E" />
+        <Field label="Sức chứa (số ô tối đa)" error={capacityInvalid ? 'Sức chứa là số nguyên từ 1 trở lên' : undefined}>
+          <Input inputMode="numeric" value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder="Không giới hạn" />
+        </Field>
+        <Field label="Mô tả">
+          <Textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-16" placeholder="Vị trí, tiện nghi…" />
         </Field>
         {!zone && (
-          <Field label="HT phụ trách" error={err('headTrainerId')} className="sm:col-span-3" hint="Có thể để trống; khu chưa có HT thì không nhận ngựa">
-            <Select value={form.headTrainerId} onChange={(event) => setForm({ ...form, headTrainerId: event.target.value })}>
-              <option value="">— Chưa giao —</option>
+          <Field label="HT phụ trách" hint="Có thể gán sau. Khu chưa có HT thì chưa nhận ngựa.">
+            <Select value={headTrainerId} onChange={(event) => setHeadTrainerId(event.target.value)}>
+              <option value="">— Chưa gán —</option>
               {headTrainers.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name}
+                  {item.fullName}
                 </option>
               ))}
             </Select>
           </Field>
         )}
+        {action.error && <ErrorBox message={action.error} />}
       </div>
-      {action.error && !action.field && <div className="mt-4"><ErrorBox message={action.error} /></div>}
     </Modal>
   );
 }
+
+/* ===== Đổi HT phụ trách ===== */
 
 export function HeadTrainerDialog({
   zone,
@@ -102,26 +112,26 @@ export function HeadTrainerDialog({
   onClose,
   onDone,
 }: {
-  zone: ZoneRow | null;
-  headTrainers: PersonOption[];
+  zone: BarnListItem | null;
+  headTrainers: UserAccount[];
   onClose: () => void;
   onDone: () => void;
 }) {
   const toast = useToast();
   const action = useAction();
-  const [userId, setUserId] = useState('');
+  const [headTrainerId, setHeadTrainerId] = useState('');
+
   useEffect(() => {
-    setUserId(zone?.headTrainerId ?? '');
+    setHeadTrainerId(zone?.headTrainerId ?? '');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
-  const horses = zone?.capacity.horseCount ?? 0;
   const submit = async () => {
     if (!zone) return;
-    const done = await action.run(() => setZoneHeadTrainer(zone.id, userId || null));
+    const done = await action.run(() => updateBarn(zone.id, { headTrainerId: headTrainerId || null }));
     if (done) {
-      toast.push('Đã đổi HT phụ trách', 'success');
+      toast.push(headTrainerId ? 'Đã đổi HT phụ trách' : 'Đã gỡ HT phụ trách', 'success');
       onDone();
       onClose();
     }
@@ -132,60 +142,54 @@ export function HeadTrainerDialog({
       open={!!zone}
       onClose={onClose}
       title={`HT phụ trách ${zone?.name ?? ''}`}
-      description="Một khu có đúng một HT phụ trách; một HT phụ trách được nhiều khu."
+      description={zone?.headTrainerFullName ? `Hiện tại: ${zone.headTrainerFullName}` : 'Khu chưa có HT phụ trách'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || (userId || undefined) === zone?.headTrainerId || (!userId && horses > 0)}>
+          <Button onClick={submit} disabled={action.pending || (headTrainerId || null) === (zone?.headTrainerId ?? null)}>
             {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Huấn luyện viên trưởng">
-          <Select value={userId} onChange={(event) => setUserId(event.target.value)}>
-            <option value="">— Gỡ HT (để trống) —</option>
+        <Field label="HT phụ trách">
+          <Select value={headTrainerId} onChange={(event) => setHeadTrainerId(event.target.value)}>
+            <option value="">— Gỡ HT (chỉ khi khu không còn ngựa) —</option>
             {headTrainers.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name}
+                {item.fullName}
               </option>
             ))}
           </Select>
         </Field>
-        {!userId && horses > 0 && (
-          <Notice tone="warning">Khu còn {horses} ngựa nên không gỡ HT được — chỉ đổi sang HT khác.</Notice>
-        )}
-        {userId && userId !== zone?.headTrainerId && (
-          <Notice tone="info">HT mới và HT cũ đều nhận thông báo. Các lớp của khu chuyển sang HT mới quản lý.</Notice>
-        )}
+        <Notice tone="info">Đổi sang HT khác luôn được, kể cả khi khu còn ngựa: ngựa chuyển sang phạm vi của HT mới ngay.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: ZoneRow | null; onClose: () => void; onDone: () => void }) {
+/* ===== Đổi trạng thái khu ===== */
+
+export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const action = useAction();
-  const [status, setStatus] = useState<ZoneStatus>('ACTIVE');
-  const [reason, setReason] = useState('');
+  const [status, setStatus] = useState<BarnStatus>('ACTIVE');
+
   useEffect(() => {
-    setStatus(zone?.status === 'ACTIVE' ? 'MAINTENANCE' : 'ACTIVE');
-    setReason('');
+    setStatus(zone?.status ?? 'ACTIVE');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
-  const horses = zone?.capacity.horseCount ?? 0;
-  const blocked = status !== 'ACTIVE' && horses > 0;
   const submit = async () => {
     if (!zone) return;
-    const done = await action.run(() => setZoneStatus(zone.id, status, reason));
+    const done = await action.run(() => updateBarn(zone.id, { status }));
     if (done) {
-      toast.push(`${zone.name}: ${zoneStatusLabel[status]}`, 'success');
+      toast.push(`${zone.name}: ${zoneStatusLabel[status].toLowerCase()}`, 'success');
       onDone();
       onClose();
     }
@@ -195,62 +199,106 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: ZoneRow | nu
     <Modal
       open={!!zone}
       onClose={onClose}
-      title={`Đổi trạng thái ${zone?.name ?? ''}`}
-      description={zone ? `Hiện tại: ${zoneStatusLabel[zone.status]}` : undefined}
+      title={`Trạng thái ${zone?.name ?? ''}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || blocked || !reason.trim() || status === zone?.status}>
-            {action.pending ? 'Đang lưu…' : 'Đổi trạng thái'}
+          <Button onClick={submit} disabled={action.pending || status === zone?.status}>
+            {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Trạng thái mới">
-          <Select value={status} onChange={(event) => setStatus(event.target.value as ZoneStatus)}>
-            {(Object.keys(zoneStatusLabel) as ZoneStatus[])
-              .filter((item) => item !== zone?.status)
-              .map((item) => (
-                <option key={item} value={item}>
-                  {zoneStatusLabel[item]}
-                </option>
-              ))}
+        <Field label="Trạng thái">
+          <Select value={status} onChange={(event) => setStatus(event.target.value as BarnStatus)}>
+            {(Object.keys(zoneStatusLabel) as BarnStatus[]).map((item) => (
+              <option key={item} value={item}>
+                {zoneStatusLabel[item]}
+              </option>
+            ))}
           </Select>
         </Field>
-        {blocked && <Notice tone="danger">Khu còn {horses} ngựa nên không chuyển sang Đóng hoặc Bảo trì được. Chuyển hết ngựa sang khu khác trước.</Notice>}
-        <Field label="Lý do" required>
-          <Textarea value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: thay mái che" />
-        </Field>
+        <Notice tone="info">Khu còn ngựa thì không chuyển sang Bảo trì hoặc Đóng — hãy đổi khu cho các ngựa trước. Khu không hoạt động không nhận ngựa mới.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-export function AddStallsDialog({ zone, onClose, onDone }: { zone: ZoneRow | null; onClose: () => void; onDone: () => void }) {
+/* ===== Thêm ô ===== */
+
+/** Gợi ý tiền tố và số tiếp theo từ các mã ô sẵn có, ví dụ "SD-A07" → tiền tố "SD-A", số 8. */
+function suggestCodes(stalls: Stall[], zoneName: string) {
+  const parsed = stalls.map((stall) => stall.code.match(/^(.*?)(\d+)$/)).filter(Boolean) as RegExpMatchArray[];
+  if (parsed.length) {
+    const prefix = parsed[0][1];
+    const width = parsed[0][2].length;
+    const max = Math.max(...parsed.filter((item) => item[1] === prefix).map((item) => Number(item[2])));
+    return { prefix, next: max + 1, width };
+  }
+  const letter = zoneName.replace(/^khu\s+/i, '').trim().slice(0, 2).toUpperCase() || 'X';
+  return { prefix: `${letter}-`, next: 1, width: 2 };
+}
+
+export function AddStallsDialog({
+  zone,
+  stalls,
+  onClose,
+  onDone,
+}: {
+  zone: BarnListItem | null;
+  stalls: Stall[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const toast = useToast();
-  const action = useAction();
-  const [count, setCount] = useState('2');
+  const [count, setCount] = useState('1');
+  const [prefix, setPrefix] = useState('');
+  const [start, setStart] = useState('1');
+  const [width, setWidth] = useState(2);
+  const [type, setType] = useState<StallType>('STANDARD');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string>();
+
   useEffect(() => {
-    setCount('2');
-    action.clearError();
+    if (!zone) return;
+    const suggestion = suggestCodes(stalls, zone.name);
+    setPrefix(suggestion.prefix);
+    setStart(String(suggestion.next));
+    setWidth(suggestion.width);
+    setCount('1');
+    setType('STANDARD');
+    setError(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
-  const n = Number.parseInt(count, 10) || 0;
-  const lastNumber = (zone?.stalls ?? []).reduce((max, stall) => Math.max(max, Number.parseInt(stall.code.split('-')[1] ?? '0', 10) || 0), 0);
-  const preview = Array.from({ length: Math.min(Math.max(n, 0), 30) }, (_, index) => `${zone?.code}-${String(lastNumber + index + 1).padStart(2, '0')}`);
+  const n = Number(count);
+  const first = Number(start);
+  const valid = Number.isInteger(n) && n >= 1 && n <= 20 && Number.isInteger(first) && first >= 0 && prefix.trim().length > 0;
+  const codes = valid ? Array.from({ length: n }, (_, index) => `${prefix.trim()}${String(first + index).padStart(width, '0')}`) : [];
 
   const submit = async () => {
     if (!zone) return;
-    const result = await action.run(() => createStalls(zone.id, n));
-    if (result) {
-      toast.push(`Đã thêm ${result.codes.length} ô: ${result.codes.join(', ')}`, 'success');
+    setPending(true);
+    setError(undefined);
+    const created: string[] = [];
+    try {
+      for (const code of codes) {
+        await createStall({ barnId: zone.id, code, type });
+        created.push(code);
+      }
+      toast.push(`Đã thêm ${created.length} ô: ${created.join(', ')}`, 'success');
       onDone();
       onClose();
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Đã xảy ra lỗi';
+      setError(created.length ? `Đã thêm ${created.join(', ')}; dừng ở ô tiếp theo: ${message}` : message);
+      if (created.length) onDone();
+    } finally {
+      setPending(false);
     }
   };
 
@@ -259,40 +307,58 @@ export function AddStallsDialog({ zone, onClose, onDone }: { zone: ZoneRow | nul
       open={!!zone}
       onClose={onClose}
       title={`Thêm ô cho ${zone?.name ?? ''}`}
+      description="Mã ô không trùng trong toàn câu lạc bộ. Ô mới luôn ở trạng thái Trống."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || n < 1 || n > 30}>
-            {action.pending ? 'Đang thêm…' : `Thêm ${n > 0 ? n : ''} ô`}
+          <Button onClick={submit} disabled={!valid || pending}>
+            {pending ? 'Đang thêm…' : `Thêm ${valid ? n : ''} ô`}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Số ô cần thêm" hint="Từ 1 đến 30 ô mỗi lần. Mã ô sinh tự động nối tiếp." error={action.field === 'count' ? action.error : undefined}>
-          <Input type="number" min={1} max={30} value={count} onChange={(event) => setCount(event.target.value)} />
-        </Field>
-        {preview.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {preview.map((code) => (
-              <span key={code} className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-gray-700 ring-1 ring-gray-200">
-                {code}
-              </span>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Số ô" required hint="Tối đa 20 ô một lần">
+            <Input inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} />
+          </Field>
+          <Field label="Tiền tố mã" required>
+            <Input value={prefix} maxLength={70} className="font-mono" onChange={(event) => setPrefix(event.target.value)} />
+          </Field>
+          <Field label="Bắt đầu từ số" required>
+            <Input inputMode="numeric" value={start} onChange={(event) => setStart(event.target.value)} />
+          </Field>
+        </div>
+        <Field label="Loại ô">
+          <Select value={type} onChange={(event) => setType(event.target.value as StallType)}>
+            {(Object.keys(stallTypeLabel) as StallType[]).map((item) => (
+              <option key={item} value={item}>
+                {stallTypeLabel[item]}
+              </option>
             ))}
-          </div>
+          </Select>
+        </Field>
+        {codes.length > 0 && (
+          <p className="text-sm text-gray-600">
+            Sẽ tạo: <span className="font-mono">{codes.join(', ')}</span>
+          </p>
         )}
-        {action.error && action.field !== 'count' && <ErrorBox message={action.error} />}
+        {zone?.capacity && <p className="text-xs text-gray-500">Sức chứa tối đa của khu: {zone.capacity} ô.</p>}
+        {error && <ErrorBox message={error} />}
       </div>
     </Modal>
   );
 }
 
-export function MaintenanceDialog({ stall, onClose, onDone }: { stall: StallRow | null; onClose: () => void; onDone: () => void }) {
+/* ===== Chuyển ô sang bảo trì ===== */
+
+export function MaintenanceDialog({ stall, onClose, onDone }: { stall: Stall | null; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const action = useAction();
   const [note, setNote] = useState('');
+
   useEffect(() => {
     setNote('');
     action.clearError();
@@ -301,7 +367,7 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: StallRow 
 
   const submit = async () => {
     if (!stall) return;
-    const done = await action.run(() => setStallMaintenance(stall.id, true, note));
+    const done = await action.run(() => updateStall(stall.id, { status: 'MAINTENANCE', description: note.trim() || undefined }));
     if (done) {
       toast.push(`Ô ${stall.code} chuyển sang bảo trì`, 'success');
       onDone();
@@ -314,7 +380,7 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: StallRow 
       open={!!stall}
       onClose={onClose}
       title={`Bảo trì ô ${stall?.code ?? ''}`}
-      description="Ô bảo trì không tính vào chỗ trống của khu."
+      description="Ô bảo trì không nhận ngựa cho tới khi kết thúc bảo trì."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -327,8 +393,8 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: StallRow 
       }
     >
       <div className="space-y-4">
-        <Field label="Ghi chú bảo trì">
-          <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: thay sàn cao su" className="min-h-16" />
+        <Field label="Ghi chú bảo trì" hint="Lưu vào mô tả của ô">
+          <Textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-16" placeholder="Ví dụ: thay máng nước" />
         </Field>
         {action.error && <ErrorBox message={action.error} />}
       </div>

@@ -8,6 +8,7 @@ import { runPeriodicOverdueJob } from './ops';
 import { clockOffsetMs, now, resetToRealTime, setSystemTime, shiftTime } from '../lib/clock';
 import { toDateKey } from '../lib/format';
 import { roleLabel } from '../lib/labels';
+import { FEATURES } from '../config/features';
 
 /* ===== Thông báo ===== */
 
@@ -208,12 +209,13 @@ export function setUserRole(userId: string, role: UserRole) {
 
 export function getPermissionMatrix() {
   const roles: UserRole[] = ['CLUB_MANAGER', 'HEAD_TRAINER', 'VETERINARIAN', 'GROOM', 'HORSE_OWNER'];
-  const groups = [...new Set(CAPABILITIES.map((item) => item.group))];
+  const visible = CAPABILITIES.filter((item) => FEATURES.training || !item.code.startsWith('F2'));
+  const groups = [...new Set(visible.map((item) => item.group))];
   return Promise.resolve({
     roles,
     groups: groups.map((group) => ({
       group,
-      rows: CAPABILITIES.filter((item) => item.group === group).map((item) => ({
+      rows: visible.filter((item) => item.group === group).map((item) => ({
         key: item.key,
         code: item.code,
         feature: item.feature,

@@ -1,23 +1,27 @@
 // F1.3 — hồ sơ ngựa: header sáng đọc theo hàng + một dải cảnh báo khi bị chặn + các tab (khóa tab qua ?tab=).
+// Hồ sơ và cờ quyền tải song song từ backend; nút nào hiện là do cờ quyền quyết định.
 import { useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Camera, ChevronDown, Lock, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
-import { useAction, useService } from '../../hooks/useService';
-import { getHorse, setAvatar, type LifecycleAction } from '../../services/horse.service';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Camera, ChevronDown, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
+import { useService } from '../../hooks/useService';
+import { getHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
+import { uploadHorsePhoto } from '../../api/media';
 import { ActionMenu, Avatar, Button, Notice, NotFound, Skeleton, Tabs, cn, useToast } from '../../components/ui';
-import { DeletedPill, EligibilityLine, HealthPill, LifecyclePill } from '../../components/ui/status';
+import { DeletedPill, EligibilityView, HealthPill, LifecyclePill } from '../../components/ui/status';
 import { distanceLabel, sexLabel } from '../../lib/labels';
+import { placementStatusLabel } from '../../lib/api-labels';
 import { formatDate } from '../../lib/format';
-import { readImageFile } from '../../lib/files';
+import { IMAGE_ACCEPT, validateImageFile } from '../../lib/files';
 import { links } from '../../lib/links';
+import { breedLabel, colorLabel } from '../../lib/horse-options';
+import { useStore } from '../../store/store';
+import { useCrumbs } from '../../components/Breadcrumb';
 import OverviewTab from './tabs/OverviewTab';
 import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
-import AuditTab from './tabs/AuditTab';
-import MedicalTab from './tabs/MedicalTab';
-import TrainingTab from './tabs/TrainingTab';
 import LifecycleDialog from './components/LifecycleDialog';
-import { lifecycleActionLabel, lifecycleActionsFor } from './components/lifecycle';
+import { lifecycleActionLabel, lifecycleActionsFor, type LifecycleAction } from './components/lifecycle';
+import { AssignZoneDialog } from '../stable/components/PlacementDialogs';
 
 /** Một ô trong hàng thông tin chính. `waiting` = đang chờ xử lý (chữ hổ phách). */
 function Fact({ label, value, waiting, mono }: { label: string; value?: ReactNode; waiting?: string; mono?: boolean }) {
@@ -37,57 +41,78 @@ function Fact({ label, value, waiting, mono }: { label: string; value?: ReactNod
   );
 }
 
+function ageOf(dateOfBirth: string | null) {
+  if (!dateOfBirth) return undefined;
+  const born = new Date(`${dateOfBirth}T00:00:00`);
+  const today = new Date();
+  let age = today.getFullYear() - born.getFullYear();
+  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
+  return Math.max(0, age);
+}
+
 export default function HorseDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const user = useStore((state) => state.currentUser);
   const [params, setParams] = useSearchParams();
-  const { data: horse, loading, error, reload } = useService(() => getHorse(id), [id]);
+  const { data, loading, error, reload } = useService(async () => {
+    const [horse, permissions] = await Promise.all([getHorse(id), getPermissions(id)]);
+    const photo = horse.mediaId ? await getPhotoUrl(id).then((result) => result.url).catch(() => undefined) : undefined;
+    return { horse, permissions, photo };
+  }, [id]);
   const [lifecycle, setLifecycle] = useState<LifecycleAction | null>(null);
-  const avatarAction = useAction();
+  const [barnOpen, setBarnOpen] = useState(false);
+  const [avatarPending, setAvatarPending] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  useCrumbs(data ? [{ label: data.horse.name }] : null);
 
-  if (loading && !horse) return <Skeleton rows={6} />;
-  if (error || !horse) return <NotFound message={error === 'Không tìm thấy dữ liệu' ? undefined : error} />;
+  if (loading && !data) return <Skeleton rows={6} />;
+  if (error || !data) return <NotFound message={error && !error.startsWith('Không tìm thấy') ? error : undefined} />;
+  const { horse, permissions, photo } = data;
 
+  const isHorseGroom = !!horse.groom && horse.groom.id === user?.id;
   const tabs = [
     { key: 'overview', label: 'Tổng quan' },
     { key: 'pedigree', label: 'Phả hệ' },
     { key: 'body', label: 'Chỉ số cơ thể' },
-    ...(horse.canViewMedical ? [{ key: 'medical', label: 'Y tế' }] : []),
-    ...(horse.canViewTraining ? [{ key: 'training', label: 'Huấn luyện' }] : []),
-    ...(horse.canViewAudit ? [{ key: 'audit', label: 'Nhật ký' }] : []),
   ];
   const requested = params.get('tab') ?? 'overview';
+  // Y tế đã thành màn riêng (Flow 3): link cũ ?tab=medical chuyển sang đó.
+  const canOpenMedical = permissions.canViewMedicalTab || isHorseGroom;
+  if (requested === 'medical' && canOpenMedical) return <Navigate to={links.horseMedical(horse.id)} replace />;
   const tab = tabs.some((item) => item.key === requested) ? requested : 'overview';
 
-  const actions = lifecycleActionsFor(horse.lifecycleStatus, horse.deleted).filter((item) =>
-    item === 'DELETE' || item === 'RESTORE' ? horse.canDelete : horse.canLifecycle,
+  const actions = lifecycleActionsFor(horse.lifecycleStatus, horse.isDeleted).filter((item) =>
+    item === 'DELETE' ? permissions.canDelete : item === 'RESTORE' ? permissions.canRestore : permissions.canChangeLifecycle,
   );
-  const canEdit = !horse.readOnly && (horse.canEditIdentity || horse.canEditPreference);
-  const inClub = horse.placement !== 'NONE';
-  const blocked = !horse.deleted && horse.lifecycleStatus === 'ACTIVE' && (!horse.train.allowed || !horse.race.allowed);
+  const canEdit = permissions.canEditProfile || permissions.canEditRaceAptitude;
+  const { barn, stall, placementStatus } = horse.location;
+  const inClub = placementStatus !== 'NOT_APPLICABLE' && !horse.isDeleted;
+  const blocked = !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE' && (!horse.eligibility.trainingEligible || !horse.eligibility.racingEligible);
 
   const pickAvatar = async (file?: File) => {
     if (!file) return;
+    setAvatarPending(true);
     try {
-      const src = await readImageFile(file);
-      const done = await avatarAction.run(() => setAvatar(horse.id, src));
-      if (done) {
-        toast.push('Đã thay ảnh đại diện', 'success');
-        reload();
-      }
+      await validateImageFile(file);
+      const mediaId = await uploadHorsePhoto(file);
+      await updateHorse(horse.id, { version: horse.version, mediaId });
+      toast.push('Đã thay ảnh đại diện', 'success');
+      reload();
     } catch (caught) {
       toast.push(caught instanceof Error ? caught.message : 'Không đọc được ảnh', 'error');
     } finally {
+      setAvatarPending(false);
       if (fileInput.current) fileInput.current.value = '';
     }
   };
 
+  const age = ageOf(horse.dateOfBirth);
   const summary = [
-    sexLabel[horse.sex],
-    horse.age !== undefined ? `${horse.age} tuổi` : undefined,
-    horse.distancePreference ? `Sở trường ${distanceLabel[horse.distancePreference].toLowerCase()}` : undefined,
+    horse.gender ? sexLabel[horse.gender] : undefined,
+    age !== undefined ? `${age} tuổi` : undefined,
+    horse.raceAptitude ? `Sở trường ${distanceLabel[horse.raceAptitude].toLowerCase()}` : undefined,
   ].filter(Boolean);
 
   return (
@@ -100,13 +125,13 @@ export default function HorseDetail() {
       <section className="overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-gray-200/80">
         <div className="flex flex-wrap items-start gap-5 p-5 sm:p-6">
           <div className="group relative shrink-0">
-            <Avatar src={horse.avatar} name={horse.name} size={84} className="rounded-2xl" />
-            {horse.canAvatar && !horse.readOnly && (
+            <Avatar src={photo} name={horse.name} size={84} className="rounded-2xl" />
+            {permissions.canEditProfile && (
               <>
                 <button
                   type="button"
                   onClick={() => fileInput.current?.click()}
-                  disabled={avatarAction.pending}
+                  disabled={avatarPending}
                   className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/45 text-white opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
                   aria-label="Đổi ảnh đại diện"
                 >
@@ -115,7 +140,7 @@ export default function HorseDetail() {
                 <input
                   ref={fileInput}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept={IMAGE_ACCEPT}
                   className="hidden"
                   onChange={(event) => pickAvatar(event.target.files?.[0])}
                 />
@@ -126,11 +151,11 @@ export default function HorseDetail() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-2xl font-bold tracking-tight text-gray-900">{horse.name}</h2>
-              {horse.deleted ? <DeletedPill /> : <LifecyclePill status={horse.lifecycleStatus} />}
+              {horse.isDeleted ? <DeletedPill /> : <LifecyclePill status={horse.lifecycleStatus} />}
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
-              {!horse.deleted && <HealthPill status={horse.healthStatus} className="text-sm" />}
-              {horse.activeLock && (
+              {!horse.isDeleted && <HealthPill status={horse.healthStatus} className="text-sm" />}
+              {horse.activeTrainingLock && (
                 <span className="inline-flex items-center gap-1 font-medium text-red-700">
                   <Lock size={13} /> Khóa huấn luyện
                 </span>
@@ -139,17 +164,25 @@ export default function HorseDetail() {
               <span>{summary.join(' · ')}</span>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-mono text-xs text-gray-500">{horse.chipNumber ?? 'Chưa có số chip'}</span>
-              {!blocked && !horse.deleted && (
-                <EligibilityLine train={horse.train} race={horse.race} lifecycle={horse.lifecycleStatus} />
-              )}
+              <span className="font-mono text-xs text-gray-500">{horse.microchipId ?? 'Chưa có số chip'}</span>
+              {!blocked && !horse.isDeleted && <EligibilityView eligibility={horse.eligibility} lifecycle={horse.lifecycleStatus} />}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {canOpenMedical && !horse.isDeleted && (
+              <Button variant="secondary" onClick={() => navigate(links.horseMedical(horse.id))}>
+                <HeartPulse size={15} /> {permissions.canViewMedicalTab ? 'Hồ sơ y tế' : 'Chăm sóc'}
+              </Button>
+            )}
             {canEdit && (
               <Button variant="secondary" onClick={() => navigate(links.horseEdit(horse.id))}>
-                <Pencil size={15} /> {horse.canEditIdentity ? 'Sửa hồ sơ' : 'Sửa sở trường'}
+                <Pencil size={15} /> {permissions.canEditProfile ? 'Sửa hồ sơ' : 'Sửa sở trường'}
+              </Button>
+            )}
+            {permissions.canAssignBarn && inClub && (
+              <Button variant={barn ? 'secondary' : 'primary'} onClick={() => setBarnOpen(true)}>
+                <MapPinned size={15} /> {barn ? 'Đổi khu' : 'Xếp khu'}
               </Button>
             )}
             {actions.length > 0 && (
@@ -175,54 +208,48 @@ export default function HorseDetail() {
 
         {/* Hàng thông tin chính */}
         <div className="grid grid-cols-2 divide-gray-100 border-t border-gray-100 sm:grid-cols-3 sm:divide-x lg:grid-cols-5">
-          <Fact label="Chủ sở hữu" value={horse.owner?.name} waiting={inClub ? 'Chưa có chủ' : undefined} />
+          <Fact label="Chủ sở hữu" value={horse.owner?.fullName} waiting={inClub ? 'Chưa có chủ' : undefined} />
           <Fact
             label="Khu · Ô"
-            value={horse.zone ? `${horse.zone.name}${horse.stall ? ` · ${horse.stall.code}` : ''}` : undefined}
-            waiting={inClub ? 'Chờ xếp khu' : undefined}
+            value={barn ? `${barn.name}${stall ? ` · ${stall.code}` : ''}` : undefined}
+            waiting={inClub ? placementStatusLabel.PENDING_BARN : undefined}
           />
           <Fact
             label="Groom phụ trách"
-            value={horse.groom?.name}
-            waiting={horse.stall ? 'Chờ phân công Groom' : horse.zone ? 'Chờ xếp ô' : undefined}
+            value={horse.groom?.fullName}
+            waiting={inClub ? (placementStatus === 'PENDING_STALL' ? placementStatusLabel.PENDING_STALL : barn ? 'Chưa có Groom' : undefined) : undefined}
           />
-          <Fact label="Giống · màu lông" value={[horse.breed, horse.color].filter(Boolean).join(' · ') || undefined} />
-          <Fact label="Ngày sinh" value={horse.birthDate ? formatDate(horse.birthDate) : undefined} />
+          <Fact label="Giống · màu lông" value={[breedLabel(horse.breed), colorLabel(horse.color)].filter(Boolean).join(' · ') || undefined} />
+          <Fact label="Ngày sinh" value={horse.dateOfBirth ? formatDate(horse.dateOfBirth) : undefined} />
         </div>
       </section>
 
       {/* Một dải cảnh báo duy nhất khi ngựa bị chặn — lý do nói một lần */}
       {blocked && (
-        <EligibilityLine
+        <EligibilityView
           variant="banner"
-          train={horse.train}
-          race={horse.race}
+          eligibility={horse.eligibility}
           lifecycle={horse.lifecycleStatus}
           action={
-            horse.openCase && horse.canViewMedical ? (
-              <Link to={links.case(horse.openCase.id)} className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:underline">
-                Xem bệnh án →
+            permissions.canViewMedicalTab ? (
+              <Link to={links.horseMedical(horse.id)} className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:underline">
+                Xem hồ sơ y tế →
               </Link>
             ) : undefined
           }
         />
       )}
 
-      {horse.deleted && (
+      {horse.isDeleted && (
         <Notice tone="danger">
-          Hồ sơ đã bị xóa ngày {formatDate(horse.deletedAt)}
-          {horse.deletedByName ? ` bởi ${horse.deletedByName}` : ''}. Lý do: {horse.deleteReason ?? '—'}. Hồ sơ chỉ đọc
-          {horse.canDelete ? ' — dùng menu Vòng đời để khôi phục.' : '.'}
+          Hồ sơ đã bị xóa và chỉ còn Quản lý câu lạc bộ xem được. Hồ sơ chỉ đọc{permissions.canRestore ? ' — dùng menu Vòng đời để khôi phục.' : '.'}
         </Notice>
       )}
-      {!horse.deleted && horse.lifecycleStatus === 'TRANSFERRED' && (
+      {!horse.isDeleted && horse.lifecycleStatus === 'TRANSFERRED' && (
         <Notice>
-          Ngựa đã chuyển nhượng khỏi câu lạc bộ. Hồ sơ chỉ đọc, giữ tên chủ cũ{horse.owner ? ` (${horse.owner.name})` : ''}.
-          {horse.canLifecycle ? ' Khi câu lạc bộ mua lại, dùng "Kích hoạt lại" trong menu Vòng đời.' : ''}
+          Ngựa đã chuyển nhượng khỏi câu lạc bộ{horse.lifecycleChangedAt ? ` ngày ${formatDate(horse.lifecycleChangedAt)}` : ''}. Hồ sơ chỉ đọc, giữ tên chủ cũ
+          {horse.owner ? ` (${horse.owner.fullName})` : ''}.{permissions.canChangeLifecycle ? ' Khi câu lạc bộ mua lại, dùng "Kích hoạt lại" trong menu Vòng đời.' : ''}
         </Notice>
-      )}
-      {horse.owner && !horse.owner.active && horse.canAssignOwner && (
-        <Notice tone="warning">Tài khoản chủ sở hữu {horse.owner.name} đang bị khóa. Quyền sở hữu vẫn giữ nguyên.</Notice>
       )}
 
       <div className="sticky top-0 z-10 -mx-1 bg-canvas/95 px-1 backdrop-blur">
@@ -230,15 +257,22 @@ export default function HorseDetail() {
       </div>
 
       <div>
-        {tab === 'overview' && <OverviewTab horse={horse} onChanged={reload} />}
+        {tab === 'overview' && <OverviewTab horse={horse} permissions={permissions} onChanged={reload} />}
         {tab === 'pedigree' && <PedigreeTab horseId={horse.id} />}
-        {tab === 'body' && <BodyTab horseId={horse.id} canRecord={horse.canRecordMetrics} canDelete={horse.canDeleteMetrics} />}
-        {tab === 'medical' && <MedicalTab horseId={horse.id} />}
-        {tab === 'training' && <TrainingTab horseId={horse.id} />}
-        {tab === 'audit' && <AuditTab horseId={horse.id} />}
+        {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
       </div>
 
       <LifecycleDialog horse={{ id: horse.id, name: horse.name }} action={lifecycle} onClose={() => setLifecycle(null)} onDone={reload} />
+      <AssignZoneDialog
+        horse={
+          barnOpen
+            ? { id: horse.id, name: horse.name, barnId: barn?.id, barnName: barn?.name, stallId: stall?.id, stallCode: stall?.code, placementStatus }
+            : null
+        }
+        onClose={() => setBarnOpen(false)}
+        onDone={reload}
+      />
     </div>
   );
 }
+

@@ -65,6 +65,8 @@ export interface User extends BaseEntity {
   email: string;
   phone: string;
   role: UserRole;
+  /** Mọi vai trò trong token (người kiêm nhiều vai trò). */
+  roles?: UserRole[];
   avatar: string;
   active: boolean;
   // Không còn zoneId: khu của HT = các khu có headTrainerId trỏ tới HT đó.

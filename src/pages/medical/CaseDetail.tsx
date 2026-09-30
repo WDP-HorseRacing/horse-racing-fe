@@ -1,55 +1,55 @@
-// Chi tiết bệnh án: dòng thời gian buổi khám (F3.6), khóa liên quan (F3.8), đóng bệnh án (F3.9).
+// Chi tiết bệnh án (F3.10): dòng thời gian buổi khám (F3.6), diễn biến chấn thương, khóa huấn luyện
+// của bệnh án (F3.8), đóng bệnh án và điều chỉnh chi phí (F3.9).
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Bandage, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
 import { useService } from '../../hooks/useService';
-import { getCase, type ExamCard, type LockRow } from '../../services/medical.service';
-import { ERR_NOT_FOUND } from '../../services/db';
-import {
-  Avatar,
-  Button,
-  Card,
-  EmptyState,
-  ErrorBox,
-  NotFound,
-  Notice,
-  SectionTitle,
-  Skeleton,
-  cn,
-} from '../../components/ui';
-import { CasePill, HealthPill, UrgencyPill } from '../../components/ui/status';
+import { getHorse } from '../../api/horses';
+import { getCase, getInjuries, listHorseExamRequests, listHorseLocks } from '../../api/medical';
+import type { MedicalRecord, TrainingLock } from '../../api/types';
+import { useStore } from '../../store/store';
+import { can } from '../../auth/permissions';
+import { Avatar, Button, Card, EmptyState, ErrorBox, NotFound, Notice, SectionTitle, Skeleton, cn } from '../../components/ui';
+import { CaseStatusPill, HealthPill } from '../../components/ui/status';
 import { healthHint } from '../../lib/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
-import ExaminationSheet from './components/ExaminationSheet';
-import { ExamTimeline } from './components/ExamTimeline';
-import { CloseCaseModal, CorrectionModal, LiftLockModal, PlaceLockModal } from './components/modals';
-import { RequestLines } from './components/parts';
+import { InjuryProgress, VisitTimeline } from './components/ExamTimeline';
+import { AdjustCostModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisitModal } from './components/modals';
+import { usePeople, type People } from './components/people';
+import { useCrumbs } from '../../components/Breadcrumb';
 
-function LockBlock({ lock, onLift }: { lock: LockRow; onLift?: () => void }) {
+type Dialog =
+  | { kind: 'cost' }
+  | { kind: 'lock' }
+  | { kind: 'release'; lock: TrainingLock }
+  | { kind: 'void'; record: MedicalRecord }
+  | null;
+
+function LockBlock({ lock, people, onRelease }: { lock: TrainingLock; people: People; onRelease?: () => void }) {
+  const active = lock.status === 'ACTIVE';
   return (
-    <div className={cn(!lock.active && 'border-t border-gray-100 pt-3')}>
+    <div className={cn(!active && 'border-t border-gray-100 pt-3')}>
       <div className="flex items-start justify-between gap-2">
-        <p className={cn('flex items-center gap-1.5 text-sm font-semibold', lock.active ? 'text-red-700' : 'text-gray-600')}>
-          {lock.active ? <Lock size={14} /> : <Unlock size={14} />}
-          {lock.active ? 'Đang khóa huấn luyện' : 'Đã gỡ khóa'}
+        <p className={cn('flex items-center gap-1.5 text-sm font-semibold', active ? 'text-red-700' : 'text-gray-600')}>
+          {active ? <Lock size={14} /> : <Unlock size={14} />}
+          {active ? 'Đang khóa huấn luyện' : 'Đã gỡ khóa'}
         </p>
-        {onLift && (
-          <Button size="sm" variant="secondary" onClick={onLift}>
+        {onRelease && active && (
+          <Button size="sm" variant="secondary" onClick={onRelease}>
             Gỡ khóa
           </Button>
         )}
       </div>
       <p className="mt-1.5 text-sm text-gray-700">{lock.reason}</p>
       <p className="mt-1 text-xs text-gray-500">
-        Đặt {formatDate(lock.placedAt)} · {lock.placedByName}
-        {lock.active && (lock.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(lock.expectedLiftDate)}` : ' · chưa đặt ngày dự kiến gỡ')}
+        Đặt {formatDate(lock.lockStart)} · {people.name(lock.lockedBy, 'vet')}
+        {active && (lock.lockEnd ? ` · dự kiến gỡ ${formatDate(lock.lockEnd)}` : ' · chưa đặt ngày dự kiến gỡ')}
       </p>
-      {lock.pastExpected && <p className="mt-1.5 text-xs font-medium text-amber-800">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>}
-      {!lock.active && (
+      {!active && (
         <p className="mt-1 text-xs text-gray-500">
-          Gỡ {formatDate(lock.liftedAt)} · {lock.liftedByName} · {lock.liftKindLabel}
-          {lock.liftReason && <span className="block text-gray-600">{lock.liftReason}</span>}
+          Gỡ {formatDate(lock.releasedAt)} · {lock.releasedBySystem ? 'Hệ thống' : people.name(lock.releasedBy, 'vet')}
+          {lock.releaseConclusion && <span className="block text-gray-600">{lock.releaseConclusion}</span>}
         </p>
       )}
     </div>
@@ -58,21 +58,52 @@ function LockBlock({ lock, onLift }: { lock: LockRow; onLift?: () => void }) {
 
 export default function CaseDetail() {
   const { id = '' } = useParams();
+  const user = useStore((state) => state.currentUser);
+  const isVet = can(user, 'case.close');
+  const isOwner = user?.role === 'HORSE_OWNER';
   const detail = useService(() => getCase(id), [id]);
-  const [addingExam, setAddingExam] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const [placingLock, setPlacingLock] = useState(false);
-  const [lifting, setLifting] = useState<LockRow | null>(null);
-  const [correcting, setCorrecting] = useState<ExamCard | null>(null);
+  const horseId = detail.data?.horseId;
+  const extra = useService(async () => {
+    if (!horseId) return null;
+    const [horse, injuries, locks, requests] = await Promise.all([
+      getHorse(horseId),
+      getInjuries(horseId),
+      listHorseLocks(horseId),
+      isOwner ? Promise.resolve([]) : listHorseExamRequests(horseId).catch(() => []),
+    ]);
+    return { horse, injuries, locks, requests };
+  }, [horseId, isOwner]);
+  const people = usePeople(extra.data?.horse.groom ? [extra.data.horse.groom] : []);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const navigate = useNavigate();
+  const caseTitle = detail.data && extra.data ? `${extra.data.horse.name} — ${detail.data.initialDiagnosis}` : null;
+  useCrumbs(caseTitle ? [{ label: caseTitle }] : null);
 
   if (detail.loading && !detail.data) return <Skeleton rows={6} />;
-  if (detail.error === ERR_NOT_FOUND) return <NotFound />;
-  if (detail.error) return <ErrorBox message={detail.error} />;
-  const data = detail.data!;
-  const item = data.medicalCase;
+  if (detail.error && !detail.data) {
+    return detail.error.startsWith('Không tìm thấy') ? <NotFound message={detail.error} /> : <ErrorBox message={detail.error} />;
+  }
+  const item = detail.data!;
+  const horse = extra.data?.horse;
   const isOpen = item.status === 'OPEN';
-  const lock = data.horseActiveLock;
-  const pastLocks = data.locks.filter((entry) => !entry.active);
+  const costVisible = 'totalCost' in item;
+  const visits = item.visits;
+  const visitIds = new Set(visits.map((visit) => visit.id));
+  const caseInjuries = (extra.data?.injuries ?? []).filter((injury) => injury.caseId === item.id);
+  const caseLocks = (extra.data?.locks ?? []).filter((lock) => lock.caseId === item.id);
+  const horseActiveLock = (extra.data?.locks ?? []).find((lock) => lock.status === 'ACTIVE');
+  const linkedRequests = (extra.data?.requests ?? []).filter((request) => request.medicalRecordId && visitIds.has(request.medicalRecordId));
+  const horseName = horse?.name ?? 'Ngựa';
+  const transferred = horse?.lifecycleStatus === 'TRANSFERRED';
+
+  const reload = () => {
+    detail.reload();
+    extra.reload();
+  };
+  const done = () => {
+    setDialog(null);
+    reload();
+  };
 
   return (
     <div className="space-y-6">
@@ -84,53 +115,55 @@ export default function CaseDetail() {
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex min-w-0 items-start gap-4">
-            <Link to={links.horse(data.horse.id, 'medical')} className="shrink-0 transition hover:opacity-80">
-              <Avatar src={data.horse.avatar} name={data.horse.name} size={64} />
+            <Link to={links.horseMedical(item.horseId)} className="shrink-0 transition hover:opacity-80">
+              <Avatar name={horseName} size={64} />
             </Link>
             <div className="min-w-0">
-              <Link to={links.horse(data.horse.id, 'medical')} className="text-sm font-medium text-emerald-700 hover:underline">
-                {data.horse.name}
-                {data.horse.zoneName && <span className="font-normal text-gray-500"> · {[data.horse.zoneName, data.horse.stallCode].filter(Boolean).join(' · ')}</span>}
-              </Link>
-              <h2 className="mt-0.5 text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900">{item.title}</h2>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                <CasePill status={item.status} />
-                {item.fromPeriodic && <span>Mở từ buổi khám định kỳ ·</span>}
-                <span>
-                  Mở {formatDate(item.openedAt)} bởi {item.openedByName}
-                </span>
-                {item.closedAt && (
-                  <span>
-                    · Đóng {formatDate(item.closedAt)} bởi {item.closedByName}
-                  </span>
+              <Link to={links.horseMedical(item.horseId)} className="text-sm font-medium text-emerald-700 hover:underline">
+                {horseName}
+                {horse?.location.barn && (
+                  <span className="font-normal text-gray-500"> · {[horse.location.barn.name, horse.location.stall?.code].filter(Boolean).join(' · ')}</span>
                 )}
-                <span>· {item.examCount} buổi khám</span>
+              </Link>
+              <h2 className="mt-0.5 text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900">{item.initialDiagnosis}</h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+                <CaseStatusPill status={item.status} />
+                <span>
+                  Mở {formatDateTime(item.openedAt)} · {people.name(item.openedBy, 'vet')}
+                </span>
+                {item.closedAt && <span>· Đóng {formatDateTime(item.closedAt)}</span>}
+                <span>· {visits.filter((visit) => !visit.voidedAt).length} buổi khám</span>
               </div>
             </div>
           </div>
           <div className="flex flex-col items-end gap-3">
-            {item.costVisible && (
+            {costVisible && (
               <div className="text-right">
                 <p className="flex items-center justify-end gap-1.5 text-xs text-gray-500">
                   <Wallet size={13} className="text-gray-400" /> Chi phí điều trị
                 </p>
-                {item.cost !== undefined ? (
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.cost)}</p>
+                {item.status === 'CLOSED' ? (
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</p>
                 ) : (
-                  <p className="text-sm text-gray-500">Chốt một lần khi đóng bệnh án</p>
+                  <p className="text-sm text-gray-500">{isOpen ? 'Chốt khi đóng bệnh án' : 'Bệnh án đã hủy, không có chi phí'}</p>
                 )}
               </div>
             )}
-            {(data.canAddExam || data.canClose) && (
+            {isVet && !transferred && (
               <div className="flex flex-wrap justify-end gap-2">
-                {data.canAddExam && (
-                  <Button onClick={() => setAddingExam(true)}>
-                    <Plus size={16} /> Thêm buổi khám
-                  </Button>
+                {isOpen && (
+                  <>
+                    <Button onClick={() => navigate(links.visitNew({ horseId: item.horseId, caseId: item.id, back: links.case(item.id) }))}>
+                      <Plus size={16} /> Tái khám
+                    </Button>
+                    <Button variant="secondary" onClick={() => navigate(links.caseClose(item.id))}>
+                      <FolderCheck size={16} /> Đóng bệnh án
+                    </Button>
+                  </>
                 )}
-                {data.canClose && (
-                  <Button variant="secondary" onClick={() => setClosing(true)}>
-                    <FolderCheck size={16} /> Đóng bệnh án
+                {item.status === 'CLOSED' && (
+                  <Button variant="secondary" onClick={() => setDialog({ kind: 'cost' })}>
+                    <Wallet size={16} /> Điều chỉnh chi phí
                   </Button>
                 )}
               </div>
@@ -139,54 +172,67 @@ export default function CaseDetail() {
         </div>
       </Card>
 
+      {transferred && <Notice tone="info">Ngựa đã chuyển nhượng, hồ sơ chỉ được xem.</Notice>}
+
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Dòng thời gian buổi khám */}
         <div className="space-y-4 lg:col-span-8">
+          {item.status === 'CLOSED' && (
+            <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200/80">
+              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <FolderCheck size={16} className="text-emerald-600" /> Kết luận cuối · {formatDateTime(item.closedAt)}
+              </p>
+              {item.finalConclusion && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{item.finalConclusion}</p>}
+            </div>
+          )}
           <SectionTitle icon={<ClipboardList size={16} />} className="mb-0">
             Dòng thời gian khám
           </SectionTitle>
-          {data.exams.length === 0 ? (
+          {visits.length === 0 ? (
             <EmptyState title="Chưa có buổi khám" />
           ) : (
-            <ExamTimeline exams={data.exams} onCorrect={data.canCorrect ? setCorrecting : undefined} />
-          )}
-          {!isOpen && (
-            <div className="ml-6 rounded-2xl bg-white p-5 ring-1 ring-gray-200/80">
-              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <FolderCheck size={16} className="text-emerald-600" /> Đóng bệnh án · {formatDateTime(item.closedAt)} · {item.closedByName}
-              </p>
-              {item.closeNote && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{item.closeNote}</p>}
-              {item.costVisible && item.cost !== undefined && (
-                <p className="mt-2 text-sm text-gray-600">
-                  Chi phí chốt: <span className="font-semibold text-gray-900">{formatMoney(item.cost)}</span>
-                </p>
-              )}
-            </div>
+            <VisitTimeline
+              records={visits}
+              people={people}
+              onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record }) : undefined}
+            />
           )}
         </div>
 
-        {/* Cột phụ dính */}
+        {/* Cột phụ */}
         <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
-          {!isOpen && (
+          {item.status !== 'OPEN' && (
             <Notice tone="info" icon={<FolderCheck size={16} className="text-gray-400" />}>
-              Bệnh án đã đóng, chỉ đọc. Không mở lại — tái phát thì mở bệnh án mới.
+              {item.status === 'CLOSED'
+                ? 'Bệnh án đã đóng, không thêm buổi khám, không mở lại. Tái phát thì mở bệnh án mới.'
+                : 'Bệnh án đã hủy do buổi mở bệnh án bị hủy.'}
             </Notice>
           )}
 
+          {horse && (
+            <Card variant="flat">
+              <SectionTitle icon={<HeartPulse size={16} />}>Sức khỏe hiện tại</SectionTitle>
+              <HealthPill status={horse.healthStatus} />
+              <p className="mt-2 text-sm text-gray-500">{healthHint[horse.healthStatus]}</p>
+            </Card>
+          )}
+
           <Card>
-            <SectionTitle icon={<HeartPulse size={16} />}>Sức khỏe hiện tại</SectionTitle>
-            <HealthPill status={data.horse.healthStatus} />
-            <p className="mt-2 text-sm text-gray-500">{healthHint[data.horse.healthStatus]}</p>
+            <SectionTitle icon={<Bandage size={16} />}>Diễn biến chấn thương</SectionTitle>
+            {extra.loading && !extra.data ? <Skeleton rows={2} /> : <InjuryProgress items={caseInjuries} />}
           </Card>
 
-          {/* className: shadow-card trong Card đè dải tone (twMerge không nhận ra shadow-card) — ép dải đỏ bằng ! */}
-          <Card tone={lock ? 'danger' : 'default'} className={lock ? '!shadow-[inset_3px_0_0_0_#ef4444]' : ''}>
+          {/* className: ép dải đỏ khi đang khóa (shadow-card của Card đè dải tone) */}
+          <Card tone={horseActiveLock ? 'danger' : 'default'} className={horseActiveLock ? 'shadow-[inset_3px_0_0_0_#ef4444]!' : ''}>
             <SectionTitle
               icon={<Lock size={16} />}
               action={
-                !lock &&
-                data.canLock && (
-                  <Button size="sm" variant="secondary" onClick={() => setPlacingLock(true)}>
+                isVet &&
+                isOpen &&
+                !transferred &&
+                horse &&
+                !horseActiveLock && (
+                  <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'lock' })}>
                     Đặt khóa
                   </Button>
                 )
@@ -195,104 +241,60 @@ export default function CaseDetail() {
               Khóa huấn luyện
             </SectionTitle>
             <div className="space-y-2.5">
-              {lock ? (
+              {horseActiveLock && horseActiveLock.caseId !== item.id && (
                 <>
-                  <LockBlock lock={lock} onLift={lock.canLift ? () => setLifting(lock) : undefined} />
-                  {lock.caseId !== item.id && (
-                    <p className="text-xs text-gray-500">Khóa này không gắn với bệnh án đang xem{lock.caseTitle ? ` (gắn với "${lock.caseTitle}")` : ''}.</p>
-                  )}
+                  <LockBlock lock={horseActiveLock} people={people} onRelease={isVet && !transferred ? () => setDialog({ kind: 'release', lock: horseActiveLock }) : undefined} />
+                  <p className="text-xs text-gray-500">Khóa này không gắn với bệnh án đang xem.</p>
                 </>
-              ) : (
-                <p className="text-sm text-gray-500">Ngựa không có khóa huấn luyện hiệu lực.</p>
               )}
-              {pastLocks.map((entry) => (
-                <LockBlock key={entry.id} lock={entry} />
+              {caseLocks.length === 0 && !horseActiveLock && <p className="text-sm text-gray-500">Bệnh án chưa có khóa huấn luyện.</p>}
+              {caseLocks.map((lock) => (
+                <LockBlock
+                  key={lock.id}
+                  lock={lock}
+                  people={people}
+                  onRelease={isVet && !transferred ? () => setDialog({ kind: 'release', lock }) : undefined}
+                />
               ))}
             </div>
-            <p className="mt-3 text-xs text-gray-500">
-              Khóa độc lập với trạng thái sức khỏe và không tự gỡ khi tới ngày dự kiến.
-            </p>
+            <p className="mt-3 text-xs text-gray-500">Khóa độc lập với sức khỏe và không tự gỡ khi tới ngày dự kiến.</p>
           </Card>
 
-          <Card>
-            <SectionTitle icon={<ClipboardList size={16} />}>Yêu cầu khám đã gắn ({data.linkedRequests.length})</SectionTitle>
-            {data.linkedRequests.length === 0 ? (
-              <p className="text-sm text-gray-500">Chưa có yêu cầu nào.</p>
-            ) : (
-              <ul className="-my-3 divide-y divide-gray-100">
-                {data.linkedRequests.map((request) => (
-                  <li key={request.id} className="py-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      {request.urgency === 'URGENT' && <UrgencyPill urgency={request.urgency} />}
-                      {request.sourceLabel} · {request.createdByName}
-                    </div>
-                    <div className="mt-1.5">
-                      <RequestLines lines={request.descriptionLines} />
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">{formatDateTime(request.createdAt)}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          {!isOwner && (
+            <Card variant="flat">
+              <SectionTitle icon={<ClipboardList size={16} />}>Yêu cầu khám đã gắn ({linkedRequests.length})</SectionTitle>
+              {linkedRequests.length === 0 ? (
+                <p className="text-sm text-gray-500">Chưa có yêu cầu nào được gắn vào buổi khám của bệnh án.</p>
+              ) : (
+                <ul className="-my-3 divide-y divide-gray-100">
+                  {linkedRequests.map((request) => (
+                    <li key={request.id} className="py-3">
+                      <RequestRow request={request} people={people} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
         </aside>
       </div>
 
-      {addingExam && (
-        <ExaminationSheet
-          horseId={data.horse.id}
-          kind="CASE"
-          caseId={item.id}
-          onClose={() => setAddingExam(false)}
-          onDone={() => {
-            setAddingExam(false);
-            detail.reload();
-          }}
-        />
+      {dialog?.kind === 'cost' && <AdjustCostModal medicalCase={item} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'lock' && horse && (
+        <PlaceLockModal horse={{ id: horse.id, name: horse.name }} onClose={() => setDialog(null)} onDone={done} />
       )}
-      {closing && (
-        <CloseCaseModal
-          caseId={item.id}
-          title={item.title}
-          horseName={data.horse.name}
-          lock={lock ? { reason: lock.reason, expectedLiftDate: lock.expectedLiftDate, linkedToCase: lock.caseId === item.id } : undefined}
-          onClose={() => setClosing(false)}
-          onDone={() => {
-            setClosing(false);
-            detail.reload();
+      {dialog?.kind === 'release' && <ReleaseLockModal lock={dialog.lock} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'void' && (
+        <VoidVisitModal
+          record={dialog.record}
+          horseName={horseName}
+          caseInfo={{
+            status: item.status,
+            otherActiveVisits: visits.filter((visit) => !visit.voidedAt && visit.id !== dialog.record.id).length,
           }}
-        />
-      )}
-      {placingLock && (
-        <PlaceLockModal
-          horseId={data.horse.id}
-          caseId={item.id}
-          onClose={() => setPlacingLock(false)}
-          onDone={() => {
-            setPlacingLock(false);
-            detail.reload();
-          }}
-        />
-      )}
-      {lifting && (
-        <LiftLockModal
-          lock={{ id: lifting.id, horseName: data.horse.name, reason: lifting.reason, placedAt: lifting.placedAt }}
-          onClose={() => setLifting(null)}
-          onDone={() => {
-            setLifting(null);
-            detail.reload();
-          }}
-        />
-      )}
-      {correcting && (
-        <CorrectionModal
-          examinationId={correcting.id}
-          examLabel={`Buổi khám ${formatDateTime(correcting.examinedAt)} · BS. ${correcting.vetName}`}
-          onClose={() => setCorrecting(null)}
-          onDone={() => {
-            setCorrecting(null);
-            detail.reload();
-          }}
+          onClose={() => setDialog(null)}
+          onVoided={reload}
+          onReRecord={(record) => navigate(links.visitNew({ horseId: item.horseId, caseId: isOpen ? item.id : undefined, replaces: record.id, back: links.case(item.id) }))}
         />
       )}
     </div>

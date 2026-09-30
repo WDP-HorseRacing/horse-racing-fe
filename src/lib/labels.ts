@@ -81,7 +81,7 @@ export const healthLabel: Record<HealthStatus, string> = {
 
 export const healthHint: Record<HealthStatus, string> = {
   ELIGIBLE: 'Khỏe mạnh, tập và đua bình thường',
-  UNDER_OBSERVATION: 'Chỉ tập Nhẹ và Trung bình, không đăng ký đua',
+  UNDER_OBSERVATION: 'Vẫn được tập, không đăng ký đua',
   INJURED: 'Không tập, không đua',
   QUARANTINED: 'Không tập, không đua',
 };

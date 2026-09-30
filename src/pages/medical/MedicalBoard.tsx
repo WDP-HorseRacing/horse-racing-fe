@@ -1,46 +1,29 @@
-// F3.1 — Bảng điều khiển y tế: VET thao tác; CM và HT xem.
-// Nguyên tắc: phần bình thường để trung tính; chỉ yêu cầu khẩn, quá hạn, khóa, sức khỏe bất thường mới có màu.
-import { useState, type ReactNode } from 'react';
+// F3.1 — Bảng điều khiển y tế (VET, CM, HT) từ GET /medical/dashboard.
+// Nguyên tắc: phần bình thường để trung tính; chỉ yêu cầu khẩn, quá hạn, sức khỏe bất thường mới có màu.
+// Bộ lọc khu và sức khỏe áp cho cả 5 khối, kể cả số đếm (BA chốt: đếm theo bộ lọc).
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  ArrowUpRight,
-  CalendarClock,
-  ClipboardList,
-  FolderOpen,
-  HeartPulse,
-  Lock,
-  Map as MapIcon,
-  Stethoscope,
-  Wrench,
-} from 'lucide-react';
+import { CalendarClock, ClipboardList, FolderOpen, Map as MapIcon, Stethoscope, Syringe } from 'lucide-react';
 import { useService } from '../../hooks/useService';
-import { getMedicalBoard, type BoardHorse } from '../../services/medical.service';
-import {
-  Avatar,
-  Button,
-  Card,
-  ChipFilter,
-  Dot,
-  EmptyState,
-  ErrorBox,
-  PageHeader,
-  SectionTitle,
-  Skeleton,
-  Tip,
-  cn,
-} from '../../components/ui';
-import { UrgencyPill, ZoneStatusPill, healthDot } from '../../components/ui/status';
+import { getMedicalDashboard } from '../../api/medical';
+import { listBarns } from '../../api/stable';
+import type { HealthStatus, MedicalDashboard } from '../../api/types';
+import { useStore } from '../../store/store';
+import { can } from '../../auth/permissions';
+import { Button, Card, ChipFilter, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, Tip, cn } from '../../components/ui';
+import { healthDot } from '../../components/ui/status';
 import { healthHint, healthLabel } from '../../lib/labels';
-import { formatDate, formatRelative, toDateKey } from '../../lib/format';
-import { links } from '../../lib/links';
-import { now } from '../../lib/clock';
-import type { HealthStatus } from '../../types/domain';
-import ExaminationSheet from './components/ExaminationSheet';
-import { HealthChangeModal } from './components/modals';
-import { HorseChip, PeriodicPill, RequestLines } from './components/parts';
-import { HEALTH_ORDER, healthText } from './components/utils';
+import { careTypeLabel } from '../../lib/api-labels';
+import { formatDate, formatDateTime } from '../../lib/format';
+import { links, type VisitParams } from '../../lib/links';
+import { CareDue } from './components/care';
+import { usePeople } from './components/people';
+import { CheckupDue, Count, HorseChip, LinkAction, RequestMeta, RequestText } from './components/parts';
+import { HEALTH_SEVERITY, healthText, todayKey } from './components/utils';
 
-/** Dải nhấn trái cho ô chuồng có ngựa bất thường — ngựa bình thường không có màu. */
+type HerdHorse = MedicalDashboard['herd']['horses'][number];
+
+/** Dải nhấn trái cho ô có ngựa bất thường — ngựa bình thường không có màu. */
 const STALL_ACCENT: Record<HealthStatus, string> = {
   ELIGIBLE: '',
   UNDER_OBSERVATION: 'shadow-[inset_3px_0_0_0_#f59e0b]',
@@ -48,206 +31,165 @@ const STALL_ACCENT: Record<HealthStatus, string> = {
   QUARANTINED: 'shadow-[inset_3px_0_0_0_#ef4444]',
 };
 
-function LinkAction({ to, children }: { to: string; children: ReactNode }) {
-  return (
-    <Link to={to} className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:underline">
-      {children} <ArrowUpRight size={14} />
-    </Link>
-  );
-}
-
-function Count({ value }: { value: number }) {
-  return <span className="rounded-md bg-gray-100 px-1.5 text-xs font-semibold text-gray-600 tabular-nums">{value}</span>;
-}
-
-function StallCell({
-  code,
-  horse,
-  maintenance,
-  dim,
-  onOpen,
-}: {
-  code: string;
-  horse?: BoardHorse;
-  maintenance?: boolean;
-  dim: boolean;
-  onOpen: (horseId: string) => void;
-}) {
-  if (!horse) {
-    return (
-      <div
-        className={cn(
-          'flex min-h-17 flex-col justify-between rounded-xl border border-dashed p-2.5 text-xs text-gray-400',
-          maintenance ? 'border-gray-300 bg-gray-50' : 'border-gray-200 bg-transparent',
-          dim && 'opacity-30',
-        )}
-      >
-        <span className="font-mono">{code}</span>
-        <span className="flex items-center gap-1">
-          {maintenance ? (
-            <>
-              <Wrench size={11} /> Bảo trì
-            </>
-          ) : (
-            'Trống'
-          )}
-        </span>
-      </div>
-    );
-  }
+function StallCell({ horse, openCase, onOpen }: { horse: HerdHorse; openCase: boolean; onOpen: (id: string) => void }) {
   const abnormal = horse.healthStatus !== 'ELIGIBLE';
-  const retired = horse.lifecycleStatus === 'RETIRED';
   return (
-    <Tip content={horse.locked ? `Khóa huấn luyện: ${horse.lockReason}` : healthHint[horse.healthStatus]}>
+    <Tip content={healthHint[horse.healthStatus]}>
       <button
         type="button"
-        onClick={() => onOpen(horse.id)}
+        onClick={() => onOpen(horse.horseId)}
         className={cn(
           'flex min-h-17 flex-col justify-between rounded-xl border border-gray-200 bg-white p-2.5 text-left transition hover:border-gray-300 hover:bg-gray-50',
           STALL_ACCENT[horse.healthStatus],
-          dim && 'opacity-25',
         )}
       >
         <span className="flex items-center justify-between gap-1">
-          <span className="font-mono text-[11px] text-gray-400">{code}</span>
-          <span className="flex items-center gap-1">
-            {horse.openCaseId && <FolderOpen size={11} className="text-gray-400" />}
-            {horse.locked && <Lock size={11} className="text-red-600" />}
-          </span>
+          <span className="font-mono text-[11px] text-gray-400">{horse.stallCode}</span>
+          {openCase && <FolderOpen size={11} className="text-gray-400" aria-label="Có bệnh án mở" />}
         </span>
-        <span className="mt-1 block truncate text-sm font-semibold text-gray-900">{horse.name}</span>
-        {abnormal ? (
-          <span className={cn('block truncate text-[11px] font-medium', healthText[horse.healthStatus])}>
-            {healthLabel[horse.healthStatus]}
-          </span>
-        ) : (
-          retired && <span className="block truncate text-[11px] text-gray-400">đã giải nghệ</span>
-        )}
+        <span className="mt-1 block truncate text-sm font-semibold text-gray-900">{horse.horseName}</span>
+        {abnormal && <span className={cn('block truncate text-[11px] font-medium', healthText[horse.healthStatus])}>{healthLabel[horse.healthStatus]}</span>}
       </button>
     </Tip>
   );
 }
 
-function HorseToken({ horse, dim, onOpen }: { horse: BoardHorse; dim: boolean; onOpen: (horseId: string) => void }) {
+function HorseToken({ horse, onOpen }: { horse: HerdHorse; onOpen: (id: string) => void }) {
   return (
     <button
       type="button"
-      onClick={() => onOpen(horse.id)}
-      className={cn(
-        'inline-flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 transition hover:ring-gray-300',
-        dim && 'opacity-25',
-      )}
+      onClick={() => onOpen(horse.horseId)}
+      className="inline-flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 transition hover:ring-gray-300"
     >
       {horse.healthStatus !== 'ELIGIBLE' && <Dot tone={healthDot[horse.healthStatus]} hollow={horse.healthStatus === 'QUARANTINED'} />}
-      {horse.name}
-      {horse.locked && <Lock size={11} className="text-red-600" />}
+      {horse.horseName}
     </button>
   );
 }
 
 export default function MedicalBoard() {
   const navigate = useNavigate();
-  const board = useService(() => getMedicalBoard(), []);
-  const [filter, setFilter] = useState<HealthStatus | ''>('');
-  const [exam, setExam] = useState<{ horseId?: string } | null>(null);
-  const [healthOpen, setHealthOpen] = useState(false);
+  const user = useStore((state) => state.currentUser);
+  const isVet = can(user, 'exam.record');
+  const [barnId, setBarnId] = useState('');
+  const [health, setHealth] = useState<HealthStatus | ''>('');
+  const barns = useService(() => listBarns(), []);
+  const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined, healthStatus: health || undefined }), [barnId, health]);
+  const people = usePeople();
+  const exam = (params: VisitParams = {}) => navigate(links.visitNew({ ...params, back: links.medicalBoard }));
 
-  if (board.loading && !board.data) return <Skeleton rows={6} />;
-  if (board.error) return <ErrorBox message={board.error} />;
-  const data = board.data!;
-  const todayKey = toDateKey(now());
-  const openHorse = (horseId: string) => navigate(links.horse(horseId, 'medical'));
-  const dim = (horse?: BoardHorse) => !!filter && (!horse || horse.healthStatus !== filter);
-  const urgentFirst = data.pendingRequests.find((row) => row.urgency === 'URGENT');
+  const barnName = useMemo(() => new Map((barns.data ?? []).map((barn) => [barn.id, barn.name])), [barns.data]);
+  const data = board.data;
+
+  const groups = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, { key: string; name: string; placed: HerdHorse[]; waiting: HerdHorse[] }>();
+    data.herd.horses.forEach((horse) => {
+      const key = horse.barnId ?? '';
+      if (!map.has(key)) map.set(key, { key, name: horse.barnId ? (barnName.get(horse.barnId) ?? 'Khu chuồng') : 'Chưa xếp khu', placed: [], waiting: [] });
+      const group = map.get(key)!;
+      (horse.stallId ? group.placed : group.waiting).push(horse);
+    });
+    const order = (barns.data ?? []).map((barn) => barn.id);
+    return [...map.values()]
+      .map((group) => ({ ...group, placed: [...group.placed].sort((a, b) => (a.stallCode ?? '').localeCompare(b.stallCode ?? '')) }))
+      .sort((a, b) => (a.key === '' ? 1 : b.key === '' ? -1 : order.indexOf(a.key) - order.indexOf(b.key)));
+  }, [data, barnName, barns.data]);
+
+  if (board.loading && !data) return <Skeleton rows={6} />;
+  if (board.error && !data) return <ErrorBox message={board.error} />;
+  if (!data) return null;
+
+  const openHorse = (horseId: string) => navigate(links.horseMedical(horseId));
+  const counts = data.herd.counts;
+  const total = HEALTH_SEVERITY.reduce((sum, status) => sum + counts[status], 0);
+  const urgentCount = data.pendingRequests.filter((row) => row.urgent).length;
+  const openCaseHorses = new Set(data.openCases.map((item) => item.horseId));
+  const today = todayKey();
+  const filtered = !!barnId || !!health;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bảng điều khiển y tế"
-        description="Yêu cầu khám đang chờ, lịch khám định kỳ, bệnh án đang mở, khóa huấn luyện và sức khỏe toàn đàn."
+        description="Yêu cầu khám đang chờ, bệnh án đang mở, lịch khám định kỳ, lịch chăm sóc và sức khỏe toàn đàn."
         actions={
-          (data.canChangeHealth || data.canExamine) && (
-            <>
-              {data.canChangeHealth && (
-                <Button variant="secondary" onClick={() => setHealthOpen(true)}>
-                  <HeartPulse size={16} /> Đổi trạng thái sức khỏe
-                </Button>
-              )}
-              {data.canExamine && (
-                <Button variant="secondary" onClick={() => setExam({})}>
-                  <Stethoscope size={16} /> Ghi buổi khám
-                </Button>
-              )}
-            </>
+          isVet && (
+            <Button variant="secondary" onClick={() => exam()}>
+              <Stethoscope size={16} /> Ghi buổi khám
+            </Button>
           )
         }
       />
 
-      {/* Sức khỏe toàn đàn — một hàng chip, bấm để lọc sơ đồ chuồng */}
+      {/* Bộ lọc: khu + sức khỏe (số đếm theo bộ lọc) */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <span className="text-sm text-gray-500">Sức khỏe toàn đàn</span>
+        <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
+          <option value="">Mọi khu</option>
+          {barns.data?.map((barn) => (
+            <option key={barn.id} value={barn.id}>
+              {barn.name}
+            </option>
+          ))}
+        </FilterSelect>
         <ChipFilter<HealthStatus | ''>
-          value={filter}
-          onChange={(value) => setFilter(value === filter ? '' : value)}
+          value={health}
+          onChange={(value) => setHealth(value === health ? '' : value)}
           options={[
-            { value: '', label: 'Tất cả', count: data.totalHorses },
-            ...HEALTH_ORDER.map((status) => ({
+            { value: '', label: 'Tất cả', count: health ? undefined : total },
+            ...HEALTH_SEVERITY.map((status) => ({
               value: status,
               label: healthLabel[status],
-              count: data.counts[status],
-              dot: status === 'ELIGIBLE' ? ('neutral' as const) : healthDot[status],
-              hollow: status === 'QUARANTINED',
+              count: counts[status],
             })),
           ]}
         />
+        {board.loading && <span className="text-xs text-gray-400">Đang tải…</span>}
       </div>
+      {board.error && <ErrorBox message={board.error} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
-        {/* Yêu cầu khám chờ xử lý — khối quan trọng nhất */}
         <div className="space-y-5 lg:col-span-7">
+          {/* Yêu cầu khám chờ xử lý — khối quan trọng nhất */}
           <Card>
             <SectionTitle icon={<ClipboardList size={16} />} action={<LinkAction to={links.requests}>Tất cả yêu cầu</LinkAction>}>
               Yêu cầu khám chờ xử lý
               <Count value={data.pendingRequests.length} />
-              {data.urgentCount > 0 && <span className="text-sm font-semibold text-red-700">· {data.urgentCount} khẩn</span>}
+              {urgentCount > 0 && <span className="text-sm font-semibold text-red-700">· {urgentCount} khẩn</span>}
             </SectionTitle>
             {data.pendingRequests.length === 0 ? (
               <EmptyState
                 title="Không có yêu cầu khám nào đang chờ"
-                hint="Yêu cầu từ Groom, cảnh báo chỉ số và cảnh báo buổi tập sẽ hiện ở đây."
+                hint="Yêu cầu từ Groom, nhân viên và cảnh báo chỉ số (sốt, sụt cân) sẽ hiện ở đây, khẩn lên trước."
               />
             ) : (
               <ul className="space-y-2.5">
-                {data.pendingRequests.slice(0, 8).map((row) => {
-                  const urgent = row.urgency === 'URGENT';
-                  return (
-                    <li
-                      key={row.id}
-                      className={cn(
-                        'flex flex-wrap items-start gap-4 rounded-xl bg-white p-4 ring-1',
-                        urgent ? 'shadow-[inset_3px_0_0_0_#ef4444] ring-red-200' : 'ring-gray-200',
-                      )}
-                    >
-                      <HorseChip horse={row.horse} size={40} />
-                      <div className="min-w-50 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-                          {urgent && <UrgencyPill urgency={row.urgency} />}
-                          <span className="font-medium text-gray-700">{row.sourceLabel}</span>
-                          <span>· {row.createdByName}</span>
-                          <span>· {formatRelative(row.createdAt, now())}</span>
-                        </div>
-                        <div className="mt-1.5">
-                          <RequestLines lines={row.descriptionLines} compact />
-                        </div>
+                {data.pendingRequests.slice(0, 8).map((row) => (
+                  <li
+                    key={row.id}
+                    className={cn(
+                      'flex flex-wrap items-start gap-4 rounded-xl bg-white p-4 ring-1',
+                      row.urgent ? 'shadow-[inset_3px_0_0_0_#ef4444] ring-red-200' : 'ring-gray-200',
+                    )}
+                  >
+                    <HorseChip horse={{ id: row.horseId, name: row.horseName }} size={40} />
+                    <div className="min-w-50 flex-1">
+                      <RequestMeta request={row} people={people} />
+                      <div className="mt-1.5">
+                        <RequestText text={row.description} compact />
                       </div>
-                      {row.canExamine && (
-                        <Button size="sm" variant={urgent ? 'primary' : 'secondary'} onClick={() => setExam({ horseId: row.horse.id })}>
-                          <Stethoscope size={14} /> Khám ngay
-                        </Button>
-                      )}
-                    </li>
-                  );
-                })}
+                    </div>
+                    {isVet && (
+                      <Button
+                        size="sm"
+                        variant={row.urgent ? 'primary' : 'secondary'}
+                        onClick={() => exam({ horseId: row.horseId, kind: 'REQUEST', requestIds: [row.id] })}
+                      >
+                        <Stethoscope size={14} /> Khám
+                      </Button>
+                    )}
+                  </li>
+                ))}
                 {data.pendingRequests.length > 8 && (
                   <li className="pt-1 text-center text-sm">
                     <Link to={links.requests} className="font-medium text-emerald-700 hover:underline">
@@ -266,30 +208,25 @@ export default function MedicalBoard() {
               <Count value={data.openCases.length} />
             </SectionTitle>
             {data.openCases.length === 0 ? (
-              <p className="text-sm text-gray-500">Không có bệnh án nào đang mở.</p>
+              <p className="text-sm text-gray-500">Không có bệnh án nào đang mở{filtered ? ' trong bộ lọc này' : ''}.</p>
             ) : (
               <ul className="-mx-2 -my-1 space-y-0.5">
                 {data.openCases.map((item) => {
-                  const due = item.nextAppointment && item.nextAppointment <= todayKey;
+                  const due = !!item.nextVisitAt && item.nextVisitAt.slice(0, 10) <= today;
                   return (
-                    <li key={item.id}>
-                      <Link to={links.case(item.id)} className="flex items-center gap-3 rounded-xl p-2 transition hover:bg-gray-50">
-                        <Avatar src={item.horse.avatar} name={item.horse.name} size={32} />
-                        <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-gray-900">
-                            {item.title}
-                            {item.activeLock && <Lock size={12} className="shrink-0 text-red-600" />}
-                          </p>
-                          <p className="truncate text-xs text-gray-500">
-                            {item.horse.name} · mở {formatDate(item.openedAt)} · {item.examCount} buổi khám
-                            {item.nextAppointment && (
-                              <span className={cn(due && 'font-medium text-amber-800')}>
-                                {' '}
-                                · hẹn {formatDate(item.nextAppointment)}
-                                {due && ' (đã tới hẹn)'}
-                              </span>
-                            )}
-                          </p>
+                    <li key={item.caseId}>
+                      <Link to={links.case(item.caseId)} className="flex items-center gap-3 rounded-xl p-2 transition hover:bg-gray-50">
+                        <HorseChip horse={{ id: item.horseId, name: item.horseName }} size={32} plain sub={item.initialDiagnosis} />
+                        <div className="ml-auto shrink-0 text-right text-xs text-gray-500">
+                          <p>Khám gần nhất {item.lastVisitAt ? formatDate(item.lastVisitAt) : '—'}</p>
+                          {item.nextVisitAt ? (
+                            <p className={cn(due && 'font-medium text-amber-800')}>
+                              Hẹn tái khám {formatDate(item.nextVisitAt)}
+                              {due && ' · đã tới hẹn'}
+                            </p>
+                          ) : (
+                            <p>Chưa hẹn tái khám</p>
+                          )}
                         </div>
                       </Link>
                     </li>
@@ -301,22 +238,26 @@ export default function MedicalBoard() {
         </div>
 
         <div className="space-y-5 lg:col-span-5">
-          {/* Quá hạn / sắp tới hạn khám định kỳ */}
+          {/* Khám định kỳ cần chú ý */}
           <Card>
             <SectionTitle icon={<CalendarClock size={16} />} action={<LinkAction to={links.periodic}>Lịch khám</LinkAction>}>
-              Khám định kỳ cần chú ý{data.periodicDue.length > 0 && <Count value={data.periodicDue.length} />}
+              Khám định kỳ cần chú ý{data.checkups.length > 0 && <Count value={data.checkups.length} />}
             </SectionTitle>
-            {data.periodicDue.length === 0 ? (
-              <p className="text-sm text-gray-500">Mọi ngựa đều đúng hạn khám định kỳ.</p>
+            {data.checkups.length === 0 ? (
+              <p className="text-sm text-gray-500">Không ngựa nào quá hạn hoặc sắp đến hạn khám trong 3 ngày tới.</p>
             ) : (
               <ul className="-my-2 divide-y divide-gray-100">
-                {data.periodicDue.slice(0, 6).map((row) => (
-                  <li key={row.horse.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                    <HorseChip horse={row.horse} size={32} sub={`Hạn ${formatDate(row.dueDate)}`} />
+                {data.checkups.slice(0, 8).map((row) => (
+                  <li key={row.horseId} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                    <HorseChip
+                      horse={{ id: row.horseId, name: row.horseName }}
+                      size={32}
+                      sub={row.appointment ? `Hạn ${formatDate(row.dueDate)} · hẹn ${formatDateTime(row.appointment.scheduledAt)}` : `Hạn ${formatDate(row.dueDate)}`}
+                    />
                     <div className="flex items-center gap-3">
-                      <PeriodicPill state={row.state} label={row.stateLabel} overdueDays={row.overdueDays} alerted={row.alerted} />
-                      {data.canExamine && (
-                        <Button size="sm" variant="ghost" onClick={() => setExam({ horseId: row.horse.id })}>
+                      <CheckupDue status={row.dueStatus} daysLeft={row.daysLeft} />
+                      {isVet && (
+                        <Button size="sm" variant="ghost" onClick={() => exam({ horseId: row.horseId, kind: 'ROUTINE' })}>
                           Khám
                         </Button>
                       )}
@@ -327,31 +268,23 @@ export default function MedicalBoard() {
             )}
           </Card>
 
-          {/* Khóa đang hiệu lực */}
-          <Card>
-            <SectionTitle icon={<Lock size={16} />} action={<LinkAction to={links.locks}>Quản lý khóa</LinkAction>}>
-              Khóa huấn luyện đang hiệu lực
-              <Count value={data.activeLocks.length} />
+          {/* Lịch chăm sóc đến hạn */}
+          <Card variant="flat">
+            <SectionTitle icon={<Syringe size={16} />} action={<LinkAction to={links.careSchedules}>Lịch chăm sóc</LinkAction>}>
+              Lịch chăm sóc đến hạn{data.careSchedules.length > 0 && <Count value={data.careSchedules.length} />}
             </SectionTitle>
-            {data.activeLocks.length === 0 ? (
-              <p className="text-sm text-gray-500">Không có ngựa nào đang bị khóa huấn luyện.</p>
+            {data.careSchedules.length === 0 ? (
+              <p className="text-sm text-gray-500">Không có lịch tiêm phòng, tẩy giun, kiểm tra móng nào đến hạn trong 3 ngày tới.</p>
             ) : (
               <ul className="-my-2 divide-y divide-gray-100">
-                {data.activeLocks.map((lock) => (
-                  <li key={lock.id} className="py-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <HorseChip horse={lock.horse} size={32} sub={`Từ ${formatDate(lock.placedAt)} · ${lock.placedByName}`} />
-                      <span className="text-xs text-gray-500">
-                        {lock.expectedLiftDate ? `Dự kiến gỡ ${formatDate(lock.expectedLiftDate)}` : 'Chưa đặt ngày gỡ'}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-sm text-gray-800">
-                      <Lock size={12} className="shrink-0 text-red-600" />
-                      {lock.reason}
-                    </p>
-                    {lock.pastExpected && (
-                      <p className="mt-1 text-xs font-medium text-amber-800">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>
-                    )}
+                {data.careSchedules.map((row) => (
+                  <li key={row.scheduleId} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                    <HorseChip
+                      horse={{ id: row.horseId, name: row.horseName }}
+                      size={32}
+                      sub={`${careTypeLabel[row.type]} · ${row.assignedTo ? people.name(row.assignedTo) : 'chưa giao'}`}
+                    />
+                    <CareDue dueAt={`${row.dueDate}T12:00:00`} />
                   </li>
                 ))}
               </ul>
@@ -360,7 +293,7 @@ export default function MedicalBoard() {
         </div>
       </div>
 
-      {/* Sơ đồ chuồng theo sức khỏe */}
+      {/* Sơ đồ đàn theo khu */}
       <Card>
         <SectionTitle
           icon={<MapIcon size={16} />}
@@ -370,10 +303,10 @@ export default function MedicalBoard() {
                 <Dot tone="warn" /> Cần theo dõi
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Dot tone="danger" /> Chấn thương · Cách ly
+                <Dot tone="danger" /> Chấn thương
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Lock size={11} className="text-red-600" /> Khóa huấn luyện
+                <Dot tone="danger" hollow /> Cách ly
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <FolderOpen size={11} className="text-gray-400" /> Bệnh án mở
@@ -381,93 +314,39 @@ export default function MedicalBoard() {
             </div>
           }
         >
-          Sơ đồ chuồng theo sức khỏe
-          {filter && (
-            <button
-              type="button"
-              onClick={() => setFilter('')}
-              className="ml-1 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-            >
-              Lọc: {healthLabel[filter]} ✕
-            </button>
-          )}
+          Sơ đồ đàn theo khu
         </SectionTitle>
-        <div className="grid gap-x-8 gap-y-6 xl:grid-cols-2">
-          {data.zones.map((zone) => (
-            <section key={zone.id}>
-              <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold text-gray-800">
-                  {zone.name}
-                  <span className="ml-2 font-normal text-gray-500">
-                    {zone.trainerName ? `HT ${zone.trainerName}` : 'Chưa có HT phụ trách'}
-                  </span>
+        {groups.length === 0 ? (
+          <EmptyState title="Không có ngựa nào khớp bộ lọc" hint="Bỏ lọc khu hoặc sức khỏe để xem toàn đàn." />
+        ) : (
+          <div className="grid gap-x-8 gap-y-6 xl:grid-cols-2">
+            {groups.map((group) => (
+              <section key={group.key || 'none'}>
+                <p className="mb-2.5 text-sm font-semibold text-gray-800">
+                  {group.name}
+                  <span className="ml-2 font-normal text-gray-500">{group.placed.length + group.waiting.length} ngựa</span>
                 </p>
-                {zone.status !== 'ACTIVE' && <ZoneStatusPill status={zone.status} />}
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {zone.cells.map((cell) => (
-                  <StallCell
-                    key={cell.stallId}
-                    code={cell.code}
-                    horse={cell.horse}
-                    maintenance={cell.status === 'MAINTENANCE'}
-                    dim={dim(cell.horse)}
-                    onOpen={openHorse}
-                  />
-                ))}
-              </div>
-              {zone.waiting.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-amber-800">Chờ xếp ô:</span>
-                  {zone.waiting.map((horse) => (
-                    <HorseToken key={horse.id} horse={horse} dim={dim(horse)} onOpen={openHorse} />
-                  ))}
-                </div>
-              )}
-            </section>
-          ))}
-          {data.noZone.length > 0 && (
-            <section>
-              <p className="mb-2.5 text-sm font-semibold text-gray-800">
-                Chưa xếp khu <span className="ml-1 text-xs font-medium text-amber-800">chờ xếp chỗ</span>
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {data.noZone.map((horse) => (
-                  <HorseToken key={horse.id} horse={horse} dim={dim(horse)} onOpen={openHorse} />
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
+                {group.placed.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {group.placed.map((horse) => (
+                      <StallCell key={horse.horseId} horse={horse} openCase={openCaseHorses.has(horse.horseId)} onOpen={openHorse} />
+                    ))}
+                  </div>
+                )}
+                {group.waiting.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500">Chưa xếp ô:</span>
+                    {group.waiting.map((horse) => (
+                      <HorseToken key={horse.horseId} horse={horse} onOpen={openHorse} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        )}
       </Card>
 
-      {urgentFirst && data.canExamine && (
-        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 lg:hidden">
-          <Button onClick={() => setExam({ horseId: urgentFirst.horse.id })}>
-            <Stethoscope size={16} /> Khám yêu cầu khẩn
-          </Button>
-        </div>
-      )}
-
-      {exam && (
-        <ExaminationSheet
-          horseId={exam.horseId}
-          onClose={() => setExam(null)}
-          onDone={() => {
-            setExam(null);
-            board.reload();
-          }}
-        />
-      )}
-      {healthOpen && (
-        <HealthChangeModal
-          onClose={() => setHealthOpen(false)}
-          onDone={() => {
-            setHealthOpen(false);
-            board.reload();
-          }}
-        />
-      )}
     </div>
   );
 }

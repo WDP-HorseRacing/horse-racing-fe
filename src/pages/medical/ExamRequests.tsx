@@ -1,12 +1,16 @@
-// F3.4 — Tiếp nhận yêu cầu khám. VET xử lý (khám ngay / bỏ qua); GROOM, HT, CM gửi.
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CheckCircle2, FolderOpen, Plus, Send, Stethoscope, XCircle } from 'lucide-react';
+// F3.4 — Hàng đợi yêu cầu khám (GET /exam-requests, phân trang ở backend).
+// VET: khám (gắn yêu cầu vào buổi khám), đổi mức khẩn, bỏ qua. CM, HT, Groom: gửi yêu cầu và theo dõi.
+// Groom chỉ thấy yêu cầu của ngựa được phân công (backend lọc).
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { CheckCircle2, ChevronLeft, ChevronRight, Plus, Send, Stethoscope, XCircle } from 'lucide-react';
 import { useService } from '../../hooks/useService';
-import { listExamRequests, type ExamRequestRow } from '../../services/medical.service';
+import { listExamRequests } from '../../api/medical';
+import type { ExamRequest, ExamRequestStatus } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import {
+  ActionMenu,
   Button,
   Card,
   ChipFilter,
@@ -15,39 +19,43 @@ import {
   ErrorBox,
   FilterSelect,
   PageHeader,
-  SearchInput,
   SectionTitle,
-  Sheet,
   Skeleton,
   Toolbar,
   cn,
 } from '../../components/ui';
-import { RequestPill, UrgencyPill } from '../../components/ui/status';
+import { RequestPill, UrgentPill } from '../../components/ui/status';
+import { requestSourceLabel } from '../../lib/api-labels';
 import { formatDateTime, formatRelative } from '../../lib/format';
 import { links } from '../../lib/links';
 import { now } from '../../lib/clock';
-import type { ExamRequestStatus } from '../../types/domain';
-import ExaminationSheet from './components/ExaminationSheet';
-import { DismissRequestModal, RequestForm } from './components/modals';
-import { HorseChip, RequestLines } from './components/parts';
+import { CreateRequestModal, DismissRequestModal, RequestForm, UrgencyModal } from './components/modals';
+import { usePeople, type People } from './components/people';
+import { HorseChip, RequestMeta, RequestText } from './components/parts';
 
-function Outcome({ row }: { row: ExamRequestRow }) {
+const LIMIT = 20;
+
+const STATUS_OPTIONS: { value: ExamRequestStatus; label: string }[] = [
+  { value: 'PENDING', label: 'Chờ xử lý' },
+  { value: 'EXAMINED', label: 'Đã khám' },
+  { value: 'DISMISSED', label: 'Đã bỏ qua' },
+];
+
+function Outcome({ row, people }: { row: ExamRequest; people: People }) {
   if (row.status === 'EXAMINED') {
     return (
       <div className="space-y-1 text-xs text-gray-500">
         <p className="flex items-center gap-1.5 text-gray-700">
-          <CheckCircle2 size={13} className="text-emerald-600" /> Đã khám {row.examinedAt ? formatDateTime(row.examinedAt) : formatDateTime(row.resolvedAt)}
+          <CheckCircle2 size={13} className="text-emerald-600" /> Đã khám {formatDateTime(row.handledAt)}
         </p>
-        {row.caseId && (
-          <Link
-            to={links.case(row.caseId)}
-            onClick={(event) => event.stopPropagation()}
-            className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline"
-          >
-            <FolderOpen size={12} /> {row.caseTitle}
-          </Link>
-        )}
-        {!row.caseId && row.examinationId && <p>Buổi khám độc lập (kết luận không mở bệnh án)</p>}
+        <p>{people.name(row.handledBy, 'vet')}</p>
+        <Link
+          to={links.horseMedical(row.horseId)}
+          onClick={(event) => event.stopPropagation()}
+          className="font-medium text-emerald-700 hover:underline"
+        >
+          Xem buổi khám
+        </Link>
       </div>
     );
   }
@@ -55,80 +63,66 @@ function Outcome({ row }: { row: ExamRequestRow }) {
     return (
       <div className="max-w-xs space-y-1 text-xs text-gray-500">
         <p className="flex items-center gap-1.5">
-          <XCircle size={13} className="text-gray-400" /> {row.dismissedByName} · {formatDateTime(row.resolvedAt)}
+          <XCircle size={13} className="text-gray-400" /> {row.handledBySystem ? 'Hệ thống' : people.name(row.handledBy, 'vet')} · {formatDateTime(row.handledAt)}
         </p>
-        <p className="text-gray-600">{row.dismissReason}</p>
+        {row.dismissReason && <p className="text-gray-600">{row.dismissReason}</p>}
       </div>
     );
   }
   return <RequestPill status="PENDING" />;
 }
 
-/* ===== Giao diện Groom: gửi yêu cầu + yêu cầu mình đã gửi ===== */
-
-function GroomView() {
-  const list = useService(() => listExamRequests(), []);
-  const rows = list.data ?? [];
+function Pager({ page, totalPages, total, onChange }: { page: number; totalPages: number; total: number; onChange: (page: number) => void }) {
+  if (totalPages <= 1) return null;
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Gửi yêu cầu khám"
-        description="Báo bác sĩ khi ngựa bạn chăm sóc có dấu hiệu bất thường — chọn Khẩn nếu cần bác sĩ tới ngay."
-      />
-      <div className="grid gap-5 lg:grid-cols-12">
-        <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
-          <SectionTitle icon={<Send size={16} />}>Yêu cầu mới</SectionTitle>
-          <RequestForm onDone={list.reload} />
-        </Card>
-        <div className="space-y-3 lg:col-span-7">
-          <SectionTitle className="mb-1">Yêu cầu tôi đã gửi</SectionTitle>
-          {list.loading && !list.data ? (
-            <Skeleton rows={3} />
-          ) : list.error ? (
-            <ErrorBox message={list.error} />
-          ) : rows.length === 0 ? (
-            <EmptyState title="Bạn chưa gửi yêu cầu khám nào" hint="Yêu cầu sau khi gửi sẽ hiện ở đây cùng kết quả xử lý của bác sĩ." />
-          ) : (
-            rows.map((row) => (
-              <article
-                key={row.id}
-                className={cn(
-                  'rounded-2xl bg-white p-4 shadow-card ring-1 ring-gray-200/80',
-                  row.status === 'PENDING' && row.urgency === 'URGENT' && 'shadow-[inset_3px_0_0_0_#ef4444]',
-                )}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <HorseChip horse={row.horse} size={36} tab="" />
-                  <div className="flex items-center gap-2">
-                    {row.urgency === 'URGENT' && <UrgencyPill urgency={row.urgency} />}
-                    <RequestPill status={row.status} />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <RequestLines lines={row.descriptionLines} />
-                </div>
-                <p className="mt-2 text-xs text-gray-500">Gửi {formatRelative(row.createdAt, now())}</p>
-                {row.status !== 'PENDING' && (
-                  <div className="mt-3 border-t border-gray-100 pt-3">
-                    {row.status === 'EXAMINED' ? (
-                      <p className="flex items-center gap-1.5 text-xs text-gray-700">
-                        <CheckCircle2 size={13} className="text-emerald-600" /> Bác sĩ đã khám {formatDateTime(row.examinedAt ?? row.resolvedAt)}
-                      </p>
-                    ) : (
-                      <Outcome row={row} />
-                    )}
-                  </div>
-                )}
-              </article>
-            ))
-          )}
-        </div>
+    <div className="flex items-center justify-between px-1 text-sm text-gray-500">
+      <span className="font-light">
+        {(page - 1) * LIMIT + 1}–{Math.min(total, page * LIMIT)} trên {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button type="button" onClick={() => onChange(page - 1)} disabled={page <= 1} className="rounded-lg p-1.5 transition hover:bg-white disabled:opacity-30">
+          <ChevronLeft size={18} />
+        </button>
+        <span className="px-2 tabular-nums">
+          {page}/{totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(page + 1)}
+          disabled={page >= totalPages}
+          className="rounded-lg p-1.5 transition hover:bg-white disabled:opacity-30"
+        >
+          <ChevronRight size={18} />
+        </button>
       </div>
     </div>
   );
 }
 
-/* ===== Giao diện VET / HT / CM ===== */
+function useQueue() {
+  const [status, setStatusState] = useState<ExamRequestStatus>('PENDING');
+  const [urgent, setUrgentState] = useState('');
+  const [page, setPage] = useState(1);
+  const list = useService(
+    () => listExamRequests({ status, urgent: urgent === '' ? undefined : urgent === 'true', page, limit: LIMIT }),
+    [status, urgent, page],
+  );
+  return {
+    list,
+    status,
+    urgent,
+    page,
+    setPage,
+    setStatus: (value: ExamRequestStatus) => {
+      setStatusState(value);
+      setPage(1);
+    },
+    setUrgent: (value: string) => {
+      setUrgentState(value);
+      setPage(1);
+    },
+  };
+}
 
 export default function ExamRequests() {
   const user = useStore((state) => state.currentUser);
@@ -136,44 +130,93 @@ export default function ExamRequests() {
   return <StaffView />;
 }
 
+/* ===== Groom: gửi yêu cầu + yêu cầu của ngựa mình chăm sóc ===== */
+
+function GroomView() {
+  const queue = useQueue();
+  const people = usePeople();
+  const rows = queue.list.data?.items ?? [];
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Yêu cầu khám" description="Báo bác sĩ khi ngựa bạn chăm sóc có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay." />
+      <div className="grid gap-5 lg:grid-cols-12">
+        <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
+          <SectionTitle icon={<Send size={16} />}>Yêu cầu mới</SectionTitle>
+          <RequestForm onDone={queue.list.reload} />
+        </Card>
+        <div className="space-y-3 lg:col-span-7">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SectionTitle className="mb-0">Yêu cầu của ngựa tôi chăm sóc</SectionTitle>
+            <ChipFilter<ExamRequestStatus> value={queue.status} onChange={queue.setStatus} options={STATUS_OPTIONS} />
+          </div>
+          {queue.list.loading && !queue.list.data ? (
+            <Skeleton rows={3} />
+          ) : queue.list.error ? (
+            <ErrorBox message={queue.list.error} />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Chưa có yêu cầu nào'}
+              hint="Chỉ hiện yêu cầu của ngựa bạn đang được phân công chăm sóc."
+            />
+          ) : (
+            <>
+              {rows.map((row) => (
+                <article
+                  key={row.id}
+                  className={cn(
+                    'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80',
+                    row.status === 'PENDING' && row.urgent ? 'shadow-[inset_3px_0_0_0_#ef4444]' : 'shadow-card',
+                  )}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <HorseChip horse={{ id: row.horseId, name: row.horseName }} size={36} to={links.horse(row.horseId)} />
+                    <div className="flex items-center gap-2">
+                      {row.urgent && <UrgentPill urgent />}
+                      <RequestPill status={row.status} />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <RequestText text={row.description} />
+                  </div>
+                  <div className="mt-2">
+                    <RequestMeta request={row} people={people} showUrgent={false} />
+                  </div>
+                  {row.status !== 'PENDING' && (
+                    <div className="mt-3 border-t border-gray-100 pt-3">
+                      <Outcome row={row} people={people} />
+                    </div>
+                  )}
+                </article>
+              ))}
+              <Pager
+                page={queue.page}
+                totalPages={queue.list.data?.meta.totalPages ?? 1}
+                total={queue.list.data?.meta.total ?? 0}
+                onChange={queue.setPage}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===== VET / HT / CM ===== */
+
 function StaffView() {
   const user = useStore((state) => state.currentUser);
-  const list = useService(() => listExamRequests(), []);
-  const [status, setStatus] = useState<ExamRequestStatus>('PENDING');
-  const [urgency, setUrgency] = useState('');
-  const [search, setSearch] = useState('');
+  const queue = useQueue();
+  const people = usePeople();
   const [creating, setCreating] = useState(false);
-  const [examHorse, setExamHorse] = useState<string | null>(null);
-  const [dismissing, setDismissing] = useState<ExamRequestRow | null>(null);
-
-  const all = useMemo(() => list.data ?? [], [list.data]);
-  const counts = useMemo(
-    () => ({
-      PENDING: all.filter((row) => row.status === 'PENDING').length,
-      EXAMINED: all.filter((row) => row.status === 'EXAMINED').length,
-      DISMISSED: all.filter((row) => row.status === 'DISMISSED').length,
-      URGENT: all.filter((row) => row.status === 'PENDING' && row.urgency === 'URGENT').length,
-    }),
-    [all],
-  );
-  const rows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return all
-      .filter((row) => row.status === status)
-      .filter((row) => !urgency || row.urgency === urgency)
-      .filter((row) => !term || `${row.horse.name} ${row.description} ${row.createdByName}`.toLowerCase().includes(term));
-  }, [all, status, urgency, search]);
+  const navigate = useNavigate();
+  const [dismissing, setDismissing] = useState<ExamRequest | null>(null);
+  const [urgency, setUrgency] = useState<ExamRequest | null>(null);
 
   const canCreate = can(user, 'examRequest.create');
-  const isVet = can(user, 'exam.record');
-
-  if (list.loading && !list.data) return <Skeleton rows={6} />;
-  if (list.error) return <ErrorBox message={list.error} />;
-
-  const oldestPending = all.filter((row) => row.status === 'PENDING').reduce<string | undefined>(
-    (oldest, row) => (!oldest || row.createdAt < oldest ? row.createdAt : oldest),
-    undefined,
-  );
+  const isVet = can(user, 'examRequest.dismiss');
+  const data = queue.list.data;
+  const rows = data?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -181,8 +224,10 @@ function StaffView() {
         title="Yêu cầu khám"
         description={
           isVet
-            ? 'Khám ngay (gắn yêu cầu vào buổi khám) hoặc bỏ qua kèm lý do.'
-            : 'Theo dõi yêu cầu khám và gửi yêu cầu cho ngựa trong phạm vi của bạn.'
+            ? 'Khẩn lên trước, rồi yêu cầu cũ nhất. Khám để gắn yêu cầu vào buổi khám, hoặc bỏ qua kèm lý do.'
+            : user?.role === 'HEAD_TRAINER'
+              ? 'Theo dõi yêu cầu khám toàn câu lạc bộ; gửi yêu cầu cho ngựa thuộc khu bạn phụ trách.'
+              : 'Theo dõi yêu cầu khám toàn câu lạc bộ và gửi yêu cầu cho bất kỳ ngựa nào.'
         }
         actions={
           canCreate && (
@@ -193,131 +238,106 @@ function StaffView() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <ChipFilter<ExamRequestStatus>
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: 'PENDING', label: 'Chờ xử lý', count: counts.PENDING },
-            { value: 'EXAMINED', label: 'Đã khám', count: counts.EXAMINED },
-            { value: 'DISMISSED', label: 'Đã bỏ qua', count: counts.DISMISSED },
-          ]}
-        />
-        {counts.PENDING > 0 && (
-          <span className="text-sm text-gray-500">
-            {counts.URGENT > 0 && <span className="font-medium text-red-700">{counts.URGENT} khẩn</span>}
-            {counts.URGENT > 0 && ' · '}yêu cầu cũ nhất gửi {oldestPending ? formatRelative(oldestPending, now()) : '—'}
-          </span>
-        )}
-      </div>
-
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo ngựa, mô tả, người gửi…" className="min-w-60 flex-1" />
-        <FilterSelect value={urgency} onChange={setUrgency} label="Mức độ">
-          <option value="">Mọi mức độ</option>
-          <option value="URGENT">Khẩn</option>
-          <option value="NORMAL">Bình thường</option>
-        </FilterSelect>
+      <Toolbar className="justify-between">
+        <ChipFilter<ExamRequestStatus> value={queue.status} onChange={queue.setStatus} options={STATUS_OPTIONS} />
+        <div className="flex items-center gap-3">
+          {data && <span className="text-sm text-gray-500">{data.meta.total} yêu cầu</span>}
+          <FilterSelect value={queue.urgent} onChange={queue.setUrgent} label="Mức độ">
+            <option value="">Mọi mức độ</option>
+            <option value="true">Khẩn</option>
+            <option value="false">Bình thường</option>
+          </FilterSelect>
+        </div>
       </Toolbar>
 
-      <DataTable
-        rows={rows}
-        rowKey={(row) => row.id}
-        pageSize={15}
-        emptyTitle={status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
-        columns={[
-          { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={row.horse} /> },
-          {
-            key: 'source',
-            header: 'Nguồn · mức',
-            render: (row) => (
-              <div className="space-y-1">
-                {row.urgency === 'URGENT' && <UrgencyPill urgency={row.urgency} />}
-                <p className="text-xs text-gray-600">{row.sourceLabel}</p>
-              </div>
-            ),
-          },
-          {
-            key: 'desc',
-            header: 'Mô tả',
-            className: 'min-w-[260px] max-w-md',
-            render: (row) => <RequestLines lines={row.descriptionLines} />,
-          },
-          {
-            key: 'by',
-            header: 'Người gửi',
-            render: (row) => (
-              <div className="text-xs">
-                <p className="font-medium text-gray-700">{row.createdByName}</p>
-                <p className="text-gray-500" title={formatDateTime(row.createdAt)}>
-                  {formatRelative(row.createdAt, now())}
-                </p>
-              </div>
-            ),
-          },
-          ...(status === 'PENDING' ? [] : [{ key: 'outcome', header: 'Kết quả', render: (row: ExamRequestRow) => <Outcome row={row} /> }]),
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (row) =>
-              row.status === 'PENDING' && (row.canExamine || row.canDismiss) ? (
-                <div className="flex justify-end gap-2">
-                  {row.canExamine && (
-                    <Button size="sm" variant={row.urgency === 'URGENT' ? 'primary' : 'secondary'} onClick={() => setExamHorse(row.horse.id)}>
-                      <Stethoscope size={14} /> Khám ngay
-                    </Button>
-                  )}
-                  {row.canDismiss && (
-                    <Button size="sm" variant="ghost" onClick={() => setDismissing(row)}>
-                      Bỏ qua
-                    </Button>
-                  )}
-                </div>
-              ) : null,
-          },
-        ]}
-      />
-
-      {creating && (
-        <Sheet
-          open
-          onClose={() => setCreating(false)}
-          title="Gửi yêu cầu khám"
-          description={
-            user?.role === 'HEAD_TRAINER'
-              ? 'Chỉ gửi cho ngựa thuộc khu bạn phụ trách.'
-              : isVet
-                ? 'Yêu cầu do bác sĩ tự tạo, để xử lý sau.'
-                : 'Gửi cho bất kỳ ngựa nào còn ở câu lạc bộ.'
-          }
-        >
-          <RequestForm
-            onCancel={() => setCreating(false)}
-            onDone={() => {
-              setCreating(false);
-              list.reload();
-            }}
+      {queue.list.loading && !data ? (
+        <Skeleton rows={6} />
+      ) : queue.list.error ? (
+        <ErrorBox message={queue.list.error} />
+      ) : (
+        <div className="space-y-3">
+          <DataTable
+            rows={rows}
+            rowKey={(row) => row.id}
+            pageSize={LIMIT}
+            emptyTitle={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
+            emptyHint={queue.status === 'PENDING' ? 'Yêu cầu từ Groom, nhân viên và cảnh báo chỉ số sẽ hiện ở đây.' : undefined}
+            columns={[
+              { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
+              {
+                key: 'source',
+                header: 'Nguồn · mức',
+                render: (row) => (
+                  <div className="space-y-1">
+                    {row.urgent && <UrgentPill urgent />}
+                    <p className="text-xs text-gray-600">{requestSourceLabel[row.source]}</p>
+                  </div>
+                ),
+              },
+              {
+                key: 'desc',
+                header: 'Mô tả',
+                className: 'min-w-[260px] max-w-md',
+                render: (row) => <RequestText text={row.description} />,
+              },
+              {
+                key: 'by',
+                header: 'Người gửi',
+                render: (row) => (
+                  <div className="text-xs">
+                    <p className="font-medium text-gray-700">{row.requestedBySystem ? 'Hệ thống' : people.name(row.requestedBy)}</p>
+                    <p className="text-gray-500" title={formatDateTime(row.createdAt)}>
+                      {formatRelative(row.createdAt, now())}
+                    </p>
+                  </div>
+                ),
+              },
+              ...(queue.status === 'PENDING'
+                ? []
+                : [{ key: 'outcome', header: 'Kết quả', render: (row: ExamRequest) => <Outcome row={row} people={people} /> }]),
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (row) =>
+                  isVet && row.status === 'PENDING' ? (
+                    <div className="flex items-center justify-end gap-1">
+                      <Button size="sm" variant={row.urgent ? 'primary' : 'secondary'} onClick={() => navigate(links.visitNew({ horseId: row.horseId, kind: 'REQUEST', requestIds: [row.id], back: links.requests }))}>
+                        <Stethoscope size={14} /> Khám
+                      </Button>
+                      <ActionMenu
+                        items={[
+                          { label: row.urgent ? 'Hạ xuống Bình thường' : 'Nâng lên Khẩn', onSelect: () => setUrgency(row) },
+                          { label: 'Bỏ qua yêu cầu', danger: true, onSelect: () => setDismissing(row) },
+                        ]}
+                      />
+                    </div>
+                  ) : null,
+              },
+            ]}
           />
-        </Sheet>
+          <Pager page={queue.page} totalPages={data?.meta.totalPages ?? 1} total={data?.meta.total ?? 0} onChange={queue.setPage} />
+        </div>
       )}
-      {examHorse && (
-        <ExaminationSheet
-          horseId={examHorse}
-          onClose={() => setExamHorse(null)}
-          onDone={() => {
-            setExamHorse(null);
-            list.reload();
-          }}
-        />
-      )}
+
+      <CreateRequestModal open={creating} onClose={() => setCreating(false)} onDone={queue.list.reload} />
       {dismissing && (
         <DismissRequestModal
-          request={{ id: dismissing.id, horseName: dismissing.horse.name, lines: dismissing.descriptionLines }}
+          request={dismissing}
           onClose={() => setDismissing(null)}
           onDone={() => {
             setDismissing(null);
-            list.reload();
+            queue.list.reload();
+          }}
+        />
+      )}
+      {urgency && (
+        <UrgencyModal
+          request={urgency}
+          onClose={() => setUrgency(null)}
+          onDone={() => {
+            setUrgency(null);
+            queue.list.reload();
           }}
         />
       )}

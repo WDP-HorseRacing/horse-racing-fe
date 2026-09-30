@@ -4,7 +4,24 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Card, cn } from './ui';
 import { IntensityMeter } from './ui/status';
-import type { WeekDay } from '../services/dashboard.service';
+import type { TrainingIntensity } from '../types/domain';
+
+export interface WeekItem {
+  id: string;
+  time?: string;
+  title: string;
+  detail?: string;
+  intensity?: TrainingIntensity;
+  tone?: 'warn' | 'danger';
+  to: string;
+}
+
+export interface WeekDay {
+  /** YYYY-MM-DD */
+  date: string;
+  isToday: boolean;
+  items: WeekItem[];
+}
 
 const DAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
