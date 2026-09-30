@@ -23,23 +23,23 @@ export default function AuditTab({ horseId }: { horseId: string }) {
           {events.loading ? (
             <Skeleton rows={2} />
           ) : (events.data ?? []).length === 0 ? (
-            <p className="text-sm font-light text-gray-500">Chưa có thay đổi vòng đời nào.</p>
+            <p className="text-sm text-gray-500">Chưa có thay đổi vòng đời nào.</p>
           ) : (
-            <ol className="relative space-y-5 border-l border-emerald-200 pl-5">
+            <ol className="relative space-y-5 border-l border-gray-200 pl-5">
               {(events.data ?? []).map((event) => (
                 <li key={event.id} className="relative">
-                  <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+                  <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full bg-gray-400 ring-4 ring-white" />
                   <p className="text-sm font-semibold text-gray-900">
                     {event.fromLabel} → {event.toLabel}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-500">
                     {formatDateTime(event.at)} · {event.byName}
                   </p>
                   <p className="mt-1 text-sm text-gray-600">{event.reason}</p>
                   {event.consequences.length > 0 && (
                     <ul className="mt-1.5 flex flex-wrap gap-1">
                       {event.consequences.map((item) => (
-                        <li key={item} className="rounded-md bg-white px-2 py-0.5 text-xs text-gray-600 ring-1 ring-emerald-900/5">
+                        <li key={item} className="rounded-md bg-white px-2 py-0.5 text-xs text-gray-600 ring-1 ring-gray-200">
                           {item}
                         </li>
                       ))}

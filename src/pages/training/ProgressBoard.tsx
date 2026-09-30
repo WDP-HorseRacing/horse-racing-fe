@@ -2,10 +2,11 @@
 // Bấm một hàng để mở tab Huấn luyện trong hồ sơ ngựa (biểu đồ thể lực).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertOctagon, CalendarCheck, HeartOff, ShieldAlert, Star, Users } from 'lucide-react';
+import { AlertOctagon, HeartOff } from 'lucide-react';
 import {
   Avatar,
   Card,
+  ChipFilter,
   DataTable,
   ErrorBox,
   FilterSelect,
@@ -14,7 +15,6 @@ import {
   Pill,
   SearchInput,
   Skeleton,
-  Stat,
   ToggleChip,
   Toolbar,
   cn,
@@ -69,10 +69,9 @@ export default function ProgressBoard() {
       alert: all.filter((row) => row.redAlerts7 > 0).length,
       blocked: all.filter((row) => !row.trainable.allowed).length,
       noHr: all.filter((row) => row.maxHeartRate === undefined).length,
+      low: all.filter((row) => row.attendance.rate !== null && row.attendance.rate < 0.8).length,
     };
   }, [all]);
-
-  const toggle = (value: Quick) => setQuick(quick === value ? '' : value);
 
   const columns: Column<ProgressRow>[] = [
     {
@@ -100,13 +99,13 @@ export default function ProgressBoard() {
               </p>
             ))}
             {row.nextSession && (
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-500 tabular-nums">
                 Buổi tới {formatDateShort(row.nextSession.date)} · {row.nextSession.slotLabel.split('–')[0]}
               </p>
             )}
           </div>
         ) : (
-          <Pill tone="slate">Chưa học lớp nào</Pill>
+          <span className="text-sm text-gray-400">Chưa học lớp nào</span>
         ),
     },
     {
@@ -115,19 +114,19 @@ export default function ProgressBoard() {
       className: 'min-w-36',
       render: (row) =>
         row.attendance.rate === null ? (
-          <span className="text-sm text-gray-300">Chưa có buổi</span>
+          <span className="text-sm text-gray-400">Chưa có buổi</span>
         ) : (
           <div>
             <p className="text-sm font-semibold tabular-nums text-gray-800">
               {formatPercent(row.attendance.rate)}
-              <span className="ml-1 font-normal text-gray-400">
+              <span className="ml-1 font-normal text-gray-500">
                 {row.attendance.present}/{row.attendance.total}
               </span>
             </p>
             <Meter
               value={row.attendance.present}
               max={row.attendance.total}
-              tone={row.attendance.rate >= 0.8 ? 'green' : row.attendance.rate >= 0.5 ? 'amber' : 'red'}
+              tone={row.attendance.rate >= 0.8 ? 'green' : 'amber'}
               className="mt-1.5"
             />
           </div>
@@ -138,16 +137,11 @@ export default function ProgressBoard() {
       header: 'Điểm TB 14 ngày',
       render: (row) =>
         row.avgScore14 === null ? (
-          <span className="text-sm text-gray-300">—</span>
+          <span className="text-sm text-gray-400">—</span>
         ) : (
-          <span
-            className={cn(
-              'text-lg font-bold tabular-nums',
-              row.avgScore14 >= 7 ? 'text-emerald-700' : row.avgScore14 >= 5 ? 'text-amber-600' : 'text-red-600',
-            )}
-          >
+          <span className={cn('text-base font-semibold tabular-nums', row.avgScore14 < 5 ? 'text-amber-700' : 'text-gray-900')}>
             {row.avgScore14.toLocaleString('vi-VN')}
-            <span className="ml-1 text-xs font-normal text-gray-400">{row.scored14} buổi</span>
+            <span className="ml-1 text-xs font-normal text-gray-500">{row.scored14} buổi</span>
           </span>
         ),
     },
@@ -156,12 +150,13 @@ export default function ProgressBoard() {
       header: 'Cảnh báo 7 ngày',
       render: (row) =>
         row.alerts7 === 0 ? (
-          <span className="text-sm text-gray-300">0</span>
-        ) : (
-          <Pill tone={row.redAlerts7 > 0 ? 'red' : 'gray'}>
-            <AlertOctagon size={11} /> {row.alerts7}
-            {row.redAlerts7 > 0 ? ` · ${row.redAlerts7} đỏ` : ''}
+          <span className="text-sm text-gray-400">—</span>
+        ) : row.redAlerts7 > 0 ? (
+          <Pill tone="red">
+            <AlertOctagon size={11} /> {row.alerts7} · {row.redAlerts7} đỏ
           </Pill>
+        ) : (
+          <span className="text-sm text-gray-700 tabular-nums">{row.alerts7}</span>
         ),
     },
     {
@@ -173,12 +168,12 @@ export default function ProgressBoard() {
             <p className="text-sm font-medium tabular-nums text-gray-800">
               {trialText(row.lastTrial.seconds, row.lastTrial.notCompleted)}
             </p>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-500 tabular-nums">
               {row.lastTrial.distanceM} m · {formatDateShort(row.lastTrial.date)}
             </p>
           </div>
         ) : (
-          <span className="text-sm text-gray-300">—</span>
+          <span className="text-sm text-gray-400">—</span>
         ),
     },
     {
@@ -187,7 +182,9 @@ export default function ProgressBoard() {
       className: 'max-w-56',
       render: (row) => (
         <div className="space-y-1">
-          <EligibilityBadge allowed={row.trainable.allowed} reason={row.trainable.reason} label={row.trainable.allowed ? 'Được tập' : 'Không được tập'} compact />
+          {!row.trainable.allowed && (
+            <EligibilityBadge allowed={false} reason={row.trainable.reason} label="Không được tập" compact />
+          )}
           {row.locked && <LockPill />}
         </div>
       ),
@@ -201,7 +198,7 @@ export default function ProgressBoard() {
               row.maxHeartRate !== undefined ? (
                 <span className="text-sm font-semibold tabular-nums text-gray-800">{row.maxHeartRate}</span>
               ) : (
-                <Pill tone="amber">Chưa đặt</Pill>
+                <span className="text-sm text-amber-700">Chưa đặt</span>
               ),
           },
         ]
@@ -224,84 +221,55 @@ export default function ProgressBoard() {
 
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-12">
-            <Stat
-              className="lg:col-span-3"
-              value={totals.horses}
-              label="Ngựa đang hoạt động"
-              icon={<Users size={18} />}
-              active={quick === ''}
-              onClick={() => setQuick('')}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ChipFilter<Quick>
+              value={quick === 'NO_HR' ? '' : quick}
+              onChange={setQuick}
+              options={[
+                { value: '', label: 'Tất cả', count: totals.horses },
+                { value: 'BLOCKED', label: 'Không được tập', count: totals.blocked, dot: 'danger' },
+                { value: 'ALERT', label: 'Có cảnh báo đỏ', count: totals.alert, dot: 'danger' },
+                { value: 'LOW', label: 'Có mặt dưới 80%', count: totals.low, dot: 'warn' },
+              ]}
             />
-            <Stat
-              className="lg:col-span-3"
-              value={totals.rate === null ? '—' : formatPercent(totals.rate)}
-              label="Tỉ lệ có mặt 28 ngày"
-              icon={<CalendarCheck size={18} />}
-              hint="Bấm để xem ngựa dưới 80%"
-              active={quick === 'LOW'}
-              onClick={() => toggle('LOW')}
-            />
-            <Stat
-              className="lg:col-span-2"
-              value={totals.avg === null ? '—' : totals.avg.toFixed(1)}
-              label="Điểm TB 14 ngày"
-              icon={<Star size={18} />}
-            />
-            <Stat
-              className="lg:col-span-2"
-              value={totals.alert}
-              label="Có cảnh báo đỏ"
-              tone={totals.alert > 0 ? 'danger' : 'success'}
-              icon={<AlertOctagon size={18} />}
-              active={quick === 'ALERT'}
-              onClick={() => toggle('ALERT')}
-            />
-            <Stat
-              className="lg:col-span-2"
-              value={totals.blocked}
-              label="Không được tập"
-              tone={totals.blocked > 0 ? 'warning' : 'success'}
-              icon={<ShieldAlert size={18} />}
-              active={quick === 'BLOCKED'}
-              onClick={() => toggle('BLOCKED')}
-            />
+            <p className="text-sm text-gray-500 tabular-nums">
+              Có mặt 28 ngày{' '}
+              <span className="font-medium text-gray-900">{totals.rate === null ? '—' : formatPercent(totals.rate)}</span>
+              {' · '}điểm TB 14 ngày{' '}
+              <span className="font-medium text-gray-900">{totals.avg === null ? '—' : totals.avg.toFixed(1)}</span>
+            </p>
           </div>
 
           {data.zones.length > 1 && (
             <div className="grid gap-4 md:grid-cols-12">
               {data.zones.map((item, index) => (
-                <Card
-                  key={item.zoneId}
-                  variant={index === 0 ? 'raised' : 'flat'}
-                  className={cn('p-4 sm:p-5', ZONE_SPANS[index % ZONE_SPANS.length])}
-                >
+                <Card key={item.zoneId} className={cn('p-4 sm:p-5', ZONE_SPANS[index % ZONE_SPANS.length])}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-gray-900">{item.zoneName}</p>
-                      <p className="text-xs text-gray-400">{item.trainerName ? `HT ${item.trainerName}` : 'Chưa có HT'}</p>
+                      <p className="text-xs text-gray-500">{item.trainerName ? `HT ${item.trainerName}` : 'Chưa có HT'}</p>
                     </div>
-                    <Pill tone="slate">{item.horseCount} ngựa</Pill>
+                    <span className="text-sm text-gray-500 tabular-nums">{item.horseCount} ngựa</span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
                     <div>
-                      <p className="text-xs text-gray-400">Có mặt</p>
+                      <p className="text-xs text-gray-500">Có mặt</p>
                       <p className="font-semibold tabular-nums text-gray-800">
                         {item.attendanceRate === null ? '—' : formatPercent(item.attendanceRate)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Điểm TB</p>
+                      <p className="text-xs text-gray-500">Điểm TB</p>
                       <p className="font-semibold tabular-nums text-gray-800">{item.avgScore ?? '—'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Cảnh báo</p>
-                      <p className={cn('font-semibold tabular-nums', item.alerts7 > 0 ? 'text-red-600' : 'text-gray-800')}>
+                      <p className="text-xs text-gray-500">Cảnh báo 7 ngày</p>
+                      <p className="font-semibold tabular-nums text-gray-800">
                         {item.alerts7}
                       </p>
                     </div>
                   </div>
-                  {item.blocked > 0 && <p className="mt-2 text-xs text-amber-700">{item.blocked} ngựa không được tập</p>}
+                  {item.blocked > 0 && <p className="mt-2 text-xs text-red-700">{item.blocked} ngựa không được tập</p>}
                 </Card>
               ))}
             </div>
@@ -334,7 +302,6 @@ export default function ProgressBoard() {
             columns={columns}
             rowKey={(row) => row.horseId}
             onRowClick={(row) => navigate(links.horse(row.horseId, 'training'))}
-            rowClassName={(row) => (row.redAlerts7 > 0 ? 'bg-red-50/30' : '')}
             pageSize={15}
             emptyTitle={all.length === 0 ? 'Chưa có ngựa nào đang hoạt động' : 'Không có ngựa khớp bộ lọc'}
           />

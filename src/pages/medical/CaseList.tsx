@@ -1,22 +1,20 @@
 // F3.10 — Danh sách bệnh án. VET mở bệnh án (F3.5); CM, HT, OWNER xem (HT không thấy chi phí).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FolderCheck, FolderOpen, FolderPlus, Lock, Wallet } from 'lucide-react';
+import { FolderPlus, Lock } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listCases } from '../../services/medical.service';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import {
   Button,
+  ChipFilter,
   DataTable,
   ErrorBox,
-  Notice,
   PageHeader,
   Pill,
   SearchInput,
-  Segmented,
   Skeleton,
-  Stat,
   Toolbar,
   cn,
 } from '../../components/ui';
@@ -61,8 +59,8 @@ export default function CaseList() {
         title={isOwner ? 'Bệnh án của ngựa tôi' : 'Bệnh án'}
         description={
           isOwner
-            ? 'Quá trình điều trị của ngựa bạn sở hữu. Chi phí chỉ hiển thị khi bệnh án đã đóng.'
-            : 'Mỗi ngựa tối đa một bệnh án đang mở. Bệnh án gồm nhiều buổi khám; chi phí chốt một lần khi đóng.'
+            ? 'Quá trình điều trị của ngựa bạn sở hữu; chi phí chỉ hiện khi bệnh án đã đóng.'
+            : 'Mỗi ngựa tối đa một bệnh án đang mở; chi phí chốt một lần khi đóng.'
         }
         actions={
           canOpen && (
@@ -73,51 +71,28 @@ export default function CaseList() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
-        <Stat
-          className={costVisible ? 'lg:col-span-3' : 'lg:col-span-5'}
-          tone={openCount ? 'warning' : 'default'}
-          icon={<FolderOpen size={20} />}
-          value={openCount}
-          label="Đang điều trị"
-          active={status === 'OPEN'}
-          onClick={() => setStatus(status === 'OPEN' ? '' : 'OPEN')}
-        />
-        <Stat
-          className={costVisible ? 'lg:col-span-3' : 'lg:col-span-4'}
-          tone="success"
-          icon={<FolderCheck size={20} />}
-          value={closed.length}
-          label="Đã đóng"
-          active={status === 'CLOSED'}
-          onClick={() => setStatus(status === 'CLOSED' ? '' : 'CLOSED')}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <ChipFilter<MedicalCaseStatus | ''>
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: '', label: 'Tất cả', count: all.length },
+            { value: 'OPEN', label: 'Đang điều trị', count: openCount, dot: 'warn' },
+            { value: 'CLOSED', label: 'Đã đóng', count: closed.length },
+          ]}
         />
         {costVisible ? (
-          <Stat
-            className="sm:col-span-2 lg:col-span-6"
-            icon={<Wallet size={20} />}
-            value={<span className="text-2xl sm:text-3xl">{formatMoney(totalCost)}</span>}
-            label="Tổng chi phí các bệnh án đã đóng"
-            hint="Bệnh án đang mở chưa có chi phí — nhập một lần khi đóng. Khám định kỳ không có chi phí."
-          />
+          <p className="text-sm text-gray-500" title="Bệnh án đang mở chưa có chi phí — nhập một lần khi đóng. Khám định kỳ không có chi phí.">
+            Tổng chi phí {closed.length} bệnh án đã đóng{' '}
+            <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
+          </p>
         ) : (
-          <Notice tone="info" className="sm:col-span-2 lg:col-span-3 lg:self-stretch">
-            Chi phí y tế không hiển thị với vai trò của bạn.
-          </Notice>
+          <p className="text-sm text-gray-500">Chi phí y tế không hiển thị với vai trò của bạn.</p>
         )}
       </div>
 
       <Toolbar>
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc tiêu đề bệnh án…" className="min-w-60 flex-1" />
-        <Segmented
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: '', label: 'Tất cả', badge: all.length },
-            { value: 'OPEN', label: 'Đang điều trị', badge: openCount },
-            { value: 'CLOSED', label: 'Đã đóng', badge: closed.length },
-          ]}
-        />
       </Toolbar>
 
       <DataTable
@@ -136,7 +111,7 @@ export default function CaseList() {
             render: (row) => (
               <div>
                 <p className="font-semibold text-gray-900">{row.title}</p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-500">
                   {row.fromPeriodic ? 'Mở từ buổi khám định kỳ' : 'Mở từ yêu cầu khám'} · {row.examCount} buổi khám
                 </p>
               </div>
@@ -149,7 +124,7 @@ export default function CaseList() {
             render: (row) => (
               <div className="text-xs">
                 <p className="font-medium text-gray-700">{formatDate(row.openedAt)}</p>
-                <p className="text-gray-400">{row.openedByName}</p>
+                <p className="text-gray-500">{row.openedByName}</p>
               </div>
             ),
           },
@@ -160,10 +135,10 @@ export default function CaseList() {
               row.status === 'CLOSED' ? (
                 <div className="text-xs">
                   <p className="font-medium text-gray-700">{formatDate(row.closedAt)}</p>
-                  <p className="text-gray-400">{row.closedByName}</p>
+                  <p className="text-gray-500">{row.closedByName}</p>
                 </div>
               ) : row.nextAppointment ? (
-                <span className={cn('text-xs', row.nextAppointment <= todayKey ? 'font-semibold text-red-600' : 'text-gray-600')}>
+                <span className={cn('text-xs', row.nextAppointment <= todayKey ? 'font-medium text-amber-800' : 'text-gray-600')}>
                   Hẹn {formatDate(row.nextAppointment)}
                 </span>
               ) : (
@@ -192,7 +167,7 @@ export default function CaseList() {
                     row.cost !== undefined ? (
                       <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.cost)}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
+                      <span className="text-xs text-gray-500">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
                     ),
                 },
               ]

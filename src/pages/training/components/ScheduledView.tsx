@@ -1,14 +1,13 @@
 // Buổi chưa bắt đầu (hoặc đã hủy): danh sách ngựa với mức sẵn sàng hiện tại, Groom dắt, vắng, việc Groom.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { HeartPulse, Play, RotateCcw, ShieldAlert, UserCog } from 'lucide-react';
+import { HeartPulse, Play, RotateCcw, UserCog, X } from 'lucide-react';
 import {
   Avatar,
   Button,
   Card,
   InfoRow,
   Notice,
-  Pill,
   SectionTitle,
   Select,
   cn,
@@ -52,7 +51,7 @@ export default function ScheduledView({
         <SectionTitle
           icon={<UserCog size={16} />}
           action={
-            <span className="text-xs font-light text-gray-400">
+            <span className="text-xs text-gray-500">
               {detail.totalHorses} ngựa trong lớp{detail.hiddenCount > 0 ? ` · bạn xem ${horses.length}` : ''}
             </span>
           }
@@ -81,22 +80,22 @@ export default function ScheduledView({
 
       <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
         {!cancelled && (
-          <Card tone={blocked.length > 0 ? 'warning' : 'success'}>
+          <Card>
             <p className="text-sm text-gray-500">Sẵn sàng lúc này</p>
             <p className="mt-1 text-4xl font-bold tabular-nums text-gray-900">
               {ready.length}
               <span className="text-lg font-medium text-gray-400">/{horses.length}</span>
             </p>
-            <p className="mt-1 text-xs font-light text-gray-400">
+            <p className="mt-1 text-xs text-gray-500">
               Tính lại mỗi lần xem; lúc bấm Bắt đầu hệ thống kiểm tra lại từng ngựa.
             </p>
             {blocked.length > 0 && (
-              <ul className="mt-4 space-y-2 border-t border-amber-100 pt-3 text-sm">
+              <ul className="mt-4 space-y-2 border-t border-gray-100 pt-3 text-sm">
                 {blocked.map((row) => (
-                  <li key={row.horseId} className="flex gap-2 text-amber-800">
-                    <ShieldAlert size={15} className="mt-0.5 shrink-0" />
+                  <li key={row.horseId} className="flex gap-2 text-red-700">
+                    <X size={14} strokeWidth={2.5} className="mt-0.5 shrink-0" />
                     <span>
-                      <span className="font-semibold">{row.horseName}</span> sẽ vắng (chặn y tế): {row.readiness.reason}
+                      <span className="font-semibold">{row.horseName}</span> sẽ vắng lúc bắt đầu
                     </span>
                   </li>
                 ))}
@@ -113,9 +112,9 @@ export default function ScheduledView({
         )}
 
         {!cancelled && !isGroom && (noThreshold.length > 0 || noGroom.length > 0) && (
-          <Card variant="flat" tone="warning">
+          <Notice tone="warning">
             {noThreshold.length > 0 && (
-              <div className="flex gap-2 text-sm text-amber-900">
+              <div className="flex gap-2">
                 <HeartPulse size={16} className="mt-0.5 shrink-0" />
                 <p>
                   <span className="font-semibold">{noThreshold.map((row) => row.horseName).join(', ')}</span> chưa được
@@ -127,12 +126,12 @@ export default function ScheduledView({
               </div>
             )}
             {noGroom.length > 0 && (
-              <p className={cn('text-sm text-amber-900', noThreshold.length > 0 && 'mt-3')}>
+              <p className={cn(noThreshold.length > 0 && 'mt-3')}>
                 <span className="font-semibold">{noGroom.map((row) => row.horseName).join(', ')}</span> chưa có Groom
                 dắt. {flags.canManage ? 'Chọn Groom cho riêng buổi này ở danh sách bên trái.' : 'HT của khu cần chọn Groom cho buổi.'}
               </p>
             )}
-          </Card>
+          </Notice>
         )}
 
         <Card variant="outline">
@@ -195,8 +194,8 @@ function HorseRow({
   return (
     <div
       className={cn(
-        'rounded-2xl bg-white p-4 ring-1 transition sm:p-5',
-        absent ? 'bg-orange-50/40 ring-orange-100' : row.readiness.allowed ? 'ring-emerald-950/[0.06]' : 'ring-amber-200 shadow-amber',
+        'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 transition sm:p-5',
+        !absent && !row.readiness.allowed && 'shadow-[inset_3px_0_0_0_#ef4444]',
       )}
     >
       <div className="grid gap-4 md:grid-cols-12 md:items-start">
@@ -206,12 +205,12 @@ function HorseRow({
             <Link to={links.horse(row.horseId)} className="block truncate font-semibold text-gray-900 hover:text-emerald-700">
               {row.horseName}
             </Link>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              <HealthPill status={row.healthStatus} />
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              {row.healthStatus !== 'ELIGIBLE' && <HealthPill status={row.healthStatus} />}
               {!isGroom && row.r1Disabled && !absent && (
-                <Pill tone="amber" title="Chưa đặt ngưỡng — R1 không chạy">
-                  <HeartPulse size={11} /> R1 tắt
-                </Pill>
+                <span className="text-xs text-amber-700" title="Bác sĩ chưa đặt nhịp tim tối đa — quy tắc R1 không chạy">
+                  R1 tắt — chưa đặt ngưỡng
+                </span>
               )}
             </div>
           </div>
@@ -221,22 +220,20 @@ function HorseRow({
           {absent ? (
             <div className="space-y-1">
               <AttendancePill status="ABSENT" reason={row.absenceReason} />
-              {row.absenceNote && <p className="text-sm text-orange-800">{row.absenceNote}</p>}
-              <p className="text-xs font-light text-gray-400">
+              {row.absenceNote && <p className="text-sm text-gray-700">{row.absenceNote}</p>}
+              <p className="text-xs text-gray-500 tabular-nums">
                 {row.markedByName} · {formatDateTime(row.markedAt)}
               </p>
             </div>
           ) : (
-            <EligibilityBadge
-              allowed={row.readiness.allowed}
-              reason={row.readiness.reason}
-              label={row.readiness.allowed ? 'Được tập ở cường độ của buổi' : 'Không được tập ở cường độ này'}
-            />
+            !row.readiness.allowed && (
+              <EligibilityBadge allowed={false} reason={row.readiness.reason} label="Không được tập ở cường độ này" />
+            )
           )}
         </div>
 
         <div className="md:col-span-4">
-          <p className="mb-1 text-xs font-light text-gray-400">Groom dắt buổi này</p>
+          <p className="mb-1 text-xs text-gray-500">Groom dắt buổi này</p>
           {row.canChangeGroom ? (
             <Select
               value={row.groomOverridden ? (row.groomId ?? '') : ''}
@@ -256,17 +253,17 @@ function HorseRow({
                 ))}
             </Select>
           ) : (
-            <p className={cn('text-sm font-medium', row.groomName ? 'text-gray-800' : 'text-amber-600')}>
+            <p className={cn('text-sm font-medium', row.groomName ? 'text-gray-800' : 'text-amber-700')}>
               {row.groomName ?? 'Chưa có Groom dắt'}
-              {row.groomOverridden && <span className="ml-1 text-xs font-normal text-emerald-700">riêng buổi này</span>}
+              {row.groomOverridden && <span className="ml-1 text-xs font-normal text-gray-500">riêng buổi này</span>}
             </p>
           )}
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-50 pt-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-3">
         {absent ? (
-          <span className="text-xs font-light text-gray-400">Ngựa vắng không có việc chuẩn bị.</span>
+          <span className="text-xs text-gray-500">Ngựa vắng không có việc chuẩn bị.</span>
         ) : (
           <GroomTaskChecklist
             sessionId={sessionId}
@@ -283,7 +280,7 @@ function HorseRow({
             </Button>
           )}
           {row.canMarkAbsent && (
-            <Button size="sm" variant="ghost" onClick={onAbsent} className="text-orange-700 hover:bg-orange-50 hover:text-orange-800">
+            <Button size="sm" variant="ghost" onClick={onAbsent}>
               {isGroom ? 'Báo không thực hiện được' : 'Đánh dấu vắng'}
             </Button>
           )}

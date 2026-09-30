@@ -4,7 +4,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listSchedule, listScheduleFilters, listSlots, type ScheduleEntry } from '../../services/training.service';
 import { Button, cn, ErrorBox, FilterSelect, Notice, PageHeader, Pill, Skeleton, ToggleChip, Toolbar } from '../../components/ui';
-import { AttendancePill, intensityDot, SessionPill } from '../../components/ui/status';
+import { AttendancePill, IntensityMeter, SessionPill } from '../../components/ui/status';
 import { intensityLabel } from '../../lib/labels';
 import { now } from '../../lib/clock';
 import { addDays, formatDate, formatDateShort, startOfWeek, toDateKey } from '../../lib/format';
@@ -47,12 +47,11 @@ export default function SchedulePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Huấn luyện · lịch tập"
         title="Lịch tập tuần"
         description={
           horseMode
             ? `Lịch tính ra từ các lớp ${schedule.data?.horse?.name} đang học — không lưu riêng cho từng ngựa.`
-            : 'Mọi buổi học của các lớp theo khung giờ và ngày. Bấm vào một buổi để mở trang buổi học.'
+            : 'Mọi buổi học của các lớp theo khung giờ — bấm một buổi để mở trang buổi học.'
         }
       />
 
@@ -61,7 +60,7 @@ export default function SchedulePage() {
       )}
 
       <Toolbar>
-        <div className="flex items-center gap-1 rounded-xl bg-white p-1 ring-1 ring-gray-200">
+        <div className="flex items-center gap-1 rounded-lg bg-white p-0.5 ring-1 ring-gray-200">
           <Button size="icon" variant="ghost" title="Tuần trước" onClick={() => shift(-1)}>
             <ChevronLeft size={16} />
           </Button>
@@ -72,7 +71,7 @@ export default function SchedulePage() {
             <ChevronRight size={16} />
           </Button>
         </div>
-        <Button size="sm" variant={weekStart === thisWeek ? 'soft' : 'secondary'} onClick={() => setWeekStart(thisWeek)} className="h-10">
+        <Button variant={weekStart === thisWeek ? 'soft' : 'secondary'} onClick={() => setWeekStart(thisWeek)} className="h-10">
           Tuần này
         </Button>
         <div className="flex-1" />
@@ -112,12 +111,12 @@ export default function SchedulePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-gray-500">
           <span className="inline-flex items-center gap-1.5">
-            <CalendarRange size={15} className="text-emerald-600" />
-            <span className="font-semibold text-gray-900 tabular-nums">{active.length}</span> buổi trong tuần
+            <CalendarRange size={15} className="text-gray-400" />
+            <span className="font-medium text-gray-900 tabular-nums">{active.length}</span> buổi trong tuần
           </span>
           {heavy > 0 && (
             <span>
-              <span className="font-semibold text-amber-700 tabular-nums">{heavy}</span> buổi Nặng/Tối đa
+              <span className="font-medium text-gray-900 tabular-nums">{heavy}</span> buổi Nặng/Tối đa
             </span>
           )}
           {entries.length > active.length && (
@@ -133,19 +132,24 @@ export default function SchedulePage() {
       {(schedule.loading && !schedule.data) || slots.loading ? (
         <Skeleton rows={6} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl bg-white shadow-grass ring-1 ring-emerald-950/[0.04] custom-scrollbar">
+        <div className="overflow-x-auto rounded-2xl bg-white shadow-card ring-1 ring-gray-200/80 custom-scrollbar">
           <div className="grid min-w-[1080px] grid-cols-[92px_repeat(7,minmax(0,1fr))]">
-            <div className="border-b border-emerald-950/[0.06] bg-emerald-50/30" />
+            <div className="border-b border-gray-200" />
             {days.map((date) => (
               <div
                 key={date}
                 className={cn(
-                  'border-b border-l border-emerald-950/[0.06] px-3 py-2.5',
-                  date === today ? 'bg-emerald-600 text-white' : 'bg-emerald-50/30',
+                  'border-b border-l border-gray-200 px-3 py-2.5',
+                  date === today && 'bg-gray-50',
                 )}
               >
-                <p className={cn('text-xs font-medium', date === today ? 'text-emerald-100' : 'text-gray-500')}>{weekdayLong(date)}</p>
-                <p className="text-sm font-semibold tabular-nums">{formatDateShort(date)}</p>
+                <p className={cn('text-xs', date === today ? 'font-medium text-emerald-800' : 'text-gray-500')}>
+                  {weekdayLong(date)}
+                  {date === today && ' · hôm nay'}
+                </p>
+                <p className={cn('text-sm font-semibold tabular-nums', date === today ? 'text-emerald-800' : 'text-gray-900')}>
+                  {formatDateShort(date)}
+                </p>
               </div>
             ))}
 
@@ -157,7 +161,7 @@ export default function SchedulePage() {
       )}
 
       {!schedule.loading && entries.length === 0 && (
-        <p className="text-center text-sm font-light text-gray-400">
+        <p className="text-center text-sm text-gray-500">
           Không có buổi học nào trong tuần này{horseMode ? ' cho ngựa đã chọn' : ''}. Dùng nút tuần trước/sau để xem tuần khác.
         </p>
       )}
@@ -180,16 +184,16 @@ function SlotRow({
 }) {
   return (
     <>
-      <div className="border-b border-emerald-950/[0.05] px-3 py-3">
-        <p className="font-mono text-xs font-semibold text-gray-700">{label.split('–')[0]}</p>
-        <p className="font-mono text-[11px] text-gray-400">{label.split('–')[1]}</p>
+      <div className="border-b border-gray-100 px-3 py-3">
+        <p className="text-sm font-semibold text-gray-800 tabular-nums">{label.split('–')[0]}</p>
+        <p className="text-[11px] text-gray-500 tabular-nums">{label.split('–')[1]}</p>
       </div>
       {days.map((date) => {
         const list = entries(date);
         return (
           <div
             key={date}
-            className={cn('min-h-[92px] space-y-1.5 border-b border-l border-emerald-950/[0.05] p-1.5', date === today && 'bg-emerald-50/40')}
+            className={cn('min-h-[92px] space-y-1.5 border-b border-l border-gray-100 p-1.5', date === today && 'bg-gray-50')}
           >
             {list.map((entry) => (
               <SessionCard key={entry.sessionId} entry={entry} horseMode={horseMode} />
@@ -208,21 +212,16 @@ function SessionCard({ entry, horseMode }: { entry: ScheduleEntry; horseMode: bo
       to={links.session(entry.sessionId)}
       title={cancelled ? `Đã hủy: ${entry.cancelReason ?? ''}` : `${entry.subjectName} · ${intensityLabel[entry.intensity]}`}
       className={cn(
-        'block rounded-xl p-2 text-left ring-1 transition hover:-translate-y-px',
-        cancelled
-          ? 'bg-gray-50 ring-gray-100'
-          : entry.status === 'IN_PROGRESS'
-            ? 'bg-sky-50/70 ring-sky-200 hover:shadow-grass'
-            : entry.status === 'AWAITING_REVIEW'
-              ? 'bg-amber-50/60 ring-amber-100 hover:shadow-amber'
-              : 'bg-white ring-emerald-950/[0.07] hover:shadow-grass hover:ring-emerald-300',
+        'block rounded-lg p-2 text-left ring-1 transition',
+        cancelled ? 'bg-gray-50 ring-gray-100' : 'bg-white ring-gray-200 hover:ring-gray-400',
+        entry.status === 'AWAITING_REVIEW' && 'shadow-[inset_3px_0_0_0_#f59e0b]',
       )}
     >
       <div className="flex items-center gap-1.5">
-        <span className={cn('h-2 w-2 shrink-0 rounded-full', intensityDot[entry.intensity])} />
-        <span className={cn('truncate text-xs font-semibold', cancelled ? 'text-gray-400 line-through' : 'text-gray-900')}>
+        <span className={cn('min-w-0 flex-1 truncate text-xs font-semibold', cancelled ? 'text-gray-400 line-through' : 'text-gray-900')}>
           {entry.className}
         </span>
+        {!cancelled && <IntensityMeter intensity={entry.intensity} showLabel={false} />}
       </div>
       <p className={cn('mt-0.5 truncate text-nowrap text-[11px]', cancelled ? 'text-gray-400' : 'text-gray-600')}>
         {entry.subjectName}
@@ -238,7 +237,9 @@ function SessionCard({ entry, horseMode }: { entry: ScheduleEntry; horseMode: bo
             <Users size={11} /> {entry.horseCount}
           </span>
         )}
-        {entry.status !== 'SCHEDULED' ? (
+        {entry.status === 'COMPLETED' ? (
+          <span className="text-[11px] text-gray-400">· đã xong</span>
+        ) : entry.status !== 'SCHEDULED' && entry.status !== 'CANCELLED' ? (
           <span className="origin-left scale-90">
             <SessionPill status={entry.status} />
           </span>

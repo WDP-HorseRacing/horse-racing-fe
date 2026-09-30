@@ -1,15 +1,13 @@
-// Tab Tổng quan của hồ sơ ngựa: thông tin định danh, xếp chỗ khu/ô/Groom, chủ sở hữu, ảnh và tóm tắt y tế – lớp.
+// Tab Tổng quan của hồ sơ ngựa: thông tin hồ sơ, tình trạng hiện tại (lớp, bệnh án, khóa) và chuồng trại – phụ trách.
+// Trình bày dạng danh sách nhãn – giá trị trên nền trắng; chỉ điều cần xử lý mới có màu.
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft, Building2, GraduationCap, HeartPulse, Lock, UserRound, Users, Warehouse } from 'lucide-react';
 import { useAction } from '../../../hooks/useService';
-import { setAvatar, unassignGroom, unassignStall, type HorseDetail } from '../../../services/horse.service';
-import { Button, Card, InfoGrid, Notice, SectionTitle, cn, useToast } from '../../../components/ui';
-import { PlacementPill } from '../../../components/ui/status';
+import { unassignGroom, unassignStall, type HorseDetail } from '../../../services/horse.service';
+import { Button, Card, InfoGrid, SectionTitle, cn, useToast } from '../../../components/ui';
 import { distanceHint, distanceLabel, sexLabel } from '../../../lib/labels';
 import { formatDate } from '../../../lib/format';
 import { links } from '../../../lib/links';
-import AvatarPicker from '../components/AvatarPicker';
 import OwnerDialog from '../components/OwnerDialog';
 import {
   AssignStallDialog,
@@ -19,36 +17,33 @@ import {
   type PlacementHorse,
 } from '../../stable/components/PlacementDialogs';
 
-function Slot({
-  icon,
+/** Một dòng nhãn – giá trị – thao tác. `tone` chỉ dùng khi cần xử lý (hổ phách) hoặc nghiêm trọng (đỏ). */
+function Row({
   label,
-  value,
-  empty,
+  children,
   actions,
   tone = 'default',
 }: {
-  icon: ReactNode;
   label: string;
-  value?: ReactNode;
-  empty: string;
+  children: ReactNode;
   actions?: ReactNode;
-  tone?: 'default' | 'waiting';
+  tone?: 'default' | 'waiting' | 'danger' | 'muted';
 }) {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-3 rounded-xl px-3.5 py-3',
-        tone === 'waiting' ? 'bg-amber-50/80 ring-1 ring-amber-200/60' : 'bg-emerald-50/40',
-      )}
-    >
-      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tone === 'waiting' ? 'bg-amber-100 text-amber-700' : 'bg-white text-emerald-700')}>
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-400">{label}</p>
-        <div className={cn('truncate text-sm font-semibold', value ? 'text-gray-900' : 'text-amber-700')}>{value ?? empty}</div>
+    <div className="flex items-start gap-4 border-b border-gray-100 py-3 last:border-0 last:pb-0 first:pt-0">
+      <span className="w-32 shrink-0 pt-px text-sm text-gray-500">{label}</span>
+      <div
+        className={cn(
+          'min-w-0 flex-1 text-sm',
+          tone === 'default' && 'font-medium text-gray-900',
+          tone === 'waiting' && 'font-medium text-amber-700',
+          tone === 'danger' && 'font-medium text-red-700',
+          tone === 'muted' && 'text-gray-500',
+        )}
+      >
+        {children}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap justify-end gap-1">{actions}</div>}
+      {actions && <div className="-my-1 flex shrink-0 items-center gap-1">{actions}</div>}
     </div>
   );
 }
@@ -56,7 +51,6 @@ function Slot({
 export default function OverviewTab({ horse, onChanged }: { horse: HorseDetail; onChanged: () => void }) {
   const toast = useToast();
   const action = useAction();
-  const avatarAction = useAction();
   const [zoneOpen, setZoneOpen] = useState(false);
   const [stallOpen, setStallOpen] = useState(false);
   const [groomOpen, setGroomOpen] = useState(false);
@@ -74,13 +68,16 @@ export default function OverviewTab({ horse, onChanged }: { horse: HorseDetail; 
     quarantined: horse.healthStatus === 'QUARANTINED',
   };
 
-  const changeAvatar = async (value: string | undefined) => {
-    const done = await avatarAction.run(() => setAvatar(horse.id, value ?? null));
-    if (done) {
-      toast.push(value ? 'Đã thay ảnh đại diện' : 'Đã gỡ ảnh đại diện', 'success');
-      onChanged();
-    }
-  };
+  const parentLink = (parent?: HorseDetail['sire']) =>
+    parent ? (
+      parent.id ? (
+        <Link className="text-emerald-700 hover:underline" to={links.horse(parent.id)}>
+          {parent.name}
+        </Link>
+      ) : (
+        parent.name
+      )
+    ) : undefined;
 
   const info = [
     { label: 'Giới tính', value: sexLabel[horse.sex] },
@@ -92,192 +89,155 @@ export default function OverviewTab({ horse, onChanged }: { horse: HorseDetail; 
       label: 'Sở trường cự ly',
       value: horse.distancePreference ? `${distanceLabel[horse.distancePreference]} (${distanceHint[horse.distancePreference]})` : 'Chưa xác định',
     },
-    {
-      label: 'Cha',
-      value: horse.sire ? (horse.sire.id ? <Link className="text-emerald-700 hover:underline" to={links.horse(horse.sire.id)}>{horse.sire.name}</Link> : horse.sire.name) : undefined,
-    },
-    {
-      label: 'Mẹ',
-      value: horse.dam ? (horse.dam.id ? <Link className="text-emerald-700 hover:underline" to={links.horse(horse.dam.id)}>{horse.dam.name}</Link> : horse.dam.name) : undefined,
-    },
+    { label: 'Cha', value: parentLink(horse.sire) },
+    { label: 'Mẹ', value: parentLink(horse.dam) },
     { label: 'Ngày tạo hồ sơ', value: formatDate(horse.createdAt) },
   ];
 
-  const waitingStall = horse.placement === 'WAITING_STALL';
-  const waitingGroom = horse.placement === 'WAITING_GROOM';
+  const inClub = horse.placement !== 'NONE';
+  const textButton = (label: ReactNode, onClick: () => void, primary = false) => (
+    <Button size="sm" variant={primary ? 'secondary' : 'ghost'} onClick={onClick}>
+      {label}
+    </Button>
+  );
 
   return (
-    <div className="grid gap-5 lg:grid-cols-12">
+    <div className="grid items-start gap-5 lg:grid-cols-12">
       <div className="space-y-5 lg:col-span-7 xl:col-span-8">
         <Card>
           <SectionTitle>Thông tin hồ sơ</SectionTitle>
-          <InfoGrid items={info} />
+          <InfoGrid items={info} className="xl:grid-cols-3" />
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-5">
-          <Card variant="flat" className="md:col-span-2">
-            <div className="flex items-start gap-3">
-              <GraduationCap size={18} className="mt-0.5 text-emerald-600" />
-              <div>
-                <p className="text-2xl font-bold text-gray-900 tabular-nums">{horse.activeClassCount}</p>
-                <p className="text-sm text-gray-500">lớp đang học</p>
-                {horse.canViewTraining && (
-                  <Link to={links.horse(horse.id, 'training')} className="mt-1 inline-block text-xs font-semibold text-emerald-700 hover:underline">
-                    Xem lịch tập và kết quả
+        <Card>
+          <SectionTitle>Tình trạng hiện tại</SectionTitle>
+          {horse.canViewTraining && (
+            <Row
+              label="Lớp đang học"
+              tone={horse.activeClassCount ? 'default' : 'muted'}
+              actions={
+                <Link
+                  to={links.horse(horse.id, 'training')}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                >
+                  Lịch tập và kết quả
+                </Link>
+              }
+            >
+              {horse.activeClassCount ? `${horse.activeClassCount} lớp` : 'Chưa học lớp nào'}
+            </Row>
+          )}
+          {horse.canViewMedical ? (
+            <>
+              <Row label="Bệnh án" tone={horse.openCase ? 'waiting' : 'muted'}>
+                {horse.openCase ? (
+                  <Link to={links.case(horse.openCase.id)} className="hover:underline">
+                    Đang điều trị: {horse.openCase.title}
                   </Link>
+                ) : (
+                  'Không có bệnh án đang mở'
                 )}
-              </div>
-            </div>
-          </Card>
-          <Card variant="flat" tone={horse.openCase || horse.activeLock ? 'warning' : 'default'} className="md:col-span-3">
-            <div className="flex items-start gap-3">
-              <HeartPulse size={18} className="mt-0.5 text-amber-600" />
-              <div className="min-w-0 space-y-1.5 text-sm">
-                {horse.canViewMedical ? (
+              </Row>
+              <Row label="Khóa huấn luyện" tone={horse.activeLock ? 'danger' : 'muted'}>
+                {horse.activeLock ? (
                   <>
-                    <p className="font-semibold text-gray-900">
-                      {horse.openCase ? (
-                        <Link to={links.case(horse.openCase.id)} className="hover:underline">
-                          Bệnh án đang mở: {horse.openCase.title}
-                        </Link>
-                      ) : (
-                        'Không có bệnh án đang mở'
-                      )}
-                    </p>
-                    {horse.activeLock ? (
-                      <p className="flex items-start gap-1.5 text-red-700">
-                        <Lock size={13} className="mt-0.5 shrink-0" />
-                        Khóa huấn luyện từ {formatDate(horse.activeLock.placedAt)}: {horse.activeLock.reason}
-                        {horse.activeLock.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(horse.activeLock.expectedLiftDate)}` : ''}
-                      </p>
-                    ) : (
-                      <p className="text-gray-500">Không có khóa huấn luyện</p>
-                    )}
+                    {horse.activeLock.reason}
+                    <span className="block text-xs font-normal text-gray-500">
+                      Từ {formatDate(horse.activeLock.placedAt)}
+                      {horse.activeLock.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(horse.activeLock.expectedLiftDate)}` : ''}
+                    </span>
                   </>
                 ) : (
-                  <p className="text-gray-500">Thông tin y tế chi tiết dành cho bác sĩ, huấn luyện viên và quản lý.</p>
+                  'Không có'
                 )}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {horse.quarantineHint && (
-          <Notice tone="warning">
-            Ngựa đang cách ly. Gợi ý cho HT của khu: cân nhắc chuyển ngựa sang ô trống để tách đàn (không bắt buộc, không có ô cách ly riêng).
-          </Notice>
-        )}
-      </div>
-
-      <div className="space-y-5 lg:col-span-5 xl:col-span-4">
-        <Card>
-          <SectionTitle icon={<Warehouse size={16} />} action={horse.placement !== 'NONE' && <PlacementPill placement={horse.placement} />}>
-            Khu, ô và Groom
-          </SectionTitle>
-          {horse.placement === 'NONE' ? (
-            <p className="text-sm text-gray-500">Ngựa không còn ở câu lạc bộ nên không có chỗ ở.</p>
+              </Row>
+            </>
           ) : (
-            <div className="space-y-2">
-              <Slot
-                icon={<Building2 size={16} />}
-                label="Khu chuồng"
-                value={horse.zone ? `${horse.zone.name}${horse.zone.headTrainerName ? ` · HT ${horse.zone.headTrainerName}` : ''}` : undefined}
-                empty="Chờ xếp khu"
-                tone={horse.zone ? 'default' : 'waiting'}
-                actions={
-                  horse.canAssignZone && (
-                    <Button size="sm" variant={horse.zone ? 'ghost' : 'primary'} onClick={() => setZoneOpen(true)}>
-                      {horse.zone ? <><ArrowRightLeft size={13} /> Đổi khu</> : 'Xếp khu'}
-                    </Button>
-                  )
-                }
-              />
-              <Slot
-                icon={<Warehouse size={16} />}
-                label="Ô chuồng"
-                value={horse.stall ? <span className="font-mono">{horse.stall.code}</span> : undefined}
-                empty={horse.zone ? 'Chờ xếp ô' : 'Chưa có khu'}
-                tone={waitingStall ? 'waiting' : 'default'}
-                actions={
-                  horse.canAssignStall && (
-                    <>
-                      <Button size="sm" variant={horse.stall ? 'ghost' : 'primary'} onClick={() => setStallOpen(true)}>
-                        {horse.stall ? 'Đổi ô' : 'Xếp ô'}
-                      </Button>
-                      {horse.stall && (
-                        <Button size="sm" variant="ghost" onClick={() => setUnassign('stall')}>
-                          Gỡ
-                        </Button>
-                      )}
-                    </>
-                  )
-                }
-              />
-              <Slot
-                icon={<Users size={16} />}
-                label="Groom phụ trách"
-                value={horse.groom ? `${horse.groom.name}${horse.groom.active ? '' : ' (tài khoản bị khóa)'}` : undefined}
-                empty={horse.stall ? 'Chờ phân công Groom' : 'Phân công khi xếp ô'}
-                tone={waitingGroom ? 'waiting' : 'default'}
-                actions={
-                  horse.canAssignGroom && (horse.groom || horse.stall) && (
-                    <>
-                      <Button size="sm" variant={horse.groom ? 'ghost' : 'primary'} onClick={() => setGroomOpen(true)}>
-                        {horse.groom ? 'Đổi' : 'Phân công'}
-                      </Button>
-                      {horse.groom && (
-                        <Button size="sm" variant="ghost" onClick={() => setUnassign('groom')}>
-                          Gỡ
-                        </Button>
-                      )}
-                    </>
-                  )
-                }
-              />
-            </div>
+            <Row label="Y tế" tone="muted">
+              Thông tin y tế chi tiết dành cho bác sĩ, huấn luyện viên và quản lý.
+            </Row>
           )}
-          {!horse.zone && horse.placement === 'NO_ZONE' && !horse.canAssignZone && (
-            <p className="mt-3 text-xs font-light text-gray-400">Ngựa chưa xếp khu thì chỉ Quản lý câu lạc bộ xử lý.</p>
+          {horse.quarantineHint && (
+            <Row label="Gợi ý" tone="waiting">
+              Ngựa đang cách ly — HT của khu có thể cân nhắc chuyển ngựa sang ô trống để tách đàn.
+            </Row>
           )}
         </Card>
+      </div>
 
-        <Card variant="outline">
-          <SectionTitle
-            icon={<UserRound size={16} />}
-            action={
-              horse.canAssignOwner && (
-                <Button size="sm" variant="soft" onClick={() => setOwnerOpen(true)}>
-                  {horse.owner ? 'Đổi chủ' : 'Gán chủ'}
-                </Button>
-              )
-            }
-          >
-            Chủ sở hữu
-          </SectionTitle>
+      <Card className="lg:col-span-5 xl:col-span-4">
+        <SectionTitle>Chuồng trại và phụ trách</SectionTitle>
+        {!inClub ? (
+          <p className="text-sm text-gray-500">Ngựa không còn ở câu lạc bộ nên không có chỗ ở.</p>
+        ) : (
+          <>
+            <Row
+              label="Khu chuồng"
+              tone={horse.zone ? 'default' : 'waiting'}
+              actions={horse.canAssignZone && textButton(horse.zone ? 'Đổi khu' : 'Xếp khu', () => setZoneOpen(true), !horse.zone)}
+            >
+              {horse.zone ? (
+                <>
+                  {horse.zone.name}
+                  {horse.zone.headTrainerName && <span className="block text-xs font-normal text-gray-500">HT {horse.zone.headTrainerName}</span>}
+                </>
+              ) : (
+                'Chờ xếp khu'
+              )}
+            </Row>
+            <Row
+              label="Ô chuồng"
+              tone={horse.stall ? 'default' : horse.zone ? 'waiting' : 'muted'}
+              actions={
+                horse.canAssignStall && (
+                  <>
+                    {textButton(horse.stall ? 'Đổi ô' : 'Xếp ô', () => setStallOpen(true), !horse.stall)}
+                    {horse.stall && textButton('Gỡ', () => setUnassign('stall'))}
+                  </>
+                )
+              }
+            >
+              {horse.stall ? <span className="font-mono">{horse.stall.code}</span> : horse.zone ? 'Chờ xếp ô' : 'Chưa có khu'}
+            </Row>
+            <Row
+              label="Groom"
+              tone={horse.groom ? 'default' : horse.stall ? 'waiting' : 'muted'}
+              actions={
+                horse.canAssignGroom &&
+                (horse.groom || horse.stall) && (
+                  <>
+                    {textButton(horse.groom ? 'Đổi' : 'Phân công', () => setGroomOpen(true), !horse.groom)}
+                    {horse.groom && textButton('Gỡ', () => setUnassign('groom'))}
+                  </>
+                )
+              }
+            >
+              {horse.groom ? `${horse.groom.name}${horse.groom.active ? '' : ' (tài khoản bị khóa)'}` : horse.stall ? 'Chờ phân công Groom' : 'Phân công khi xếp ô'}
+            </Row>
+          </>
+        )}
+        <Row
+          label="Chủ sở hữu"
+          tone={horse.owner ? 'default' : 'muted'}
+          actions={horse.canAssignOwner && textButton(horse.owner ? 'Đổi chủ' : 'Gán chủ', () => setOwnerOpen(true))}
+        >
           {horse.owner ? (
-            <div>
-              <p className="font-semibold text-gray-900">{horse.owner.name}</p>
-              {!horse.owner.active && (
-                <p className="mt-1 text-xs text-amber-700">Tài khoản chủ đang bị khóa — vẫn giữ nguyên quyền sở hữu.</p>
-              )}
+            <>
+              {horse.owner.name}
+              {!horse.owner.active && <span className="block text-xs font-normal text-amber-700">Tài khoản đang bị khóa — vẫn giữ quyền sở hữu</span>}
               {horse.owner.active && !horse.owner.isOwnerRole && (
-                <p className="mt-1 text-xs text-amber-700">Tài khoản không còn vai trò Chủ ngựa.</p>
+                <span className="block text-xs font-normal text-amber-700">Tài khoản không còn vai trò Chủ ngựa</span>
               )}
-              {horse.lifecycleStatus === 'TRANSFERRED' && <p className="mt-1 text-xs text-gray-400">Chủ tại thời điểm chuyển nhượng</p>}
-            </div>
+              {horse.lifecycleStatus === 'TRANSFERRED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm chuyển nhượng</span>}
+            </>
           ) : (
-            <p className="text-sm text-gray-500">Chưa có chủ sở hữu</p>
+            'Chưa có chủ sở hữu'
           )}
-        </Card>
-
-        {horse.canAvatar && (
-          <Card variant="flat">
-            <SectionTitle>Ảnh đại diện</SectionTitle>
-            <AvatarPicker value={horse.avatar} name={horse.name} size={72} disabled={avatarAction.pending} onChange={changeAvatar} />
-            {avatarAction.error && <p className="mt-2 text-xs font-medium text-red-600">{avatarAction.error}</p>}
-          </Card>
+        </Row>
+        {inClub && !horse.zone && !horse.canAssignZone && (
+          <p className="mt-3 text-xs text-gray-500">Ngựa chưa xếp khu thì chỉ Quản lý câu lạc bộ xử lý.</p>
         )}
-      </div>
+      </Card>
 
       <AssignZoneDialog horse={zoneOpen ? placementHorse : null} onClose={() => setZoneOpen(false)} onDone={onChanged} />
       <AssignStallDialog horse={stallOpen ? placementHorse : null} onClose={() => setStallOpen(false)} onDone={onChanged} />

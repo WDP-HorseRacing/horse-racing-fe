@@ -107,7 +107,7 @@ export function AddSessionModal({
           </Select>
         </Field>
         {subject && detail.maxIntensity && subject.intensity !== 'LIGHT' && (
-          <p className="text-xs font-light text-gray-500">
+          <p className="text-xs text-gray-500">
             Ngựa không được tập ở mức {intensityLabel[subject.intensity]} sẽ tự được đánh dấu vắng (chặn y tế) khi bắt đầu buổi.
           </p>
         )}

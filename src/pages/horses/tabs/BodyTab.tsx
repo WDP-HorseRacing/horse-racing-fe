@@ -1,7 +1,7 @@
-// F1.5 — chỉ số cơ thể: 4 biểu đồ có dải bình thường, bảng bản ghi có cờ bất thường và nguồn,
+// F1.5 — chỉ số cơ thể: 4 biểu đồ cùng một màu, dải bình thường xám; chỉ bản ghi bất thường mới có màu.
 // form ghi chỉ số (hỏi xác nhận khi ngoài khoảng), VET xóa bản ghi ghi sai kèm lý do.
 import { useState } from 'react';
-import { AlertTriangle, Plus, Stethoscope, Trash2 } from 'lucide-react';
+import { Plus, Stethoscope, Trash2 } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
 import { addMeasurement, deleteMeasurement, listMeasurements, type MeasurementRow } from '../../../services/horse.service';
 import { AppError } from '../../../services/api';
@@ -11,11 +11,11 @@ import {
   Card,
   ConfirmDialog,
   DataTable,
+  Dot,
   ErrorBox,
   Field,
   Input,
   Modal,
-  Pill,
   Segmented,
   Skeleton,
   Textarea,
@@ -33,12 +33,14 @@ import type { MeasurementType } from '../../../types/domain';
 import { ReasonDialog } from '../../stable/components/PlacementDialogs';
 
 const TYPES: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
-const COLORS: Record<MeasurementType, string> = {
-  WEIGHT: chartColors.emerald,
-  TEMPERATURE: chartColors.red,
-  HEIGHT: chartColors.sky,
-  BODY_CONDITION: chartColors.amber,
-};
+// Bốn biểu đồ dùng chung một màu — màu chỉ để nói "bất thường", không để phân biệt loại chỉ số.
+const LINE_COLOR = chartColors.emerald;
+
+/** Vượt ngưỡng cảnh báo (báo khẩn) → đỏ; chỉ ngoài khoảng bình thường → hổ phách. */
+function severityOf(row: { type: MeasurementType; value: number; abnormal: boolean }): 'danger' | 'warn' | null {
+  if (row.type === 'TEMPERATURE' && row.value > TEMP_ALERT_C) return 'danger';
+  return row.abnormal ? 'warn' : null;
+}
 const SPAN: Record<MeasurementType, string> = {
   WEIGHT: 'lg:col-span-7',
   TEMPERATURE: 'lg:col-span-5',
@@ -133,27 +135,37 @@ export default function BodyTab({
     {
       key: 'value',
       header: 'Giá trị',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <span className={cn('font-semibold tabular-nums', row.abnormal ? 'text-amber-700' : 'text-gray-900', row.deleted && 'line-through opacity-60')}>
-            {formatValue(row.type, row.value)} <span className="text-xs font-normal text-gray-400">{measurementLabel[row.type].unit}</span>
-          </span>
-          {row.abnormal && !row.deleted && (
-            <Pill tone="amber">
-              <AlertTriangle size={11} /> Bất thường
-            </Pill>
-          )}
-        </div>
-      ),
+      render: (row) => {
+        const severity = row.deleted ? null : severityOf(row);
+        return (
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'font-semibold tabular-nums',
+                severity === 'danger' ? 'text-red-700' : severity === 'warn' ? 'text-amber-700' : 'text-gray-900',
+                row.deleted && 'line-through opacity-60',
+              )}
+            >
+              {formatValue(row.type, row.value)} <span className="text-xs font-normal text-gray-500">{measurementLabel[row.type].unit}</span>
+            </span>
+            {severity && (
+              <span className={cn('inline-flex items-center gap-1.5 text-xs font-medium', severity === 'danger' ? 'text-red-700' : 'text-amber-800')}>
+                <Dot tone={severity} />
+                {severity === 'danger' ? 'Vượt ngưỡng báo khẩn' : 'Bất thường'}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'source',
       header: 'Nguồn',
       render: (row) =>
         row.source === 'EXAM' ? (
-          <Pill tone="blue">
-            <Stethoscope size={11} /> {row.sourceLabel}
-          </Pill>
+          <span className="inline-flex items-center gap-1 text-xs text-gray-700">
+            <Stethoscope size={12} className="text-gray-400" /> {row.sourceLabel}
+          </span>
         ) : (
           <span className="text-xs text-gray-500">{row.sourceLabel}</span>
         ),
@@ -164,7 +176,7 @@ export default function BodyTab({
       header: 'Ghi chú',
       render: (row) =>
         row.deleted ? (
-          <span className="text-xs text-red-600">
+          <span className="text-xs text-gray-500">
             Đã xóa bởi {row.deletedByName}: {row.deleteReason}
           </span>
         ) : (
@@ -206,9 +218,7 @@ export default function BodyTab({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-light text-gray-500">
-          Khoảng bình thường tô nền xanh trên biểu đồ. Giá trị ngoài khoảng vẫn lưu được nhưng được đánh dấu bất thường.
-        </p>
+        <p className="text-sm text-gray-500">Dải xám trên biểu đồ là khoảng bình thường; giá trị ngoài khoảng được đánh dấu bất thường.</p>
         {canRecord && (
           <Button onClick={openForm}>
             <Plus size={16} /> Ghi chỉ số
@@ -220,28 +230,40 @@ export default function BodyTab({
         {TYPES.map((type) => {
           const info = measurementLabel[type];
           const record = latest(type);
+          const severity = record ? severityOf(record) : null;
           const points = live
             .filter((row) => row.type === type)
             .map((row) => ({ x: new Date(row.measuredAt).getTime(), y: row.value }))
             .sort((a, b) => a.x - b.x);
           return (
-            <Card key={type} className={cn('p-5', SPAN[type])} tone={record?.abnormal ? 'warning' : 'default'}>
+            <Card key={type} className={cn('p-5', SPAN[type])} tone={severity === 'danger' ? 'danger' : severity === 'warn' ? 'warning' : 'default'}>
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
                   <p className="text-sm text-gray-500">{info.name}</p>
-                  <p className={cn('text-2xl font-bold tabular-nums', record?.abnormal ? 'text-amber-700' : 'text-gray-900')}>
+                  <p
+                    className={cn(
+                      'flex items-baseline gap-1 text-2xl font-bold tabular-nums',
+                      severity === 'danger' ? 'text-red-700' : severity === 'warn' ? 'text-amber-700' : 'text-gray-900',
+                    )}
+                  >
                     {record ? formatValue(type, record.value) : '—'}
-                    <span className="ml-1 text-sm font-medium text-gray-400">{info.unit}</span>
+                    <span className="text-sm font-medium text-gray-500">{info.unit}</span>
+                    {severity && (
+                      <span className={cn('ml-1 inline-flex items-center gap-1.5 self-center text-xs font-medium', severity === 'danger' ? 'text-red-700' : 'text-amber-800')}>
+                        <Dot tone={severity} />
+                        {severity === 'danger' ? 'Vượt ngưỡng báo khẩn' : 'Ngoài khoảng bình thường'}
+                      </span>
+                    )}
                   </p>
                 </div>
-                <p className="text-right text-xs text-gray-400">
+                <p className="text-right text-xs text-gray-500">
                   Bình thường {info.min}–{info.max} {info.unit}
                   {record && <span className="block">Lần đo gần nhất {formatDateShort(record.measuredAt)}</span>}
                 </p>
               </div>
               <LineChart
                 height={type === 'WEIGHT' || type === 'BODY_CONDITION' ? 200 : 180}
-                series={[{ key: type, label: info.name, color: COLORS[type], points }]}
+                series={[{ key: type, label: info.name, color: LINE_COLOR, points }]}
                 band={{ from: info.min, to: info.max }}
                 threshold={type === 'TEMPERATURE' ? { value: TEMP_ALERT_C, label: `Ngưỡng báo khẩn ${TEMP_ALERT_C} °C` } : undefined}
                 formatX={(value) => formatDateShort(new Date(value))}
@@ -274,7 +296,7 @@ export default function BodyTab({
           rowKey={(row) => row.id}
           pageSize={10}
           emptyTitle="Chưa có bản ghi chỉ số"
-          rowClassName={(row) => cn(row.deleted && 'bg-red-50/30', row.abnormal && !row.deleted && 'bg-amber-50/30')}
+          rowClassName={(row) => cn(row.deleted && 'opacity-70')}
         />
       </div>
 
@@ -330,7 +352,7 @@ export default function BodyTab({
             <Textarea value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} className="min-h-16" placeholder="Ví dụ: đo sau khi tập buổi sáng" />
           </Field>
           {form.type === 'TEMPERATURE' && (
-            <p className="text-xs text-gray-400">Trên {TEMP_ALERT_C} °C: hệ thống báo khẩn bác sĩ, HT của khu và tự tạo yêu cầu khám khẩn.</p>
+            <p className="text-xs text-gray-500">Trên {TEMP_ALERT_C} °C: hệ thống báo khẩn bác sĩ, HT của khu và tự tạo yêu cầu khám khẩn.</p>
           )}
           {formError && formError.field !== 'value' && formError.field !== 'measuredAt' && <ErrorBox message={formError.message} />}
         </div>

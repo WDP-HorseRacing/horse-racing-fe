@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  AlertOctagon,
   CalendarDays,
   CalendarCheck,
   GraduationCap,
@@ -13,7 +12,6 @@ import {
   Info,
   LineChart as LineIcon,
   Pencil,
-  Star,
   Timer,
 } from 'lucide-react';
 import {
@@ -26,10 +24,9 @@ import {
   SectionTitle,
   FilterSelect,
   Skeleton,
-  Stat,
   cn,
 } from '../../../components/ui';
-import { AttendancePill, EligibilityBadge, IntensityPill, SessionPill } from '../../../components/ui/status';
+import { AttendancePill, IntensityMeter, SessionPill } from '../../../components/ui/status';
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
 import { useService } from '../../../hooks/useService';
 import { useStore } from '../../../store/store';
@@ -67,28 +64,24 @@ function TrainingBody({ horseId }: { horseId: string }) {
 
   return (
     <div className="space-y-5">
-      {!data.trainable.allowed && (
-        <EligibilityBadge allowed={false} reason={data.trainable.reason} label="Hiện không được tập" />
-      )}
-
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Cột trái: lớp, lịch, kết quả */}
         <div className="space-y-5 lg:col-span-5">
           <Card>
             <SectionTitle icon={<GraduationCap size={16} />}>Lớp đang học</SectionTitle>
             {openClasses.length === 0 ? (
-              <p className="text-sm font-light text-gray-400">Ngựa chưa học lớp nào đang mở.</p>
+              <p className="text-sm text-gray-500">Ngựa chưa học lớp nào đang mở.</p>
             ) : (
               <ul className="space-y-2.5">
                 {openClasses.map((item) => (
-                  <li key={item.enrollmentId} className="rounded-xl bg-emerald-50/50 px-4 py-3">
+                  <li key={item.enrollmentId} className="rounded-xl px-4 py-3 ring-1 ring-gray-200">
                     <div className="flex items-center justify-between gap-2">
                       <Link to={links.class(item.classId)} className="font-semibold text-gray-900 hover:text-emerald-700">
                         {item.className}
                       </Link>
-                      <Pill tone={item.classStatusLabel === 'Đang chạy' ? 'blue' : 'gray'}>{item.classStatusLabel}</Pill>
+                      <span className="text-xs text-gray-500">{item.classStatusLabel}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-gray-500 tabular-nums">
                       Slot {item.slotLabel}
                       {item.zoneName ? ` · ${item.zoneName}` : ''} · vào lớp {formatDate(item.joinedAt)}
                     </p>
@@ -97,20 +90,20 @@ function TrainingBody({ horseId }: { horseId: string }) {
               </ul>
             )}
             {pastClasses.length > 0 && (
-              <div className="mt-4 border-t border-gray-50 pt-3">
-                <p className="mb-2 text-xs font-medium text-gray-400">Đã rút hoặc lớp đã kết thúc</p>
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <p className="mb-2 text-xs font-medium text-gray-500">Đã rút hoặc lớp đã kết thúc</p>
                 <ul className="space-y-2">
                   {pastClasses.map((item) => (
                     <li key={item.enrollmentId} className="text-sm">
                       <Link to={links.class(item.classId)} className="font-medium text-gray-700 hover:text-emerald-700">
                         {item.className}
                       </Link>
-                      <span className="text-gray-400">
+                      <span className="text-gray-500 tabular-nums">
                         {' '}
                         · {formatDate(item.joinedAt)} – {item.withdrawnAt ? formatDate(item.withdrawnAt) : item.classStatusLabel.toLowerCase()}
                       </span>
                       {item.withdrawLabel && (
-                        <p className="text-xs text-orange-700">
+                        <p className="text-xs text-gray-500">
                           Rút: {item.withdrawLabel}
                           {item.withdrawNote ? ` — ${item.withdrawNote}` : ''}
                         </p>
@@ -128,29 +121,19 @@ function TrainingBody({ horseId }: { horseId: string }) {
 
         {/* Cột phải: KPI, biểu đồ, nhịp tim tối đa */}
         <div className="space-y-5 lg:col-span-7">
-          <div className="grid gap-4 sm:grid-cols-12">
-            <Stat
-              className="sm:col-span-5"
-              value={data.kpi.attendance28.rate === null ? '—' : formatPercent(data.kpi.attendance28.rate)}
+          <Card className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-[1.2fr_1fr_0.8fr]">
+            <Figure
               label="Có mặt 28 ngày"
+              value={data.kpi.attendance28.rate === null ? '—' : formatPercent(data.kpi.attendance28.rate)}
               hint={`${data.kpi.attendance28.present}/${data.kpi.attendance28.total} buổi`}
-              icon={<CalendarCheck size={18} />}
             />
-            <Stat
-              className="sm:col-span-4"
-              value={data.kpi.avgScore14 === null ? '—' : data.kpi.avgScore14.toLocaleString('vi-VN')}
+            <Figure
               label="Điểm TB 14 ngày"
+              value={data.kpi.avgScore14 === null ? '—' : data.kpi.avgScore14.toLocaleString('vi-VN')}
               hint={`${data.kpi.sessionsDone} buổi đã tập`}
-              icon={<Star size={18} />}
             />
-            <Stat
-              className="sm:col-span-3"
-              value={data.kpi.alerts7}
-              label="Cảnh báo 7 ngày"
-              tone={data.kpi.alerts7 > 0 ? 'danger' : 'success'}
-              icon={<AlertOctagon size={18} />}
-            />
-          </div>
+            <Figure label="Cảnh báo 7 ngày" value={String(data.kpi.alerts7)} />
+          </Card>
 
           <Card>
             <SectionTitle icon={<LineIcon size={16} />}>Điểm đánh giá theo buổi</SectionTitle>
@@ -178,34 +161,29 @@ function TrainingBody({ horseId }: { horseId: string }) {
           {data.maxHeartRate.canView && (
             <Card tone={data.maxHeartRate.current === undefined ? 'warning' : 'default'}>
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={cn(
-                      'flex h-12 w-12 items-center justify-center rounded-2xl',
-                      data.maxHeartRate.current === undefined ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-600',
-                    )}
-                  >
-                    {data.maxHeartRate.current === undefined ? <HeartOff size={22} /> : <HeartPulse size={22} />}
-                  </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400">
+                    {data.maxHeartRate.current === undefined ? <HeartOff size={20} /> : <HeartPulse size={20} />}
+                  </span>
                   <div>
                     <p className="text-sm text-gray-500">Nhịp tim tối đa (R1)</p>
                     {data.maxHeartRate.current !== undefined ? (
-                      <p className="text-2xl font-bold tabular-nums text-gray-900">
+                      <p className="text-xl font-semibold tabular-nums text-gray-900">
                         {data.maxHeartRate.current}
-                        <span className="ml-1 text-sm font-normal text-gray-400">nhịp/phút</span>
+                        <span className="ml-1 text-sm font-normal text-gray-500">nhịp/phút</span>
                       </p>
                     ) : (
-                      <p className="text-lg font-semibold text-amber-800">Chưa đặt — R1 không chạy</p>
+                      <p className="text-base font-semibold text-amber-800">Chưa đặt — R1 không chạy</p>
                     )}
                   </div>
                 </div>
                 <div className="flex gap-2">
                   {data.maxHeartRate.canEdit && (
-                    <Button size="sm" onClick={() => setEditOpen(true)}>
+                    <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>
                       <Pencil size={13} /> {data.maxHeartRate.current === undefined ? 'Đặt ngưỡng' : 'Sửa ngưỡng'}
                     </Button>
                   )}
-                  <Button size="sm" variant="secondary" onClick={() => setHistoryOpen(true)}>
+                  <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
                     <History size={13} /> Lịch sử
                   </Button>
                 </div>
@@ -239,17 +217,17 @@ function UpcomingCard({ data }: { data: HorseTrainingView }) {
   }, [data.upcoming]);
 
   return (
-    <Card variant="flat">
+    <Card>
       <SectionTitle icon={<CalendarDays size={16} />}>Lịch 14 ngày tới</SectionTitle>
       {byDate.length === 0 ? (
-        <p className="text-sm font-light text-gray-400">Không có buổi nào — lịch tính ra từ các lớp ngựa đang học.</p>
+        <p className="text-sm text-gray-500">Không có buổi nào — lịch tính ra từ các lớp ngựa đang học.</p>
       ) : (
         <ol className="space-y-3">
           {byDate.map(([date, items]) => (
             <li key={date} className="grid grid-cols-[64px_minmax(0,1fr)] gap-3">
               <div className="pt-0.5 text-right">
                 <p className="text-sm font-bold tabular-nums text-gray-800">{formatDateShort(date)}</p>
-                <p className="text-[11px] text-gray-400">{dayOfWeekLabel[isoDayOfWeek(date)]}</p>
+                <p className="text-[11px] text-gray-500">{dayOfWeekLabel[isoDayOfWeek(date)]}</p>
               </div>
               <div className="space-y-1.5">
                 {items.map((item) => (
@@ -257,16 +235,16 @@ function UpcomingCard({ data }: { data: HorseTrainingView }) {
                     key={item.sessionId}
                     to={links.session(item.sessionId)}
                     className={cn(
-                      'block rounded-xl bg-white px-3 py-2 ring-1 ring-emerald-950/[0.05] transition hover:ring-emerald-200',
+                      'block rounded-lg bg-white px-3 py-2 ring-1 ring-gray-200 transition hover:ring-gray-400',
                       item.status === 'CANCELLED' && 'opacity-60',
                     )}
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold tabular-nums text-emerald-700">{item.slotLabel.split('–')[0]}</span>
+                      <span className="text-xs font-semibold tabular-nums text-gray-900">{item.slotLabel.split('–')[0]}</span>
                       <span className="text-sm font-medium text-gray-800">{item.className}</span>
-                      <IntensityPill intensity={item.intensity} />
+                      <IntensityMeter intensity={item.intensity} />
                       {item.status !== 'SCHEDULED' && <SessionPill status={item.status} />}
-                      {item.attendanceStatus === 'ABSENT' && <Pill tone="orange">Vắng · {item.absenceLabel}</Pill>}
+                      {item.attendanceStatus === 'ABSENT' && <Pill tone="amber">Vắng · {item.absenceLabel}</Pill>}
                     </div>
                     <p className="mt-0.5 text-xs text-gray-500">
                       {subjectLine(item)}
@@ -291,7 +269,7 @@ function ResultsCard({ data }: { data: HorseTrainingView }) {
       {items.length === 0 ? (
         <EmptyState title="Chưa có buổi nào kết thúc" hint="Kết quả xuất hiện sau khi buổi đầu tiên kết thúc." />
       ) : (
-        <ul className="divide-y divide-gray-50">
+        <ul className="divide-y divide-gray-100">
           {items.map((item) => (
             <li key={item.sessionId} className="py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
@@ -309,8 +287,8 @@ function ResultsCard({ data }: { data: HorseTrainingView }) {
                 ) : item.evaluation ? (
                   <span
                     className={cn(
-                      'rounded-lg px-2 py-0.5 text-sm font-bold tabular-nums',
-                      item.evaluation.score >= 7 ? 'bg-emerald-50 text-emerald-700' : item.evaluation.score >= 5 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700',
+                      'rounded-md px-1.5 py-0.5 text-sm font-semibold tabular-nums',
+                      item.evaluation.score <= 5 ? 'bg-amber-50 text-amber-800' : 'text-gray-900',
                     )}
                   >
                     {item.evaluation.score}/10
@@ -320,7 +298,7 @@ function ResultsCard({ data }: { data: HorseTrainingView }) {
                 )}
               </div>
               {item.attendanceStatus === 'ABSENT' ? (
-                <p className="mt-1 text-xs text-orange-800">
+                <p className="mt-1 text-xs text-gray-600">
                   {item.absenceLabel}
                   {item.absenceNote ? ` — ${item.absenceNote}` : ''}
                 </p>
@@ -330,7 +308,7 @@ function ResultsCard({ data }: { data: HorseTrainingView }) {
                     <p className="mt-1 text-xs tabular-nums text-gray-500">
                       Khối lượng {formatPercent(item.summary.volumeRatio)} · nhịp tim TB {item.summary.avgHeartRate}, cao nhất{' '}
                       {item.summary.maxHeartRate}
-                      {item.summary.alertCountRed > 0 && <span className="text-red-600"> · {item.summary.alertCountRed} cảnh báo đỏ</span>}
+                      {item.summary.alertCountRed > 0 && <span className="text-red-700"> · {item.summary.alertCountRed} cảnh báo đỏ</span>}
                     </p>
                   )}
                   {item.stoppedReason && <p className="mt-1 text-xs text-red-700">Dừng giữa buổi: {item.stoppedReason}</p>}
@@ -360,7 +338,7 @@ function ResultsCard({ data }: { data: HorseTrainingView }) {
 
 function TrialCard({ data, className }: { data: HorseTrainingView; className?: string }) {
   const distances = [...new Set(data.trialSeries.map((point) => point.distanceM))];
-  const colors = [chartColors.amber, chartColors.emerald, chartColors.sky];
+  const colors = [chartColors.emerald, '#6b7280', '#9ca3af'];
   return (
     <Card className={className}>
       <SectionTitle icon={<Timer size={16} />}>Chạy thử</SectionTitle>
@@ -374,7 +352,7 @@ function TrialCard({ data, className }: { data: HorseTrainingView; className?: s
         </p>
       )}
       {data.trialSeries.length < 2 ? (
-        <div className="rounded-xl bg-amber-50/50 px-4 py-5 text-sm text-gray-600">
+        <div className="rounded-xl bg-gray-50 px-4 py-5 text-sm text-gray-600">
           {data.trialSeries.length === 0
             ? 'Chưa có buổi chạy thử nào được chấm.'
             : 'Mới có một lần chạy thử — biểu đồ xuất hiện từ lần thứ hai để so sánh.'}
@@ -427,7 +405,7 @@ function CardiacCard({ data, className }: { data: HorseTrainingView; className?:
           {
             key: 'cardiac',
             label: 'Tốc độ chính ÷ nhịp tim chính × 100',
-            color: chartColors.sky,
+            color: chartColors.emerald,
             points: points.map((point) => ({ x: new Date(point.date).getTime(), y: point.value })),
           },
         ]}
@@ -436,5 +414,15 @@ function CardiacCard({ data, className }: { data: HorseTrainingView; className?:
         yLabel="Tăng dần = cùng tốc độ với nhịp tim thấp hơn. Chỉ so sánh cùng loại bài."
       />
     </Card>
+  );
+}
+
+function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-2xl font-semibold tabular-nums text-gray-900">{value}</p>
+      {hint && <p className="text-xs text-gray-500 tabular-nums">{hint}</p>}
+    </div>
   );
 }

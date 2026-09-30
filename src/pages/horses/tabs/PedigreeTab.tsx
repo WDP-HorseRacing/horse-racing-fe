@@ -26,12 +26,12 @@ function NodeCard({
     return (
       <div
         className={cn(
-          'flex flex-col justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/40 px-4 py-3',
+          'flex flex-col justify-center rounded-xl border border-dashed border-gray-200 px-4 py-3',
           height,
         )}
       >
-        <span className="text-xs text-gray-300">{role}</span>
-        <span className="text-sm font-light text-gray-300">Không khai báo</span>
+        <span className="text-xs text-gray-400">{role}</span>
+        <span className="text-sm text-gray-400">Không khai báo</span>
       </div>
     );
   }
@@ -50,17 +50,19 @@ function NodeCard({
         'group flex flex-col justify-center rounded-xl border px-4 py-3 text-left transition disabled:cursor-default [&>*]:shrink-0',
         height,
         generation === 0
-          ? 'border-emerald-300 bg-linear-to-br from-emerald-50 to-white shadow-grass'
+          ? 'border-emerald-600/70 bg-white ring-1 ring-emerald-600/20'
           : node.restricted
-            ? 'border-gray-200 bg-gray-50 hover:border-gray-300'
-            : 'border-emerald-900/10 bg-white hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-grass',
+            ? 'border-gray-200 bg-white hover:border-gray-300'
+            : 'border-gray-200 bg-white hover:border-gray-400',
       )}
     >
-      <span className="text-xs text-gray-400">{role}</span>
-      <span className={cn('truncate font-semibold text-gray-900', generation === 0 ? 'text-2xl' : 'text-sm')}>{node.name}</span>
+      <span className="text-xs text-gray-500">{role}</span>
+      <span className={cn('truncate font-semibold text-gray-900', generation === 0 ? 'text-2xl' : 'text-sm', generation > 0 && !node.restricted && 'group-hover:text-emerald-800')}>
+        {node.name}
+      </span>
       {node.restricted ? (
-        <span className="mt-1 flex items-center gap-1 text-xs text-gray-400">
-          <EyeOff size={12} /> Không có quyền xem hồ sơ
+        <span className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+          <EyeOff size={12} className="text-gray-400" /> Không có quyền xem hồ sơ
         </span>
       ) : (
         <>
@@ -91,7 +93,7 @@ export default function PedigreeTab({ horseId }: { horseId: string }) {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="font-semibold text-gray-900">Phả hệ ba đời</p>
-          <p className="text-sm font-light text-gray-500">Bấm vào tổ tiên để mở hồ sơ. Cha mẹ chỉ khai báo được trong ngựa có hồ sơ tại câu lạc bộ.</p>
+          <p className="text-sm text-gray-500">Bấm vào tổ tiên để mở hồ sơ.</p>
         </div>
       </div>
       <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1fr]">

@@ -17,7 +17,6 @@ import {
   ErrorBox,
   FilterSelect,
   PageHeader,
-  Pill,
   SearchInput,
   Skeleton,
   Tip,
@@ -25,7 +24,7 @@ import {
   useToast,
   type Column,
 } from '../../../components/ui';
-import { IntensityPill } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { intensityLabel, surfaceLabel, workoutLabel } from '../../../lib/labels';
 import { links } from '../../../lib/links';
 import type { TrainingIntensity, WorkoutType } from '../../../types/domain';
@@ -83,7 +82,7 @@ export default function SubjectList() {
       render: (row) => (
         <div className="min-w-0">
           <p className="font-semibold text-gray-900">{row.name}</p>
-          {row.description && <p className="mt-0.5 line-clamp-2 max-w-md text-xs font-light text-gray-500">{row.description}</p>}
+          {row.description && <p className="mt-0.5 line-clamp-2 max-w-md text-xs text-gray-500">{row.description}</p>}
         </div>
       ),
     },
@@ -94,11 +93,11 @@ export default function SubjectList() {
       render: (row) => (
         <div className="whitespace-nowrap tabular-nums">
           <p className="font-medium text-gray-800">{workoutLine(row.distanceM, row.repetitions)}</p>
-          {row.repetitions > 1 && <p className="text-xs font-light text-gray-400">tổng {volumeLabel(row.volumeM)}</p>}
+          {row.repetitions > 1 && <p className="text-xs text-gray-500">tổng {volumeLabel(row.volumeM)}</p>}
         </div>
       ),
     },
-    { key: 'intensity', header: 'Cường độ', render: (row) => <IntensityPill intensity={row.intensity} /> },
+    { key: 'intensity', header: 'Cường độ', render: (row) => <IntensityMeter intensity={row.intensity} /> },
     { key: 'surface', header: 'Mặt sân', render: (row) => <span className="whitespace-nowrap text-gray-600">{surfaceLabel[row.surface]}</span> },
     {
       key: 'usage',
@@ -106,20 +105,24 @@ export default function SubjectList() {
       className: 'min-w-[200px]',
       render: (row) =>
         row.usedByPrograms.length === 0 && row.usedBySessions === 0 ? (
-          <span className="text-xs font-light text-gray-400">Chưa dùng ở đâu</span>
+          <span className="text-sm text-gray-400">Chưa dùng</span>
         ) : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {row.usedByPrograms.map((program) => (
-              <Link
-                key={program.id}
-                to={links.program(program.id)}
-                onClick={(event) => event.stopPropagation()}
-                className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 transition hover:bg-emerald-100"
-              >
-                {program.name}
-              </Link>
+          <div className="text-sm text-gray-700">
+            {row.usedByPrograms.map((program, index) => (
+              <span key={program.id}>
+                {index > 0 && ', '}
+                <Link
+                  to={links.program(program.id)}
+                  onClick={(event) => event.stopPropagation()}
+                  className="transition hover:text-emerald-700 hover:underline"
+                >
+                  {program.name}
+                </Link>
+              </span>
             ))}
-            {row.usedBySessions > 0 && <span className="text-xs text-gray-400">{row.usedBySessions} buổi đã sinh</span>}
+            {row.usedBySessions > 0 && (
+              <span className="block text-xs text-gray-400 tabular-nums">{row.usedBySessions} buổi đã sinh</span>
+            )}
           </div>
         ),
     },
@@ -140,7 +143,7 @@ export default function SubjectList() {
                 save.clearError();
                 setEditing({ row });
               }}
-              className="rounded-lg p-2 text-gray-400 transition hover:bg-emerald-50 hover:text-emerald-700"
+              className="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-800"
             >
               <Pencil size={15} />
             </button>
@@ -155,7 +158,7 @@ export default function SubjectList() {
                   remove.clearError();
                   setDeleting(row);
                 }}
-                className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent"
               >
                 <Trash2 size={15} />
               </button>
@@ -169,9 +172,8 @@ export default function SubjectList() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Huấn luyện · môn học"
         title="Môn học"
-        description="Nội dung huấn luyện dùng lại được: loại bài tập, cự ly, cường độ, mặt sân. Môn học không gắn với con ngựa nào; giáo án xếp các môn này theo giai đoạn."
+        description="Nội dung huấn luyện dùng lại được — giáo án xếp các môn này theo giai đoạn."
         actions={
           canManage ? (
             <Button
@@ -189,17 +191,17 @@ export default function SubjectList() {
       {data && (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500">
           <span>
-            <span className="font-semibold text-gray-900 tabular-nums">{data.rows.length}</span> môn học
+            <span className="font-medium text-gray-900 tabular-nums">{data.rows.length}</span> môn học
           </span>
           <span>
-            <span className="font-semibold text-gray-900 tabular-nums">{data.rows.length - unused}</span> đang được dùng
+            <span className="font-medium text-gray-900 tabular-nums">{data.rows.length - unused}</span> đang được dùng
           </span>
           {unused > 0 && (
             <span>
-              <span className="font-semibold text-emerald-700 tabular-nums">{unused}</span> chưa dùng, xóa được
+              <span className="font-medium text-gray-900 tabular-nums">{unused}</span> chưa dùng, xóa được
             </span>
           )}
-          {!canManage && <Pill tone="slate">Chỉ xem — thêm, sửa, xóa môn học là việc của huấn luyện viên trưởng</Pill>}
+          {!canManage && <span className="text-gray-500">Chỉ xem — thêm, sửa, xóa môn học là việc của huấn luyện viên trưởng</span>}
         </div>
       )}
 

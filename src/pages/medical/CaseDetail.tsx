@@ -13,7 +13,6 @@ import {
   ErrorBox,
   NotFound,
   Notice,
-  Pill,
   SectionTitle,
   Skeleton,
   cn,
@@ -29,9 +28,9 @@ import { RequestLines } from './components/parts';
 
 function LockBlock({ lock, onLift }: { lock: LockRow; onLift?: () => void }) {
   return (
-    <div className={cn('rounded-xl p-3.5 ring-1', lock.active ? 'bg-red-50/70 ring-red-100' : 'bg-gray-50 ring-gray-100')}>
+    <div className={cn(!lock.active && 'border-t border-gray-100 pt-3')}>
       <div className="flex items-start justify-between gap-2">
-        <p className={cn('flex items-center gap-1.5 text-sm font-semibold', lock.active ? 'text-red-800' : 'text-gray-600')}>
+        <p className={cn('flex items-center gap-1.5 text-sm font-semibold', lock.active ? 'text-red-700' : 'text-gray-600')}>
           {lock.active ? <Lock size={14} /> : <Unlock size={14} />}
           {lock.active ? 'Đang khóa huấn luyện' : 'Đã gỡ khóa'}
         </p>
@@ -46,7 +45,7 @@ function LockBlock({ lock, onLift }: { lock: LockRow; onLift?: () => void }) {
         Đặt {formatDate(lock.placedAt)} · {lock.placedByName}
         {lock.active && (lock.expectedLiftDate ? ` · dự kiến gỡ ${formatDate(lock.expectedLiftDate)}` : ' · chưa đặt ngày dự kiến gỡ')}
       </p>
-      {lock.pastExpected && <p className="mt-1.5 text-xs font-medium text-amber-700">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>}
+      {lock.pastExpected && <p className="mt-1.5 text-xs font-medium text-amber-800">Đã qua ngày dự kiến — chờ bác sĩ xác nhận</p>}
       {!lock.active && (
         <p className="mt-1 text-xs text-gray-500">
           Gỡ {formatDate(lock.liftedAt)} · {lock.liftedByName} · {lock.liftKindLabel}
@@ -82,8 +81,7 @@ export default function CaseDetail() {
       </Link>
 
       {/* Dải header */}
-      <Card tone={isOpen ? 'warning' : 'success'} className="relative overflow-hidden">
-        <span className={cn('absolute inset-y-0 left-0 w-1.5', isOpen ? 'bg-amber-400' : 'bg-emerald-500')} />
+      <Card>
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex min-w-0 items-start gap-4">
             <Link to={links.horse(data.horse.id, 'medical')} className="shrink-0 transition hover:opacity-80">
@@ -92,12 +90,12 @@ export default function CaseDetail() {
             <div className="min-w-0">
               <Link to={links.horse(data.horse.id, 'medical')} className="text-sm font-medium text-emerald-700 hover:underline">
                 {data.horse.name}
-                {data.horse.zoneName && <span className="font-light text-gray-400"> · {[data.horse.zoneName, data.horse.stallCode].filter(Boolean).join(' · ')}</span>}
+                {data.horse.zoneName && <span className="font-normal text-gray-500"> · {[data.horse.zoneName, data.horse.stallCode].filter(Boolean).join(' · ')}</span>}
               </Link>
               <h2 className="mt-0.5 text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900">{item.title}</h2>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                 <CasePill status={item.status} />
-                {item.fromPeriodic && <Pill tone="blue">Mở từ buổi khám định kỳ</Pill>}
+                {item.fromPeriodic && <span>Mở từ buổi khám định kỳ ·</span>}
                 <span>
                   Mở {formatDate(item.openedAt)} bởi {item.openedByName}
                 </span>
@@ -113,8 +111,8 @@ export default function CaseDetail() {
           <div className="flex flex-col items-end gap-3">
             {item.costVisible && (
               <div className="text-right">
-                <p className="flex items-center justify-end gap-1.5 text-xs text-gray-400">
-                  <Wallet size={13} /> Chi phí điều trị
+                <p className="flex items-center justify-end gap-1.5 text-xs text-gray-500">
+                  <Wallet size={13} className="text-gray-400" /> Chi phí điều trị
                 </p>
                 {item.cost !== undefined ? (
                   <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.cost)}</p>
@@ -153,9 +151,9 @@ export default function CaseDetail() {
             <ExamTimeline exams={data.exams} onCorrect={data.canCorrect ? setCorrecting : undefined} />
           )}
           {!isOpen && (
-            <div className="ml-6 rounded-2xl bg-emerald-50/70 p-5 ring-1 ring-emerald-100">
-              <p className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
-                <FolderCheck size={16} /> Đóng bệnh án · {formatDateTime(item.closedAt)} · {item.closedByName}
+            <div className="ml-6 rounded-2xl bg-white p-5 ring-1 ring-gray-200/80">
+              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <FolderCheck size={16} className="text-emerald-600" /> Đóng bệnh án · {formatDateTime(item.closedAt)} · {item.closedByName}
               </p>
               {item.closeNote && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{item.closeNote}</p>}
               {item.costVisible && item.cost !== undefined && (
@@ -170,24 +168,25 @@ export default function CaseDetail() {
         {/* Cột phụ dính */}
         <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
           {!isOpen && (
-            <Notice tone="success" icon={<FolderCheck size={16} />}>
+            <Notice tone="info" icon={<FolderCheck size={16} className="text-gray-400" />}>
               Bệnh án đã đóng, chỉ đọc. Không mở lại — tái phát thì mở bệnh án mới.
             </Notice>
           )}
 
-          <Card variant="outline">
+          <Card>
             <SectionTitle icon={<HeartPulse size={16} />}>Sức khỏe hiện tại</SectionTitle>
             <HealthPill status={data.horse.healthStatus} />
             <p className="mt-2 text-sm text-gray-500">{healthHint[data.horse.healthStatus]}</p>
           </Card>
 
-          <Card tone={lock ? 'danger' : 'default'}>
+          {/* className: shadow-card trong Card đè dải tone (twMerge không nhận ra shadow-card) — ép dải đỏ bằng ! */}
+          <Card tone={lock ? 'danger' : 'default'} className={lock ? '!shadow-[inset_3px_0_0_0_#ef4444]' : ''}>
             <SectionTitle
               icon={<Lock size={16} />}
               action={
                 !lock &&
                 data.canLock && (
-                  <Button size="sm" variant="soft" onClick={() => setPlacingLock(true)}>
+                  <Button size="sm" variant="secondary" onClick={() => setPlacingLock(true)}>
                     Đặt khóa
                   </Button>
                 )
@@ -210,27 +209,27 @@ export default function CaseDetail() {
                 <LockBlock key={entry.id} lock={entry} />
               ))}
             </div>
-            <p className="mt-3 text-xs font-light text-gray-400">
+            <p className="mt-3 text-xs text-gray-500">
               Khóa độc lập với trạng thái sức khỏe và không tự gỡ khi tới ngày dự kiến.
             </p>
           </Card>
 
-          <Card variant="flat">
+          <Card>
             <SectionTitle icon={<ClipboardList size={16} />}>Yêu cầu khám đã gắn ({data.linkedRequests.length})</SectionTitle>
             {data.linkedRequests.length === 0 ? (
               <p className="text-sm text-gray-500">Chưa có yêu cầu nào.</p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="-my-3 divide-y divide-gray-100">
                 {data.linkedRequests.map((request) => (
-                  <li key={request.id} className="rounded-xl bg-white p-3 ring-1 ring-emerald-950/5">
+                  <li key={request.id} className="py-3">
                     <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                      <UrgencyPill urgency={request.urgency} />
+                      {request.urgency === 'URGENT' && <UrgencyPill urgency={request.urgency} />}
                       {request.sourceLabel} · {request.createdByName}
                     </div>
                     <div className="mt-1.5">
                       <RequestLines lines={request.descriptionLines} />
                     </div>
-                    <p className="mt-1 text-[11px] text-gray-400">{formatDateTime(request.createdAt)}</p>
+                    <p className="mt-1 text-xs text-gray-500">{formatDateTime(request.createdAt)}</p>
                   </li>
                 ))}
               </ul>

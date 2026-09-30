@@ -1,5 +1,6 @@
-// Bộ thành phần dùng chung. Tự style trên Radix primitives, nhấn xanh cỏ (emerald),
-// bóng đổ ám màu theo vai trò của thẻ thay vì một kiểu viền + bóng cho mọi thứ.
+// Bộ thành phần dùng chung. Tự style trên Radix primitives.
+// Bảng màu 2 + 1: xanh cỏ (chủ đạo) · xám (trung tính, mọi trạng thái bình thường) · hổ phách (cần chú ý).
+// Đỏ chỉ dành cho điều nghiêm trọng. Chỉ tô màu khi có điều bất thường — phần bình thường để trung tính.
 import {
   createContext,
   useContext,
@@ -28,26 +29,19 @@ export function cn(...inputs: ClassValue[]) {
 type CardTone = 'default' | 'danger' | 'warning' | 'success' | 'muted';
 type CardVariant = 'raised' | 'flat' | 'outline';
 
-const cardRaised: Record<CardTone, string> = {
-  default: 'bg-white shadow-grass ring-1 ring-emerald-950/[0.04]',
-  danger: 'bg-white shadow-red ring-1 ring-red-100',
-  warning: 'bg-white shadow-amber ring-1 ring-amber-100',
-  success: 'bg-white shadow-grass ring-1 ring-emerald-100',
-  muted: 'bg-white/70 ring-1 ring-emerald-950/[0.04]',
+// Tone của thẻ chỉ còn là một dải màu 3px bên trái — không tô nền cả khối.
+const toneAccent: Record<CardTone, string> = {
+  default: '',
+  muted: '',
+  success: '',
+  // Gộp dải nhấn và bóng nhẹ vào MỘT giá trị box-shadow để không đè nhau.
+  warning: 'shadow-[inset_3px_0_0_0_#f59e0b,0_1px_2px_rgba(20,30,25,0.04)]',
+  danger: 'shadow-[inset_3px_0_0_0_#ef4444,0_1px_2px_rgba(20,30,25,0.04)]',
 };
-const cardFlat: Record<CardTone, string> = {
-  default: 'bg-emerald-50/40',
-  danger: 'bg-red-50/70',
-  warning: 'bg-amber-50/70',
-  success: 'bg-emerald-50/70',
-  muted: 'bg-gray-50/80',
-};
-const cardOutline: Record<CardTone, string> = {
-  default: 'border border-emerald-900/10 bg-white/60',
-  danger: 'border border-red-200 bg-white/60',
-  warning: 'border border-amber-200 bg-white/60',
-  success: 'border border-emerald-200 bg-white/60',
-  muted: 'border border-dashed border-gray-200 bg-transparent',
+const cardBase: Record<CardVariant, string> = {
+  raised: 'bg-white ring-1 ring-gray-200/80',
+  flat: 'bg-white/55 ring-1 ring-gray-200/50',
+  outline: 'bg-transparent ring-1 ring-gray-200',
 };
 
 export function Card({
@@ -61,8 +55,11 @@ export function Card({
   tone?: CardTone;
   variant?: CardVariant;
 }) {
-  const palette = variant === 'raised' ? cardRaised : variant === 'flat' ? cardFlat : cardOutline;
-  return <div className={cn('rounded-2xl p-5 sm:p-6', palette[tone], className)}>{children}</div>;
+  return (
+    <div className={cn('rounded-2xl p-5', cardBase[variant], toneAccent[tone] || (variant === 'raised' && 'shadow-card'), tone === 'muted' && 'opacity-90', className)}>
+      {children}
+    </div>
+  );
 }
 
 export function PageHeader({
@@ -80,12 +77,19 @@ export function PageHeader({
   back?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 flex-1">
         {back && <div className="mb-2">{back}</div>}
-        {eyebrow && <p className="mb-1 text-sm font-medium text-emerald-700">{eyebrow}</p>}
-        <h2 className="text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900">{title}</h2>
-        {description && <p className="mt-1 max-w-3xl font-light text-gray-500">{description}</p>}
+        {eyebrow && <p className="mb-1 text-sm text-gray-500">{eyebrow}</p>}
+        <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900">{title}</h2>
+        {description && (
+          <p
+            className="mt-1 line-clamp-1 max-w-4xl text-sm text-gray-500"
+            title={typeof description === 'string' ? description : undefined}
+          >
+            {description}
+          </p>
+        )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -105,8 +109,8 @@ export function SectionTitle({
 }) {
   return (
     <div className={cn('mb-4 flex items-center justify-between gap-3', className)}>
-      <h3 className="flex items-center gap-2 text-[0.95rem] font-semibold text-gray-800">
-        {icon && <span className="text-emerald-600">{icon}</span>}
+      <h3 className="flex items-center gap-2 text-[0.95rem] font-semibold text-gray-900">
+        {icon && <span className="text-gray-400">{icon}</span>}
         {children}
       </h3>
       {action}
@@ -138,13 +142,13 @@ export function Button({
   title?: string;
 }) {
   const variants: Record<ButtonVariant, string> = {
-    primary: 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-[0_8px_20px_-10px_rgba(5,150,105,0.8)]',
-    secondary: 'bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 hover:ring-gray-300',
-    danger: 'bg-red-600 text-white hover:bg-red-500 shadow-[0_8px_20px_-10px_rgba(220,38,38,0.8)]',
-    ghost: 'text-gray-500 hover:bg-emerald-50/70 hover:text-emerald-800',
-    soft: 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100',
+    primary: 'bg-emerald-700 text-white hover:bg-emerald-600',
+    secondary: 'bg-white text-gray-800 ring-1 ring-gray-200 hover:bg-gray-50 hover:ring-gray-300',
+    danger: 'bg-red-600 text-white hover:bg-red-500',
+    ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+    soft: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
   };
-  const sizes = { sm: 'h-8 px-3 text-xs', md: 'h-10 px-4 text-sm', icon: 'h-9 w-9 p-0' };
+  const sizes = { sm: 'h-8 px-3 text-xs', md: 'h-9 px-3.5 text-sm', icon: 'h-9 w-9 p-0' };
   return (
     <button
       type={type}
@@ -152,7 +156,7 @@ export function Button({
       disabled={disabled}
       title={title}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-2 rounded-xl font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],
         className,
@@ -163,19 +167,21 @@ export function Button({
   );
 }
 
-/* ===== Nhãn trạng thái: luôn có màu kèm chữ ===== */
+/* ===== Nhãn trạng thái =====
+ * Chỉ 4 sắc: xanh cỏ (đang chạy / tích cực), hổ phách (cần chú ý), đỏ (nghiêm trọng), xám (bình thường).
+ * Các tone cũ (blue, purple, orange, slate…) được quy về 4 sắc này để các trang không phải sửa. */
 
 export type PillTone = 'green' | 'amber' | 'red' | 'purple' | 'blue' | 'gray' | 'slate' | 'orange';
 
 const pillTones: Record<PillTone, string> = {
-  green: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
-  red: 'bg-red-50 text-red-700 ring-red-100',
-  purple: 'bg-fuchsia-50 text-fuchsia-700 ring-fuchsia-100',
-  blue: 'bg-sky-50 text-sky-700 ring-sky-100',
-  orange: 'bg-orange-50 text-orange-700 ring-orange-100',
-  gray: 'bg-gray-100 text-gray-600 ring-gray-200',
-  slate: 'bg-white text-gray-500 ring-gray-200',
+  green: 'bg-emerald-50 text-emerald-800',
+  amber: 'bg-amber-50 text-amber-800',
+  orange: 'bg-amber-50 text-amber-800',
+  red: 'bg-red-50 text-red-700',
+  purple: 'bg-gray-100 text-gray-700',
+  blue: 'bg-gray-100 text-gray-700',
+  gray: 'bg-gray-100 text-gray-700',
+  slate: 'bg-white text-gray-600 ring-1 ring-gray-200',
 };
 
 export function Pill({
@@ -195,7 +201,7 @@ export function Pill({
     <span
       title={title}
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-0.5 text-xs font-semibold ring-1',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium',
         pillTones[tone],
         className,
       )}
@@ -222,13 +228,13 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-900/10 bg-white/50 px-6 py-12 text-center',
+        'flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white/60 px-6 py-10 text-center',
         className,
       )}
     >
-      <Inbox className="mb-3 text-emerald-200" size={30} />
+      <Inbox className="mb-3 text-gray-300" size={28} />
       <p className="font-semibold text-gray-700">{title}</p>
-      {hint && <p className="mt-1 max-w-md text-sm font-light text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 max-w-md text-sm text-gray-500">{hint}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>
   );
@@ -246,7 +252,7 @@ export function Skeleton({ rows = 3, className = '' }: { rows?: number; classNam
 
 export function ErrorBox({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-red-50 p-4 text-sm text-red-700 ring-1 ring-red-100">
+    <div className="flex items-start gap-3 rounded-xl bg-red-50 p-3.5 text-sm text-red-800 ring-1 ring-red-100">
       <AlertTriangle size={18} className="mt-0.5 shrink-0" />
       <span>{message}</span>
     </div>
@@ -265,10 +271,10 @@ export function Notice({
   className?: string;
 }) {
   const tones = {
-    info: 'bg-sky-50 text-sky-800 ring-sky-100',
-    warning: 'bg-amber-50 text-amber-800 ring-amber-100',
-    danger: 'bg-red-50 text-red-800 ring-red-100',
-    success: 'bg-emerald-50 text-emerald-800 ring-emerald-100',
+    info: 'bg-white text-gray-700 ring-gray-200',
+    warning: 'bg-amber-50/70 text-amber-900 ring-amber-200/70',
+    danger: 'bg-red-50/80 text-red-800 ring-red-200/70',
+    success: 'bg-emerald-50/70 text-emerald-900 ring-emerald-200/70',
   };
   return (
     <div className={cn('flex items-start gap-3 rounded-xl p-3.5 text-sm ring-1', tones[tone], className)}>
@@ -281,7 +287,7 @@ export function Notice({
 export function NotFound({ message = 'Không tìm thấy dữ liệu bạn yêu cầu, hoặc dữ liệu nằm ngoài phạm vi của bạn.' }) {
   return (
     <div className="py-24 text-center">
-      <p className="text-5xl font-bold tracking-tight text-emerald-100">404</p>
+      <p className="text-5xl font-bold tracking-tight text-gray-200">404</p>
       <p className="mt-4 text-lg font-semibold text-gray-800">Không tìm thấy</p>
       <p className="mx-auto mt-1 max-w-md font-light text-gray-500">{message}</p>
     </div>
@@ -321,7 +327,7 @@ export function Field({
 }
 
 const inputClass =
-  'w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-70';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-70';
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cn(inputClass, props.className)} />;
@@ -355,8 +361,8 @@ export function FilterSelect({
       value={value}
       onChange={(event) => onChange(event.target.value)}
       className={cn(
-        'h-10 rounded-xl border border-gray-200 bg-white pl-3 pr-8 text-sm text-gray-700 transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
-        value && 'border-emerald-300 bg-emerald-50/50 text-emerald-900',
+        'h-9 rounded-lg border border-gray-200 bg-white pl-3 pr-8 text-sm text-gray-700 transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
+        value && 'border-gray-400 font-medium text-gray-900',
         className,
       )}
     >
@@ -382,16 +388,16 @@ export function ToggleChip({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        'inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium ring-1 transition',
+        'inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium ring-1 transition',
         checked
-          ? 'bg-emerald-600 text-white ring-emerald-600'
+          ? 'bg-emerald-50 text-emerald-800 ring-emerald-600/40'
           : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
       )}
     >
       <span
         className={cn(
           'flex h-4 w-4 items-center justify-center rounded-[5px] ring-1',
-          checked ? 'bg-white text-emerald-700 ring-white' : 'ring-gray-300',
+          checked ? 'bg-emerald-700 text-white ring-emerald-700' : 'ring-gray-300',
         )}
       >
         {checked && <Check size={11} strokeWidth={3} />}
@@ -419,20 +425,20 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn('inline-flex rounded-xl bg-emerald-950/[0.04] p-1', className)}>
+    <div className={cn('inline-flex rounded-lg bg-gray-100 p-0.5', className)}>
       {options.map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition',
+            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition',
             value === option.value ? 'bg-white text-emerald-800 shadow-sm' : 'text-gray-500 hover:text-gray-800',
           )}
         >
           {option.label}
           {option.badge !== undefined && option.badge > 0 && (
-            <span className="rounded-md bg-emerald-100 px-1.5 text-[11px] font-semibold text-emerald-800 tabular-nums">
+            <span className="rounded bg-gray-200/80 px-1.5 text-[11px] font-semibold text-gray-700 tabular-nums">
               {option.badge}
             </span>
           )}
@@ -633,7 +639,7 @@ export function ActionMenu({
         <Dropdown.Content
           align={align}
           sideOffset={6}
-          className="anim-pop z-50 min-w-48 rounded-xl bg-white p-1 shadow-float ring-1 ring-emerald-950/5"
+          className="anim-pop z-50 min-w-48 rounded-xl bg-white p-1 shadow-float ring-1 ring-gray-200"
         >
           {items.map((item, index) => (
             <Dropdown.Item
@@ -642,7 +648,7 @@ export function ActionMenu({
               onSelect={item.onSelect}
               className={cn(
                 'flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40',
-                item.danger ? 'text-red-600 data-[highlighted]:bg-red-50' : 'text-gray-700 data-[highlighted]:bg-emerald-50',
+                item.danger ? 'text-red-600 data-[highlighted]:bg-red-50' : 'text-gray-700 data-[highlighted]:bg-gray-100',
               )}
             >
               {item.icon}
@@ -722,16 +728,16 @@ export function DataTable<T>({
       <div
         className={cn(
           'overflow-x-auto custom-scrollbar',
-          !flat && 'rounded-2xl bg-white shadow-grass ring-1 ring-emerald-950/[0.04]',
+          !flat && 'rounded-2xl bg-white shadow-card ring-1 ring-gray-200/80',
         )}
       >
         <table className="w-full min-w-[720px] text-left text-sm">
           <thead>
-            <tr className="border-b border-emerald-950/[0.06] bg-emerald-50/30">
+            <tr className="border-b border-gray-200/80">
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={cn('whitespace-nowrap px-4 py-3 text-xs font-semibold text-gray-500', column.className)}
+                  className={cn('whitespace-nowrap px-4 py-2.5 text-xs font-medium text-gray-500', column.className)}
                 >
                   {column.header}
                 </th>
@@ -744,8 +750,8 @@ export function DataTable<T>({
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={cn(
-                  'border-b border-gray-50 last:border-0',
-                  onRowClick && 'cursor-pointer transition hover:bg-emerald-50/50',
+                  'border-b border-gray-100 last:border-0',
+                  onRowClick && 'cursor-pointer transition hover:bg-gray-50',
                   rowClassName?.(row),
                 )}
               >
@@ -828,20 +834,20 @@ export function Tabs({
 }) {
   return (
     <RadixTabs.Root value={active} onValueChange={onChange} className={className}>
-      <RadixTabs.List className="flex gap-1 overflow-x-auto border-b border-emerald-950/[0.07] custom-scrollbar">
+      <RadixTabs.List className="no-scrollbar flex gap-1 overflow-x-auto border-b border-gray-200">
         {tabs.map((tab) => (
           <RadixTabs.Trigger
             key={tab.key}
             value={tab.key}
             className={cn(
-              'relative shrink-0 rounded-t-lg px-4 py-2.5 text-sm font-medium outline-none transition',
-              'text-gray-400 hover:bg-white/70 hover:text-gray-700',
+              'relative shrink-0 rounded-t-md px-3.5 py-2.5 text-sm font-medium outline-none transition',
+              'text-gray-500 hover:text-gray-800',
               'data-[state=active]:text-emerald-800 data-[state=active]:after:absolute data-[state=active]:after:inset-x-3 data-[state=active]:after:-bottom-px data-[state=active]:after:h-0.5 data-[state=active]:after:rounded-full data-[state=active]:after:bg-emerald-600',
             )}
           >
             {tab.label}
             {tab.badge !== undefined && tab.badge > 0 && (
-              <span className="ml-1.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 tabular-nums">
+              <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 tabular-nums">
                 {tab.badge}
               </span>
             )}
@@ -872,7 +878,7 @@ export function Avatar({
         src={src}
         alt={name}
         style={{ width: size, height: size }}
-        className={cn('shrink-0 rounded-[12px] object-cover ring-1 ring-emerald-950/5', className)}
+        className={cn('shrink-0 rounded-[12px] object-cover ring-1 ring-black/5', className)}
       />
     );
   }
@@ -880,7 +886,7 @@ export function Avatar({
     <span
       style={{ width: size, height: size, fontSize: size * 0.4 }}
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-[12px] bg-emerald-100/70 font-bold text-emerald-800',
+        'flex shrink-0 items-center justify-center rounded-[12px] bg-gray-100 font-semibold text-gray-600',
         className,
       )}
     >
@@ -922,9 +928,9 @@ export function ToastHost({ children }: { children: ReactNode }) {
   );
 
   const tones = {
-    success: 'bg-white text-emerald-800 ring-emerald-100 shadow-grass-lift',
-    error: 'bg-white text-red-700 ring-red-100 shadow-red',
-    info: 'bg-white text-gray-700 ring-gray-100 shadow-grass',
+    success: 'bg-white text-gray-800 ring-gray-200 shadow-float',
+    error: 'bg-white text-red-700 ring-red-200 shadow-float',
+    info: 'bg-white text-gray-700 ring-gray-200 shadow-float',
   };
 
   return (
@@ -973,7 +979,7 @@ export function Reveal({ children, className = '' }: { children: ReactNode; clas
 export function InfoRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-gray-50 py-2.5 last:border-0">
-      <span className="text-sm font-light text-gray-400">{label}</span>
+      <span className="text-sm text-gray-500">{label}</span>
       <span className="text-right text-sm font-medium text-gray-800">{value ?? '—'}</span>
     </div>
   );
@@ -991,8 +997,8 @@ export function InfoGrid({
     <dl className={cn('grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-4', className)}>
       {items.map((item, index) => (
         <div key={index} className={cn('min-w-0', item.wide && 'col-span-2')}>
-          <dt className="text-xs font-light text-gray-400">{item.label}</dt>
-          <dd className="mt-0.5 text-sm font-medium text-gray-800">{item.value ?? '—'}</dd>
+          <dt className="text-xs text-gray-500">{item.label}</dt>
+          <dd className="mt-0.5 text-sm font-medium text-gray-900">{item.value ?? '—'}</dd>
         </div>
       ))}
     </dl>
@@ -1001,6 +1007,10 @@ export function InfoGrid({
 
 type StatTone = 'default' | 'danger' | 'warning' | 'success';
 
+/**
+ * Ô số liệu. Số luôn màu mực; chỉ khi tone là warning/danger VÀ giá trị khác 0 thì mới tô màu
+ * và hiện dải nhấn bên trái — để chỗ cần chú ý thật sự nổi lên giữa các số bình thường.
+ */
 export function Stat({
   value,
   label,
@@ -1020,17 +1030,19 @@ export function Stat({
   active?: boolean;
   className?: string;
 }) {
-  const iconTones: Record<StatTone, string> = {
-    default: 'bg-emerald-50 text-emerald-700',
-    danger: 'bg-red-50 text-red-600',
-    warning: 'bg-amber-50 text-amber-600',
-    success: 'bg-emerald-50 text-emerald-600',
-  };
+  const quiet = value === 0 || value === '0' || tone === 'success' || tone === 'default';
+  const effective: StatTone = quiet ? 'default' : tone;
   const valueTones: Record<StatTone, string> = {
     default: 'text-gray-900',
+    success: 'text-gray-900',
     danger: 'text-red-700',
     warning: 'text-amber-700',
-    success: 'text-emerald-700',
+  };
+  const accent: Record<StatTone, string> = {
+    default: '',
+    success: '',
+    danger: 'shadow-[inset_3px_0_0_0_#ef4444]',
+    warning: 'shadow-[inset_3px_0_0_0_#f59e0b]',
   };
   return (
     <button
@@ -1038,18 +1050,19 @@ export function Stat({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group flex w-full items-start justify-between gap-3 rounded-2xl bg-white p-5 text-left ring-1 ring-emerald-950/[0.05] transition-all duration-200 disabled:cursor-default',
-        onClick && 'hover:-translate-y-0.5 hover:shadow-grass-lift',
-        active && 'ring-2 ring-emerald-500',
+        'group flex w-full items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3.5 text-left ring-1 ring-gray-200/80 transition-colors duration-150 disabled:cursor-default',
+        accent[effective],
+        onClick && 'hover:bg-gray-50',
+        active && 'bg-gray-50 ring-gray-400',
         className,
       )}
     >
       <div className="min-w-0">
-        <p className={cn('text-3xl font-bold leading-none tabular-nums', valueTones[tone])}>{value}</p>
-        <p className="mt-2 text-sm text-gray-500">{label}</p>
-        {hint && <p className="mt-1 text-xs font-light text-gray-400">{hint}</p>}
+        <p className={cn('text-2xl font-bold leading-none tabular-nums', valueTones[effective])}>{value}</p>
+        <p className="mt-1.5 text-sm text-gray-600">{label}</p>
+        {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
       </div>
-      {icon && <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', iconTones[tone])}>{icon}</div>}
+      {icon && <div className="mt-0.5 shrink-0 text-gray-400">{icon}</div>}
     </button>
   );
 }
@@ -1067,10 +1080,79 @@ export function Meter({
   className?: string;
 }) {
   const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
-  const tones = { green: 'bg-emerald-500', amber: 'bg-amber-500', red: 'bg-red-500' };
+  const tones = { green: 'bg-emerald-600', amber: 'bg-amber-500', red: 'bg-red-500' };
   return (
-    <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-emerald-950/[0.06]', className)}>
+    <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-gray-200/70', className)}>
       <div className={cn('h-full rounded-full transition-all', tones[tone])} style={{ width: `${ratio * 100}%` }} />
+    </div>
+  );
+}
+
+/** Chấm trạng thái nhỏ — dùng thay cho pill màu trong bảng và danh sách. */
+export type DotTone = 'ok' | 'warn' | 'danger' | 'neutral' | 'live';
+
+const dotTones: Record<DotTone, string> = {
+  ok: 'bg-emerald-500',
+  warn: 'bg-amber-500',
+  danger: 'bg-red-500',
+  neutral: 'bg-gray-300',
+  live: 'bg-emerald-500 animate-pulse',
+};
+
+export function Dot({ tone = 'neutral', hollow = false, className = '' }: { tone?: DotTone; hollow?: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'inline-block h-2 w-2 shrink-0 rounded-full',
+        hollow ? `bg-white ring-2 ${tone === 'danger' ? 'ring-red-500' : tone === 'warn' ? 'ring-amber-500' : 'ring-gray-400'}` : dotTones[tone],
+        className,
+      )}
+    />
+  );
+}
+
+/**
+ * Hàng chip lọc gọn thay cho các thẻ KPI to: "Tất cả 13 · ● Cần theo dõi 1 · …".
+ * Một màu duy nhất: chip đang chọn nền xanh cỏ nhạt; không dùng chấm màu trong chip
+ * (mức nghiêm trọng đã thể hiện ở nội dung bên dưới). Prop `dot` giữ lại cho tương thích.
+ */
+export function ChipFilter<T extends string>({
+  value,
+  onChange,
+  options,
+  className = '',
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: ReactNode; count?: number; dot?: DotTone; hollow?: boolean }[];
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        const quiet = option.count === 0;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm ring-1 transition-colors',
+              selected
+                ? 'bg-emerald-50 text-emerald-800 ring-emerald-600/40'
+                : 'bg-white text-gray-700 ring-gray-200 hover:bg-gray-50 hover:ring-gray-300',
+              quiet && !selected && 'text-gray-400',
+            )}
+          >
+            <span className="font-medium">{option.label}</span>
+            {option.count !== undefined && (
+              <span className={cn('tabular-nums', selected ? 'text-emerald-700/70' : 'text-gray-400')}>{option.count}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

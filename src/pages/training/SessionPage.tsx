@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Clock, Flag, MapPin, Octagon, Play, Square, UserRound } from 'lucide-react';
 import { Button, ConfirmDialog, Notice, NotFound, Pill, Skeleton, useToast } from '../../components/ui';
-import { IntensityPill, SessionPill } from '../../components/ui/status';
+import { IntensityMeter, SessionPill } from '../../components/ui/status';
 import { useAction, useService } from '../../hooks/useService';
 import {
   emergencyStop,
@@ -74,12 +74,12 @@ export default function SessionPage() {
               </Button>
             )}
             {flags.canFinish && (
-              <Button variant="soft" onClick={() => setFinishOpen(true)}>
+              <Button variant="secondary" onClick={() => setFinishOpen(true)}>
                 <Square size={14} /> Kết thúc buổi
               </Button>
             )}
             {flags.canStop && (
-              <Button variant="danger" onClick={() => setStopOpen(true)}>
+              <Button variant="secondary" className="text-red-700 hover:text-red-800" onClick={() => setStopOpen(true)}>
                 <Octagon size={14} /> Dừng khẩn
               </Button>
             )}
@@ -92,7 +92,7 @@ export default function SessionPage() {
       )}
 
       {header.status === 'CANCELLED' && (
-        <Notice tone="danger">
+        <Notice tone="info">
           <p className="font-semibold">Buổi đã hủy{header.cancelKindLabel ? ` — ${header.cancelKindLabel}` : ''}</p>
           <p className="mt-0.5">{header.cancelReason ?? 'Không ghi lý do'}</p>
           <p className="mt-1 text-xs opacity-75">
@@ -194,55 +194,53 @@ function SessionHeaderStrip({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 transition hover:text-emerald-700"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-emerald-700"
       >
         <ArrowLeft size={15} /> {header.status === 'AWAITING_REVIEW' ? 'Buổi chờ đánh giá' : 'Buổi tập hôm nay'}
       </button>
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4 rounded-3xl bg-linear-to-br from-emerald-50/80 via-white to-lime-50/60 px-6 py-5 ring-1 ring-emerald-950/[0.05]">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-emerald-700">
-            <Link to={links.class(header.classId)} className="hover:underline">
-              Lớp {header.className}
-            </Link>
-            {header.phaseName ? ` · ${header.phaseName}${header.weekNo ? `, tuần ${header.weekNo}` : ''}` : ''}
-          </p>
-          <h2 className="mt-1 text-[1.65rem] font-bold leading-tight tracking-tight text-gray-900">
-            {header.subjectName}
-            {subjectExtra(header) && (
-              <span className="font-light text-gray-400">
-                {subjectExtra(header).startsWith('×') ? ' ' : ' · '}
-                {subjectExtra(header)}
-              </span>
-            )}
-          </h2>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900">
+              {header.subjectName}
+              {subjectExtra(header) && (
+                <span className="font-normal text-gray-400">
+                  {subjectExtra(header).startsWith('×') ? ' ' : ' · '}
+                  {subjectExtra(header)}
+                </span>
+              )}
+            </h2>
             <SessionPill status={header.status} />
-            <IntensityPill intensity={header.intensity} />
+            <IntensityMeter intensity={header.intensity} />
             {header.derivedLabel && <Pill tone="amber">{header.derivedLabel}</Pill>}
             {header.endLabel && (
               <Pill tone={header.endReason === 'EMERGENCY_STOP' ? 'red' : 'amber'}>{header.endLabel}</Pill>
             )}
             {header.isExtra && <Pill tone="slate">Buổi thêm tay</Pill>}
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-500">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+            <Link to={links.class(header.classId)} className="font-medium text-gray-700 hover:text-emerald-700">
+              Lớp {header.className}
+              {header.phaseName ? ` · ${header.phaseName}${header.weekNo ? `, tuần ${header.weekNo}` : ''}` : ''}
+            </Link>
             {facts.map((fact) => (
-              <span key={fact.label} className="inline-flex items-center gap-1.5">
-                <span className="text-emerald-600">{fact.icon}</span>
+              <span key={fact.label} className="inline-flex items-center gap-1.5 tabular-nums">
+                <span className="text-gray-400">{fact.icon}</span>
                 {fact.label}
               </span>
             ))}
           </div>
           {header.stopReason && (
-            <p className="mt-2 text-sm text-red-700">
+            <p className="mt-1.5 text-sm text-red-700">
               Lý do dừng khẩn: {header.stopReason} · {header.endedByName}
             </p>
           )}
           {header.endedAt && !header.stopReason && (
-            <p className="mt-2 text-xs font-light text-gray-400">
+            <p className="mt-1.5 text-xs text-gray-500 tabular-nums">
               Bắt đầu {formatDateTime(header.startedAt)} ({header.startedByName}) · kết thúc {formatDateTime(header.endedAt)}
               {header.endedByName ? ` (${header.endedByName})` : ''}
             </p>

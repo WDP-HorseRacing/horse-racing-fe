@@ -2,13 +2,13 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, BellRing } from 'lucide-react';
-import { Avatar, Pill, cn } from '../../../components/ui';
-import { HealthPill } from '../../../components/ui/status';
+import { Avatar, Dot, cn } from '../../../components/ui';
+import { HealthPill, healthDot } from '../../../components/ui/status';
 import { healthHint, healthLabel, lifecycleLabel } from '../../../lib/labels';
 import { links } from '../../../lib/links';
 import type { HealthStatus } from '../../../types/domain';
 import type { MedHorseRef, PeriodicRowState } from '../../../services/medical.service';
-import { HEALTH_ORDER, dueText, healthSwatch, periodicTone } from './utils';
+import { HEALTH_ORDER, dueText, periodicText } from './utils';
 
 /** Ảnh + tên ngựa, bấm để sang tab Y tế trong hồ sơ. */
 export function HorseChip({
@@ -34,7 +34,7 @@ export function HorseChip({
       <Avatar src={horse.avatar} name={horse.name} size={size} />
       <span className="min-w-0">
         <span className="block truncate font-semibold text-gray-900">{horse.name}</span>
-        {meta && <span className="block truncate text-xs font-light text-gray-400">{meta}</span>}
+        {meta && <span className="block truncate text-xs text-gray-500">{meta}</span>}
       </span>
     </span>
   );
@@ -50,7 +50,7 @@ export function HorseChip({
   );
 }
 
-/** Bốn nút chọn trạng thái sức khỏe có màu. */
+/** Bốn nút chọn trạng thái sức khỏe: viền xám, đang chọn → viền đậm + chấm màu tương ứng. */
 export function HealthPicker({
   value,
   onChange,
@@ -71,24 +71,19 @@ export function HealthPicker({
             <button
               key={status}
               type="button"
+              aria-pressed={active}
               onClick={() => onChange(status)}
               className={cn(
-                'rounded-xl px-3 py-2.5 text-left ring-1 transition-all duration-200 active:scale-[0.98]',
-                active ? healthSwatch[status].active : healthSwatch[status].idle,
+                'rounded-lg bg-white px-3 py-2.5 text-left transition active:scale-[0.99]',
+                active ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300',
               )}
             >
-              <span className="flex items-center gap-2 text-sm font-semibold">
-                <span className={cn('h-2 w-2 rounded-full', active ? 'bg-white' : healthSwatch[status].dot)} />
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <Dot tone={active ? healthDot[status] : 'neutral'} hollow={active && status === 'QUARANTINED'} />
                 {healthLabel[status]}
-                {current === status && (
-                  <span className={cn('ml-auto text-[11px] font-medium', active ? 'text-white/80' : 'text-gray-400')}>
-                    hiện tại
-                  </span>
-                )}
+                {current === status && <span className="ml-auto text-[11px] font-medium text-gray-500">hiện tại</span>}
               </span>
-              <span className={cn('mt-0.5 block text-[11px] leading-snug', active ? 'text-white/85' : 'text-gray-500')}>
-                {healthHint[status]}
-              </span>
+              <span className="mt-0.5 block text-xs leading-snug text-gray-500">{healthHint[status]}</span>
             </button>
           );
         })}
@@ -102,7 +97,7 @@ export function HealthPicker({
 export function HealthShift({ from, to }: { from: HealthStatus; to: HealthStatus }) {
   if (from === to) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
         <HealthPill status={to} /> giữ nguyên
       </span>
     );
@@ -110,7 +105,7 @@ export function HealthShift({ from, to }: { from: HealthStatus; to: HealthStatus
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <HealthPill status={from} />
-      <ArrowRight size={13} className="text-gray-300" />
+      <ArrowRight size={13} className="text-gray-400" />
       <HealthPill status={to} />
     </span>
   );
@@ -133,6 +128,10 @@ export function RequestLines({ lines, compact = false }: { lines: string[]; comp
   );
 }
 
+/**
+ * Tình trạng khám định kỳ — MỘT nhãn chữ mỗi dòng:
+ * đúng hạn xám · sắp tới hạn / quá hạn hổ phách · quá hạn > 7 ngày đỏ (kèm chuông nếu đã cảnh báo).
+ */
 export function PeriodicPill({
   state,
   label,
@@ -144,15 +143,19 @@ export function PeriodicPill({
   overdueDays: number;
   alerted?: boolean;
 }) {
+  const text =
+    state === 'OVERDUE' || state === 'OVERDUE_ALERT'
+      ? overdueDays > 0
+        ? `Quá hạn ${overdueDays} ngày`
+        : label
+      : `${label} · ${dueText(overdueDays).toLowerCase()}`;
   return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      <Pill tone={periodicTone[state]}>{label}</Pill>
-      <span className="text-xs text-gray-400">{dueText(overdueDays)}</span>
-      {alerted && (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-500" title="Đã gửi cảnh báo cho bác sĩ và quản lý">
-          <BellRing size={11} /> đã cảnh báo
-        </span>
-      )}
+    <span
+      className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-[13px]', state !== 'OK' && 'font-medium', periodicText[state])}
+      title={alerted ? 'Đã gửi cảnh báo cho bác sĩ và quản lý' : undefined}
+    >
+      {text}
+      {alerted && <BellRing size={12} aria-label="đã cảnh báo" />}
     </span>
   );
 }

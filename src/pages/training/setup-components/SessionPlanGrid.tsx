@@ -1,6 +1,6 @@
 // Lịch xem trước của một lớp: mỗi tuần một hàng, 7 ô ngày tính từ ngày bắt đầu lớp.
 import { cn, Tip } from '../../../components/ui';
-import { intensityDot } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { intensityLabel, surfaceLabel } from '../../../lib/labels';
 import { addDays, daysBetween, formatDateShort, toDateKey } from '../../../lib/format';
 import type { TrackSurface, TrainingIntensity } from '../../../types/domain';
@@ -41,7 +41,7 @@ export function SessionPlanGrid({
         <div className="sticky top-0 z-10 grid grid-cols-[88px_repeat(7,minmax(0,1fr))] gap-1 bg-white/95 pb-1.5 backdrop-blur">
           <span />
           {header.map((label, index) => (
-            <span key={index} className="text-center text-[11px] font-semibold text-gray-400">
+            <span key={index} className="text-center text-[11px] font-medium text-gray-500">
               {label}
             </span>
           ))}
@@ -54,7 +54,7 @@ export function SessionPlanGrid({
               <div key={week} className="grid grid-cols-[88px_repeat(7,minmax(0,1fr))] gap-1">
                 <div className="flex flex-col justify-center pr-1">
                   <span className="text-xs font-semibold text-gray-700">Tuần {week + 1}</span>
-                  {first?.phaseName && <span className="truncate text-[11px] font-light text-gray-400">{first.phaseName}</span>}
+                  {first?.phaseName && <span className="truncate text-[11px] text-gray-500">{first.phaseName}</span>}
                 </div>
                 {days.map((date) => {
                   const cells = byDate.get(date) ?? [];
@@ -64,8 +64,8 @@ export function SessionPlanGrid({
                       key={date}
                       className={cn(
                         'min-h-[52px] rounded-lg p-1.5',
-                        out ? 'bg-transparent' : cells.length > 0 ? 'bg-white ring-1 ring-emerald-950/[0.06]' : 'bg-emerald-950/[0.025]',
-                        date === today && 'ring-2 ring-emerald-500',
+                        out ? 'bg-transparent' : cells.length > 0 ? 'bg-white ring-1 ring-gray-200' : 'bg-gray-50',
+                        date === today && 'ring-2 ring-emerald-600',
                       )}
                     >
                       {!out && <p className="text-[10px] text-gray-400 tabular-nums">{formatDateShort(date)}</p>}
@@ -81,12 +81,12 @@ export function SessionPlanGrid({
                           }
                         >
                           <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium leading-tight text-gray-700">
-                            <span className={cn('h-2 w-2 shrink-0 rounded-full', intensityDot[cell.intensity])} />
+                            <IntensityMeter intensity={cell.intensity} showLabel={false} />
                             <span className="line-clamp-2">{cell.subjectName}</span>
                           </p>
                         </Tip>
                       ))}
-                      {!out && cells.length === 0 && <p className="mt-1 text-[10px] font-light text-gray-300">Nghỉ</p>}
+                      {!out && cells.length === 0 && <p className="mt-1 text-[10px] text-gray-400">Nghỉ</p>}
                     </div>
                   );
                 })}
@@ -99,14 +99,13 @@ export function SessionPlanGrid({
   );
 }
 
+const INTENSITIES: TrainingIntensity[] = ['LIGHT', 'MEDIUM', 'HEAVY', 'MAX'];
+
 export function IntensityLegend({ className = '' }: { className?: string }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500', className)}>
-      {(Object.keys(intensityDot) as TrainingIntensity[]).map((key) => (
-        <span key={key} className="inline-flex items-center gap-1.5">
-          <span className={cn('h-2 w-2 rounded-full', intensityDot[key])} />
-          {intensityLabel[key]}
-        </span>
+      {INTENSITIES.map((key) => (
+        <IntensityMeter key={key} intensity={key} />
       ))}
     </div>
   );

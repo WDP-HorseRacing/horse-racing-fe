@@ -8,13 +8,13 @@ import {
   CalendarRange,
   ChevronDown,
   ClipboardList,
-  Flag,
   HeartPulse,
   Lock,
   Stethoscope,
   Users,
 } from 'lucide-react';
 import { useStore } from '../store/store';
+import { Logo } from '../components/Logo';
 import { useGsapReveal, useGsapCounter } from '../hooks/useGsapReveal';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -136,12 +136,7 @@ const LandingPage = () => {
           className="fixed inset-x-0 top-0 z-50 flex items-center justify-between px-5 py-5 sm:px-8"
           data-hero-reveal
         >
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 shadow-md">
-              <Flag size={16} className="text-white" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-white">HorseRacing</span>
-          </div>
+          <Logo size={34} textClassName="text-white" />
           <div className="flex items-center gap-3">
             <a
               href="#chuc-nang"
@@ -350,12 +345,7 @@ const LandingPage = () => {
       {/* ===== CHÂN TRANG ===== */}
       <footer className="border-t border-gray-100 bg-white px-6 py-12">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 sm:flex-row">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600">
-              <Flag size={14} className="text-white" />
-            </div>
-            <span className="text-sm font-bold tracking-tight text-gray-900">HorseRacing</span>
-          </div>
+          <Logo size={28} textClassName="text-sm" />
           <p className="text-sm text-gray-400">
             Hệ thống Quản lý Huấn luyện Ngựa đua · {new Date().getFullYear()}
           </p>

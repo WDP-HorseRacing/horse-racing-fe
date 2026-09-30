@@ -56,19 +56,17 @@ export default function GroomTaskChecklist({
               if (clickable) void toggle(task);
             }}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition',
-              task.done
-                ? 'bg-emerald-600 text-white shadow-[0_6px_14px_-8px_rgba(5,150,105,0.9)]'
-                : 'bg-white text-gray-600 ring-1 ring-gray-200',
-              clickable && !task.done && 'hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-200',
-              clickable && task.done && 'hover:bg-emerald-500',
+              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium ring-1 transition',
+              task.done ? 'bg-emerald-50 text-emerald-800 ring-emerald-100' : 'bg-white text-gray-600 ring-gray-200',
+              clickable && !task.done && 'hover:bg-gray-50 hover:text-gray-900 hover:ring-gray-300',
+              clickable && task.done && 'hover:ring-emerald-200',
               !clickable && !task.done && 'text-gray-400 ring-gray-100',
               !clickable && 'cursor-default',
             )}
           >
             <Icon size={12} strokeWidth={task.done ? 3 : 2} />
             {task.label}
-            {task.done && task.at && <span className="font-normal text-emerald-100">{formatTime(task.at)}</span>}
+            {task.done && task.at && <span className="font-normal tabular-nums text-emerald-700/80">{formatTime(task.at)}</span>}
           </button>
         );
         return (

@@ -277,7 +277,7 @@ export function AddStallsDialog({ zone, onClose, onDone }: { zone: ZoneRow | nul
         {preview.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {preview.map((code) => (
-              <span key={code} className="rounded-lg bg-emerald-50 px-2 py-1 font-mono text-xs font-semibold text-emerald-800 ring-1 ring-emerald-100">
+              <span key={code} className="rounded-md bg-white px-2 py-1 font-mono text-xs font-semibold text-gray-700 ring-1 ring-gray-200">
                 {code}
               </span>
             ))}

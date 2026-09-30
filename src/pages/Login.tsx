@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Flag, KeyRound, Mail, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, KeyRound, Mail, Users } from 'lucide-react';
+import { Logo } from '../components/Logo';
 import gsap from 'gsap';
 import { useStore } from '../store/store';
 import { listAccounts, SHARED_PASSWORD } from '../services/auth.service';
@@ -73,8 +74,7 @@ export const Login = () => {
           alt="Ngựa trên đồng cỏ của trường đua"
           className="absolute inset-0 h-full w-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/60 to-emerald-800/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+        <div className="absolute inset-0 bg-gray-950/45" />
 
         <div className="relative z-10 flex flex-col justify-end p-12 pb-16">
           <Link
@@ -85,13 +85,10 @@ export const Login = () => {
             <span className="text-sm font-medium">Về trang chủ</span>
           </Link>
 
-          <div className="mb-6 flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/15 backdrop-blur-sm">
-              <Flag size={20} className="text-white" />
-            </div>
-            <span className="text-xl font-bold tracking-tight text-white">HorseRacing</span>
+          <div className="mb-6">
+            <Logo size={40} textClassName="text-xl text-white" />
           </div>
-          <p className="max-w-sm text-base font-light leading-relaxed text-white/70">
+          <p className="max-w-sm text-base leading-relaxed text-white/85">
             Hệ thống quản lý huấn luyện ngựa đua. Hồ sơ đàn ngựa, lớp huấn luyện theo giáo án và y tế trong
             một nơi duy nhất.
           </p>
@@ -112,34 +109,34 @@ export const Login = () => {
 
           <div className="mb-10" data-form-reveal>
             <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-900">Đăng nhập</h1>
-            <p className="font-light text-gray-500">Dùng tài khoản câu lạc bộ cấp cho bạn.</p>
+            <p className="text-gray-500">Dùng tài khoản câu lạc bộ cấp cho bạn.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5" data-form-reveal>
             <div className="space-y-4">
               <div className="group relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-emerald-500">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-gray-500">
                   <Mail className="h-5 w-5" />
                 </div>
                 <input
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 font-light text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="ten@horseracing.vn"
                   required
                 />
               </div>
 
               <div className="group relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-emerald-500">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-gray-300 transition-colors group-focus-within:text-gray-500">
                   <KeyRound className="h-5 w-5" />
                 </div>
                 <input
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 font-light text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-12 pr-4 text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
                   placeholder="••••••"
                   required
                 />
@@ -147,7 +144,7 @@ export const Login = () => {
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm font-medium text-red-600">
+              <div className="rounded-xl bg-white p-3 text-sm font-medium text-red-700 shadow-[inset_3px_0_0_0_#ef4444] ring-1 ring-red-200">
                 {error}
               </div>
             )}
@@ -155,7 +152,7 @@ export const Login = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="group flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3.5 font-semibold text-white shadow-md shadow-emerald-600/20 transition-all duration-200 hover:bg-emerald-500 hover:shadow-lg hover:shadow-emerald-500/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
+              className="group flex w-full items-center justify-center rounded-lg bg-emerald-700 px-4 py-3.5 font-semibold text-white transition-colors duration-150 hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -171,12 +168,12 @@ export const Login = () => {
           <div className="mt-10 border-t border-gray-100 pt-8" data-form-reveal>
             <div className="mb-4 flex items-center gap-2">
               <Users className="h-3.5 w-3.5 text-gray-400" />
-              <span className="text-xs font-semibold tracking-wide text-gray-400">Chọn nhanh tài khoản</span>
+              <span className="text-xs font-medium text-gray-500">Chọn nhanh tài khoản</span>
             </div>
             <div className="max-h-72 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
               {grouped.map((group) => (
                 <div key={group.role}>
-                  <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-gray-300">
+                  <p className="mb-1.5 text-xs font-medium text-gray-500">
                     {roleLabel[group.role]}
                   </p>
                   <div className="space-y-1">
@@ -186,7 +183,7 @@ export const Login = () => {
                         onClick={() => quickFill(user.email)}
                         className={`group flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-all duration-200 ${
                           email === user.email
-                            ? 'border-emerald-200 bg-emerald-50'
+                            ? 'border-emerald-600/40 bg-white ring-1 ring-emerald-600/15'
                             : 'border-transparent hover:border-gray-100 hover:bg-gray-50'
                         }`}
                       >

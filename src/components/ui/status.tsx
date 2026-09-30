@@ -1,6 +1,7 @@
-// Nhãn trạng thái dùng chung. Mã màu cố định theo quy ước, luôn kèm chữ.
-import { AlertOctagon, Check, Lock, X } from 'lucide-react';
-import { Pill, Tip, cn, type PillTone } from './index';
+// Nhãn trạng thái dùng chung — theo quy tắc "chỉ tô màu khi bất thường":
+// bình thường → xám (hoặc ẩn) · cần chú ý → hổ phách · nghiêm trọng → đỏ · đang chạy → xanh cỏ.
+import { Check, Lock, X } from 'lucide-react';
+import { Dot, Pill, Tip, cn, type DotTone, type PillTone } from './index';
 import {
   absenceLabel,
   attendanceLabel,
@@ -33,117 +34,158 @@ import type {
   ZoneStatus,
 } from '../../types/domain';
 
+/* ===== Sức khỏe ===== */
+
+/** Dùng khi cần Pill (ví dụ trên nền tối hoặc trong nhóm pill). */
 export const healthTone: Record<HealthStatus, PillTone> = {
-  ELIGIBLE: 'green',
+  ELIGIBLE: 'gray',
   UNDER_OBSERVATION: 'amber',
   INJURED: 'red',
-  QUARANTINED: 'purple',
+  QUARANTINED: 'red',
 };
 
-export function HealthPill({ status }: { status: HealthStatus }) {
-  return <Pill tone={healthTone[status]}>{healthLabel[status]}</Pill>;
+export const healthDot: Record<HealthStatus, DotTone> = {
+  ELIGIBLE: 'ok',
+  UNDER_OBSERVATION: 'warn',
+  INJURED: 'danger',
+  QUARANTINED: 'danger',
+};
+
+/** Sức khỏe: bình thường là chữ xám; bất thường có chấm màu. Cách ly dùng chấm rỗng để phân biệt với Chấn thương. */
+export function HealthPill({ status, className = '' }: { status: HealthStatus; className?: string }) {
+  const text: Record<HealthStatus, string> = {
+    ELIGIBLE: 'text-gray-500',
+    UNDER_OBSERVATION: 'font-medium text-amber-800',
+    INJURED: 'font-medium text-red-700',
+    QUARANTINED: 'font-medium text-red-700',
+  };
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-[13px]', text[status], className)}>
+      {status !== 'ELIGIBLE' && <Dot tone={healthDot[status]} hollow={status === 'QUARANTINED'} />}
+      {healthLabel[status]}
+    </span>
+  );
 }
 
-const lifecycleTone: Record<LifecycleStatus, PillTone> = {
-  ACTIVE: 'blue',
-  RETIRED: 'gray',
-  TRANSFERRED: 'slate',
-};
+/* ===== Vòng đời, xếp chỗ, khu, ô ===== */
 
-export function LifecyclePill({ status }: { status: LifecycleStatus }) {
-  return <Pill tone={lifecycleTone[status]}>{lifecycleLabel[status]}</Pill>;
+/** Đang hoạt động là trạng thái bình thường nên mặc định không hiện. */
+export function LifecyclePill({ status, showActive = false }: { status: LifecycleStatus; showActive?: boolean }) {
+  if (status === 'ACTIVE' && !showActive) return null;
+  return <Pill tone="gray">{lifecycleLabel[status]}</Pill>;
 }
 
 export function DeletedPill() {
-  return <Pill tone="red">Đã xóa hồ sơ</Pill>;
+  return <Pill tone="gray" className="line-through decoration-gray-400">Đã xóa hồ sơ</Pill>;
 }
-
-const placementTone: Record<HorsePlacement, PillTone> = {
-  NO_ZONE: 'orange',
-  WAITING_STALL: 'amber',
-  WAITING_GROOM: 'amber',
-  PLACED: 'green',
-  NONE: 'slate',
-};
 
 export function PlacementPill({ placement }: { placement: HorsePlacement }) {
-  return <Pill tone={placementTone[placement]}>{placementLabel[placement]}</Pill>;
+  if (placement === 'PLACED' || placement === 'NONE') {
+    return <span className="text-xs text-gray-500">{placementLabel[placement]}</span>;
+  }
+  return <Pill tone="amber">{placementLabel[placement]}</Pill>;
 }
-
-const zoneTone: Record<ZoneStatus, PillTone> = { ACTIVE: 'green', MAINTENANCE: 'amber', CLOSED: 'gray' };
 
 export function ZoneStatusPill({ status }: { status: ZoneStatus }) {
-  return <Pill tone={zoneTone[status]}>{zoneStatusLabel[status]}</Pill>;
+  if (status === 'ACTIVE') return <span className="text-xs text-gray-500">{zoneStatusLabel[status]}</span>;
+  return <Pill tone={status === 'MAINTENANCE' ? 'amber' : 'gray'}>{zoneStatusLabel[status]}</Pill>;
 }
-
-const stallTone: Record<StallStatus, PillTone> = { AVAILABLE: 'green', OCCUPIED: 'blue', MAINTENANCE: 'amber' };
 
 export function StallStatusPill({ status }: { status: StallStatus }) {
-  return <Pill tone={stallTone[status]}>{stallStatusLabel[status]}</Pill>;
+  return <Pill tone={status === 'MAINTENANCE' ? 'amber' : 'gray'}>{stallStatusLabel[status]}</Pill>;
 }
 
-const intensityTone: Record<TrainingIntensity, PillTone> = { LIGHT: 'green', MEDIUM: 'blue', HEAVY: 'amber', MAX: 'red' };
+/* ===== Cường độ: thanh 4 vạch đơn sắc, không dùng màu riêng cho từng mức ===== */
 
+const INTENSITY_LEVEL: Record<TrainingIntensity, number> = { LIGHT: 1, MEDIUM: 2, HEAVY: 3, MAX: 4 };
+
+export function IntensityMeter({ intensity, showLabel = true }: { intensity: TrainingIntensity; showLabel?: boolean }) {
+  const level = INTENSITY_LEVEL[intensity];
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-700" title={`Cường độ ${intensityLabel[intensity]}`}>
+      <span className="inline-flex items-end gap-[2px]" aria-hidden>
+        {[1, 2, 3, 4].map((bar) => (
+          <span
+            key={bar}
+            className={cn('w-[3px] rounded-[1px]', bar <= level ? 'bg-gray-800' : 'bg-gray-200')}
+            style={{ height: 4 + bar * 2 }}
+          />
+        ))}
+      </span>
+      {showLabel && intensityLabel[intensity]}
+    </span>
+  );
+}
+
+/** Giữ tên cũ — nay hiển thị dạng thanh vạch. */
 export function IntensityPill({ intensity }: { intensity: TrainingIntensity }) {
-  return <Pill tone={intensityTone[intensity]}>{intensityLabel[intensity]}</Pill>;
+  return <IntensityMeter intensity={intensity} />;
 }
 
-/** Màu chấm cường độ dùng trong lưới lịch. */
+/** Chấm cường độ trong lưới lịch: bốn sắc độ của cùng một màu. */
 export const intensityDot: Record<TrainingIntensity, string> = {
-  LIGHT: 'bg-emerald-400',
-  MEDIUM: 'bg-sky-500',
-  HEAVY: 'bg-amber-500',
-  MAX: 'bg-red-500',
+  LIGHT: 'bg-gray-300',
+  MEDIUM: 'bg-gray-500',
+  HEAVY: 'bg-gray-700',
+  MAX: 'bg-gray-900',
 };
 
-const classTone: Record<ClassStatus, PillTone> = {
-  SCHEDULED: 'gray',
-  ACTIVE: 'blue',
-  COMPLETED: 'green',
-  CANCELLED: 'red',
-};
+/* ===== Lớp, buổi, tham gia ===== */
 
 export function ClassPill({ status }: { status: ClassStatus }) {
-  return <Pill tone={classTone[status]}>{classStatusLabel[status]}</Pill>;
+  if (status === 'ACTIVE') {
+    return (
+      <Pill tone="green">
+        <Dot tone="ok" />
+        {classStatusLabel[status]}
+      </Pill>
+    );
+  }
+  return (
+    <Pill tone={status === 'SCHEDULED' ? 'slate' : 'gray'} className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
+      {classStatusLabel[status]}
+    </Pill>
+  );
 }
 
-const sessionTone: Record<SessionStatus, PillTone> = {
-  SCHEDULED: 'gray',
-  IN_PROGRESS: 'blue',
-  AWAITING_REVIEW: 'amber',
-  COMPLETED: 'green',
-  CANCELLED: 'red',
-};
-
 export function SessionPill({ status }: { status: SessionStatus }) {
+  if (status === 'IN_PROGRESS') {
+    return (
+      <Pill tone="green" pulse>
+        {sessionStatusLabel[status]}
+      </Pill>
+    );
+  }
+  if (status === 'AWAITING_REVIEW') return <Pill tone="amber">{sessionStatusLabel[status]}</Pill>;
   return (
-    <Pill tone={sessionTone[status]} pulse={status === 'IN_PROGRESS'}>
+    <Pill tone={status === 'SCHEDULED' ? 'slate' : 'gray'} className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
       {sessionStatusLabel[status]}
     </Pill>
   );
 }
 
-const attendanceTone: Record<AttendanceStatus, PillTone> = { EXPECTED: 'slate', PRESENT: 'green', ABSENT: 'orange' };
-
 export function AttendancePill({ status, reason }: { status: AttendanceStatus; reason?: AbsenceReason }) {
-  return (
-    <Pill tone={attendanceTone[status]} title={reason ? absenceLabel[reason] : undefined}>
-      {attendanceLabel[status]}
-      {status === 'ABSENT' && reason && <span className="font-normal">· {absenceLabel[reason]}</span>}
-    </Pill>
-  );
+  if (status === 'ABSENT') {
+    return (
+      <Pill tone="amber" title={reason ? absenceLabel[reason] : undefined}>
+        {attendanceLabel[status]}
+        {reason && <span className="font-normal">· {absenceLabel[reason]}</span>}
+      </Pill>
+    );
+  }
+  return <Pill tone={status === 'PRESENT' ? 'gray' : 'slate'}>{attendanceLabel[status]}</Pill>;
 }
 
-const requestTone: Record<ExamRequestStatus, PillTone> = { PENDING: 'amber', EXAMINED: 'green', DISMISSED: 'gray' };
+/* ===== Y tế ===== */
 
 export function RequestPill({ status }: { status: ExamRequestStatus }) {
-  return <Pill tone={requestTone[status]}>{examRequestStatusLabel[status]}</Pill>;
+  return <Pill tone={status === 'PENDING' ? 'amber' : status === 'EXAMINED' ? 'gray' : 'slate'}>{examRequestStatusLabel[status]}</Pill>;
 }
 
 export function UrgencyPill({ urgency }: { urgency: ExamUrgency }) {
   return urgency === 'URGENT' ? (
     <Pill tone="red">
-      <AlertOctagon size={11} />
+      <Dot tone="danger" />
       {examUrgencyLabel.URGENT}
     </Pill>
   ) : (
@@ -152,7 +194,7 @@ export function UrgencyPill({ urgency }: { urgency: ExamUrgency }) {
 }
 
 export function CasePill({ status }: { status: MedicalCaseStatus }) {
-  return <Pill tone={status === 'OPEN' ? 'amber' : 'green'}>{caseStatusLabel[status]}</Pill>;
+  return <Pill tone={status === 'OPEN' ? 'amber' : 'gray'}>{caseStatusLabel[status]}</Pill>;
 }
 
 export function LockPill({ reason }: { reason?: string }) {
@@ -165,12 +207,16 @@ export function LockPill({ reason }: { reason?: string }) {
 }
 
 export const notificationTone: Record<NotificationLevel, { dot: string; label: string; pill: PillTone }> = {
-  NORMAL: { dot: 'bg-emerald-500', label: 'Thấp', pill: 'green' },
+  NORMAL: { dot: 'bg-gray-300', label: 'Thấp', pill: 'gray' },
   HIGH: { dot: 'bg-amber-500', label: 'Trung bình', pill: 'amber' },
   URGENT: { dot: 'bg-red-500', label: 'Khẩn', pill: 'red' },
 };
 
-/** "Được tập" / "Được đua" — luôn hiện lý do khi không được phép (A.4.5). */
+/* ===== Được tập / Được đua ===== */
+
+/**
+ * Được phép → chữ xám nhỏ, không nổi bật. Không được phép → đỏ, kèm lý do (A.4.5).
+ */
 export function EligibilityBadge({
   allowed,
   reason,
@@ -183,33 +229,87 @@ export function EligibilityBadge({
   compact?: boolean;
 }) {
   const body = (
-    <span
-      className={cn(
-        'inline-flex max-w-full items-start gap-1.5 text-sm',
-        allowed ? 'text-emerald-700' : 'text-red-600',
-      )}
-    >
-      <span
-        className={cn(
-          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
-          allowed ? 'bg-emerald-100' : 'bg-red-100',
-        )}
-      >
-        {allowed ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
-      </span>
+    <span className={cn('inline-flex max-w-full items-start gap-1.5 text-sm', allowed ? 'text-gray-500' : 'text-red-700')}>
+      <span className="mt-[3px] shrink-0">{allowed ? <Check size={13} strokeWidth={2.5} /> : <X size={13} strokeWidth={2.5} />}</span>
       <span className="min-w-0">
-        <span className="font-semibold">{label}</span>
-        {!allowed && reason && !compact && <span className="block text-xs font-normal text-red-500/90">{reason}</span>}
+        <span className={allowed ? '' : 'font-medium'}>{label}</span>
+        {!allowed && reason && !compact && <span className="block text-xs text-red-600/90">{reason}</span>}
       </span>
     </span>
   );
   return compact && !allowed ? <Tip content={reason}>{body}</Tip> : body;
 }
 
-/** Màu viền ô chuồng theo trạng thái sức khỏe. */
+interface Check_ {
+  allowed: boolean;
+  reason?: string;
+  code?: string;
+}
+
+/**
+ * Gộp "được tập / được đua" thành MỘT câu, lý do chỉ nói một lần.
+ * - variant "line": một dòng chữ (dùng trong header, danh sách).
+ * - variant "banner": dải cảnh báo có viền trái (chỉ hiện khi bị chặn).
+ */
+export function EligibilityLine({
+  train,
+  race,
+  lifecycle,
+  variant = 'line',
+  action,
+}: {
+  train: Check_;
+  race: Check_;
+  lifecycle?: LifecycleStatus;
+  variant?: 'line' | 'banner';
+  action?: React.ReactNode;
+}) {
+  // Giải nghệ / chuyển nhượng: không tập không đua là điều hiển nhiên — không cảnh báo đỏ.
+  if (lifecycle && lifecycle !== 'ACTIVE') {
+    if (variant === 'banner') return null;
+    return <span className="text-sm text-gray-500">{lifecycle === 'RETIRED' ? 'Không học lớp, không đua (đã giải nghệ)' : 'Đã rời câu lạc bộ'}</span>;
+  }
+  if (train.allowed && race.allowed) {
+    if (variant === 'banner') return null;
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
+        <Check size={13} strokeWidth={2.5} /> Được tập · Được đua
+      </span>
+    );
+  }
+  const severe = !train.allowed;
+  const title = !train.allowed ? 'Không được tập và không được đua' : 'Chỉ tập Nhẹ và Trung bình · không được đua';
+  const reason = !train.allowed ? train.reason : race.reason;
+
+  if (variant === 'line') {
+    return (
+      <Tip content={reason}>
+        <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', severe ? 'text-red-700' : 'text-amber-800')}>
+          <X size={13} strokeWidth={2.5} /> {title}
+        </span>
+      </Tip>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center justify-between gap-x-6 gap-y-2 rounded-xl bg-white px-4 py-3 ring-1',
+        severe ? 'shadow-[inset_3px_0_0_0_#ef4444] ring-red-200/70' : 'shadow-[inset_3px_0_0_0_#f59e0b] ring-amber-200/70',
+      )}
+    >
+      <div className="min-w-0 text-sm">
+        <span className={cn('font-semibold', severe ? 'text-red-700' : 'text-amber-800')}>{title}</span>
+        {reason && <span className="text-gray-700"> — {reason}</span>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** Viền ô chuồng: bình thường xám; chỉ bất thường có màu. */
 export const stallBorder: Record<HealthStatus, string> = {
-  ELIGIBLE: 'border-emerald-200 bg-emerald-50/50',
-  UNDER_OBSERVATION: 'border-amber-200 bg-amber-50/60',
-  INJURED: 'border-red-200 bg-red-50/60',
-  QUARANTINED: 'border-fuchsia-200 bg-fuchsia-50/60',
+  ELIGIBLE: 'border-gray-200 bg-white',
+  UNDER_OBSERVATION: 'border-amber-300 bg-white',
+  INJURED: 'border-red-300 bg-white',
+  QUARANTINED: 'border-red-300 bg-white',
 };

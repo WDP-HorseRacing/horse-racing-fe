@@ -1,25 +1,22 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, CalendarClock, CheckCircle2, PlayCircle, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
 import { listClasses, type ClassRow } from '../../../services/training.service';
 import {
   Button,
-  cn,
+  ChipFilter,
   DataTable,
   ErrorBox,
   FilterSelect,
   Meter,
   PageHeader,
-  Pill,
   SearchInput,
-  Segmented,
   Skeleton,
-  Stat,
   Toolbar,
   type Column,
 } from '../../../components/ui';
-import { ClassPill, intensityDot } from '../../../components/ui/status';
+import { ClassPill, IntensityMeter } from '../../../components/ui/status';
 import { classStatusLabel } from '../../../lib/labels';
 import { formatDate, formatDateShort, toDateKey } from '../../../lib/format';
 import { now } from '../../../lib/clock';
@@ -45,7 +42,6 @@ export default function ClassList() {
 
   const counts = data?.counts;
   const today = toDateKey(now());
-  const toggle = (value: ClassStatus) => setStatus((current) => (current === value ? '' : value));
 
   const columns: Column<ClassRow>[] = [
     {
@@ -55,7 +51,7 @@ export default function ClassList() {
       render: (row) => (
         <div>
           <p className="font-semibold text-gray-900">{row.name}</p>
-          <p className="text-xs font-light text-gray-500">Giáo án {row.programName}</p>
+          <p className="text-xs text-gray-500">Giáo án {row.programName}</p>
         </div>
       ),
     },
@@ -65,14 +61,14 @@ export default function ClassList() {
       render: (row) => (
         <div>
           <p className="text-gray-800">{row.zoneName}</p>
-          <p className="text-xs font-light text-gray-500">{row.trainerName}</p>
+          <p className="text-xs text-gray-500">{row.trainerName}</p>
         </div>
       ),
     },
     {
       key: 'slot',
       header: 'Khung giờ',
-      render: (row) => <span className="font-mono text-xs font-medium text-gray-700">{row.slotLabel}</span>,
+      render: (row) => <span className="whitespace-nowrap text-sm text-gray-700 tabular-nums">{row.slotLabel}</span>,
     },
     {
       key: 'time',
@@ -90,12 +86,12 @@ export default function ClassList() {
       render: (row) => (
         <div className="w-28">
           <div className="mb-1 flex justify-between text-xs tabular-nums">
-            <span className="font-semibold text-gray-800">
+            <span className="font-medium text-gray-800">
               {row.enrolled}/{row.capacity}
             </span>
-            {row.enrolled >= row.capacity && <span className="text-amber-700">Đủ</span>}
+            {row.enrolled >= row.capacity && <span className="text-gray-500">Đủ chỗ</span>}
           </div>
-          <Meter value={row.enrolled} max={row.capacity} tone={row.enrolled >= row.capacity ? 'amber' : 'green'} />
+          <Meter value={row.enrolled} max={row.capacity} />
         </div>
       ),
     },
@@ -107,12 +103,12 @@ export default function ClassList() {
       render: (row) => (
         <div>
           <p className="text-sm text-gray-800 tabular-nums">
-            <span className="font-semibold">{row.sessionsDone}</span>
-            <span className="text-gray-400">/{row.sessionsTotal} buổi</span>
+            <span className="font-medium">{row.sessionsDone}</span>
+            <span className="text-gray-500">/{row.sessionsTotal} buổi</span>
           </p>
           {row.nextSession && (row.status === 'ACTIVE' || row.status === 'SCHEDULED') && (
             <p className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-500">
-              <span className={cn('h-1.5 w-1.5 rounded-full', intensityDot[row.nextSession.intensity])} />
+              <IntensityMeter intensity={row.nextSession.intensity} showLabel={false} />
               Kế tiếp{' '}
               {row.nextSession.date === today
                 ? 'hôm nay'
@@ -128,9 +124,8 @@ export default function ClassList() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Huấn luyện · lớp học"
         title="Lớp huấn luyện"
-        description="Mỗi lớp mở từ một giáo án, thuộc một khu và một khung giờ cố định. Buổi học thuộc về lớp; ngựa vào lớp bằng đăng ký."
+        description="Mỗi lớp mở từ một giáo án, thuộc một khu và một khung giờ cố định."
         actions={
           data?.canCreate ? (
             <Button onClick={() => navigate(links.classNew)}>
@@ -140,44 +135,22 @@ export default function ClassList() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-12">
-        <Stat
-          className="lg:col-span-4"
-          value={counts?.ACTIVE ?? '—'}
-          label="Đang chạy"
-          hint="Lớp trong thời gian học"
-          icon={<PlayCircle size={20} />}
-          tone="success"
-          active={status === 'ACTIVE'}
-          onClick={() => toggle('ACTIVE')}
-        />
-        <Stat
-          className="lg:col-span-3"
-          value={counts?.SCHEDULED ?? '—'}
-          label="Sắp tới"
-          hint="Chưa tới ngày bắt đầu"
-          icon={<CalendarClock size={20} />}
-          active={status === 'SCHEDULED'}
-          onClick={() => toggle('SCHEDULED')}
-        />
-        <Stat
-          className="lg:col-span-3"
-          value={counts?.COMPLETED ?? '—'}
-          label="Đã kết thúc"
-          icon={<CheckCircle2 size={20} />}
-          active={status === 'COMPLETED'}
-          onClick={() => toggle('COMPLETED')}
-        />
-        <Stat
-          className="lg:col-span-2"
-          value={counts?.CANCELLED ?? '—'}
-          label="Đã hủy"
-          icon={<Ban size={20} />}
-          tone="danger"
-          active={status === 'CANCELLED'}
-          onClick={() => toggle('CANCELLED')}
-        />
-      </div>
+      <ChipFilter<StatusFilter>
+        value={status}
+        onChange={setStatus}
+        options={[
+          {
+            value: '',
+            label: 'Tất cả',
+            count: counts ? Object.values(counts).reduce((sum, value) => sum + value, 0) : undefined,
+          },
+          ...(['ACTIVE', 'SCHEDULED', 'COMPLETED', 'CANCELLED'] as ClassStatus[]).map((value) => ({
+            value,
+            label: classStatusLabel[value],
+            count: counts?.[value],
+          })),
+        ]}
+      />
 
       <Toolbar>
         <SearchInput value={search} onChange={setSearch} placeholder="Tìm lớp, giáo án, HT…" className="min-w-[220px] flex-1" />
@@ -189,17 +162,6 @@ export default function ClassList() {
             </option>
           ))}
         </FilterSelect>
-        <Segmented<StatusFilter>
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: '', label: 'Tất cả' },
-            ...(['ACTIVE', 'SCHEDULED', 'COMPLETED', 'CANCELLED'] as ClassStatus[]).map((value) => ({
-              value,
-              label: classStatusLabel[value],
-            })),
-          ]}
-        />
       </Toolbar>
 
       {error && <ErrorBox message={error} />}
@@ -218,11 +180,8 @@ export default function ClassList() {
       )}
 
       {data && !data.canCreate && data.rows.length > 0 && (
-        <p className="text-xs font-light text-gray-400">
-          <Pill tone="slate" className="mr-2">
-            Chỉ xem
-          </Pill>
-          Mở, sửa, kết thúc sớm hoặc hủy lớp là việc của huấn luyện viên trưởng phụ trách khu.
+        <p className="text-xs text-gray-500">
+          Chỉ xem — mở, sửa, kết thúc sớm hoặc hủy lớp là việc của huấn luyện viên trưởng phụ trách khu.
         </p>
       )}
     </div>

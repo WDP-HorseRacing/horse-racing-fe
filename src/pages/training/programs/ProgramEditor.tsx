@@ -29,7 +29,7 @@ import {
   Textarea,
   useToast,
 } from '../../../components/ui';
-import { IntensityPill, intensityDot } from '../../../components/ui/status';
+import { IntensityMeter } from '../../../components/ui/status';
 import { intensityLabel, surfaceLabel, workoutLabel } from '../../../lib/labels';
 import { links } from '../../../lib/links';
 import type { ProgramPhase } from '../../../types/domain';
@@ -170,13 +170,13 @@ function EditorForm({
         back={
           <Link
             to={programId ? links.program(programId) : links.programs}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 transition hover:text-gray-700"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition hover:text-gray-800"
           >
             <ArrowLeft size={15} /> {programId ? 'Về giáo án' : 'Danh sách giáo án'}
           </Link>
         }
         title={programId ? `Sửa giáo án "${initial?.name}"` : 'Soạn giáo án mới'}
-        description="Giáo án là khuôn mẫu không ngày, không gắn ngựa. Xếp môn học vào từng giai đoạn kèm số buổi mỗi tuần; ngày cụ thể chỉ sinh ra khi mở lớp."
+        description="Xếp môn học vào từng giai đoạn kèm số buổi mỗi tuần; ngày cụ thể chỉ sinh ra khi mở lớp."
         actions={
           <Button onClick={submit} disabled={action.pending || (touched && blocking)}>
             <Save size={16} /> {action.pending ? 'Đang lưu…' : programId ? 'Lưu giáo án' : 'Tạo giáo án'}
@@ -216,8 +216,8 @@ function EditorForm({
             const errors = phaseIssues(index);
             return (
               <div key={phase.key} ref={index === phases.length - 1 ? lastPhaseRef : undefined}>
-                <Card className={cn('relative overflow-hidden', errors.length > 0 && 'ring-red-200')}>
-                  <span className={cn('absolute inset-y-0 left-0 w-1.5', phaseTone(index).split(' ')[0])} />
+                <Card tone={errors.length > 0 ? 'danger' : 'default'} className="relative overflow-hidden">
+                  {errors.length === 0 && <span className={cn('absolute inset-y-0 left-0 w-1.5', phaseTone(index).split(' ')[0])} />}
                   <div className="flex flex-wrap items-end gap-3">
                     <Field label={`Giai đoạn ${index + 1}`} className="min-w-[200px] flex-1">
                       <Input
@@ -262,11 +262,11 @@ function EditorForm({
                   </div>
 
                   <div className="mt-5 space-y-2">
-                    <p className="px-1 text-xs font-medium text-gray-400">Môn học và số buổi mỗi tuần</p>
+                    <p className="px-1 text-xs font-medium text-gray-500">Môn học và số buổi mỗi tuần</p>
                     {phase.items.map((item) => {
                       const subject = byId.get(item.subjectId);
                       return (
-                        <div key={item.key} className="flex flex-wrap items-start gap-3 rounded-xl bg-emerald-50/40 p-2.5">
+                        <div key={item.key} className="flex flex-wrap items-start gap-3 rounded-xl bg-gray-50 p-2.5">
                           <div className="min-w-[220px] flex-1">
                             <Select
                               aria-label="Môn học"
@@ -283,10 +283,7 @@ function EditorForm({
                             </Select>
                             {subject && (
                               <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-gray-500">
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span className={cn('h-2 w-2 rounded-full', intensityDot[subject.intensity])} />
-                                  {intensityLabel[subject.intensity]}
-                                </span>
+                                <IntensityMeter intensity={subject.intensity} />
                                 <span>{workoutLabel[subject.workoutType]}</span>
                                 <span>Sân {surfaceLabel[subject.surface].toLowerCase()}</span>
                               </p>
@@ -334,7 +331,7 @@ function EditorForm({
                     <span
                       className={cn(
                         'text-sm tabular-nums',
-                        perWeek > 7 ? 'font-semibold text-red-600' : perWeek === 7 ? 'text-amber-700' : 'text-gray-500',
+                        perWeek > 7 ? 'font-semibold text-red-700' : perWeek === 7 ? 'text-amber-700' : 'text-gray-500',
                       )}
                     >
                       {perWeek}/7 buổi mỗi tuần
@@ -343,7 +340,7 @@ function EditorForm({
                   </div>
 
                   {errors.length > 0 && (
-                    <ul className="mt-3 space-y-1 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                    <ul className="mt-3 space-y-1 text-sm text-red-700">
                       {errors.map((issue) => (
                         <li key={issue.message}>{issue.message}</li>
                       ))}
@@ -364,7 +361,7 @@ function EditorForm({
               ]);
               window.setTimeout(() => lastPhaseRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
             }}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-emerald-900/10 py-5 text-sm font-medium text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50/50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 py-5 text-sm font-medium text-gray-600 transition hover:border-gray-300 hover:bg-white hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus size={16} />
             {phases.length >= PROGRAM_LIMITS.maxPhases
@@ -379,27 +376,27 @@ function EditorForm({
             <PhaseTimeline phases={summary.phases} size="lg" showRuler />
             <dl className="mt-5 grid grid-cols-2 gap-4">
               <div>
-                <dt className="text-xs font-light text-gray-400">Tổng thời lượng</dt>
+                <dt className="text-xs text-gray-500">Tổng thời lượng</dt>
                 <dd
                   className={cn(
                     'text-2xl font-bold tabular-nums',
-                    summary.totalWeeks > PROGRAM_LIMITS.maxTotalWeeks ? 'text-red-600' : 'text-gray-900',
+                    summary.totalWeeks > PROGRAM_LIMITS.maxTotalWeeks ? 'text-red-700' : 'text-gray-900',
                   )}
                 >
                   {summary.totalWeeks}
-                  <span className="ml-1 text-sm font-medium text-gray-400">/ {PROGRAM_LIMITS.maxTotalWeeks} tuần</span>
+                  <span className="ml-1 text-sm font-medium text-gray-500">/ {PROGRAM_LIMITS.maxTotalWeeks} tuần</span>
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-light text-gray-400">Tổng số buổi</dt>
+                <dt className="text-xs text-gray-500">Tổng số buổi</dt>
                 <dd className="text-2xl font-bold text-gray-900 tabular-nums">{summary.totalSessions}</dd>
               </div>
               <div>
-                <dt className="text-xs font-light text-gray-400">Cường độ cao nhất</dt>
-                <dd className="mt-1">{summary.maxIntensity ? <IntensityPill intensity={summary.maxIntensity} /> : '—'}</dd>
+                <dt className="text-xs text-gray-500">Cường độ cao nhất</dt>
+                <dd className="mt-1">{summary.maxIntensity ? <IntensityMeter intensity={summary.maxIntensity} /> : '—'}</dd>
               </div>
               <div>
-                <dt className="text-xs font-light text-gray-400">Khối lượng đỉnh</dt>
+                <dt className="text-xs text-gray-500">Khối lượng đỉnh</dt>
                 <dd className="font-semibold text-gray-900 tabular-nums">{volumeLabel(summary.peakWeeklyVolumeM)}/tuần</dd>
               </div>
             </dl>
@@ -413,7 +410,7 @@ function EditorForm({
                     {phase.sessionsPerWeek} buổi/tuần · {volumeLabel(phase.weeklyVolumeM)}
                   </span>
                   {phase.maxIntensity && (
-                    <span className={cn('h-2 w-2 shrink-0 rounded-full', intensityDot[phase.maxIntensity])} title={intensityLabel[phase.maxIntensity]} />
+                    <IntensityMeter intensity={phase.maxIntensity} showLabel={false} />
                   )}
                 </div>
               ))}
@@ -428,11 +425,9 @@ function EditorForm({
           )}
 
           {warnings.length > 0 && (
-            <div className="space-y-2 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 shadow-amber ring-1 ring-amber-100">
-              <p className="flex items-center gap-2 font-semibold">
-                <AlertTriangle size={15} /> Cảnh báo — vẫn lưu được
-              </p>
-              <ul className="space-y-1.5">
+            <Notice tone="warning" icon={<AlertTriangle size={15} />}>
+              <p className="font-semibold">Cảnh báo — vẫn lưu được</p>
+              <ul className="mt-1.5 space-y-1.5">
                 {warnings.map((warning) => (
                   <li key={warning} className="flex gap-2">
                     <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-amber-500" />
@@ -440,13 +435,13 @@ function EditorForm({
                   </li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
 
           {touched && blocking && (
-            <div className="space-y-2 rounded-2xl bg-red-50 p-4 text-sm text-red-800 ring-1 ring-red-100">
+            <Notice tone="danger">
               <p className="font-semibold">Cần sửa trước khi lưu</p>
-              <ul className="space-y-1">
+              <ul className="mt-1.5 space-y-1">
                 {issues.map((issue) => (
                   <li key={issue.message} className="flex gap-2">
                     <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-red-500" />
@@ -454,11 +449,11 @@ function EditorForm({
                   </li>
                 ))}
               </ul>
-            </div>
+            </Notice>
           )}
 
           {!touched && (
-            <p className="px-1 text-xs font-light text-gray-400">
+            <p className="px-1 text-xs text-gray-500">
               Tối đa {PROGRAM_LIMITS.maxPhases} giai đoạn, mỗi giai đoạn 1–{PROGRAM_LIMITS.maxWeeks} tuần, tổng không quá{' '}
               {PROGRAM_LIMITS.maxTotalWeeks} tuần. Mỗi tuần tối đa 7 buổi vì lớp học dùng một khung giờ cố định.
             </p>

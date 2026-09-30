@@ -24,6 +24,7 @@ import {
   Notice,
   NotFound,
   PageHeader,
+  Pill,
   SectionTitle,
   Select,
   Skeleton,
@@ -72,13 +73,13 @@ function CheckLine({ ok, children, optional }: { ok: boolean | undefined; childr
     <li className="flex items-start gap-2.5 text-sm">
       <span
         className={cn(
-          'mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full',
-          ok === undefined ? 'text-gray-300' : ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600',
+          'mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center',
+          ok === undefined ? 'text-gray-300' : ok ? 'text-emerald-700' : 'text-red-600',
         )}
       >
-        {ok === undefined ? <CircleDashed size={14} /> : ok ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+        {ok === undefined ? <CircleDashed size={14} /> : ok ? <Check size={14} strokeWidth={2.5} /> : <X size={14} strokeWidth={2.5} />}
       </span>
-      <span className={cn(ok === false ? 'text-red-600' : 'text-gray-600', optional && ok === undefined && 'text-gray-400')}>{children}</span>
+      <span className={cn(ok === false ? 'text-red-700' : 'text-gray-700', optional && ok === undefined && 'text-gray-500')}>{children}</span>
     </li>
   );
 }
@@ -209,13 +210,13 @@ export default function HorseForm() {
   const lockedNote = disabledIdentity ? 'Chỉ Quản lý câu lạc bộ sửa được' : undefined;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         back={
           <button
             type="button"
             onClick={() => navigate(editing && horse ? links.horse(horse.id) : links.horses)}
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-emerald-700"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900"
           >
             <ArrowLeft size={15} /> {editing ? 'Về hồ sơ' : 'Danh sách ngựa'}
           </button>
@@ -223,10 +224,10 @@ export default function HorseForm() {
         title={editing ? `Sửa hồ sơ ${horse?.name ?? ''}` : 'Thêm ngựa mới'}
         description={
           preferenceOnly
-            ? 'Huấn luyện viên trưởng chỉ cập nhật sở trường cự ly cho ngựa trong khu mình phụ trách.'
+            ? 'HT chỉ cập nhật sở trường cự ly cho ngựa trong khu mình phụ trách.'
             : editing
-              ? 'Cập nhật thông tin định danh, phả hệ và chủ sở hữu. Đổi khu làm ở sơ đồ chuồng.'
-              : 'Bắt buộc tên và giới tính. Các trường khác có thể bổ sung sau.'
+              ? 'Đổi khu làm ở sơ đồ chuồng.'
+              : 'Bắt buộc tên và giới tính; các trường khác bổ sung sau được.'
         }
       />
 
@@ -279,7 +280,7 @@ export default function HorseForm() {
             </div>
           </Card>
 
-          <Card className={cn(preferenceOnly && 'ring-2 ring-emerald-400/60')}>
+          <Card>
             <SectionTitle>Sở trường cự ly</SectionTitle>
             <div className="grid gap-2 sm:grid-cols-4">
               {([['', 'Chưa xác định', 'Để trống'], ...(Object.keys(distanceLabel) as DistancePreference[]).map((key) => [key, distanceLabel[key], distanceHint[key]])] as [string, string, string][]).map(
@@ -292,11 +293,11 @@ export default function HorseForm() {
                       'rounded-xl border px-4 py-3 text-left transition',
                       form.distancePreference === value
                         ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/15'
-                        : 'border-gray-200 bg-white hover:border-emerald-300',
+                        : 'border-gray-200 bg-white hover:border-gray-300',
                     )}
                   >
                     <p className="text-sm font-semibold text-gray-900">{label}</p>
-                    <p className="text-xs text-gray-400">{hint}</p>
+                    <p className="text-xs text-gray-500">{hint}</p>
                   </button>
                 ),
               )}
@@ -307,7 +308,7 @@ export default function HorseForm() {
           {!preferenceOnly && (
             <Card>
               <SectionTitle>Phả hệ</SectionTitle>
-              <p className="-mt-2 mb-4 text-sm font-light text-gray-500">
+              <p className="-mt-2 mb-4 text-sm text-gray-500">
                 Chỉ chọn ngựa có hồ sơ tại câu lạc bộ (kể cả đã giải nghệ, đã chuyển nhượng). Ngày sinh của cha mẹ phải trước ngày sinh của ngựa.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -382,28 +383,26 @@ export default function HorseForm() {
 
         <aside className="lg:col-span-4">
           <div className="space-y-4 lg:sticky lg:top-6">
-            <div className="overflow-hidden rounded-2xl bg-linear-to-br from-emerald-800 to-emerald-950 p-5 text-white shadow-grass-lift">
+            <Card>
               <div className="flex items-center gap-4">
-                <Avatar src={form.avatar} name={form.name || '?'} size={72} className="rounded-2xl ring-2 ring-white/20" />
+                <Avatar src={form.avatar} name={form.name || '?'} size={64} className="rounded-2xl" />
                 <div className="min-w-0">
-                  <div className="truncate text-xl font-bold">{form.name.trim() || 'Ngựa chưa đặt tên'}</div>
-                  <p className="font-mono text-xs text-emerald-200/80">{form.chipNumber || 'chưa có chip'}</p>
+                  <div className="truncate text-lg font-bold text-gray-900">{form.name.trim() || 'Ngựa chưa đặt tên'}</div>
+                  <p className="font-mono text-xs text-gray-400">{form.chipNumber || 'chưa có chip'}</p>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-1.5 text-xs">
-                <span className="rounded-lg bg-white/10 px-2 py-0.5">{form.sex ? sexLabel[form.sex] : 'Chưa chọn giới tính'}</span>
-                {form.breed && <span className="rounded-lg bg-white/10 px-2 py-0.5">{form.breed}</span>}
-                {form.birthDate && <span className="rounded-lg bg-white/10 px-2 py-0.5">Sinh {formatDate(form.birthDate)}</span>}
-                {form.distancePreference && (
-                  <span className="rounded-lg bg-emerald-400/20 px-2 py-0.5 text-emerald-100">{distanceLabel[form.distancePreference]}</span>
-                )}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                <Pill tone="gray">{form.sex ? sexLabel[form.sex] : 'Chưa chọn giới tính'}</Pill>
+                {form.breed && <Pill tone="gray">{form.breed}</Pill>}
+                {form.birthDate && <Pill tone="gray">Sinh {formatDate(form.birthDate)}</Pill>}
+                {form.distancePreference && <Pill tone="gray">{distanceLabel[form.distancePreference]}</Pill>}
               </div>
               {!editing && (
-                <p className="mt-4 border-t border-white/10 pt-3 text-sm text-emerald-100/90">
+                <p className="mt-4 border-t border-gray-100 pt-3 text-sm text-gray-600">
                   {checks.zoneName ? `Sẽ vào ${checks.zoneName} — chờ HT xếp ô và Groom` : 'Sẽ vào danh sách Chờ xếp khu'}
                 </p>
               )}
-            </div>
+            </Card>
 
             <Card variant="flat">
               <p className="mb-3 text-sm font-semibold text-gray-800">Tóm tắt kiểm tra</p>
@@ -412,8 +411,9 @@ export default function HorseForm() {
                   <CheckLine ok={true}>Chỉ trường sở trường cự ly được gửi đi</CheckLine>
                 ) : (
                   <>
-                    <CheckLine ok={checks.name}>Có tên ngựa</CheckLine>
-                    <CheckLine ok={checks.sex}>Đã chọn giới tính</CheckLine>
+                    {/* Chưa điền trường bắt buộc chỉ là "chưa xong" (xám), không phải lỗi. */}
+                    <CheckLine ok={checks.name || undefined}>Có tên ngựa</CheckLine>
+                    <CheckLine ok={checks.sex || undefined}>Đã chọn giới tính</CheckLine>
                     <CheckLine ok={checks.birth} optional>
                       {checks.birth === false ? 'Ngày sinh đang ở tương lai' : 'Ngày sinh không ở tương lai'}
                     </CheckLine>

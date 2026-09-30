@@ -51,7 +51,7 @@ export default function AvatarPicker({
             </Button>
           )}
         </div>
-        <p className="text-xs font-light text-gray-400">JPEG, PNG hoặc WebP, tối đa 10 MB</p>
+        <p className="text-xs text-gray-500">JPEG, PNG hoặc WebP, tối đa 10 MB</p>
         {error && <p className="text-xs font-medium text-red-600">{error}</p>}
       </div>
       <input
