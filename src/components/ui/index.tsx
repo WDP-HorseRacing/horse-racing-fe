@@ -18,6 +18,7 @@ import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Inbox, Mo
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import gsap from 'gsap';
+import { prefersReducedMotion } from '../../lib/motion';
 
 /** Ghép class Tailwind, class truyền sau thắng class mặc định. */
 export function cn(...inputs: ClassValue[]) {
@@ -1118,7 +1119,7 @@ export function Reveal({ children, className = '' }: { children: ReactNode; clas
   useEffect(() => {
     if (!ref.current) return;
     const targets = ref.current.querySelectorAll('[data-reveal]');
-    if (targets.length === 0) return;
+    if (targets.length === 0 || prefersReducedMotion()) return;
     const tween = gsap.fromTo(
       targets,
       { opacity: 0, y: 16 },

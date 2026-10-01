@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { MotionConfig } from 'motion/react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
@@ -103,6 +104,7 @@ function App() {
   }, [bootstrap]);
 
   return (
+    <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -149,6 +151,7 @@ function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </MotionConfig>
   );
 }
 
