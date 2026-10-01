@@ -8,6 +8,7 @@ import type { WeekDay, WeekItem } from '../../components/WeekStrip';
 import { careTypeLabel } from '../../lib/api-labels';
 import { addDays, daysBetween, formatDateShort, formatTime, toDateKey } from '../../lib/format';
 import { links } from '../../lib/links';
+import { primeZoneScope } from '../../hooks/useMyScope';
 import { now } from '../../lib/clock';
 
 export const inClub = (horse: HorseListItem) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED';
@@ -167,6 +168,7 @@ export async function loadTrainer(userId: string) {
   const mine = horses.filter(inClub);
   const ids = new Set(mine.map((horse) => horse.id));
   const care = dashboardCare(medical);
+  primeZoneScope(userId, barns, stalls);
   return {
     horses: mine,
     barns: barns.filter((barn) => barn.headTrainerId === userId),

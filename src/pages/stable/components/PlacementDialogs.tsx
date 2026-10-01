@@ -1,13 +1,14 @@
 // Hộp thoại xếp chỗ dùng chung cho sơ đồ chuồng và hồ sơ ngựa (F1.6, F1.7).
-// CM xếp/đổi khu; HT của khu xếp ô + Groom (một lần), chuyển ô, đổi Groom, gỡ khỏi ô.
+// CM xếp/đổi khu; HT của khu xếp ô hoặc chuyển ô (chỉ chọn ô), giao/đổi Groom (riêng), gỡ khỏi ô.
 import { useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, Info } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Info, UserRound } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
 import { assignBarn, previewBarn } from '../../../api/horses';
-import { assignGroom, listBarns, listGroomWorkload, listStalls, moveStall, placeHorse, removeFromStall } from '../../../api/stable';
+import { assignGroom, listBarns, listGroomHistory, listGroomWorkload, listStalls, moveStall, removeFromStall } from '../../../api/stable';
+import { ChoiceList } from '../../../components/ui/ChoiceList';
 import type { HealthStatus, PlacementStatus } from '../../../api/types';
 import { barnBlocker } from './barn';
-import { Button, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { Button, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 
 export interface PlacementHorse {
   id: string;
@@ -160,34 +161,41 @@ export function AssignZoneDialog({
   );
 }
 
-/* ===== HT xếp ô (kèm Groom bắt buộc) hoặc chuyển ô ===== */
+/* ===== HT xếp ô hoặc chuyển ô (chỉ chọn ô; Groom phân công riêng) ===== */
 
 export function AssignStallDialog({
   horse,
   onClose,
   onDone,
   presetStallId,
+  onAssignGroom,
 }: {
   horse: PlacementHorse | null;
   onClose: () => void;
   onDone: () => void;
   presetStallId?: string;
+  /** Có thì sau khi xếp ô cho ngựa chưa có Groom, thông báo có nút "Giao Groom". */
+  onAssignGroom?: (horse: PlacementHorse) => void;
 }) {
   const toast = useToast();
   const action = useAction();
   const [stallId, setStallId] = useState('');
-  const [groomId, setGroomId] = useState('');
   const stalls = useService(
     () => (horse?.barnId ? listStalls({ barnId: horse.barnId, status: 'AVAILABLE' }) : Promise.resolve([])),
     [horse?.id, horse?.barnId],
   );
   const moving = !!horse?.stallId;
-  // Chuyển ô không đổi Groom; xếp ô lần đầu bắt buộc chọn Groom (một lần gửi).
-  const grooms = useService(() => (horse && !moving ? listGroomWorkload() : Promise.resolve([])), [horse?.id, moving]);
+  // Xếp ô lần đầu: xem ngựa đã có Groom chưa (gỡ khỏi ô vẫn giữ Groom) để nhắc giao sau.
+  const currentGroom = useService(async () => {
+    if (!horse || moving) return null;
+    if (horse.groomId) return { id: horse.groomId, fullName: horse.groomName ?? 'Groom' };
+    const history = await listGroomHistory(horse.id).catch(() => []);
+    const active = history.find((item) => !item.endAt);
+    return active ? { id: active.groomId, fullName: active.groom?.fullName ?? 'Groom' } : null;
+  }, [horse?.id, moving]);
 
   useEffect(() => {
     setStallId(presetStallId ?? '');
-    setGroomId(horse?.groomId ?? '');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id, presetStallId]);
@@ -195,19 +203,22 @@ export function AssignStallDialog({
   const submit = async () => {
     if (!horse) return;
     const done = await action.run(async () => {
-      if (moving) await moveStall(horse.id, stallId);
-      else await placeHorse(horse.id, stallId, groomId);
+      await moveStall(horse.id, stallId);
       return true;
     });
     if (done) {
-      const code = stalls.data?.find((item) => item.id === stallId)?.code;
-      toast.push(`${horse.name} đã vào ô ${code ?? ''}`, 'success');
+      const code = stalls.data?.find((item) => item.id === stallId)?.code ?? '';
+      const needsGroom = !moving && !currentGroom.data;
+      const placed: PlacementHorse = { ...horse, stallId, stallCode: code, placementStatus: 'PLACED' };
+      toast.push(
+        needsGroom ? `${horse.name} đã vào ô ${code}, chưa có Groom` : `${horse.name} đã vào ô ${code}`,
+        'success',
+        needsGroom && onAssignGroom ? { label: 'Giao Groom', onClick: () => onAssignGroom(placed) } : undefined,
+      );
       onDone();
       onClose();
     }
   };
-
-  const sortedGrooms = [...(grooms.data ?? [])].sort((a, b) => a.activeHorseCount - b.activeHorseCount || a.fullName.localeCompare(b.fullName, 'vi'));
 
   return (
     <Modal
@@ -221,7 +232,7 @@ export function AssignStallDialog({
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!stallId || (!moving && !groomId) || action.pending}>
+          <Button onClick={submit} disabled={!stallId || action.pending}>
             {action.pending ? 'Đang lưu…' : moving ? 'Chuyển sang ô này' : 'Xếp vào ô'}
           </Button>
         </>
@@ -238,21 +249,27 @@ export function AssignStallDialog({
             Chọn ô trống<span className="ml-0.5 text-red-500">*</span>
           </p>
           {stalls.loading ? (
-            <Skeleton rows={1} />
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div key={index} className="skeleton h-12 rounded-xl" />
+              ))}
+            </div>
           ) : (stalls.data ?? []).length === 0 ? (
             <Notice tone="warning">Khu không còn ô trống. Quản lý câu lạc bộ cần thêm ô, kết thúc bảo trì một ô, hoặc đổi khu cho ngựa.</Notice>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            <div role="radiogroup" aria-label="Ô trống" className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {(stalls.data ?? []).map((stall) => (
                 <button
                   key={stall.id}
                   type="button"
+                  role="radio"
+                  aria-checked={stallId === stall.id}
                   onClick={() => setStallId(stall.id)}
                   className={cn(
                     'rounded-xl border px-3 py-3 font-mono text-sm font-semibold transition',
                     stallId === stall.id
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500/20'
-                      : 'border-dashed border-gray-300 bg-white text-gray-700 hover:border-gray-400',
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-[0_10px_24px_-18px_rgba(6,78,59,0.6)] ring-2 ring-emerald-500/20'
+                      : 'border-dashed border-gray-300 bg-white text-gray-700 hover:border-emerald-400 hover:bg-emerald-50/30',
                   )}
                 >
                   {stall.code}
@@ -261,27 +278,27 @@ export function AssignStallDialog({
             </div>
           )}
         </div>
-        {moving ? (
-          <p className="text-sm text-gray-500">Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}; ô cũ được trả về trống.</p>
-        ) : (
-          <Field label="Groom phụ trách" required hint="Bắt buộc khi xếp ô. Groom được phân công theo con ngựa, không theo ô.">
-            <Select value={groomId} onChange={(event) => setGroomId(event.target.value)}>
-              <option value="">— Chọn Groom —</option>
-              {sortedGrooms.map((groom) => (
-                <option key={groom.groomId} value={groom.groomId}>
-                  {groom.fullName} · đang phụ trách {groom.activeHorseCount} ngựa
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
+        <p className="flex items-start gap-2 rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600">
+          <UserRound size={15} className="mt-0.5 shrink-0 text-gray-400" />
+          {moving ? (
+            <span>Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}; ô cũ được trả về trống.</span>
+          ) : currentGroom.loading ? (
+            <span className="text-gray-400">Đang kiểm tra Groom phụ trách…</span>
+          ) : currentGroom.data ? (
+            <span>
+              Groom phụ trách giữ nguyên: <span className="font-medium text-gray-900">{currentGroom.data.fullName}</span>.
+            </span>
+          ) : (
+            <span>Ngựa chưa có Groom. Xếp ô xong, giao Groom ở menu ô (Giao Groom) hoặc trong hồ sơ ngựa.</span>
+          )}
+        </p>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
 }
 
-/* ===== HT đổi Groom ===== */
+/* ===== HT giao / đổi Groom ===== */
 
 export function GroomDialog({
   horse,
@@ -307,17 +324,22 @@ export function GroomDialog({
     if (!horse) return;
     const done = await action.run(() => assignGroom(horse.id, groomId));
     if (done) {
-      toast.push(`Đã phân công Groom cho ${horse.name}`, 'success');
+      toast.push(`Đã giao Groom cho ${horse.name}`, 'success');
       onDone();
       onClose();
     }
   };
 
+  // Ít việc nhất lên đầu; thanh khối lượng so với Groom nhiều ngựa nhất.
+  const list = [...(grooms.data ?? [])].sort((a, b) => a.activeHorseCount - b.activeHorseCount || a.fullName.localeCompare(b.fullName, 'vi'));
+  const most = Math.max(1, ...list.map((groom) => groom.activeHorseCount));
+
   return (
     <Modal
       open={!!horse}
       onClose={onClose}
-      title={horse?.groomId ? `Đổi Groom cho ${horse?.name}` : `Phân công Groom cho ${horse?.name ?? ''}`}
+      width="max-w-2xl"
+      title={horse?.groomId ? `Đổi Groom cho ${horse?.name}` : `Giao Groom cho ${horse?.name ?? ''}`}
       description={horse?.groomName ? `Đang phụ trách: ${horse.groomName}` : 'Ngựa chưa có Groom phụ trách'}
       footer={
         <>
@@ -325,24 +347,35 @@ export function GroomDialog({
             Quay lại
           </Button>
           <Button onClick={submit} disabled={!groomId || action.pending}>
-            {action.pending ? 'Đang lưu…' : 'Phân công'}
+            {action.pending ? 'Đang lưu…' : 'Giao Groom'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Groom" required>
-          <Select value={groomId} onChange={(event) => setGroomId(event.target.value)}>
-            <option value="">— Chọn Groom —</option>
-            {(grooms.data ?? [])
-              .filter((groom) => groom.groomId !== horse?.groomId)
-              .map((groom) => (
-                <option key={groom.groomId} value={groom.groomId}>
-                  {groom.fullName} · đang phụ trách {groom.activeHorseCount} ngựa
-                </option>
-              ))}
-          </Select>
-        </Field>
+        {grooms.loading && !grooms.data ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="skeleton h-16 rounded-xl" />
+            ))}
+          </div>
+        ) : (
+          <ChoiceList
+            label="Groom"
+            value={groomId}
+            onChange={setGroomId}
+            empty="Chưa có Groom nào đang hoạt động."
+            choices={list.map((groom) => ({
+              value: groom.groomId,
+              title: groom.fullName,
+              meta: `Đang phụ trách ${groom.activeHorseCount} ngựa`,
+              badge: groom.groomId === horse?.groomId ? 'Hiện tại' : undefined,
+              disabled: groom.groomId === horse?.groomId,
+              load: groom.activeHorseCount / most,
+            }))}
+          />
+        )}
+        <p className="text-xs text-gray-500">Groom được phân công theo con ngựa, không theo ô: chuyển ô vẫn giữ Groom.</p>
         {horse?.groomId && (
           <Notice tone="info">Groom cũ và Groom mới đều nhận thông báo. Groom cũ vẫn xem được hồ sơ nhưng không thao tác được nữa.</Notice>
         )}

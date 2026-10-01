@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAction } from '../../../hooks/useService';
 import { createBarn, createStall, updateBarn, updateStall } from '../../../api/stable';
 import type { BarnListItem, BarnStatus, Stall, StallType, UserAccount } from '../../../api/types';
-import { Button, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToast } from '../../../components/ui';
+import { Button, ConfirmDialog, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToast } from '../../../components/ui';
+import { ChoiceList } from '../../../components/ui/ChoiceList';
 import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
 import { MAX_STALLS_PER_BARN } from './barn';
@@ -110,11 +111,14 @@ export function ZoneFormDialog({
 export function HeadTrainerDialog({
   zone,
   headTrainers,
+  barns = [],
   onClose,
   onDone,
 }: {
   zone: BarnListItem | null;
   headTrainers: UserAccount[];
+  /** Mọi khu: để ghi dưới tên mỗi HT các khu họ đang phụ trách. */
+  barns?: BarnListItem[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -129,47 +133,113 @@ export function HeadTrainerDialog({
   }, [zone?.id]);
 
   const submit = async () => {
-    if (!zone) return;
-    const done = await action.run(() => updateBarn(zone.id, { headTrainerId: headTrainerId || null }));
+    if (!zone || !headTrainerId) return;
+    const done = await action.run(() => updateBarn(zone.id, { headTrainerId }));
     if (done) {
-      toast.push(headTrainerId ? 'Đã đổi HT phụ trách' : 'Đã gỡ HT phụ trách', 'success');
+      toast.push(zone.headTrainerId ? 'Đã đổi HT phụ trách' : 'Đã gán HT phụ trách', 'success');
       onDone();
       onClose();
     }
   };
 
+  const zonesOf = (userId: string) => barns.filter((barn) => barn.headTrainerId === userId).map((barn) => barn.name);
+
   return (
     <Modal
       open={!!zone}
       onClose={onClose}
-      title={`HT phụ trách ${zone?.name ?? ''}`}
+      width="max-w-2xl"
+      title={`${zone?.headTrainerId ? 'Đổi' : 'Gán'} HT phụ trách ${zone?.name ?? ''}`}
       description={zone?.headTrainerFullName ? `Hiện tại: ${zone.headTrainerFullName}` : 'Khu chưa có HT phụ trách'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || (headTrainerId || null) === (zone?.headTrainerId ?? null)}>
+          <Button onClick={submit} disabled={action.pending || !headTrainerId || headTrainerId === (zone?.headTrainerId ?? '')}>
             {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="HT phụ trách">
-          <Select value={headTrainerId} onChange={(event) => setHeadTrainerId(event.target.value)}>
-            <option value="">— Gỡ HT (chỉ khi khu không còn ngựa) —</option>
-            {headTrainers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.fullName}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Notice tone="info">Đổi sang HT khác luôn được, kể cả khi khu còn ngựa: ngựa chuyển sang phạm vi của HT mới ngay.</Notice>
+        <ChoiceList
+          label="HT phụ trách"
+          value={headTrainerId}
+          onChange={setHeadTrainerId}
+          empty="Chưa có Head Trainer nào đang hoạt động."
+          choices={headTrainers.map((item) => {
+            const names = zonesOf(item.id);
+            return {
+              value: item.id,
+              title: item.fullName,
+              meta: names.length ? `Đang phụ trách ${names.join(', ')}` : 'Chưa phụ trách khu nào',
+              badge: item.id === zone?.headTrainerId ? 'Hiện tại' : undefined,
+            };
+          })}
+        />
+        <Notice tone="info">Đổi sang HT khác luôn được, kể cả khi khu còn ngựa: ngựa chuyển sang phạm vi của HT mới ngay. Muốn bỏ trống HT, dùng mục "Gỡ HT phụ trách" trong menu khu.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
+  );
+}
+
+/* ===== Gỡ HT phụ trách (thao tác riêng, có xác nhận) ===== */
+
+export function UnassignTrainerDialog({
+  zone,
+  horseCount,
+  onClose,
+  onDone,
+}: {
+  zone: BarnListItem | null;
+  /** Số ngựa còn trong khu: còn ngựa thì không gỡ được. */
+  horseCount: number;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const action = useAction();
+  useEffect(() => {
+    action.clearError();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone?.id]);
+  const blocked = horseCount > 0;
+
+  return (
+    <ConfirmDialog
+      open={!!zone}
+      title={`Gỡ HT phụ trách ${zone?.name ?? ''}`}
+      message={
+        blocked ? (
+          <>Không gỡ được: khu còn {horseCount} ngựa. Đổi khu cho các ngựa này trước, hoặc đổi sang HT khác.</>
+        ) : (
+          <>
+            Gỡ <span className="font-semibold text-gray-900">{zone?.headTrainerFullName ?? 'HT'}</span> khỏi {zone?.name}. Khu sẽ không có ai phụ trách.
+          </>
+        )
+      }
+      consequences={blocked ? [] : ['Khu ngừng nhận ngựa mới cho tới khi có HT', 'Không ai xếp ô, chuyển ô hay giao Groom trong khu này']}
+      confirmLabel="Gỡ HT"
+      disabled={blocked}
+      pending={action.pending}
+      onClose={onClose}
+      onConfirm={async () => {
+        if (!zone) return;
+        const done = await action.run(async () => {
+          await updateBarn(zone.id, { headTrainerId: null });
+          return true;
+        });
+        if (done) {
+          toast.push(`Đã gỡ HT phụ trách ${zone.name}`, 'success');
+          onDone();
+          onClose();
+        }
+      }}
+    >
+      {action.error && <ErrorBox message={action.error} />}
+    </ConfirmDialog>
   );
 }
 

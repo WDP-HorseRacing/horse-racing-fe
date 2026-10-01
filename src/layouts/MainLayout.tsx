@@ -29,8 +29,7 @@ import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
 import { links } from '../lib/links';
-import { useService } from '../hooks/useService';
-import { listBarns } from '../api/stable';
+import { useMyScope } from '../hooks/useMyScope';
 import { formatRelative } from '../lib/format';
 import { now } from '../lib/clock';
 import { playAlertBeep } from '../lib/sound';
@@ -261,28 +260,26 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
               <p className="mb-1 px-3 text-xs font-medium text-gray-400">{group.group}</p>
             ))}
           {group.items.map((item) => {
+            // className phải là chuỗi: Tooltip.Trigger (asChild) ghép class bằng nối chuỗi nên làm hỏng className dạng hàm.
+            // Mục đang mở nhận aria-current="page" từ NavLink, tô màu bằng biến thể aria-[current=page].
             const link = (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end={item.path === links.dashboard}
                 onClick={onNavigate}
-                className={({ isActive }) =>
-                  cn(
-                    'group flex items-center gap-3 rounded-lg text-sm font-medium transition-colors duration-150',
-                    collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
-                    isActive
-                      ? 'bg-emerald-50 font-semibold text-emerald-800'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  )
-                }
+                className={cn(
+                  'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900',
+                  'aria-[current=page]:bg-emerald-50 aria-[current=page]:font-semibold aria-[current=page]:text-emerald-800 aria-[current=page]:hover:bg-emerald-50',
+                  collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
+                )}
               >
                 <item.icon size={17} className="shrink-0" />
                 {!collapsed && <span className="truncate">{item.name}</span>}
               </NavLink>
             );
             return collapsed ? (
-              <Tip key={item.path} content={item.name}>
+              <Tip key={item.path} content={item.name} side="right">
                 {link}
               </Tip>
             ) : (
@@ -310,7 +307,7 @@ function Shell() {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isTrainer = currentUser?.role === 'HEAD_TRAINER';
-  const barns = useService(() => (isTrainer ? listBarns() : Promise.resolve([])), [isTrainer]);
+  const myScope = useMyScope();
 
   useEffect(() => {
     try {
@@ -351,8 +348,8 @@ function Shell() {
   const scope = (() => {
     if (!currentUser) return '';
     if (isTrainer) {
-      if (!barns.data) return '…';
-      const names = barns.data.filter((barn) => barn.headTrainerId === currentUser.id).map((barn) => barn.name);
+      if (!myScope.scope) return '…';
+      const names = myScope.scope.myBarns.map((barn) => barn.name);
       return names.length ? names.join(', ') : 'Chưa được giao khu';
     }
     if (currentUser.role === 'GROOM') return 'Ngựa được giao';

@@ -29,7 +29,6 @@ export const listAllHorses = (query: Omit<HorseListQuery, 'page' | 'limit'> = {}
 /** Chỉ đếm số ngựa khớp bộ lọc. */
 export const countHorses = async (query: Omit<HorseListQuery, 'page' | 'limit'> = {}) =>
   (await http.get<Page<HorseListItem>>('/horses', q({ ...query, page: 1, limit: 1 }))).meta.total;
-export const listMyOwnedHorses = () => http.get<HorseBase[]>('/owners/me/horses');
 
 export const getHorse = (id: string) => http.get<HorseDetail>(`/horses/${id}`);
 export const getPermissions = (id: string) => http.get<HorsePermissions>(`/horses/${id}/permissions`);

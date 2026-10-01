@@ -1,23 +1,31 @@
 // Sơ đồ chuồng (gộp cả danh mục khu và ô). Cột trái: tổng quan, các danh sách chờ xếp chỗ, ngựa cần chú ý,
 // khu cần xử lý. Cột phải: mỗi khu một thẻ lưới 3×3 ô, rê chuột vào ô để xem ngựa, bấm ô để thao tác.
-// CM: xếp/đổi khu (F1.6), quản lý khu và ô. HT của khu: xếp ô kèm Groom, chuyển ô, gỡ ô, đổi Groom (F1.7).
+// CM: xếp/đổi khu (F1.6), quản lý khu và ô. HT của khu: xếp ô, chuyển ô, gỡ ô, giao/đổi Groom (F1.7).
+// HT chỉ thấy khu mình phụ trách và khu cách ly (khu cách ly của HT khác chỉ xem). Bấm tên khu để phóng to (?focus=).
 // Dữ liệu ghép từ /barns, /stalls và /horses (ô có ngựa xác định qua location.stall.id).
-import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Building2, Plus, Warehouse } from 'lucide-react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { LayoutGroup } from 'motion/react';
+import { AlertTriangle, Building2, Plus, UserMinus, Warehouse } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { listAllHorses } from '../../api/horses';
 import { deleteBarn, deleteStall, listBarns, listStalls, updateStall } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
 import type { BarnListItem, HorseListItem, Stall } from '../../api/types';
 import { useStore } from '../../store/store';
-import { Avatar, Button, Card, ConfirmDialog, EmptyState, ErrorBox, PageHeader, SectionTitle, Skeleton, cn, useToast, type MenuAction } from '../../components/ui';
+import type { User } from '../../types/domain';
+import { canManageBarn, canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
+import { primeZoneScope } from '../../hooks/useMyScope';
+import { Avatar, Button, Card, ConfirmDialog, EmptyState, ErrorBox, PageHeader, SectionTitle, cn, useToast, type MenuAction } from '../../components/ui';
+import { StableMapSkeleton } from '../../components/skeletons';
 import { healthLabel } from '../../lib/labels';
 import { links } from '../../lib/links';
 import { AssignStallDialog, AssignZoneDialog, GroomDialog, RemoveStallDialog, type PlacementHorse } from './components/PlacementDialogs';
-import { AddStallsDialog, HeadTrainerDialog, MaintenanceDialog, ZoneFormDialog, ZoneStatusDialog } from './components/ZoneDialogs';
+import { AddStallsDialog, HeadTrainerDialog, MaintenanceDialog, UnassignTrainerDialog, ZoneFormDialog, ZoneStatusDialog } from './components/ZoneDialogs';
 import { MAX_STALLS_PER_BARN, barnBlocker, buildCells, isLockedHorse, occupantsByStall, type ZoneCell } from './components/barn';
 import { ZoneBoard, ZoneLegend } from './components/ZoneBoard';
+import { ZoneFocus } from './components/ZoneFocus';
+import { loadZoneDetail } from './components/zone-detail';
 
 interface MapZone {
   barn: BarnListItem;
@@ -28,20 +36,29 @@ interface MapZone {
   horseCount: number;
   /** Người xem là HT phụ trách khu này. */
   canManage: boolean;
+  /** Khu cách ly (mọi ô là ô cách ly). */
+  isolation: boolean;
+  /** HT xem khu cách ly không do mình phụ trách: chỉ xem, không thao tác. */
+  readOnly: boolean;
 }
 
-async function loadMap(userId: string | undefined, isTrainer: boolean, isManager: boolean) {
+async function loadMap(user: User | null, isManager: boolean) {
   const [barns, stalls, horses, headTrainers] = await Promise.all([
     listBarns(),
     listStalls(),
     listAllHorses(),
     isManager ? listAllUsers({ role: 'HEAD_TRAINER', status: 'ACTIVE' }) : Promise.resolve([]),
   ]);
+  // HT chỉ thấy khu mình phụ trách và khu cách ly; các vai trò khác thấy toàn câu lạc bộ.
+  const scope = computeZoneScope(user, barns, stalls);
+  if (user && scope.trainer) primeZoneScope(user.id, barns, stalls);
   const inClub = horses.filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED');
   const occupants = occupantsByStall(inClub);
   const horseByStall = new Map(inClub.filter((horse) => horse.location.stall?.id).map((horse) => [horse.location.stall!.id!, horse]));
   const zones: MapZone[] = barns
+    .filter((barn) => canSeeBarn(scope, barn.id))
     .map((barn) => {
+      const canManage = canManageBarn(scope, barn.id);
       const horsesOfBarn = inClub.filter((horse) => horse.location.barn?.id === barn.id);
       return {
         barn,
@@ -50,12 +67,20 @@ async function loadMap(userId: string | undefined, isTrainer: boolean, isManager
         horseByStall,
         waitingStall: horsesOfBarn.filter((horse) => horse.location.placementStatus === 'PENDING_STALL'),
         horseCount: horsesOfBarn.length,
-        canManage: isTrainer && barn.headTrainerId === userId,
+        canManage,
+        isolation: scope.isolationBarnIds.has(barn.id),
+        readOnly: scope.trainer && !canManage,
       };
     })
-    .sort((a, b) => Number(b.canManage) - Number(a.canManage) || a.barn.name.localeCompare(b.barn.name, 'vi', { numeric: true }));
-  const noZone = inClub.filter((horse) => horse.location.placementStatus === 'PENDING_BARN');
-  return { zones, noZone, stalls, headTrainers };
+    .sort(
+      (a, b) =>
+        Number(b.canManage) - Number(a.canManage) ||
+        Number(a.isolation) - Number(b.isolation) ||
+        a.barn.name.localeCompare(b.barn.name, 'vi', { numeric: true }),
+    );
+  // "Chờ xếp khu" là việc của CM: HT không cần thấy.
+  const noZone = scope.trainer ? [] : inClub.filter((horse) => horse.location.placementStatus === 'PENDING_BARN');
+  return { zones, noZone, stalls: stalls.filter((stall) => canSeeBarn(scope, stall.barnId)), barns, headTrainers, trainer: scope.trainer };
 }
 
 function toPlacement(horse: HorseListItem): PlacementHorse {
@@ -115,15 +140,16 @@ function MiniStat({ value, label, warn }: { value: ReactNode; label: string; war
 
 export default function StableMap() {
   const navigate = useNavigate();
+  const location = useLocation();
   const toast = useToast();
   const action = useAction();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const user = useStore((state) => state.currentUser);
   const role = user?.role;
   const isOwner = role === 'HORSE_OWNER';
   const isManager = role === 'CLUB_MANAGER';
   const { data, loading, error, reload } = useService(
-    () => (isOwner ? Promise.resolve(undefined) : loadMap(user?.id, role === 'HEAD_TRAINER', isManager)),
+    () => (isOwner ? Promise.resolve(undefined) : loadMap(user, isManager)),
     [isOwner, user?.id, role, isManager],
   );
 
@@ -135,6 +161,7 @@ export default function StableMap() {
   // Hộp thoại quản lý khu và ô (CM)
   const [formOpen, setFormOpen] = useState<{ zone?: BarnListItem } | null>(null);
   const [trainerZone, setTrainerZone] = useState<BarnListItem | null>(null);
+  const [unassignZone, setUnassignZone] = useState<MapZone | null>(null);
   const [statusZone, setStatusZone] = useState<BarnListItem | null>(null);
   const [stallsZone, setStallsZone] = useState<MapZone | null>(null);
   const [deletingZone, setDeletingZone] = useState<MapZone | null>(null);
@@ -142,21 +169,101 @@ export default function StableMap() {
   const [deletingStall, setDeletingStall] = useState<Stall | null>(null);
 
   // Mở từ Tổng quan với ?zone=<id>: cuộn tới khu đó và nhấn mạnh viền trong giây lát.
-  const focusZone = params.get('zone');
+  const zoneParam = params.get('zone');
+  // ?focus=<id>: phóng to một khu. Đẩy vào lịch sử để nút Back của trình duyệt thu nhỏ lại.
+  const focusParam = params.get('focus');
+  const focused = focusParam ? data?.zones.find((zone) => zone.barn.id === focusParam) : undefined;
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const loaded = !!data;
+
   useEffect(() => {
-    if (!focusZone || !loaded) return;
+    if (!zoneParam || !loaded) return;
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById(`zone-${focusZone}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setHighlight(focusZone);
+      document.getElementById(`zone-${zoneParam}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlight(zoneParam);
     });
     const timer = window.setTimeout(() => setHighlight(null), 2600);
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
-  }, [focusZone, loaded]);
+  }, [zoneParam, loaded]);
+
+  const openFocus = (barnId: string) => {
+    document.getElementById('main-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('focus', barnId);
+        next.delete('zone');
+        return next;
+      },
+      { state: { focusPushed: true } },
+    );
+  };
+  const closeFocus = useCallback(() => {
+    if (focusParam) setReturnTo(focusParam);
+    if ((location.state as { focusPushed?: boolean } | null)?.focusPushed) {
+      navigate(-1);
+      return;
+    }
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('focus');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [focusParam, location.state, navigate, setParams]);
+
+  // Id khu phóng to không còn trong phạm vi xem (đường dẫn cũ, HT bị gỡ khu): bỏ tham số.
+  useEffect(() => {
+    if (focusParam && loaded && !focused) {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete('focus');
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [focusParam, loaded, focused, setParams]);
+
+  // Esc để thu nhỏ; hộp thoại / menu Radix đang mở tự chặn Esc (defaultPrevented).
+  useEffect(() => {
+    if (!focused) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented) closeFocus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focused, closeFocus]);
+
+  // Thu nhỏ xong: cuộn về khu vừa xem (sau khi hiệu ứng chạy xong) và nhấn mạnh viền.
+  useEffect(() => {
+    if (focusParam || !returnTo) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(`zone-${returnTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlight(returnTo);
+      setReturnTo(null);
+    }, 520);
+    const clear = window.setTimeout(() => setHighlight(null), 2600);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearTimeout(clear);
+    };
+  }, [focusParam, returnTo]);
+
+  // Ô lớn khi phóng to cần Groom, khóa huấn luyện, bệnh án: tải riêng cho khu đang xem.
+  const focusHorseIds = focused ? focused.cells.flatMap((cell) => (cell.occupant ? [cell.occupant.id] : [])) : [];
+  const idsKey = focusHorseIds.join(',');
+  const detail = useService(
+    () => (focused ? loadZoneDetail(focused.barn.id, focusHorseIds, role !== 'GROOM') : Promise.resolve(undefined)),
+    [focused?.barn.id, idsKey],
+  );
 
   if (isOwner) {
     return (
@@ -166,12 +273,14 @@ export default function StableMap() {
       </div>
     );
   }
-  if (loading && !data) return <Skeleton rows={6} />;
+  if (loading && !data) return <StableMapSkeleton />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được sơ đồ chuồng'} />;
 
-  const { zones, noZone, stalls, headTrainers } = data;
-  const waitingStall = zones.flatMap((zone) => zone.waitingStall.map((horse) => ({ zone, horse })));
-  const attention = zones.flatMap((zone) =>
+  const { zones, noZone, stalls, barns, headTrainers, trainer } = data;
+  // HT: việc cần làm chỉ tính trong khu mình phụ trách (khu cách ly của HT khác chỉ để theo dõi).
+  const workZones = trainer ? zones.filter((zone) => zone.canManage) : zones;
+  const waitingStall = workZones.flatMap((zone) => zone.waitingStall.map((horse) => ({ zone, horse })));
+  const attention = workZones.flatMap((zone) =>
     zone.cells.flatMap((cell) => {
       const horse = zone.horseByStall.get(cell.stall.id);
       const label = horse ? attentionOf(horse) : undefined;
@@ -179,14 +288,16 @@ export default function StableMap() {
     }),
   );
   const pendingZones = zones.filter((zone) => barnBlocker(zone.barn));
+  const statStalls = trainer ? stalls.filter((stall) => workZones.some((zone) => zone.barn.id === stall.barnId)) : stalls;
   const totals = {
-    active: zones.filter((zone) => zone.barn.status === 'ACTIVE').length,
-    free: stalls.filter((stall) => stall.status === 'AVAILABLE').length,
-    maintenance: stalls.filter((stall) => stall.status === 'MAINTENANCE').length,
-    receiving: zones.reduce((sum, zone) => sum + (barnBlocker(zone.barn) ? 0 : zone.barn.availableStallCount), 0),
-    horses: zones.reduce((sum, zone) => sum + zone.horseCount, 0),
+    active: workZones.filter((zone) => zone.barn.status === 'ACTIVE').length,
+    free: statStalls.filter((stall) => stall.status === 'AVAILABLE').length,
+    maintenance: statStalls.filter((stall) => stall.status === 'MAINTENANCE').length,
+    receiving: workZones.reduce((sum, zone) => sum + (barnBlocker(zone.barn) ? 0 : zone.barn.availableStallCount), 0),
+    horses: workZones.reduce((sum, zone) => sum + zone.horseCount, 0),
   };
   const myZones = zones.filter((zone) => zone.canManage).map((zone) => zone.barn.name);
+  const watchZones = zones.filter((zone) => zone.readOnly).map((zone) => zone.barn.name);
 
   const openHorse = (horse: HorseListItem) => navigate(links.horse(horse.id));
 
@@ -194,13 +305,23 @@ export default function StableMap() {
     if (!isManager) return [];
     const blockers = zoneDeleteBlockers(zone);
     const full = zone.stalls.length >= MAX_STALLS_PER_BARN;
-    return [
+    const items: MenuAction[] = [
       { label: 'Sửa tên, sức chứa, mô tả', onSelect: () => setFormOpen({ zone: zone.barn }) },
-      { label: 'Đổi HT phụ trách', onSelect: () => setTrainerZone(zone.barn) },
+      { label: zone.barn.headTrainerId ? 'Đổi HT phụ trách' : 'Gán HT phụ trách', onSelect: () => setTrainerZone(zone.barn) },
       { label: 'Đổi trạng thái', onSelect: () => setStatusZone(zone.barn) },
       { label: full ? `Thêm ô (đã đủ ${MAX_STALLS_PER_BARN} ô)` : 'Thêm ô', disabled: full, onSelect: () => setStallsZone(zone) },
-      { label: blockers.length ? `Xóa khu (${blockers[0].toLowerCase()})` : 'Xóa khu', danger: true, onSelect: () => setDeletingZone(zone) },
     ];
+    if (zone.barn.headTrainerId) {
+      items.push({
+        label: zone.horseCount ? `Gỡ HT phụ trách (khu còn ${zone.horseCount} ngựa)` : 'Gỡ HT phụ trách',
+        icon: <UserMinus size={14} />,
+        danger: true,
+        disabled: zone.horseCount > 0,
+        onSelect: () => setUnassignZone(zone),
+      });
+    }
+    items.push({ label: blockers.length ? `Xóa khu (${blockers[0].toLowerCase()})` : 'Xóa khu', danger: true, onSelect: () => setDeletingZone(zone) });
+    return items;
   };
 
   const cellMenu = (zone: MapZone) => (cell: ZoneCell): MenuAction[] => {
@@ -210,7 +331,7 @@ export default function StableMap() {
       const items: MenuAction[] = [{ label: 'Mở hồ sơ ngựa', onSelect: () => openHorse(horse) }];
       if (zone.canManage) {
         items.push({ label: horse.healthStatus === 'QUARANTINED' ? 'Chuyển ô (tách đàn)' : 'Chuyển ô', onSelect: () => setStallTarget({ horse: toPlacement(horse) }) });
-        items.push({ label: 'Đổi Groom', onSelect: () => setGroomHorse(toPlacement(horse)) });
+        items.push({ label: 'Giao / đổi Groom', onSelect: () => setGroomHorse(toPlacement(horse)) });
         items.push({ label: 'Gỡ khỏi ô', danger: true, onSelect: () => setRemoveHorse(toPlacement(horse)) });
       }
       if (isManager) items.push({ label: 'Đổi khu', onSelect: () => setZoneHorse(toPlacement(horse)) });
@@ -244,11 +365,48 @@ export default function StableMap() {
     return items;
   };
 
+  /** Khu chỉ xem: bấm ô có ngựa thì mở hồ sơ, không có menu thao tác. */
+  const readOnlyLink = (cell: ZoneCell) => (cell.occupant ? links.horse(cell.occupant.id) : undefined);
+
+  const zoneFooter = (zone: MapZone) =>
+    zone.waitingStall.length > 0 || zone.barn.description ? (
+      <div className="space-y-1.5 text-sm">
+        {zone.waitingStall.length > 0 && (
+          <p className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-amber-800">Chờ xếp ô:</span>
+            {zone.waitingStall.map((horse) =>
+              zone.canManage ? (
+                <button
+                  key={horse.id}
+                  type="button"
+                  onClick={() => setStallTarget({ horse: toPlacement(horse) })}
+                  className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-amber-200/70 transition hover:bg-amber-100"
+                >
+                  {horse.name} · Xếp ô
+                </button>
+              ) : (
+                <span key={horse.id} className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
+                  {horse.name}
+                </span>
+              ),
+            )}
+          </p>
+        )}
+        {zone.barn.description && <p className="text-xs text-gray-500">{zone.barn.description}</p>}
+      </div>
+    ) : undefined;
+
+  const description = trainer
+    ? myZones.length
+      ? `Bạn phụ trách ${myZones.join(', ')}${watchZones.length ? ` · theo dõi ${watchZones.join(', ')} (chỉ xem)` : ''}. Bấm tên khu để phóng to, bấm ô để thao tác.`
+      : 'Bạn chưa được giao khu nào. Quản lý câu lạc bộ sẽ giao khu cho bạn.'
+    : `${zones.length} khu · ${stalls.length} ô · ${totals.horses} ngựa thuộc khu. Bấm tên khu để phóng to, rê chuột vào ô để xem ngựa, bấm ô để thao tác.`;
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="Sơ đồ chuồng"
-        description={`${zones.length} khu · ${stalls.length} ô · ${totals.horses} ngựa thuộc khu${myZones.length ? ` · bạn phụ trách ${myZones.join(', ')}` : ''}. Rê chuột vào ô để xem ngựa, bấm ô để thao tác.`}
+        description={description}
         actions={
           isManager && (
             <Button onClick={() => setFormOpen({})}>
@@ -260,184 +418,215 @@ export default function StableMap() {
 
       {action.error && !deletingZone && <ErrorBox message={action.error} />}
 
-      <div className="grid items-start gap-5 lg:grid-cols-12">
-        {/* ===== Cột trái ===== */}
-        <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
-          <Card className="p-4">
-            <SectionTitle icon={<Warehouse size={16} />} className="mb-3">
-              Tổng quan chuồng
-            </SectionTitle>
-            <div className="grid grid-cols-2 gap-2">
-              <MiniStat value={`${totals.active}/${zones.length}`} label="khu hoạt động" />
-              <MiniStat value={totals.free} label="ô trống" />
-              <MiniStat value={totals.maintenance} label="ô bảo trì" warn={totals.maintenance > 0} />
-              <MiniStat value={totals.receiving} label="còn nhận ngựa" warn={totals.receiving === 0} />
-            </div>
-          </Card>
+      <LayoutGroup>
+        {focused ? (
+          <ZoneFocus
+            barn={focused.barn}
+            cells={focused.cells}
+            mine={focused.canManage}
+            isolation={focused.isolation}
+            readOnly={focused.readOnly}
+            layoutId={`zone-plate-${focused.barn.id}`}
+            detail={detail.data}
+            detailLoading={detail.loading}
+            zoneMenu={zoneMenu(focused)}
+            cellMenu={focused.readOnly ? undefined : cellMenu(focused)}
+            cellLink={focused.readOnly ? readOnlyLink : undefined}
+            emptyLabel={(cell) => (cell.stall.status === 'AVAILABLE' && focused.canManage && focused.waitingStall.length > 0 ? 'Trống · bấm để xếp ngựa' : undefined)}
+            onAddStall={isManager ? () => setStallsZone(focused) : undefined}
+            footer={zoneFooter(focused)}
+            onClose={closeFocus}
+          />
+        ) : (
+          <div className="grid items-start gap-5 lg:grid-cols-12">
+            {/* ===== Cột trái ===== */}
+            <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
+              <Card className="p-4">
+                <SectionTitle icon={<Warehouse size={16} />} className="mb-3">
+                  {trainer ? 'Khu của bạn' : 'Tổng quan chuồng'}
+                </SectionTitle>
+                <div className="grid grid-cols-2 gap-2">
+                  <MiniStat value={`${totals.active}/${workZones.length}`} label="khu hoạt động" />
+                  <MiniStat value={totals.free} label="ô trống" />
+                  <MiniStat value={totals.maintenance} label="ô bảo trì" warn={totals.maintenance > 0} />
+                  <MiniStat value={totals.receiving} label="còn nhận ngựa" warn={totals.receiving === 0} />
+                </div>
+              </Card>
 
-          <Card tone={noZone.length ? 'warning' : 'default'} className="p-4">
-            <SectionTitle icon={<Building2 size={16} />} action={<Count value={noZone.length} />} className="mb-1">
-              Chờ xếp khu
-            </SectionTitle>
-            {noZone.length === 0 ? (
-              <p className="py-1.5 text-sm text-gray-500">Không có ngựa nào chờ xếp khu.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {noZone.map((horse) => (
-                  <PersonRow
-                    key={horse.id}
-                    horse={horse}
-                    onOpen={() => openHorse(horse)}
-                    note={isManager ? undefined : 'Chỉ Quản lý câu lạc bộ xếp khu'}
-                    action={
-                      isManager && (
-                        <Button size="sm" variant="secondary" onClick={() => setZoneHorse(toPlacement(horse))}>
-                          Xếp khu
-                        </Button>
-                      )
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </Card>
+              {!trainer && (
+                <Card tone={noZone.length ? 'warning' : 'default'} className="p-4">
+                  <SectionTitle icon={<Building2 size={16} />} action={<Count value={noZone.length} />} className="mb-1">
+                    Chờ xếp khu
+                  </SectionTitle>
+                  {noZone.length === 0 ? (
+                    <p className="py-1.5 text-sm text-gray-500">Không có ngựa nào chờ xếp khu.</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100">
+                      {noZone.map((horse) => (
+                        <PersonRow
+                          key={horse.id}
+                          horse={horse}
+                          onOpen={() => openHorse(horse)}
+                          note={isManager ? undefined : 'Chỉ Quản lý câu lạc bộ xếp khu'}
+                          action={
+                            isManager && (
+                              <Button size="sm" variant="secondary" onClick={() => setZoneHorse(toPlacement(horse))}>
+                                Xếp khu
+                              </Button>
+                            )
+                          }
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              )}
 
-          <Card tone={waitingStall.length ? 'warning' : 'default'} className="p-4">
-            <SectionTitle action={<Count value={waitingStall.length} />} className="mb-1">
-              Chờ xếp ô
-            </SectionTitle>
-            {waitingStall.length === 0 ? (
-              <p className="py-1.5 text-sm text-gray-500">Mọi ngựa đã có khu đều đã có ô.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {waitingStall.map(({ zone, horse }) => (
-                  <PersonRow
-                    key={horse.id}
-                    horse={horse}
-                    note={zone.barn.name}
-                    onOpen={() => openHorse(horse)}
-                    action={
-                      zone.canManage && (
-                        <Button size="sm" variant="secondary" onClick={() => setStallTarget({ horse: toPlacement(horse) })}>
-                          Xếp ô
-                        </Button>
-                      )
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </Card>
+              <Card tone={waitingStall.length ? 'warning' : 'default'} className="p-4">
+                <SectionTitle action={<Count value={waitingStall.length} />} className="mb-1">
+                  Chờ xếp ô
+                </SectionTitle>
+                {waitingStall.length === 0 ? (
+                  <p className="py-1.5 text-sm text-gray-500">{trainer ? 'Ngựa trong khu của bạn đều đã có ô.' : 'Mọi ngựa đã có khu đều đã có ô.'}</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {waitingStall.map(({ zone, horse }) => (
+                      <PersonRow
+                        key={horse.id}
+                        horse={horse}
+                        note={zone.barn.name}
+                        onOpen={() => openHorse(horse)}
+                        action={
+                          zone.canManage && (
+                            <Button size="sm" variant="secondary" onClick={() => setStallTarget({ horse: toPlacement(horse) })}>
+                              Xếp ô
+                            </Button>
+                          )
+                        }
+                      />
+                    ))}
+                  </ul>
+                )}
+              </Card>
 
-          {attention.length > 0 && (
-            <Card className="p-4">
-              <SectionTitle icon={<AlertTriangle size={16} />} action={<Count value={attention.length} />} className="mb-1">
-                Cần chú ý
-              </SectionTitle>
-              <ul className="divide-y divide-gray-100">
-                {attention.map(({ horse, label, code }) => (
-                  <PersonRow
-                    key={horse.id}
-                    horse={horse}
-                    onOpen={() => openHorse(horse)}
-                    note={
-                      <>
-                        <span className="font-mono">{code}</span> · <span className="font-medium text-red-700">{label}</span>
-                      </>
-                    }
-                  />
-                ))}
-              </ul>
-            </Card>
-          )}
+              {attention.length > 0 && (
+                <Card className="p-4">
+                  <SectionTitle icon={<AlertTriangle size={16} />} action={<Count value={attention.length} />} className="mb-1">
+                    Cần chú ý
+                  </SectionTitle>
+                  <ul className="divide-y divide-gray-100">
+                    {attention.map(({ horse, label, code }) => (
+                      <PersonRow
+                        key={horse.id}
+                        horse={horse}
+                        onOpen={() => openHorse(horse)}
+                        note={
+                          <>
+                            <span className="font-mono">{code}</span> · <span className="font-medium text-red-700">{label}</span>
+                          </>
+                        }
+                      />
+                    ))}
+                  </ul>
+                </Card>
+              )}
 
-          {isManager && pendingZones.length > 0 && (
-            <Card variant="flat" className="p-4">
-              <SectionTitle className="mb-1">Khu cần xử lý</SectionTitle>
-              <ul className="divide-y divide-gray-100">
-                {pendingZones.map((zone) => {
-                  const noTrainer = !zone.barn.headTrainerId || !zone.barn.hasActiveHeadTrainer;
-                  const inactive = zone.barn.status !== 'ACTIVE';
-                  const canAdd = zone.stalls.length < MAX_STALLS_PER_BARN;
-                  return (
-                    <li key={zone.barn.id} className="flex items-center justify-between gap-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-900">{zone.barn.name}</p>
-                        <p className="truncate text-xs text-amber-700">{barnBlocker(zone.barn)}</p>
-                      </div>
-                      {inactive ? (
-                        <Button size="sm" variant="ghost" onClick={() => setStatusZone(zone.barn)}>
-                          Đổi trạng thái
-                        </Button>
-                      ) : noTrainer ? (
-                        <Button size="sm" variant="ghost" onClick={() => setTrainerZone(zone.barn)}>
-                          Gán HT
-                        </Button>
-                      ) : canAdd ? (
-                        <Button size="sm" variant="ghost" onClick={() => setStallsZone(zone)}>
-                          Thêm ô
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">Đủ {MAX_STALLS_PER_BARN} ô</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-          )}
-        </aside>
+              {isManager && pendingZones.length > 0 && (
+                <Card variant="flat" className="p-4">
+                  <SectionTitle className="mb-1">Khu cần xử lý</SectionTitle>
+                  <ul className="divide-y divide-gray-100">
+                    {pendingZones.map((zone) => {
+                      const noTrainer = !zone.barn.headTrainerId || !zone.barn.hasActiveHeadTrainer;
+                      const inactive = zone.barn.status !== 'ACTIVE';
+                      const canAdd = zone.stalls.length < MAX_STALLS_PER_BARN;
+                      return (
+                        <li key={zone.barn.id} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-gray-900">{zone.barn.name}</p>
+                            <p className="truncate text-xs text-amber-700">{barnBlocker(zone.barn)}</p>
+                          </div>
+                          {inactive ? (
+                            <Button size="sm" variant="ghost" onClick={() => setStatusZone(zone.barn)}>
+                              Đổi trạng thái
+                            </Button>
+                          ) : noTrainer ? (
+                            <Button size="sm" variant="ghost" onClick={() => setTrainerZone(zone.barn)}>
+                              Gán HT
+                            </Button>
+                          ) : canAdd ? (
+                            <Button size="sm" variant="ghost" onClick={() => setStallsZone(zone)}>
+                              Thêm ô
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Đủ {MAX_STALLS_PER_BARN} ô</span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              )}
+            </aside>
 
-        {/* ===== Các khu ===== */}
-        <div className="space-y-4 lg:col-span-8 xl:col-span-9">
-          <ZoneLegend />
-          {zones.length === 0 ? (
-            <EmptyState title="Chưa có khu chuồng nào" hint={isManager ? 'Bấm Thêm khu để tạo khu đầu tiên.' : 'Quản lý câu lạc bộ sẽ tạo khu và ô chuồng.'} />
-          ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
-              {zones.map((zone) => (
-                <ZoneBoard
-                  key={zone.barn.id}
-                  id={`zone-${zone.barn.id}`}
-                  barn={zone.barn}
-                  cells={zone.cells}
-                  mine={zone.canManage}
-                  highlight={highlight === zone.barn.id}
-                  zoneMenu={zoneMenu(zone)}
-                  cellMenu={cellMenu(zone)}
-                  emptyLabel={(cell) => (cell.stall.status === 'AVAILABLE' && zone.canManage && zone.waitingStall.length > 0 ? 'Trống · bấm để xếp' : undefined)}
-                  onAddStall={isManager ? () => setStallsZone(zone) : undefined}
-                  footer={
-                    zone.waitingStall.length > 0 || zone.barn.description ? (
-                      <div className="space-y-1.5 text-sm">
-                        {zone.waitingStall.length > 0 && (
-                          <p className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium text-amber-800">Chờ xếp ô:</span>
-                            {zone.waitingStall.map((horse) => (
-                              <span key={horse.id} className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
-                                {horse.name}
-                              </span>
-                            ))}
-                          </p>
-                        )}
-                        {zone.barn.description && <p className="text-xs text-gray-500">{zone.barn.description}</p>}
-                      </div>
-                    ) : undefined
-                  }
+            {/* ===== Các khu ===== */}
+            <div className="space-y-4 lg:col-span-8 xl:col-span-9">
+              <ZoneLegend />
+              {zones.length === 0 ? (
+                <EmptyState
+                  title={trainer ? 'Bạn chưa được giao khu nào' : 'Chưa có khu chuồng nào'}
+                  hint={isManager ? 'Bấm Thêm khu để tạo khu đầu tiên.' : trainer ? 'Quản lý câu lạc bộ sẽ giao khu cho bạn.' : 'Quản lý câu lạc bộ sẽ tạo khu và ô chuồng.'}
                 />
-              ))}
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,440px),1fr))] gap-4">
+                  {zones.map((zone) => (
+                    <div key={zone.barn.id}>
+                      <ZoneBoard
+                        id={`zone-${zone.barn.id}`}
+                        layoutId={`zone-plate-${zone.barn.id}`}
+                        barn={zone.barn}
+                        cells={zone.cells}
+                        mine={zone.canManage}
+                        isolation={zone.isolation}
+                        readOnly={zone.readOnly}
+                        highlight={highlight === zone.barn.id}
+                        zoneMenu={zoneMenu(zone)}
+                        cellMenu={zone.readOnly ? undefined : cellMenu(zone)}
+                        cellLink={zone.readOnly ? readOnlyLink : undefined}
+                        emptyLabel={(cell) => (cell.stall.status === 'AVAILABLE' && zone.canManage && zone.waitingStall.length > 0 ? 'Trống · bấm để xếp' : undefined)}
+                        onAddStall={isManager ? () => setStallsZone(zone) : undefined}
+                        onExpand={() => openFocus(zone.barn.id)}
+                        footer={zoneFooter(zone)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </LayoutGroup>
 
       <AssignZoneDialog horse={zoneHorse} onClose={() => setZoneHorse(null)} onDone={reload} />
-      <AssignStallDialog horse={stallTarget?.horse ?? null} presetStallId={stallTarget?.preset} onClose={() => setStallTarget(null)} onDone={reload} />
-      <GroomDialog horse={groomHorse} onClose={() => setGroomHorse(null)} onDone={reload} />
+      <AssignStallDialog
+        horse={stallTarget?.horse ?? null}
+        presetStallId={stallTarget?.preset}
+        onClose={() => setStallTarget(null)}
+        onDone={reload}
+        onAssignGroom={(horse) => setGroomHorse(horse)}
+      />
+      <GroomDialog
+        horse={groomHorse}
+        onClose={() => setGroomHorse(null)}
+        onDone={() => {
+          reload();
+          detail.reload();
+        }}
+      />
       <RemoveStallDialog horse={removeHorse} onClose={() => setRemoveHorse(null)} onDone={reload} />
 
       <ZoneFormDialog open={!!formOpen} zone={formOpen?.zone} headTrainers={headTrainers} onClose={() => setFormOpen(null)} onDone={reload} />
-      <HeadTrainerDialog zone={trainerZone} headTrainers={headTrainers} onClose={() => setTrainerZone(null)} onDone={reload} />
+      <HeadTrainerDialog zone={trainerZone} headTrainers={headTrainers} barns={barns} onClose={() => setTrainerZone(null)} onDone={reload} />
+      <UnassignTrainerDialog zone={unassignZone?.barn ?? null} horseCount={unassignZone?.horseCount ?? 0} onClose={() => setUnassignZone(null)} onDone={reload} />
       <ZoneStatusDialog zone={statusZone} onClose={() => setStatusZone(null)} onDone={reload} />
       <AddStallsDialog zone={stallsZone?.barn ?? null} stalls={stallsZone?.stalls ?? []} onClose={() => setStallsZone(null)} onDone={reload} />
       <MaintenanceDialog stall={maintStall} onClose={() => setMaintStall(null)} onDone={reload} />

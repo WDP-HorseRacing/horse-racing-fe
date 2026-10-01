@@ -224,3 +224,46 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* === Sọc cỏ cắt của trường đua — họa tiết riêng cho ảnh trống, empty state, nền hero === */
+.turf {
+  background-color: #e3f0e6;
+  background-image:
+    repeating-linear-gradient(100deg, transparent 0 34px, rgba(255, 255, 255, 0.5) 34px 68px),
+    radial-gradient(120% 90% at 20% 0%, rgba(255, 255, 255, 0.55), transparent 60%);
+}
+.turf-dark {
+  background-color: #0c3a2b;
+  background-image:
+    repeating-linear-gradient(100deg, transparent 0 56px, rgba(255, 255, 255, 0.035) 56px 112px),
+    radial-gradient(90% 120% at 100% 0%, rgba(52, 211, 153, 0.16), transparent 55%);
+}
+
+/* === Mã ô kiểu số áo đua === */
+.saddle-tag {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #064e3b;
+  box-shadow: 0 1px 0 rgba(6, 78, 59, 0.12), inset 0 0 0 1px rgba(6, 78, 59, 0.12);
+}
+
+/* === Khung chờ: chỉ hiện sau 150ms để API trả nhanh thì không nháy === */
+@keyframes skeleton-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.skeleton-delay {
+  animation: skeleton-appear 220ms ease-out 150ms both;
+}
+
+/* === Người dùng chọn giảm chuyển động: tắt shimmer và hiệu ứng hộp thoại === */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  .skeleton-delay { animation-duration: 1ms; }
+  .anim-overlay, .anim-dialog, .anim-sheet, .anim-drawer, .anim-pop { animation: none; }
+  html { scroll-behavior: auto; }
+}
