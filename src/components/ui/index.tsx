@@ -78,7 +78,7 @@ export function PageHeader({
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-72">
         {back && <div className="mb-2">{back}</div>}
         {eyebrow && <p className="mb-1 text-sm text-gray-500">{eyebrow}</p>}
         <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900">{title}</h2>
@@ -676,25 +676,42 @@ export function ActionMenu({
   items,
   trigger,
   align = 'end',
+  tip,
+  tipVariant = 'dark',
 }: {
   items: MenuAction[];
   trigger?: ReactNode;
   align?: 'start' | 'end';
+  /** Chú thích khi rê chuột vào nút mở menu (Tooltip lồng Dropdown theo đúng cách Radix hướng dẫn). */
+  tip?: ReactNode;
+  tipVariant?: 'dark' | 'card';
 }) {
   if (items.length === 0) return null;
+  const button = (
+    <Dropdown.Trigger asChild>
+      {trigger ?? (
+        <button
+          type="button"
+          aria-label="Thao tác"
+          className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+        >
+          <MoreHorizontal size={18} />
+        </button>
+      )}
+    </Dropdown.Trigger>
+  );
   return (
     <Dropdown.Root modal={false}>
-      <Dropdown.Trigger asChild>
-        {trigger ?? (
-          <button
-            type="button"
-            aria-label="Thao tác"
-            className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-          >
-            <MoreHorizontal size={18} />
-          </button>
-        )}
-      </Dropdown.Trigger>
+      {tip ? (
+        <Tooltip.Provider delayDuration={tipVariant === 'card' ? 120 : 200}>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
+            <TipBubble content={tip} variant={tipVariant} />
+          </Tooltip.Root>
+        </Tooltip.Provider>
+      ) : (
+        button
+      )}
       <Dropdown.Portal>
         <Dropdown.Content
           align={align}
@@ -723,23 +740,47 @@ export function ActionMenu({
 
 /* ===== Chú thích khi rê chuột (Radix Tooltip) ===== */
 
-export function Tip({ content, children }: { content: ReactNode; children: ReactNode }) {
+export function Tip({
+  content,
+  children,
+  variant = 'dark',
+  side = 'top',
+}: {
+  content: ReactNode;
+  children: ReactNode;
+  /** `card`: thẻ nhỏ nền trắng (ví dụ thông tin ngựa khi rê chuột vào ô chuồng). */
+  variant?: 'dark' | 'card';
+  side?: 'top' | 'right' | 'bottom' | 'left';
+}) {
   if (!content) return <>{children}</>;
   return (
-    <Tooltip.Provider delayDuration={200}>
+    <Tooltip.Provider delayDuration={variant === 'card' ? 120 : 200}>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content
-            sideOffset={6}
-            className="anim-pop z-50 max-w-xs rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-lg"
-          >
-            {content}
-            <Tooltip.Arrow className="fill-gray-900" />
-          </Tooltip.Content>
-        </Tooltip.Portal>
+        <TipBubble content={content} variant={variant} side={side} />
       </Tooltip.Root>
     </Tooltip.Provider>
+  );
+}
+
+function TipBubble({ content, variant, side = 'top' }: { content: ReactNode; variant: 'dark' | 'card'; side?: 'top' | 'right' | 'bottom' | 'left' }) {
+  const card = variant === 'card';
+  return (
+    <Tooltip.Portal>
+      <Tooltip.Content
+        side={side}
+        sideOffset={card ? 8 : 6}
+        collisionPadding={12}
+        className={
+          card
+            ? 'anim-pop z-50 w-60 rounded-xl bg-white p-3 text-sm text-gray-700 shadow-[0_18px_40px_-18px_rgba(6,78,59,0.45)] ring-1 ring-gray-200'
+            : 'anim-pop z-50 max-w-xs rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-lg'
+        }
+      >
+        {content}
+        <Tooltip.Arrow className={card ? 'fill-white' : 'fill-gray-900'} />
+      </Tooltip.Content>
+    </Tooltip.Portal>
   );
 }
 
@@ -781,7 +822,7 @@ export function DataTable<T>({
 
   useEffect(() => setPage(0), [rows.length]);
 
-  if (rows.length === 0) return <EmptyState title={emptyTitle} hint={emptyHint} />;
+  if (rows.length === 0) return <EmptyState title={emptyTitle} hint={emptyHint} className={flat ? 'rounded-none border-0 bg-transparent' : ''} />;
 
   return (
     <div>
@@ -826,7 +867,7 @@ export function DataTable<T>({
         </table>
       </div>
       {pageCount > 1 && (
-        <div className="mt-3 flex items-center justify-between px-1 text-sm text-gray-500">
+        <div className={cn('flex items-center justify-between text-sm text-gray-500', flat ? 'border-t border-gray-100 px-4 py-2.5' : 'mt-3 px-1')}>
           <span className="font-light">
             {current * pageSize + 1}–{Math.min(rows.length, (current + 1) * pageSize)} trên {rows.length}
           </span>
@@ -879,7 +920,19 @@ export function SearchInput({
   );
 }
 
-/* ===== Tab (Radix Tabs, điều khiển từ ngoài) ===== */
+/* ===== Tab kiểu trình duyệt (Radix Tabs, điều khiển từ ngoài) =====
+ * Tab đang chọn là một "thẻ" trắng bo góc trên, đè lên đường kẻ để nối liền với nội dung bên dưới.
+ * Dùng cho cả chuyển mục (hồ sơ ngựa) lẫn bộ lọc (danh sách ngựa, yêu cầu khám…). Bộ lọc thì bọc
+ * nội dung bằng <TabPanel> để tab và bảng thành một khối. */
+
+export interface TabItem {
+  key: string;
+  label: ReactNode;
+  /** Số nhỏ bên phải, ẩn khi bằng 0 (dùng cho chuyển mục). */
+  badge?: number;
+  /** Số đếm của bộ lọc, luôn hiện kể cả 0. */
+  count?: number;
+}
 
 export function Tabs({
   tabs,
@@ -887,34 +940,82 @@ export function Tabs({
   onChange,
   className = '',
 }: {
-  tabs: { key: string; label: ReactNode; badge?: number }[];
+  tabs: TabItem[];
   active: string;
   onChange: (key: string) => void;
   className?: string;
 }) {
   return (
     <RadixTabs.Root value={active} onValueChange={onChange} className={className}>
-      <RadixTabs.List className="no-scrollbar flex gap-1 overflow-x-auto border-b border-gray-200">
-        {tabs.map((tab) => (
-          <RadixTabs.Trigger
-            key={tab.key}
-            value={tab.key}
-            className={cn(
-              'relative shrink-0 rounded-t-md px-3.5 py-2.5 text-sm font-medium outline-none transition',
-              'text-gray-500 hover:text-gray-800',
-              'data-[state=active]:text-emerald-800 data-[state=active]:after:absolute data-[state=active]:after:inset-x-3 data-[state=active]:after:-bottom-px data-[state=active]:after:h-0.5 data-[state=active]:after:rounded-full data-[state=active]:after:bg-emerald-600',
-            )}
-          >
-            {tab.label}
-            {tab.badge !== undefined && tab.badge > 0 && (
-              <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600 tabular-nums">
-                {tab.badge}
-              </span>
-            )}
-          </RadixTabs.Trigger>
-        ))}
+      <RadixTabs.List className="no-scrollbar flex items-end gap-1 overflow-x-auto border-b border-gray-200 px-1">
+        {tabs.map((tab) => {
+          const number = tab.count ?? (tab.badge ? tab.badge : undefined);
+          const isActive = tab.key === active;
+          return (
+            <RadixTabs.Trigger
+              key={tab.key}
+              value={tab.key}
+              className={cn(
+                'relative -mb-px flex shrink-0 items-center gap-2 rounded-t-xl border px-4 py-2.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/30',
+                isActive
+                  ? 'z-1 border-gray-200 border-b-white bg-white font-semibold text-gray-900 shadow-[0_-6px_14px_-10px_rgba(6,78,59,0.35)]'
+                  : 'border-transparent font-medium text-gray-500 hover:bg-white/60 hover:text-gray-800',
+                tab.count === 0 && !isActive && 'text-gray-400',
+              )}
+            >
+              {isActive && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b-full bg-emerald-600" aria-hidden />}
+              {tab.label}
+              {number !== undefined && (
+                <span
+                  className={cn(
+                    'rounded-md px-1.5 py-px text-[11px] font-semibold tabular-nums',
+                    isActive ? 'bg-emerald-50 text-emerald-800' : 'bg-gray-200/70 text-gray-600',
+                  )}
+                >
+                  {number}
+                </span>
+              )}
+            </RadixTabs.Trigger>
+          );
+        })}
       </RadixTabs.List>
     </RadixTabs.Root>
+  );
+}
+
+/** Khung nội dung nối liền ngay dưới <Tabs>: cùng viền, bo góc dưới. */
+export function TabPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('rounded-b-2xl border border-t-0 border-gray-200 bg-white shadow-[0_14px_32px_-26px_rgba(6,78,59,0.35)]', className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Tab bộ lọc + khung nội dung liền nhau. `toolbar` là hàng tìm kiếm/bộ lọc phụ nằm trong khung, trên nội dung. */
+export function FilterTabs({
+  tabs,
+  active,
+  onChange,
+  toolbar,
+  children,
+  className = '',
+}: {
+  tabs: TabItem[];
+  active: string;
+  onChange: (key: string) => void;
+  toolbar?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <Tabs tabs={tabs} active={active} onChange={onChange} />
+      <TabPanel>
+        {toolbar && <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-3">{toolbar}</div>}
+        {children}
+      </TabPanel>
+    </div>
   );
 }
 

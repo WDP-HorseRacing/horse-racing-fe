@@ -1,4 +1,4 @@
-// Hộp thoại của danh mục khu và ô chuồng (CM). Backend kiểm lại mọi luật: khu còn ngựa không đóng/bảo trì/gỡ HT/xóa,
+// Hộp thoại quản lý khu và ô chuồng trên Sơ đồ chuồng (CM). Backend kiểm lại mọi luật: khu còn ngựa không đóng/bảo trì/gỡ HT/xóa,
 // khu còn ô không xóa, ô có ngựa không bảo trì/xóa, không làm khu thiếu ô cho ngựa đang chờ xếp ô.
 import { useEffect, useState } from 'react';
 import { useAction } from '../../../hooks/useService';
@@ -7,6 +7,7 @@ import type { BarnListItem, BarnStatus, Stall, StallType, UserAccount } from '..
 import { Button, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToast } from '../../../components/ui';
 import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
+import { MAX_STALLS_PER_BARN } from './barn';
 
 /* ===== Thêm / sửa khu ===== */
 
@@ -275,9 +276,12 @@ export function AddStallsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
+  // Sơ đồ mỗi khu là lưới 3×3 nên khu có tối đa MAX_STALLS_PER_BARN ô.
+  const room = Math.max(0, MAX_STALLS_PER_BARN - stalls.length);
   const n = Number(count);
   const first = Number(start);
-  const valid = Number.isInteger(n) && n >= 1 && n <= 20 && Number.isInteger(first) && first >= 0 && prefix.trim().length > 0;
+  const valid = Number.isInteger(n) && n >= 1 && n <= room && Number.isInteger(first) && first >= 0 && prefix.trim().length > 0;
+  const tooMany = Number.isInteger(n) && n > room && room > 0;
   const codes = valid ? Array.from({ length: n }, (_, index) => `${prefix.trim()}${String(first + index).padStart(width, '0')}`) : [];
 
   const submit = async () => {
@@ -321,8 +325,8 @@ export function AddStallsDialog({
     >
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Số ô" required hint="Tối đa 20 ô một lần">
-            <Input inputMode="numeric" value={count} onChange={(event) => setCount(event.target.value)} />
+          <Field label="Số ô" required error={tooMany ? `Chỉ thêm được ${room} ô nữa` : undefined} hint={`Khu đang có ${stalls.length}/${MAX_STALLS_PER_BARN} ô`}>
+            <Input inputMode="numeric" value={count} disabled={room === 0} onChange={(event) => setCount(event.target.value)} />
           </Field>
           <Field label="Tiền tố mã" required>
             <Input value={prefix} maxLength={70} className="font-mono" onChange={(event) => setPrefix(event.target.value)} />
@@ -345,6 +349,7 @@ export function AddStallsDialog({
             Sẽ tạo: <span className="font-mono">{codes.join(', ')}</span>
           </p>
         )}
+        {room === 0 && <Notice tone="warning">Khu đã đủ {MAX_STALLS_PER_BARN} ô, không thêm được nữa.</Notice>}
         {zone?.capacity && <p className="text-xs text-gray-500">Sức chứa tối đa của khu: {zone.capacity} ô.</p>}
         {error && <ErrorBox message={error} />}
       </div>

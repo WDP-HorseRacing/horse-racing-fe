@@ -6,53 +6,24 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CalendarClock, ClipboardList, FolderOpen, Map as MapIcon, Stethoscope, Syringe } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getMedicalDashboard } from '../../api/medical';
-import { listBarns } from '../../api/stable';
+import { listBarns, listStalls } from '../../api/stable';
 import type { HealthStatus, MedicalDashboard } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Button, Card, ChipFilter, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, Tip, cn } from '../../components/ui';
+import { Button, Card, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, Tabs, cn } from '../../components/ui';
 import { healthDot } from '../../components/ui/status';
-import { healthHint, healthLabel } from '../../lib/labels';
+import { healthLabel } from '../../lib/labels';
 import { careTypeLabel } from '../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { links, type VisitParams } from '../../lib/links';
 import { CareDue } from './components/care';
 import { usePeople } from './components/people';
 import { CheckupDue, Count, HorseChip, LinkAction, RequestMeta, RequestText } from './components/parts';
-import { HEALTH_SEVERITY, healthText, todayKey } from './components/utils';
+import { HEALTH_SEVERITY, todayKey } from './components/utils';
+import { ZoneBoard, ZoneLegend } from '../stable/components/ZoneBoard';
+import { buildCells, type StallOccupant } from '../stable/components/barn';
 
 type HerdHorse = MedicalDashboard['herd']['horses'][number];
-
-/** Dải nhấn trái cho ô có ngựa bất thường — ngựa bình thường không có màu. */
-const STALL_ACCENT: Record<HealthStatus, string> = {
-  ELIGIBLE: '',
-  UNDER_OBSERVATION: 'shadow-[inset_3px_0_0_0_#f59e0b]',
-  INJURED: 'shadow-[inset_3px_0_0_0_#ef4444]',
-  QUARANTINED: 'shadow-[inset_3px_0_0_0_#ef4444]',
-};
-
-function StallCell({ horse, openCase, onOpen }: { horse: HerdHorse; openCase: boolean; onOpen: (id: string) => void }) {
-  const abnormal = horse.healthStatus !== 'ELIGIBLE';
-  return (
-    <Tip content={healthHint[horse.healthStatus]}>
-      <button
-        type="button"
-        onClick={() => onOpen(horse.horseId)}
-        className={cn(
-          'flex min-h-17 flex-col justify-between rounded-xl border border-gray-200 bg-white p-2.5 text-left transition hover:border-gray-300 hover:bg-gray-50',
-          STALL_ACCENT[horse.healthStatus],
-        )}
-      >
-        <span className="flex items-center justify-between gap-1">
-          <span className="font-mono text-[11px] text-gray-400">{horse.stallCode}</span>
-          {openCase && <FolderOpen size={11} className="text-gray-400" aria-label="Có bệnh án mở" />}
-        </span>
-        <span className="mt-1 block truncate text-sm font-semibold text-gray-900">{horse.horseName}</span>
-        {abnormal && <span className={cn('block truncate text-[11px] font-medium', healthText[horse.healthStatus])}>{healthLabel[horse.healthStatus]}</span>}
-      </button>
-    </Tip>
-  );
-}
 
 function HorseToken({ horse, onOpen }: { horse: HerdHorse; onOpen: (id: string) => void }) {
   return (
@@ -73,28 +44,32 @@ export default function MedicalBoard() {
   const isVet = can(user, 'exam.record');
   const [barnId, setBarnId] = useState('');
   const [health, setHealth] = useState<HealthStatus | ''>('');
-  const barns = useService(() => listBarns(), []);
+  const barns = useService(() => Promise.all([listBarns(), listStalls()]).then(([items, stalls]) => ({ items, stalls })), []);
   const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined, healthStatus: health || undefined }), [barnId, health]);
   const people = usePeople();
   const exam = (params: VisitParams = {}) => navigate(links.visitNew({ ...params, back: links.medicalBoard }));
 
-  const barnName = useMemo(() => new Map((barns.data ?? []).map((barn) => [barn.id, barn.name])), [barns.data]);
   const data = board.data;
 
-  const groups = useMemo(() => {
-    if (!data) return [];
-    const map = new Map<string, { key: string; name: string; placed: HerdHorse[]; waiting: HerdHorse[] }>();
-    data.herd.horses.forEach((horse) => {
-      const key = horse.barnId ?? '';
-      if (!map.has(key)) map.set(key, { key, name: horse.barnId ? (barnName.get(horse.barnId) ?? 'Khu chuồng') : 'Chưa xếp khu', placed: [], waiting: [] });
-      const group = map.get(key)!;
-      (horse.stallId ? group.placed : group.waiting).push(horse);
-    });
-    const order = (barns.data ?? []).map((barn) => barn.id);
-    return [...map.values()]
-      .map((group) => ({ ...group, placed: [...group.placed].sort((a, b) => (a.stallCode ?? '').localeCompare(b.stallCode ?? '')) }))
-      .sort((a, b) => (a.key === '' ? 1 : b.key === '' ? -1 : order.indexOf(a.key) - order.indexOf(b.key)));
-  }, [data, barnName, barns.data]);
+  // Sơ đồ đàn: mỗi khu một lưới 3×3 ô như Sơ đồ chuồng. Ô có ngựa không khớp bộ lọc sức khỏe hiện mờ.
+  const herd = useMemo(() => {
+    if (!data || !barns.data) return null;
+    const caseByHorse = new Map(data.openCases.map((item) => [item.horseId, item.initialDiagnosis]));
+    const occupants = new Map<string, StallOccupant>(
+      data.herd.horses
+        .filter((horse) => horse.stallId)
+        .map((horse) => [horse.stallId!, { id: horse.horseId, name: horse.horseName, healthStatus: horse.healthStatus, openCase: caseByHorse.get(horse.horseId) }]),
+    );
+    const zones = barns.data.items
+      .filter((barn) => !barnId || barn.id === barnId)
+      .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }))
+      .map((barn) => ({
+        barn,
+        cells: buildCells(barn.id, barns.data!.stalls, occupants),
+        waiting: data.herd.horses.filter((horse) => horse.barnId === barn.id && !horse.stallId),
+      }));
+    return { zones, noBarn: data.herd.horses.filter((horse) => !horse.barnId) };
+  }, [data, barns.data, barnId]);
 
   if (board.loading && !data) return <Skeleton rows={6} />;
   if (board.error && !data) return <ErrorBox message={board.error} />;
@@ -104,7 +79,6 @@ export default function MedicalBoard() {
   const counts = data.herd.counts;
   const total = HEALTH_SEVERITY.reduce((sum, status) => sum + counts[status], 0);
   const urgentCount = data.pendingRequests.filter((row) => row.urgent).length;
-  const openCaseHorses = new Set(data.openCases.map((item) => item.horseId));
   const today = todayKey();
   const filtered = !!barnId || !!health;
 
@@ -122,29 +96,28 @@ export default function MedicalBoard() {
         }
       />
 
-      {/* Bộ lọc: khu + sức khỏe (số đếm theo bộ lọc) */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
-          <option value="">Mọi khu</option>
-          {barns.data?.map((barn) => (
-            <option key={barn.id} value={barn.id}>
-              {barn.name}
-            </option>
-          ))}
-        </FilterSelect>
-        <ChipFilter<HealthStatus | ''>
-          value={health}
-          onChange={(value) => setHealth(value === health ? '' : value)}
-          options={[
-            { value: '', label: 'Tất cả', count: health ? undefined : total },
-            ...HEALTH_SEVERITY.map((status) => ({
-              value: status,
-              label: healthLabel[status],
-              count: counts[status],
-            })),
+      {/* Bộ lọc: sức khỏe (tab) + khu, áp cho mọi khối bên dưới (số đếm theo bộ lọc) */}
+      <div className="flex flex-wrap items-end gap-3">
+        <Tabs
+          className="min-w-0 flex-1"
+          active={health}
+          onChange={(key) => setHealth(key as HealthStatus | '')}
+          tabs={[
+            { key: '', label: 'Toàn đàn', count: health ? undefined : total },
+            ...HEALTH_SEVERITY.map((status) => ({ key: status, label: healthLabel[status], count: counts[status] })),
           ]}
         />
-        {board.loading && <span className="text-xs text-gray-400">Đang tải…</span>}
+        <div className="flex items-center gap-2 pb-1.5">
+          {board.loading && <span className="text-xs text-gray-400">Đang tải…</span>}
+          <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
+            <option value="">Mọi khu</option>
+            {barns.data?.items.map((barn) => (
+              <option key={barn.id} value={barn.id}>
+                {barn.name}
+              </option>
+            ))}
+          </FilterSelect>
+        </div>
       </div>
       {board.error && <ErrorBox message={board.error} />}
 
@@ -293,60 +266,51 @@ export default function MedicalBoard() {
         </div>
       </div>
 
-      {/* Sơ đồ đàn theo khu */}
+      {/* Sơ đồ đàn theo khu — cùng cách vẽ với Sơ đồ chuồng */}
       <Card>
-        <SectionTitle
-          icon={<MapIcon size={16} />}
-          action={
-            <div className="hidden flex-wrap items-center gap-4 text-xs text-gray-500 sm:flex">
-              <span className="inline-flex items-center gap-1.5">
-                <Dot tone="warn" /> Cần theo dõi
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Dot tone="danger" /> Chấn thương
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Dot tone="danger" hollow /> Cách ly
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <FolderOpen size={11} className="text-gray-400" /> Bệnh án mở
-              </span>
-            </div>
-          }
-        >
+        <SectionTitle icon={<MapIcon size={16} />} action={<LinkAction to={links.stable}>Sơ đồ chuồng</LinkAction>}>
           Sơ đồ đàn theo khu
         </SectionTitle>
-        {groups.length === 0 ? (
+        <ZoneLegend className="mb-4" />
+        {!herd ? (
+          <Skeleton rows={2} />
+        ) : herd.zones.length === 0 && herd.noBarn.length === 0 ? (
           <EmptyState title="Không có ngựa nào khớp bộ lọc" hint="Bỏ lọc khu hoặc sức khỏe để xem toàn đàn." />
         ) : (
-          <div className="grid gap-x-8 gap-y-6 xl:grid-cols-2">
-            {groups.map((group) => (
-              <section key={group.key || 'none'}>
-                <p className="mb-2.5 text-sm font-semibold text-gray-800">
-                  {group.name}
-                  <span className="ml-2 font-normal text-gray-500">{group.placed.length + group.waiting.length} ngựa</span>
-                </p>
-                {group.placed.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                    {group.placed.map((horse) => (
-                      <StallCell key={horse.horseId} horse={horse} openCase={openCaseHorses.has(horse.horseId)} onOpen={openHorse} />
-                    ))}
-                  </div>
-                )}
-                {group.waiting.length > 0 && (
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-gray-500">Chưa xếp ô:</span>
-                    {group.waiting.map((horse) => (
-                      <HorseToken key={horse.horseId} horse={horse} onOpen={openHorse} />
-                    ))}
-                  </div>
-                )}
-              </section>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {herd.zones.map((zone) => (
+              <ZoneBoard
+                key={zone.barn.id}
+                size="compact"
+                variant="nested"
+                barn={zone.barn}
+                cells={zone.cells}
+                cellLink={(cell) => (cell.occupant ? links.horseMedical(cell.occupant.id) : undefined)}
+                footer={
+                  zone.waiting.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-medium text-gray-500">Chưa xếp ô:</span>
+                      {zone.waiting.map((horse) => (
+                        <HorseToken key={horse.horseId} horse={horse} onOpen={openHorse} />
+                      ))}
+                    </div>
+                  ) : undefined
+                }
+              />
             ))}
+            {herd.noBarn.length > 0 && (
+              <section className="rounded-2xl bg-gray-50/70 p-3.5 ring-1 ring-gray-200/60">
+                <p className="mb-2 text-base font-bold text-gray-900">Chưa xếp khu</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {herd.noBarn.map((horse) => (
+                    <HorseToken key={horse.horseId} horse={horse} onOpen={openHorse} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </Card>
-
     </div>
   );
 }

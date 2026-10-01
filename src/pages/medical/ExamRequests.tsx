@@ -13,16 +13,18 @@ import {
   ActionMenu,
   Button,
   Card,
-  ChipFilter,
   DataTable,
   EmptyState,
   ErrorBox,
   FilterSelect,
+  FilterTabs,
   PageHeader,
   SectionTitle,
   Skeleton,
-  Toolbar,
+  TabPanel,
+  Tabs,
   cn,
+  type TabItem,
 } from '../../components/ui';
 import { RequestPill, UrgentPill } from '../../components/ui/status';
 import { requestSourceLabel } from '../../lib/api-labels';
@@ -40,6 +42,11 @@ const STATUS_OPTIONS: { value: ExamRequestStatus; label: string }[] = [
   { value: 'EXAMINED', label: 'Đã khám' },
   { value: 'DISMISSED', label: 'Đã bỏ qua' },
 ];
+
+/** Tab trạng thái; API phân trang theo từng trạng thái nên chỉ tab đang chọn có số. */
+function statusTabs(active: ExamRequestStatus, total?: number): TabItem[] {
+  return STATUS_OPTIONS.map((option) => ({ key: option.value, label: option.label, count: option.value === active ? total : undefined }));
+}
 
 function Outcome({ row, people }: { row: ExamRequest; people: People }) {
   if (row.status === 'EXAMINED') {
@@ -145,57 +152,57 @@ function GroomView() {
           <RequestForm onDone={queue.list.reload} />
         </Card>
         <div className="space-y-3 lg:col-span-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <SectionTitle className="mb-0">Yêu cầu của ngựa tôi chăm sóc</SectionTitle>
-            <ChipFilter<ExamRequestStatus> value={queue.status} onChange={queue.setStatus} options={STATUS_OPTIONS} />
-          </div>
-          {queue.list.loading && !queue.list.data ? (
-            <Skeleton rows={3} />
-          ) : queue.list.error ? (
-            <ErrorBox message={queue.list.error} />
-          ) : rows.length === 0 ? (
-            <EmptyState
-              title={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Chưa có yêu cầu nào'}
-              hint="Chỉ hiện yêu cầu của ngựa bạn đang được phân công chăm sóc."
-            />
-          ) : (
-            <>
-              {rows.map((row) => (
-                <article
-                  key={row.id}
-                  className={cn(
-                    'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80',
-                    row.status === 'PENDING' && row.urgent ? 'shadow-[inset_3px_0_0_0_#ef4444]' : 'shadow-card',
-                  )}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <HorseChip horse={{ id: row.horseId, name: row.horseName }} size={36} to={links.horse(row.horseId)} />
-                    <div className="flex items-center gap-2">
-                      {row.urgent && <UrgentPill urgent />}
-                      <RequestPill status={row.status} />
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <RequestText text={row.description} />
-                  </div>
-                  <div className="mt-2">
-                    <RequestMeta request={row} people={people} showUrgent={false} />
-                  </div>
-                  {row.status !== 'PENDING' && (
-                    <div className="mt-3 border-t border-gray-100 pt-3">
-                      <Outcome row={row} people={people} />
-                    </div>
-                  )}
-                </article>
-              ))}
-              <Pager
-                page={queue.page}
-                totalPages={queue.list.data?.meta.totalPages ?? 1}
-                total={queue.list.data?.meta.total ?? 0}
-                onChange={queue.setPage}
+          <SectionTitle className="mb-0">Yêu cầu của ngựa tôi chăm sóc</SectionTitle>
+          <Tabs active={queue.status} onChange={(key) => queue.setStatus(key as ExamRequestStatus)} tabs={statusTabs(queue.status, queue.list.data?.meta.total)} />
+          <TabPanel className="space-y-3 bg-gray-50/60 p-4">
+            {queue.list.loading && !queue.list.data ? (
+              <Skeleton rows={3} />
+            ) : queue.list.error ? (
+              <ErrorBox message={queue.list.error} />
+            ) : rows.length === 0 ? (
+              <EmptyState
+                title={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Chưa có yêu cầu nào'}
+                hint="Chỉ hiện yêu cầu của ngựa bạn đang được phân công chăm sóc."
               />
-            </>
-          )}
+            ) : (
+              <>
+                {rows.map((row) => (
+                  <article
+                    key={row.id}
+                    className={cn(
+                      'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80',
+                      row.status === 'PENDING' && row.urgent ? 'shadow-[inset_3px_0_0_0_#ef4444]' : 'shadow-card',
+                    )}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <HorseChip horse={{ id: row.horseId, name: row.horseName }} size={36} to={links.horse(row.horseId)} />
+                      <div className="flex items-center gap-2">
+                        {row.urgent && <UrgentPill urgent />}
+                        <RequestPill status={row.status} />
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <RequestText text={row.description} />
+                    </div>
+                    <div className="mt-2">
+                      <RequestMeta request={row} people={people} showUrgent={false} />
+                    </div>
+                    {row.status !== 'PENDING' && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <Outcome row={row} people={people} />
+                      </div>
+                    )}
+                  </article>
+                ))}
+                <Pager
+                  page={queue.page}
+                  totalPages={queue.list.data?.meta.totalPages ?? 1}
+                  total={queue.list.data?.meta.total ?? 0}
+                  onChange={queue.setPage}
+                />
+              </>
+            )}
+          </TabPanel>
         </div>
       </div>
     </div>
@@ -238,87 +245,98 @@ function StaffView() {
         }
       />
 
-      <Toolbar className="justify-between">
-        <ChipFilter<ExamRequestStatus> value={queue.status} onChange={queue.setStatus} options={STATUS_OPTIONS} />
-        <div className="flex items-center gap-3">
-          {data && <span className="text-sm text-gray-500">{data.meta.total} yêu cầu</span>}
-          <FilterSelect value={queue.urgent} onChange={queue.setUrgent} label="Mức độ">
-            <option value="">Mọi mức độ</option>
-            <option value="true">Khẩn</option>
-            <option value="false">Bình thường</option>
-          </FilterSelect>
-        </div>
-      </Toolbar>
-
-      {queue.list.loading && !data ? (
-        <Skeleton rows={6} />
-      ) : queue.list.error ? (
-        <ErrorBox message={queue.list.error} />
-      ) : (
-        <div className="space-y-3">
-          <DataTable
-            rows={rows}
-            rowKey={(row) => row.id}
-            pageSize={LIMIT}
-            emptyTitle={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
-            emptyHint={queue.status === 'PENDING' ? 'Yêu cầu từ Groom, nhân viên và cảnh báo chỉ số sẽ hiện ở đây.' : undefined}
-            columns={[
-              { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
-              {
-                key: 'source',
-                header: 'Nguồn · mức',
-                render: (row) => (
-                  <div className="space-y-1">
-                    {row.urgent && <UrgentPill urgent />}
-                    <p className="text-xs text-gray-600">{requestSourceLabel[row.source]}</p>
-                  </div>
-                ),
-              },
-              {
-                key: 'desc',
-                header: 'Mô tả',
-                className: 'min-w-[260px] max-w-md',
-                render: (row) => <RequestText text={row.description} />,
-              },
-              {
-                key: 'by',
-                header: 'Người gửi',
-                render: (row) => (
-                  <div className="text-xs">
-                    <p className="font-medium text-gray-700">{row.requestedBySystem ? 'Hệ thống' : people.name(row.requestedBy)}</p>
-                    <p className="text-gray-500" title={formatDateTime(row.createdAt)}>
-                      {formatRelative(row.createdAt, now())}
-                    </p>
-                  </div>
-                ),
-              },
-              ...(queue.status === 'PENDING'
-                ? []
-                : [{ key: 'outcome', header: 'Kết quả', render: (row: ExamRequest) => <Outcome row={row} people={people} /> }]),
-              {
-                key: 'actions',
-                header: '',
-                className: 'text-right',
-                render: (row) =>
-                  isVet && row.status === 'PENDING' ? (
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant={row.urgent ? 'primary' : 'secondary'} onClick={() => navigate(links.visitNew({ horseId: row.horseId, kind: 'REQUEST', requestIds: [row.id], back: links.requests }))}>
-                        <Stethoscope size={14} /> Khám
-                      </Button>
-                      <ActionMenu
-                        items={[
-                          { label: row.urgent ? 'Hạ xuống Bình thường' : 'Nâng lên Khẩn', onSelect: () => setUrgency(row) },
-                          { label: 'Bỏ qua yêu cầu', danger: true, onSelect: () => setDismissing(row) },
-                        ]}
-                      />
+      <FilterTabs
+        active={queue.status}
+        onChange={(key) => queue.setStatus(key as ExamRequestStatus)}
+        tabs={statusTabs(queue.status, data?.meta.total)}
+        toolbar={
+          <>
+            <FilterSelect value={queue.urgent} onChange={queue.setUrgent} label="Mức độ">
+              <option value="">Mọi mức độ</option>
+              <option value="true">Khẩn</option>
+              <option value="false">Bình thường</option>
+            </FilterSelect>
+            {data && <span className="ml-auto text-sm text-gray-500">{data.meta.total} yêu cầu</span>}
+          </>
+        }
+      >
+        {queue.list.loading && !data ? (
+          <Skeleton rows={6} className="p-4" />
+        ) : queue.list.error ? (
+          <div className="p-4">
+            <ErrorBox message={queue.list.error} />
+          </div>
+        ) : (
+          <div>
+            <DataTable
+              flat
+              rows={rows}
+              rowKey={(row) => row.id}
+              pageSize={LIMIT}
+              emptyTitle={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
+              emptyHint={queue.status === 'PENDING' ? 'Yêu cầu từ Groom, nhân viên và cảnh báo chỉ số sẽ hiện ở đây.' : undefined}
+              columns={[
+                { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
+                {
+                  key: 'source',
+                  header: 'Nguồn · mức',
+                  render: (row) => (
+                    <div className="space-y-1">
+                      {row.urgent && <UrgentPill urgent />}
+                      <p className="text-xs text-gray-600">{requestSourceLabel[row.source]}</p>
                     </div>
-                  ) : null,
-              },
-            ]}
-          />
-          <Pager page={queue.page} totalPages={data?.meta.totalPages ?? 1} total={data?.meta.total ?? 0} onChange={queue.setPage} />
-        </div>
-      )}
+                  ),
+                },
+                {
+                  key: 'desc',
+                  header: 'Mô tả',
+                  className: 'min-w-[260px] max-w-md',
+                  render: (row) => <RequestText text={row.description} />,
+                },
+                {
+                  key: 'by',
+                  header: 'Người gửi',
+                  render: (row) => (
+                    <div className="text-xs">
+                      <p className="font-medium text-gray-700">{row.requestedBySystem ? 'Hệ thống' : people.name(row.requestedBy)}</p>
+                      <p className="text-gray-500" title={formatDateTime(row.createdAt)}>
+                        {formatRelative(row.createdAt, now())}
+                      </p>
+                    </div>
+                  ),
+                },
+                ...(queue.status === 'PENDING'
+                  ? []
+                  : [{ key: 'outcome', header: 'Kết quả', render: (row: ExamRequest) => <Outcome row={row} people={people} /> }]),
+                {
+                  key: 'actions',
+                  header: '',
+                  className: 'text-right',
+                  render: (row) =>
+                    isVet && row.status === 'PENDING' ? (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button size="sm" variant={row.urgent ? 'primary' : 'secondary'} onClick={() => navigate(links.visitNew({ horseId: row.horseId, kind: 'REQUEST', requestIds: [row.id], back: links.requests }))}>
+                          <Stethoscope size={14} /> Khám
+                        </Button>
+                        <ActionMenu
+                          items={[
+                            { label: row.urgent ? 'Hạ xuống Bình thường' : 'Nâng lên Khẩn', onSelect: () => setUrgency(row) },
+                            { label: 'Bỏ qua yêu cầu', danger: true, onSelect: () => setDismissing(row) },
+                          ]}
+                        />
+                      </div>
+                    ) : null,
+                },
+              ]}
+            />
+            {(data?.meta.totalPages ?? 1) > 1 && (
+              <div className="border-t border-gray-100 px-4 py-2.5">
+                <Pager page={queue.page} totalPages={data?.meta.totalPages ?? 1} total={data?.meta.total ?? 0} onChange={queue.setPage} />
+              </div>
+            )}
+          </div>
+        )}
+      </FilterTabs>
 
       <CreateRequestModal open={creating} onClose={() => setCreating(false)} onDone={queue.list.reload} />
       {dismissing && (

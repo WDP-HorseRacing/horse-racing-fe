@@ -1,5 +1,5 @@
 // Bảng quyền dùng chung: menu, nút bấm và service đều hỏi cùng một nơi.
-// Màn hình "Phân quyền" ở phần Quản trị được sinh thẳng từ bảng này.
+// Quyền chi tiết theo vai trò; giao diện ẩn/hiện nút theo bảng này, backend vẫn kiểm lại.
 // Ký hiệu phạm vi: all = toàn câu lạc bộ, zone = khu HT phụ trách, assigned = ngựa được giao, owned = ngựa sở hữu.
 import type { ClassSession, Database, Horse, User, UserRole } from '../types/domain';
 import { effectiveGroomId, managedZoneIds, sessionRoster } from '../services/selectors';

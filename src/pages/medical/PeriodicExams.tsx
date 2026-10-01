@@ -9,7 +9,7 @@ import { listBarns } from '../../api/stable';
 import type { CheckupDueStatus, CheckupItem } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Button, ChipFilter, DataTable, ErrorBox, FilterSelect, PageHeader, SearchInput, Skeleton, Toolbar } from '../../components/ui';
+import { Button, DataTable, ErrorBox, FilterSelect, FilterTabs, PageHeader, SearchInput, Skeleton } from '../../components/ui';
 import { HealthPill } from '../../components/ui/status';
 import { checkupStatusLabel } from '../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../lib/format';
@@ -68,100 +68,101 @@ export default function PeriodicExams() {
         Chu kỳ cố định 30 ngày: hạn = buổi khám gần nhất (mọi loại, kể cả trong bệnh án) + 30 ngày. Quá hạn hơn 7 ngày thì bác sĩ và quản lý nhận thông báo.
       </p>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <ChipFilter<CheckupDueStatus | ''>
-          value={status}
-          onChange={(value) => setStatus(value === status ? '' : value)}
-          options={[
-            { value: '', label: 'Tất cả', count: all.length },
-            { value: 'OVERDUE', label: checkupStatusLabel.OVERDUE, count: counts.OVERDUE },
-            { value: 'DUE_SOON', label: checkupStatusLabel.DUE_SOON, count: counts.DUE_SOON },
-            { value: 'OK', label: checkupStatusLabel.OK, count: counts.OK },
-          ]}
-        />
-        {alertCount > 0 && <span className="text-sm font-medium text-red-700">{alertCount} ngựa quá hạn hơn 7 ngày</span>}
-      </div>
-
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa…" className="min-w-60 flex-1" />
-        <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
-          <option value="">Mọi khu</option>
-          {barns.data?.map((barn) => (
-            <option key={barn.id} value={barn.id}>
-              {barn.name}
-            </option>
-          ))}
-        </FilterSelect>
-      </Toolbar>
       {list.error && <ErrorBox message={list.error} />}
 
-      <DataTable
-        rows={rows}
-        rowKey={(row) => row.horseId}
-        pageSize={20}
-        emptyTitle={all.length === 0 ? 'Chưa có ngựa nào cần khám định kỳ' : 'Không có ngựa phù hợp'}
-        emptyHint={all.length === 0 ? 'Ngựa đang hoạt động hoặc đã giải nghệ đều có hạn khám; ngựa đã chuyển nhượng thì không.' : 'Thử bỏ bộ lọc tình trạng hoặc khu.'}
-        columns={[
-          {
-            key: 'horse',
-            header: 'Ngựa',
-            render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} sub={row.barnId ? barnName.get(row.barnId) : 'Chưa xếp khu'} />,
-          },
-          { key: 'health', header: 'Sức khỏe', render: (row) => <HealthPill status={row.healthStatus} /> },
-          {
-            key: 'last',
-            header: 'Buổi khám gần nhất',
-            render: (row) =>
-              row.lastVisitDate ? (
-                <span className="text-sm text-gray-700">{formatDate(row.lastVisitDate)}</span>
-              ) : (
-                <span className="text-xs text-gray-500">Chưa khám, tính từ ngày tạo hồ sơ</span>
-              ),
-          },
-          {
-            key: 'due',
-            header: 'Hạn khám',
-            render: (row) => (
-              <div className="space-y-1">
-                <p className="font-semibold tabular-nums text-gray-900">{formatDate(row.dueDate)}</p>
-                <CheckupDue status={row.dueStatus} daysLeft={row.daysLeft} />
-              </div>
-            ),
-          },
-          {
-            key: 'appointment',
-            header: 'Ngày hẹn',
-            render: (row) =>
-              row.appointment ? (
-                <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
-                  <CalendarClock size={13} className="text-gray-400" /> {formatDateTime(row.appointment.scheduledAt)}
-                </span>
-              ) : (
-                <span className="text-xs text-gray-400">Chưa hẹn</span>
-              ),
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (row) =>
-              isVet || canAppoint ? (
-                <div className="flex justify-end gap-1">
-                  {canAppoint && (
-                    <Button size="sm" variant="ghost" onClick={() => setAppointing(row)}>
-                      {row.appointment ? 'Dời hẹn' : 'Đặt hẹn'}
-                    </Button>
-                  )}
-                  {isVet && (
-                    <Button size="sm" variant="secondary" onClick={() => exam(row.horseId)}>
-                      <Stethoscope size={14} /> Ghi khám
-                    </Button>
-                  )}
-                </div>
-              ) : null,
-          },
+      <FilterTabs
+        active={status}
+        onChange={(key) => setStatus(key as CheckupDueStatus | '')}
+        tabs={[
+          { key: '', label: 'Tất cả', count: all.length },
+          { key: 'OVERDUE', label: checkupStatusLabel.OVERDUE, count: counts.OVERDUE },
+          { key: 'DUE_SOON', label: checkupStatusLabel.DUE_SOON, count: counts.DUE_SOON },
+          { key: 'OK', label: checkupStatusLabel.OK, count: counts.OK },
         ]}
-      />
+        toolbar={
+          <>
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa…" className="min-w-60 flex-1" />
+            <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
+              <option value="">Mọi khu</option>
+              {barns.data?.map((barn) => (
+                <option key={barn.id} value={barn.id}>
+                  {barn.name}
+                </option>
+              ))}
+            </FilterSelect>
+            {alertCount > 0 && <span className="text-sm font-medium text-red-700">{alertCount} ngựa quá hạn hơn 7 ngày</span>}
+          </>
+        }
+      >
+        <DataTable
+          flat
+          rows={rows}
+          rowKey={(row) => row.horseId}
+          pageSize={20}
+          emptyTitle={all.length === 0 ? 'Chưa có ngựa nào cần khám định kỳ' : 'Không có ngựa phù hợp'}
+          emptyHint={all.length === 0 ? 'Ngựa đang hoạt động hoặc đã giải nghệ đều có hạn khám; ngựa đã chuyển nhượng thì không.' : 'Thử bỏ bộ lọc tình trạng hoặc khu.'}
+          columns={[
+            {
+              key: 'horse',
+              header: 'Ngựa',
+              render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} sub={row.barnId ? barnName.get(row.barnId) : 'Chưa xếp khu'} />,
+            },
+            { key: 'health', header: 'Sức khỏe', render: (row) => <HealthPill status={row.healthStatus} /> },
+            {
+              key: 'last',
+              header: 'Buổi khám gần nhất',
+              render: (row) =>
+                row.lastVisitDate ? (
+                  <span className="text-sm text-gray-700">{formatDate(row.lastVisitDate)}</span>
+                ) : (
+                  <span className="text-xs text-gray-500">Chưa khám, tính từ ngày tạo hồ sơ</span>
+                ),
+            },
+            {
+              key: 'due',
+              header: 'Hạn khám',
+              render: (row) => (
+                <div className="space-y-1">
+                  <p className="font-semibold tabular-nums text-gray-900">{formatDate(row.dueDate)}</p>
+                  <CheckupDue status={row.dueStatus} daysLeft={row.daysLeft} />
+                </div>
+              ),
+            },
+            {
+              key: 'appointment',
+              header: 'Ngày hẹn',
+              render: (row) =>
+                row.appointment ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+                    <CalendarClock size={13} className="text-gray-400" /> {formatDateTime(row.appointment.scheduledAt)}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-400">Chưa hẹn</span>
+                ),
+            },
+            {
+              key: 'actions',
+              header: '',
+              className: 'text-right',
+              render: (row) =>
+                isVet || canAppoint ? (
+                  <div className="flex justify-end gap-1">
+                    {canAppoint && (
+                      <Button size="sm" variant="ghost" onClick={() => setAppointing(row)}>
+                        {row.appointment ? 'Dời hẹn' : 'Đặt hẹn'}
+                      </Button>
+                    )}
+                    {isVet && (
+                      <Button size="sm" variant="secondary" onClick={() => exam(row.horseId)}>
+                        <Stethoscope size={14} /> Ghi khám
+                      </Button>
+                    )}
+                  </div>
+                ) : null,
+            },
+          ]}
+        />
+      </FilterTabs>
 
       {appointing && (
         <AppointmentModal

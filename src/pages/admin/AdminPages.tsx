@@ -1,16 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Check, Plus, ShieldCheck, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
-import { getPermissionMatrix } from '../../auth/permission-matrix';
 import { createUser, listAllUsers, setUserStatus, updateUser } from '../../api/users';
 import type { Role, UserAccount } from '../../api/types';
 import {
   Avatar,
   Button,
-  Card,
   ConfirmDialog,
   DataTable,
   ErrorBox,
+  FilterTabs,
   Field,
   Input,
   Modal,
@@ -18,11 +17,8 @@ import {
   PageHeader,
   Pill,
   SearchInput,
-  Segmented,
-  SectionTitle,
   Select,
   Skeleton,
-  Toolbar,
   useToast,
 } from '../../components/ui';
 import { roleLabel } from '../../lib/labels';
@@ -81,7 +77,7 @@ export function AdminUsers() {
     <div className="space-y-6">
       <PageHeader
         title="Nhân sự"
-        description="Tạo tài khoản, đổi vai trò, khóa hoặc mở lại tài khoản. Khu phụ trách của HLV trưởng gán ở danh mục khu chuồng."
+        description="Tạo tài khoản, đổi vai trò, khóa hoặc mở lại tài khoản. Khu phụ trách của HLV trưởng gán trên Sơ đồ chuồng."
         actions={
           <Button
             onClick={() => {
@@ -96,91 +92,90 @@ export function AdminUsers() {
       />
       {error && <ErrorBox message={error} />}
 
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc email…" className="min-w-[240px] flex-1" />
-        <Segmented<Role | ''>
-          value={roleFilter}
-          onChange={setRoleFilter}
-          options={[{ value: '', label: 'Tất cả' }, ...ROLES.map((item) => ({ value: item, label: shortRole(item), badge: counts[item] }))]}
-        />
-      </Toolbar>
-
-      <DataTable
-        rows={rows}
-        rowKey={(row) => row.id}
-        pageSize={20}
-        emptyTitle="Không có tài khoản phù hợp"
-        columns={[
-          {
-            key: 'name',
-            header: 'Tài khoản',
-            render: (row) => (
-              <div className="flex items-center gap-3">
-                <Avatar name={row.fullName} size={36} />
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-semibold text-gray-900">
-                    {row.fullName}
-                    {row.id === me?.id && <Pill tone="slate">Bạn</Pill>}
-                  </p>
-                  <p className="text-xs text-gray-500">{row.email}</p>
+      <FilterTabs
+        active={roleFilter}
+        onChange={(key) => setRoleFilter(key as Role | '')}
+        tabs={[{ key: '', label: 'Tất cả', count: data?.length ?? 0 }, ...ROLES.map((item) => ({ key: item, label: shortRole(item), count: counts[item] ?? 0 }))]}
+        toolbar={<SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc email…" className="min-w-60 flex-1" />}
+      >
+        <DataTable
+          flat
+          rows={rows}
+          rowKey={(row) => row.id}
+          pageSize={20}
+          emptyTitle="Không có tài khoản phù hợp"
+          columns={[
+            {
+              key: 'name',
+              header: 'Tài khoản',
+              render: (row) => (
+                <div className="flex items-center gap-3">
+                  <Avatar name={row.fullName} size={36} />
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold text-gray-900">
+                      {row.fullName}
+                      {row.id === me?.id && <Pill tone="slate">Bạn</Pill>}
+                    </p>
+                    <p className="text-xs text-gray-500">{row.email}</p>
+                  </div>
                 </div>
-              </div>
-            ),
-          },
-          { key: 'role', header: 'Vai trò', render: (row) => <span className="font-medium text-gray-700">{row.role ? roleLabel[row.role] : '—'}</span> },
-          {
-            key: 'status',
-            header: 'Trạng thái',
-            render: (row) =>
-              row.status === 'ACTIVE' ? (
-                <span className="text-sm text-gray-500">{userStatusLabel.ACTIVE}</span>
-              ) : (
-                <Pill tone="amber">{userStatusLabel[row.status]}</Pill>
               ),
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (row) => (
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setEditing(row);
-                    setEditName(row.fullName);
-                    setEditRole(row.role ?? 'GROOM');
-                    action.clearError();
-                  }}
-                >
-                  Sửa
-                </Button>
-                {row.id !== me?.id && (
+            },
+            { key: 'role', header: 'Vai trò', render: (row) => <span className="font-medium text-gray-700">{row.role ? roleLabel[row.role] : '—'}</span> },
+            {
+              key: 'status',
+              header: 'Trạng thái',
+              render: (row) =>
+                row.status === 'ACTIVE' ? (
+                  <span className="text-sm text-gray-500">{userStatusLabel.ACTIVE}</span>
+                ) : (
+                  <Pill tone="amber">{userStatusLabel[row.status]}</Pill>
+                ),
+            },
+            {
+              key: 'actions',
+              header: '',
+              className: 'text-right',
+              render: (row) => (
+                <div className="flex justify-end gap-2">
                   <Button
                     size="sm"
-                    variant={row.status === 'ACTIVE' ? 'ghost' : 'soft'}
-                    onClick={async () => {
-                      if (row.status === 'ACTIVE') {
-                        action.clearError();
-                        setLocking(row);
-                        return;
-                      }
-                      const done = await action.run(() => setUserStatus(row.id, 'ACTIVE'));
-                      if (done !== undefined) {
-                        toast.push(`Đã mở lại tài khoản ${row.fullName}`, 'success');
-                        reload();
-                      }
+                    variant="secondary"
+                    onClick={() => {
+                      setEditing(row);
+                      setEditName(row.fullName);
+                      setEditRole(row.role ?? 'GROOM');
+                      action.clearError();
                     }}
                   >
-                    {row.status === 'ACTIVE' ? 'Khóa' : 'Mở lại'}
+                    Sửa
                   </Button>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+                  {row.id !== me?.id && (
+                    <Button
+                      size="sm"
+                      variant={row.status === 'ACTIVE' ? 'ghost' : 'soft'}
+                      onClick={async () => {
+                        if (row.status === 'ACTIVE') {
+                          action.clearError();
+                          setLocking(row);
+                          return;
+                        }
+                        const done = await action.run(() => setUserStatus(row.id, 'ACTIVE'));
+                        if (done !== undefined) {
+                          toast.push(`Đã mở lại tài khoản ${row.fullName}`, 'success');
+                          reload();
+                        }
+                      }}
+                    >
+                      {row.status === 'ACTIVE' ? 'Khóa' : 'Mở lại'}
+                    </Button>
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
+      </FilterTabs>
       {action.error && !creating && !editing && !locking && <ErrorBox message={action.error} />}
 
       <Modal
@@ -317,63 +312,6 @@ export function AdminUsers() {
           }
         }}
       />
-    </div>
-  );
-}
-
-/* ===== Ma trận phân quyền ===== */
-
-export function AdminPermissions() {
-  const { data, loading } = useService(() => getPermissionMatrix(), []);
-
-  if (loading || !data) return <Skeleton rows={5} />;
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Ma trận phân quyền"
-        description="Vai trò nào được làm gì, trên phạm vi nào. Backend kiểm lại mọi thao tác theo đúng bảng này."
-      />
-      {data.groups.map((group) => (
-        <Card key={group.group} className="overflow-x-auto p-0 sm:p-0">
-          <div className="px-5 pt-5 sm:px-6">
-            <SectionTitle icon={<ShieldCheck size={16} />}>{group.group}</SectionTitle>
-          </div>
-          <table className="w-full min-w-[820px] text-left text-sm">
-            <thead>
-              <tr className="border-y border-gray-200/80 bg-gray-50/70">
-                <th className="w-16 px-5 py-2.5 text-xs font-semibold text-gray-500">Mã</th>
-                <th className="px-3 py-2.5 text-xs font-semibold text-gray-500">Chức năng</th>
-                {data.roles.map((item) => (
-                  <th key={item} className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500">
-                    {shortRole(item)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {group.rows.map((row) => (
-                <tr key={row.key} className="border-b border-gray-100 last:border-0">
-                  <td className="px-5 py-2.5 font-mono text-xs text-gray-400">{row.code}</td>
-                  <td className="px-3 py-2.5 text-gray-700">{row.feature}</td>
-                  {row.cells.map((cell) => (
-                    <td key={cell.role} className="px-3 py-2.5 text-center" title={cell.scopeLabel ?? 'Không có quyền'}>
-                      {cell.allowed ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-700">
-                          <Check size={12} strokeWidth={2.5} className="text-gray-900" />
-                          {cell.scopeLabel}
-                        </span>
-                      ) : (
-                        <X size={14} className="mx-auto text-gray-200" />
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      ))}
     </div>
   );
 }
