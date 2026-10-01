@@ -1,7 +1,7 @@
 // Trang Keycloak quay về sau khi đăng nhập Google: /auth/callback?code&state (hoặc ?error=).
 // Đổi mã lấy token qua BE rồi vào trang đích. Mã PKCE chỉ dùng được một lần, mà StrictMode chạy effect hai lần,
 // nên mỗi `state` chỉ gọi BE một lần (Map ở mức module) và chỉ xóa thông tin chờ khi đã có kết quả.
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useStore } from '../store/store';
@@ -14,7 +14,8 @@ export default function AuthCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const loginWithOidc = useStore((state) => state.loginWithOidc);
-  const [failed, setFailed] = useState<string>();
+  // Thiếu mã hoặc state mà Keycloak không báo lỗi: liên kết bị sửa tay hoặc mở lại từ lịch sử.
+  const failed = !params.get('error') && (!params.get('code') || !params.get('state')) ? 'Liên kết đăng nhập không hợp lệ.' : undefined;
 
   useEffect(() => {
     let active = true;
@@ -38,7 +39,6 @@ export default function AuthCallback() {
     const code = params.get('code');
     const state = params.get('state');
     if (!code || !state) {
-      setFailed('Liên kết đăng nhập không hợp lệ.');
       return () => {
         active = false;
       };
