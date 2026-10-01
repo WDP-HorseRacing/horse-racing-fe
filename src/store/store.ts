@@ -2,10 +2,10 @@
 // Dữ liệu nghiệp vụ không nằm ở đây — màn hình gọi src/api/* qua hook useService.
 import { create } from 'zustand';
 import type { AppNotification, User, UserRole } from '../types/domain';
-import { getMe, login as apiLogin, logout as apiLogout } from '../api/auth';
+import { exchangeOidcCode, getMe, login as apiLogin, logout as apiLogout, type OidcCallbackQuery } from '../api/auth';
 import { setUnauthorizedHandler } from '../api/http';
 import { startRealtime } from '../api/realtime';
-import { getTokens, onOtherTabTokensChange } from '../api/tokens';
+import { clearTokens, getTokens, onOtherTabTokensChange } from '../api/tokens';
 import type { CurrentUser, LiveNotificationPayload } from '../api/types';
 
 /** Lý do phiên kết thúc mà người dùng không bấm đăng xuất ở tab này. */
@@ -22,6 +22,8 @@ interface AppState {
   unreadCount: number;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<User>;
+  /** Hoàn tất đăng nhập Google: đổi mã Keycloak lấy token rồi vào phiên. */
+  loginWithOidc: (provider: 'google', query: OidcCallbackQuery) => Promise<User>;
   logout: () => Promise<void>;
   /** Tải lại thông tin tài khoản (sau khi đổi tên, đổi vai trò…). */
   refresh: () => Promise<void>;
@@ -74,6 +76,19 @@ export const useStore = create<AppState>((set, get) => {
     });
   };
 
+  /** Đã có token: lấy tài khoản rồi mở phiên. Tài khoản chưa được cấp / bị khóa thì bỏ token. */
+  const enterSession = async () => {
+    try {
+      const user = toUser(await getMe());
+      set({ currentUser: user, isAuthenticated: true, booting: false, sessionEnded: null, notifications: [], unreadCount: 0 });
+      startNotifications(user.id);
+      return user;
+    } catch (caught) {
+      clearTokens();
+      throw caught;
+    }
+  };
+
   const clearSession = () => {
     stopRealtime?.();
     stopRealtime = undefined;
@@ -105,10 +120,12 @@ export const useStore = create<AppState>((set, get) => {
 
     login: async (email, password) => {
       await apiLogin(email.trim(), password);
-      const user = toUser(await getMe());
-      set({ currentUser: user, isAuthenticated: true, sessionEnded: null, notifications: [], unreadCount: 0 });
-      startNotifications(user.id);
-      return user;
+      return enterSession();
+    },
+
+    loginWithOidc: async (provider, query) => {
+      await exchangeOidcCode(provider, query);
+      return enterSession();
     },
 
     logout: async () => {

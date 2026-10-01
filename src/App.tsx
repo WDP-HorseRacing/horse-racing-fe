@@ -7,6 +7,7 @@ import { FEATURES } from './config/features';
 
 import LandingPage from './pages/LandingPage';
 import { Login } from './pages/Login';
+import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/dashboard/Dashboard';
 import Profile from './pages/Profile';
 
@@ -109,6 +110,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
