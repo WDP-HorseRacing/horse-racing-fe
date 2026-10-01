@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { prefersReducedMotion } from '../lib/motion';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -144,7 +145,8 @@ export function useGsapEntrance<T extends HTMLElement = HTMLDivElement>(
     const children = el.querySelectorAll('[data-entrance]');
     const targets = children.length > 0 ? children : [el];
 
-    gsap.fromTo(
+    if (prefersReducedMotion()) return;
+    const tween = gsap.fromTo(
       targets,
       { opacity: 0, y },
       {
@@ -156,6 +158,9 @@ export function useGsapEntrance<T extends HTMLElement = HTMLDivElement>(
         ease: 'power3.out',
       }
     );
+    return () => {
+      tween.kill();
+    };
   }, [delay, duration, y, stagger]);
 
   return ref;
