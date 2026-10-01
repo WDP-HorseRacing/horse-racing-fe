@@ -36,7 +36,9 @@ import type { HorseDetail, HorsePermissions, MedicalRecord, TrainingLock } from 
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs, type Crumb } from '../../components/Breadcrumb';
-import { ActionMenu, Avatar, Button, Card, Dot, EmptyState, ErrorBox, NotFound, SectionTitle, Skeleton, Tabs, cn } from '../../components/ui';
+import { ActionMenu, Button, Card, Dot, EmptyState, ErrorBox, NotFound, Reveal, SectionTitle, Skeleton, Tabs, cn } from '../../components/ui';
+import { HorseDetailSkeleton } from '../../components/skeletons';
+import { HorseMedia } from '../horses/components/HorseMedia';
 import { CaseStatusPill, LockPill, RequestPill, healthDot } from '../../components/ui/status';
 import { healthHint, healthLabel } from '../../lib/labels';
 import { healthChangeSource } from '../../lib/api-labels';
@@ -78,47 +80,83 @@ export default function HorseMedical() {
   const user = useStore((state) => state.currentUser);
   const base = useService(async () => {
     const [horse, permissions] = await Promise.all([getHorse(id), getPermissions(id)]);
-    const photo = horse.mediaId ? await getPhotoUrl(id).then((result) => result.url).catch(() => undefined) : undefined;
-    return { horse, permissions, photo };
+    return { horse, permissions };
   }, [id]);
+  // Ảnh tải riêng: không chặn phần y tế.
+  const mediaId = base.data?.horse.mediaId;
+  const photo = useService(() => (mediaId ? getPhotoUrl(id).then((result) => result.url) : Promise.resolve(undefined)), [id, mediaId], { silent: true });
   const root = useRootCrumbs();
   const horse = base.data?.horse;
   useCrumbs(horse ? [{ label: horse.name, to: links.horse(horse.id) }, { label: 'Hồ sơ y tế' }] : null, root);
 
-  if (base.loading && !base.data) return <Skeleton rows={6} />;
+  if (base.loading && !base.data) return <HorseDetailSkeleton />;
   if (base.error || !base.data || !horse) return <NotFound message={base.error && !base.error.startsWith('Không tìm thấy') ? base.error : undefined} />;
-  const { permissions, photo } = base.data;
+  const { permissions } = base.data;
   const isHorseGroom = !!horse.groom && horse.groom.id === user?.id;
   if (!permissions.canViewMedicalTab && !isHorseGroom) {
     return <NotFound message="Hồ sơ y tế của ngựa này không hiển thị với vai trò của bạn." />;
   }
 
   return (
-    <div className="space-y-5">
-      <Header horse={horse} photo={photo} />
-      {permissions.canViewMedicalTab ? <FullView horse={horse} permissions={permissions} onChanged={base.reload} /> : <GroomView horse={horse} />}
-    </div>
+    <Reveal className="space-y-5">
+      <Header horse={horse} photo={photo.data} photoLoading={!!mediaId && photo.loading && !photo.data} onPhotoExpired={() => photo.reload()} />
+      <div data-reveal className="space-y-5">{permissions.canViewMedicalTab ? <FullView horse={horse} permissions={permissions} onChanged={base.reload} /> : <GroomView horse={horse} />}</div>
+    </Reveal>
   );
 }
 
 /* ===== Đầu trang ===== */
 
-function Header({ horse, photo }: { horse: HorseDetail; photo?: string }) {
+const HEALTH_SURFACE: Record<HorseDetail['healthStatus'], string> = {
+  ELIGIBLE: 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30',
+  UNDER_OBSERVATION: 'bg-amber-400/20 text-amber-100 ring-amber-300/35',
+  INJURED: 'bg-red-500/25 text-red-100 ring-red-300/40',
+  QUARANTINED: 'bg-red-500/25 text-red-100 ring-red-300/40',
+};
+
+/** Dải hero xanh rừng: ảnh ngựa, tên, trạng thái sức khỏe nổi bật, khóa huấn luyện, chỗ ở và người phụ trách. */
+function Header({ horse, photo, photoLoading, onPhotoExpired }: { horse: HorseDetail; photo?: string; photoLoading?: boolean; onPhotoExpired?: () => void }) {
   const place = [horse.location.barn?.name, horse.location.stall?.code].filter(Boolean).join(' · ');
+  const facts = [
+    { label: 'Chỗ ở', value: place || 'Chưa xếp chỗ' },
+    { label: 'Groom', value: horse.groom?.fullName ?? 'Chưa có Groom' },
+    { label: 'Chủ', value: horse.owner?.fullName ?? 'Chưa có chủ' },
+  ];
   return (
-    <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80 sm:p-6">
-      <Avatar src={photo} name={horse.name} size={64} className="rounded-2xl" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-gray-500">Hồ sơ y tế</p>
-        <h2 className="truncate text-2xl font-bold tracking-tight text-gray-900">{horse.name}</h2>
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
-          <span>{place || 'Chưa xếp chỗ'}</span>
-          {horse.owner && <span>Chủ: {horse.owner.fullName}</span>}
-          {horse.groom && <span>Groom: {horse.groom.fullName}</span>}
-          <Link to={links.horse(horse.id)} className="inline-flex items-center gap-0.5 font-medium text-emerald-700 hover:underline">
-            Hồ sơ ngựa <ArrowUpRight size={13} />
-          </Link>
-        </p>
+    <section data-reveal className="turf-dark relative overflow-hidden rounded-3xl p-3 text-white shadow-[0_30px_60px_-40px_rgba(6,78,59,0.9)] sm:p-4">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-stretch">
+        <HorseMedia src={photo} name={horse.name} loading={photoLoading} onExpired={onPhotoExpired} className="aspect-[4/3] w-full shrink-0 sm:aspect-auto sm:h-auto sm:w-64 lg:w-72" />
+        <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 p-2 sm:py-3 sm:pr-4">
+          <div>
+            <p className="text-sm text-emerald-200/75">Hồ sơ y tế</p>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h2 className="truncate text-4xl font-bold tracking-tight">{horse.name}</h2>
+              <span className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ring-1', HEALTH_SURFACE[horse.healthStatus])}>
+                <Dot tone={healthDot[horse.healthStatus]} hollow={horse.healthStatus === 'QUARANTINED'} />
+                {healthLabel[horse.healthStatus]}
+              </span>
+              {horse.activeTrainingLock && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(239,68,68,0.9)]">
+                  <Lock size={13} /> Đang khóa huấn luyện
+                </span>
+              )}
+            </div>
+            <p className="mt-2 max-w-2xl text-sm text-emerald-50/70">{healthHint[horse.healthStatus]}</p>
+          </div>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-3">
+              {facts.map((fact) => (
+                <div key={fact.label} className="min-w-0">
+                  <dt className="text-xs text-emerald-100/55">{fact.label}</dt>
+                  <dd className="truncate text-sm font-semibold text-white">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <Link to={links.horse(horse.id)} className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15">
+              Hồ sơ ngựa <ArrowUpRight size={14} />
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   );
