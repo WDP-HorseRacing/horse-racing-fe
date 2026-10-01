@@ -1,8 +1,9 @@
-// F1.1 — danh sách ngựa: hàng chip lọc theo sức khỏe, thanh lọc một hàng, bảng full width.
+// F1.1 — danh sách ngựa: hàng chip lọc theo sức khỏe, thanh lọc một hàng, xem dạng thẻ ảnh hoặc bảng
+// (nhớ lựa chọn trên máy).
 // Lọc ở backend; câu lạc bộ ít ngựa nên lấy hết các trang rồi phân trang trên bảng.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { LayoutGrid, List, Plus } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { useDebounced } from '../../hooks/useDebounced';
 import { countHorses, listAllHorses } from '../../api/horses';
@@ -13,13 +14,14 @@ import { can } from '../../auth/permissions';
 import {
   Avatar,
   Button,
-    DataTable,
+  DataTable,
+  EmptyState,
   ErrorBox,
   FilterTabs,
   FilterSelect,
   PageHeader,
   SearchInput,
-  Skeleton,
+  Segmented,
   Tip,
   ToggleChip,
   cn,
@@ -31,6 +33,19 @@ import { placementStatusLabel } from '../../lib/api-labels';
 import { links } from '../../lib/links';
 import { breedLabel } from '../../lib/horse-options';
 import { now } from '../../lib/clock';
+import { HorseCard } from './components/HorseCard';
+import { HorseCardsSkeleton, HorseRowsSkeleton } from '../../components/skeletons';
+
+type View = 'cards' | 'table';
+const VIEW_KEY = 'horseracing_horse_view';
+
+function readView(): View {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'cards';
+  } catch {
+    return 'cards';
+  }
+}
 
 type ChipValue = 'ALL' | HealthStatus;
 const HEALTH: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
@@ -94,6 +109,15 @@ export default function HorseList() {
   // HT và Groom mặc định chỉ xem ngựa mình phụ trách; bỏ chọn để xem toàn câu lạc bộ.
   const [mine, setMine] = useState(isTrainer || isGroom);
   const [withDeleted, setWithDeleted] = useState(false);
+  const [view, setViewState] = useState<View>(readView);
+  const setView = (next: View) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Trình duyệt chặn lưu trữ: chỉ mất ghi nhớ chế độ xem.
+    }
+  };
   // Gõ tìm kiếm: đợi ngừng gõ 300 ms mới gọi API.
   const searchTerm = useDebounced(search.trim());
 
@@ -210,11 +234,21 @@ export default function HorseList() {
         title={isOwner ? 'Ngựa của tôi' : 'Danh sách ngựa'}
         description={isOwner ? 'Hồ sơ, sức khỏe và chỗ ở của các ngựa bạn sở hữu.' : undefined}
         actions={
-          can(user, 'horse.create') && (
-            <Button onClick={() => navigate(links.horseNew)}>
-              <Plus size={16} /> Thêm ngựa mới
-            </Button>
-          )
+          <>
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'cards', label: <><LayoutGrid size={14} /> Thẻ</> },
+                { value: 'table', label: <><List size={14} /> Bảng</> },
+              ]}
+            />
+            {can(user, 'horse.create') && (
+              <Button onClick={() => navigate(links.horseNew)}>
+                <Plus size={16} /> Thêm ngựa mới
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -291,7 +325,26 @@ export default function HorseList() {
           </div>
         )}
         {list.loading && !list.data ? (
-          <Skeleton rows={6} className="p-4" />
+          view === 'cards' ? (
+            <div className="p-4">
+              <HorseCardsSkeleton />
+            </div>
+          ) : (
+            <HorseRowsSkeleton />
+          )
+        ) : view === 'cards' ? (
+          (list.data ?? []).length === 0 ? (
+            <EmptyState
+              title={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
+              hint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
+            />
+          ) : (
+            <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-4 transition-opacity', list.refreshing && 'opacity-60')}>
+              {(list.data ?? []).map((horse, index) => (
+                <HorseCard key={horse.id} horse={horse} age={ageOf(horse.dateOfBirth)} index={index} />
+              ))}
+            </div>
+          )
         ) : (
           <DataTable
             flat
