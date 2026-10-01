@@ -11,7 +11,7 @@ import type { CareTaskType } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Button, CharCount, ErrorBox, Field, Input, NotFound, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { Button, CharCount, ErrorBox, Field, NotFound, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
 import { careTypeLabel } from '../../lib/api-labels';
 import { formatDateTime } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
@@ -22,6 +22,7 @@ import { horsePlace, useMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { localToIso, toLocalInput, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
+import { DateTimePicker } from '../../components/ui/DatePicker';
 
 const CARE_HINT: Record<CareTaskType, string> = {
   VACCINATION: 'Mũi tiêm phòng định kỳ hoặc nhắc lại',
@@ -156,7 +157,7 @@ export default function CareNew() {
               </div>
             </div>
             <Field label="Ngày đến hạn" required name="dueAt" error={show('dueAt')} className="sm:max-w-xs">
-              <Input type="datetime-local" value={dueAt} min={`${todayKey()}T00:00`} onChange={(event) => setDueAt(event.target.value)} className={cn(show('dueAt') && invalidClass)} />
+              <DateTimePicker value={dueAt} min={`${todayKey()}T00:00`} onChange={setDueAt} invalid={!!show('dueAt')} />
             </Field>
           </FormSection>
 

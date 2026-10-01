@@ -44,6 +44,7 @@ import { usePeople } from './components/people';
 import { HealthPicker, RequestMeta, RequestText } from './components/parts';
 import { isSevere, localToIso, toLocalInput, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
+import { DatePicker, DateTimePicker } from '../../components/ui/DatePicker';
 
 const METRICS: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 const REGIONS = Object.keys(bodyRegionLabel) as BodyRegion[];
@@ -466,13 +467,12 @@ function VisitForm(props: VisitOptions) {
               {/* Khám */}
               <FormSection icon={<Activity size={16} />} title="Kết quả khám">
                 <Field label="Thời điểm khám" required name="examDate" error={show('examDate')} className="sm:max-w-xs">
-                  <Input
-                    type="datetime-local"
+                  <DateTimePicker
                     value={examDate}
                     min={toLocalInput(addDays(now(), -7))}
                     max={toLocalInput(now())}
-                    onChange={(event) => setExamDate(event.target.value)}
-                    className={cn(show('examDate') && invalidClass)}
+                    onChange={setExamDate}
+                    invalid={!!show('examDate')}
                   />
                 </Field>
                 <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -549,9 +549,9 @@ function VisitForm(props: VisitOptions) {
                             <Input className="sm:col-span-3" placeholder="Tên thuốc" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
                             <Input className="sm:col-span-3" placeholder="Liều (ví dụ 2 g)" maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
                             <Input className="sm:col-span-2" placeholder="Tần suất (1 lần/ngày)" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
-                            <Input className="sm:col-span-2" type="date" title="Ngày bắt đầu" value={row.startDate} onChange={(event) => update({ startDate: event.target.value })} />
+                            <DatePicker className="sm:col-span-2" title="Ngày bắt đầu" value={row.startDate} onChange={(value) => update({ startDate: value })} />
                             <div className="flex gap-2 sm:col-span-2">
-                              <Input type="date" title="Ngày kết thúc" min={row.startDate || undefined} value={row.endDate} onChange={(event) => update({ endDate: event.target.value })} />
+                              <DatePicker title="Ngày kết thúc" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
                               <Button size="icon" variant="ghost" title="Bỏ thuốc này" onClick={() => setPrescriptions(prescriptions.filter((item) => item.key !== row.key))}>
                                 <Trash2 size={15} />
                               </Button>
@@ -625,13 +625,7 @@ function VisitForm(props: VisitOptions) {
                     </div>
                   )}
                   <Field label="Hẹn tái khám" name="nextVisitAt" error={show('nextVisitAt')} className="sm:max-w-xs">
-                    <Input
-                      type="datetime-local"
-                      value={nextVisitAt}
-                      min={`${todayKey()}T00:00`}
-                      onChange={(event) => setNextVisitAt(event.target.value)}
-                      className={cn(show('nextVisitAt') && invalidClass)}
-                    />
+                    <DateTimePicker value={nextVisitAt} min={`${todayKey()}T00:00`} onChange={setNextVisitAt} invalid={!!show('nextVisitAt')} />
                   </Field>
                 </FormSection>
               )}

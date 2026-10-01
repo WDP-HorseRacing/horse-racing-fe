@@ -26,6 +26,7 @@ import { horsePlace, useMedicalHorses, useRequestScope } from './horses';
 import type { People } from './people';
 import { HealthPicker, RequestMeta, RequestText } from './parts';
 import { MAX_COST, dateToIso, formatMoneyInput, localToIso, parseMoney, toLocalInput, todayKey } from './utils';
+import { DatePicker, DateTimePicker } from '../../../components/ui/DatePicker';
 
 function Counter({ value, max }: { value: string; max: number }) {
   return (
@@ -423,7 +424,7 @@ export function PlaceLockModal({
           />
         </Field>
         <Field label="Ngày dự kiến gỡ" hint="Không bắt buộc. Tới ngày này hệ thống không tự gỡ khóa.">
-          <Input type="date" value={date} min={todayKey()} onChange={(event) => setDate(event.target.value)} />
+          <DatePicker value={date} min={todayKey()} onChange={setDate} />
         </Field>
         <p className="text-xs text-gray-500">
           Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HT khu và quản lý nhận thông báo. Lượt tập đã xếp không bị hủy.
@@ -746,13 +747,7 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
           error={dayError}
           hint={overdue ? 'Ngựa đã quá hạn: chọn ngày bất kỳ từ hôm nay.' : `Từ hôm nay đến hạn khám ${formatDate(item.dueDate)}.`}
         >
-          <Input
-            type="datetime-local"
-            value={value}
-            min={`${today}T00:00`}
-            max={overdue ? undefined : `${item.dueDate}T23:59`}
-            onChange={(event) => setValue(event.target.value)}
-          />
+          <DateTimePicker value={value} min={`${today}T00:00`} max={overdue ? undefined : `${item.dueDate}T23:59`} onChange={setValue} />
         </Field>
         <Field label="Lý do" required={rescheduling} hint={rescheduling ? undefined : 'Không bắt buộc khi đặt lần đầu'}>
           <Input maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Trùng lịch thi đấu" />
