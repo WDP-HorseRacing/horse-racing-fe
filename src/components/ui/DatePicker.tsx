@@ -33,6 +33,12 @@ export function CalendarPanel({ value, min, max, defaultView = 'day', defaultMon
   const [cursor, setCursor] = useState({ year: startParts.year, month: startParts.month });
   const [focused, setFocused] = useState(start);
   const [direction, setDirection] = useState(0);
+  // Trang 20 năm: đặt năm đang xem ở giữa, không vượt quá năm lớn nhất được chọn (ngày sinh: hết ở năm nay).
+  const maxYear = parseKey(max)?.year;
+  const [yearStart, setYearStart] = useState(() => {
+    const startYear = startParts.year - 12;
+    return maxYear !== undefined ? Math.min(startYear, maxYear - 19) : startYear;
+  });
   const grid = useRef<HTMLDivElement>(null);
   const labelId = useId();
 
@@ -75,13 +81,12 @@ export function CalendarPanel({ value, min, max, defaultView = 'day', defaultMon
     }
   };
 
-  const yearStart = Math.floor(cursor.year / 20) * 20;
   const title =
     view === 'day' ? `${VI_MONTHS[cursor.month]}, ${cursor.year}` : view === 'month' ? String(cursor.year) : `${yearStart} – ${yearStart + 19}`;
   const step = (delta: number) => {
     if (view === 'day') goMonth(delta);
     else if (view === 'month') setCursor((current) => ({ ...current, year: current.year + delta }));
-    else setCursor((current) => ({ ...current, year: current.year + delta * 20 }));
+    else setYearStart((current) => current + delta * 20);
   };
   const monthAllowed = (year: number, month: number) => {
     const first = keyOf(year, month, 1);
