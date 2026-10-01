@@ -13,16 +13,15 @@ import { can } from '../../auth/permissions';
 import {
   Avatar,
   Button,
-  ChipFilter,
-  DataTable,
+    DataTable,
   ErrorBox,
+  FilterTabs,
   FilterSelect,
   PageHeader,
   SearchInput,
   Skeleton,
   Tip,
   ToggleChip,
-  Toolbar,
   cn,
   type Column,
 } from '../../components/ui';
@@ -219,92 +218,94 @@ export default function HorseList() {
         }
       />
 
-      {stats ? (
-        <ChipFilter<ChipValue>
-          value={chip}
-          onChange={(value) => setHealth(value === 'ALL' ? '' : value)}
-          options={[
-            { value: 'ALL', label: 'Tất cả', count: stats.total },
-            ...HEALTH.map((item) => ({ value: item, label: healthLabel[item], count: stats.byHealth[item] })),
-          ]}
-        />
-      ) : (
-        <div className="skeleton h-8 w-full max-w-2xl" />
-      )}
-
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc số chip…" className="min-w-[220px] flex-1" />
-        <FilterSelect value={lifecycle} onChange={setLifecycle} label="Vòng đời">
-          <option value="">Mọi vòng đời</option>
-          {(Object.keys(lifecycleLabel) as LifecycleStatus[]).map((item) => (
-            <option key={item} value={item}>
-              {lifecycleLabel[item]}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect value={gender} onChange={setGender} label="Giới tính">
-          <option value="">Mọi giới tính</option>
-          {(Object.keys(sexLabel) as Gender[]).map((item) => (
-            <option key={item} value={item}>
-              {sexLabel[item]}
-            </option>
-          ))}
-        </FilterSelect>
-        <FilterSelect value={aptitude} onChange={setAptitude} label="Sở trường">
-          <option value="">Mọi sở trường</option>
-          {(Object.keys(distanceLabel) as RaceAptitude[]).map((item) => (
-            <option key={item} value={item}>
-              {distanceLabel[item]}
-            </option>
-          ))}
-        </FilterSelect>
-        {!isOwner && (
+      <FilterTabs
+        active={chip}
+        onChange={(value) => setHealth(value === 'ALL' ? '' : (value as HealthStatus))}
+        tabs={[
+          { key: 'ALL', label: 'Tất cả', count: stats?.total },
+          ...HEALTH.map((item) => ({ key: item, label: healthLabel[item], count: stats?.byHealth[item] })),
+        ]}
+        toolbar={
           <>
-            <FilterSelect value={barn} onChange={setBarn} label="Khu chuồng">
-              <option value="">Mọi khu</option>
-              {(barns.data ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </FilterSelect>
-            <FilterSelect value={placement} onChange={setPlacement} label="Xếp chỗ">
-              <option value="">Mọi tình trạng xếp chỗ</option>
-              {(['PENDING_BARN', 'PENDING_STALL', 'PLACED'] as PlacementStatus[]).map((item) => (
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên hoặc số chip…" className="min-w-55 flex-1" />
+            <FilterSelect value={lifecycle} onChange={setLifecycle} label="Vòng đời">
+              <option value="">Mọi vòng đời</option>
+              {(Object.keys(lifecycleLabel) as LifecycleStatus[]).map((item) => (
                 <option key={item} value={item}>
-                  {placementStatusLabel[item]}
+                  {lifecycleLabel[item]}
                 </option>
               ))}
             </FilterSelect>
+            <FilterSelect value={gender} onChange={setGender} label="Giới tính">
+              <option value="">Mọi giới tính</option>
+              {(Object.keys(sexLabel) as Gender[]).map((item) => (
+                <option key={item} value={item}>
+                  {sexLabel[item]}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect value={aptitude} onChange={setAptitude} label="Sở trường">
+              <option value="">Mọi sở trường</option>
+              {(Object.keys(distanceLabel) as RaceAptitude[]).map((item) => (
+                <option key={item} value={item}>
+                  {distanceLabel[item]}
+                </option>
+              ))}
+            </FilterSelect>
+            {!isOwner && (
+              <>
+                <FilterSelect value={barn} onChange={setBarn} label="Khu chuồng">
+                  <option value="">Mọi khu</option>
+                  {(barns.data ?? []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </FilterSelect>
+                <FilterSelect value={placement} onChange={setPlacement} label="Xếp chỗ">
+                  <option value="">Mọi tình trạng xếp chỗ</option>
+                  {(['PENDING_BARN', 'PENDING_STALL', 'PLACED'] as PlacementStatus[]).map((item) => (
+                    <option key={item} value={item}>
+                      {placementStatusLabel[item]}
+                    </option>
+                  ))}
+                </FilterSelect>
+              </>
+            )}
+            {(isTrainer || isGroom) && (
+              <ToggleChip checked={mine} onChange={setMine}>
+                {isTrainer ? 'Khu của tôi' : 'Ngựa tôi phụ trách'}
+              </ToggleChip>
+            )}
+            {can(user, 'horse.viewDeleted') && (
+              <ToggleChip checked={withDeleted} onChange={setWithDeleted}>
+                Hiện hồ sơ đã xóa
+              </ToggleChip>
+            )}
           </>
+        }
+      >
+        {list.error && (
+          <div className="p-4">
+            <ErrorBox message={list.error} />
+          </div>
         )}
-        {(isTrainer || isGroom) && (
-          <ToggleChip checked={mine} onChange={setMine}>
-            {isTrainer ? 'Khu của tôi' : 'Ngựa tôi phụ trách'}
-          </ToggleChip>
+        {list.loading && !list.data ? (
+          <Skeleton rows={6} className="p-4" />
+        ) : (
+          <DataTable
+            flat
+            rows={list.data ?? []}
+            columns={columns}
+            rowKey={(row) => row.id}
+            onRowClick={(row) => navigate(links.horse(row.id))}
+            pageSize={12}
+            emptyTitle={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
+            emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
+            rowClassName={(row) => cn((row.isDeleted || row.lifecycleStatus === 'TRANSFERRED') && 'opacity-60')}
+          />
         )}
-        {can(user, 'horse.viewDeleted') && (
-          <ToggleChip checked={withDeleted} onChange={setWithDeleted}>
-            Hiện hồ sơ đã xóa
-          </ToggleChip>
-        )}
-      </Toolbar>
-
-      {list.error && <ErrorBox message={list.error} />}
-      {list.loading && !list.data ? (
-        <Skeleton rows={6} />
-      ) : (
-        <DataTable
-          rows={list.data ?? []}
-          columns={columns}
-          rowKey={(row) => row.id}
-          onRowClick={(row) => navigate(links.horse(row.id))}
-          pageSize={12}
-          emptyTitle={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
-          emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
-          rowClassName={(row) => cn((row.isDeleted || row.lifecycleStatus === 'TRANSFERRED') && 'opacity-60')}
-        />
-      )}
+      </FilterTabs>
     </div>
   );
 }

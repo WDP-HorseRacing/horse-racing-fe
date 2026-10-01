@@ -10,7 +10,7 @@ import { listMyOwnedHorses } from '../../api/horses';
 import type { CaseStatus, MedicalCase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Button, ChipFilter, DataTable, ErrorBox, PageHeader, SearchInput, Skeleton, Toolbar, cn } from '../../components/ui';
+import { Button, DataTable, ErrorBox, FilterTabs, PageHeader, SearchInput, Skeleton, Toolbar, cn } from '../../components/ui';
 import { CaseStatusPill } from '../../components/ui/status';
 import { formatDate, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
@@ -133,62 +133,62 @@ function OwnerCases() {
     <div className="space-y-6">
       <PageHeader title="Bệnh án của ngựa tôi" description="Quá trình điều trị của ngựa bạn sở hữu. Chi phí chỉ hiện khi bệnh án đã đóng." />
 
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <ChipFilter<CaseStatus | ''>
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: '', label: 'Tất cả', count: all.length },
-            { value: 'OPEN', label: 'Đang điều trị', count: count('OPEN') },
-            { value: 'CLOSED', label: 'Đã đóng', count: closed.length },
-            { value: 'CANCELLED', label: 'Đã hủy', count: count('CANCELLED') },
+      <FilterTabs
+        active={status}
+        onChange={(key) => setStatus(key as CaseStatus | '')}
+        tabs={[
+          { key: '', label: 'Tất cả', count: all.length },
+          { key: 'OPEN', label: 'Đang điều trị', count: count('OPEN') },
+          { key: 'CLOSED', label: 'Đã đóng', count: closed.length },
+          { key: 'CANCELLED', label: 'Đã hủy', count: count('CANCELLED') },
+        ]}
+        toolbar={
+          <>
+            <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc chẩn đoán…" className="min-w-60 flex-1" />
+            <p className="text-sm text-gray-500">
+              Tổng chi phí {closed.length} bệnh án đã đóng <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
+            </p>
+          </>
+        }
+      >
+        <DataTable
+          flat
+          rows={rows}
+          rowKey={(row) => row.id}
+          onRowClick={(row) => navigate(links.case(row.id))}
+          pageSize={15}
+          emptyTitle={all.length === 0 ? 'Ngựa của bạn chưa có bệnh án nào' : 'Không có bệnh án phù hợp'}
+          emptyHint={all.length === 0 ? 'Bệnh án được mở khi bác sĩ phát hiện vấn đề tại buổi khám.' : undefined}
+          columns={[
+            { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
+            {
+              key: 'diagnosis',
+              header: 'Chẩn đoán ban đầu',
+              className: 'min-w-[220px]',
+              render: (row) => (
+                <div>
+                  <p className="font-semibold text-gray-900">{row.initialDiagnosis}</p>
+                  {row.finalConclusion && <p className="line-clamp-1 text-xs text-gray-500">{row.finalConclusion}</p>}
+                </div>
+              ),
+            },
+            { key: 'status', header: 'Trạng thái', render: (row) => <CaseStatusPill status={row.status} /> },
+            { key: 'opened', header: 'Mở', render: (row) => <span className="text-sm text-gray-700">{formatDate(row.openedAt)}</span> },
+            { key: 'closed', header: 'Đóng', render: (row) => <span className="text-sm text-gray-700">{row.closedAt ? formatDate(row.closedAt) : '—'}</span> },
+            {
+              key: 'cost',
+              header: 'Chi phí',
+              className: 'text-right',
+              render: (row) =>
+                row.status === 'CLOSED' ? (
+                  <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost)}</span>
+                ) : (
+                  <span className="text-xs text-gray-500">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
+                ),
+            },
           ]}
         />
-        <p className="text-sm text-gray-500">
-          Tổng chi phí {closed.length} bệnh án đã đóng <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
-        </p>
-      </div>
-
-      <Toolbar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc chẩn đoán…" className="min-w-60 flex-1" />
-      </Toolbar>
-
-      <DataTable
-        rows={rows}
-        rowKey={(row) => row.id}
-        onRowClick={(row) => navigate(links.case(row.id))}
-        pageSize={15}
-        emptyTitle={all.length === 0 ? 'Ngựa của bạn chưa có bệnh án nào' : 'Không có bệnh án phù hợp'}
-        emptyHint={all.length === 0 ? 'Bệnh án được mở khi bác sĩ phát hiện vấn đề tại buổi khám.' : undefined}
-        columns={[
-          { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
-          {
-            key: 'diagnosis',
-            header: 'Chẩn đoán ban đầu',
-            className: 'min-w-[220px]',
-            render: (row) => (
-              <div>
-                <p className="font-semibold text-gray-900">{row.initialDiagnosis}</p>
-                {row.finalConclusion && <p className="line-clamp-1 text-xs text-gray-500">{row.finalConclusion}</p>}
-              </div>
-            ),
-          },
-          { key: 'status', header: 'Trạng thái', render: (row) => <CaseStatusPill status={row.status} /> },
-          { key: 'opened', header: 'Mở', render: (row) => <span className="text-sm text-gray-700">{formatDate(row.openedAt)}</span> },
-          { key: 'closed', header: 'Đóng', render: (row) => <span className="text-sm text-gray-700">{row.closedAt ? formatDate(row.closedAt) : '—'}</span> },
-          {
-            key: 'cost',
-            header: 'Chi phí',
-            className: 'text-right',
-            render: (row) =>
-              row.status === 'CLOSED' ? (
-                <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost)}</span>
-              ) : (
-                <span className="text-xs text-gray-500">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
-              ),
-          },
-        ]}
-      />
+      </FilterTabs>
     </div>
   );
 }

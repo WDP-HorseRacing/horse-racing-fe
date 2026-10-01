@@ -1,12 +1,12 @@
 // Dữ liệu trang Tổng quan theo vai trò, ghép từ API thật. Câu lạc bộ nhỏ (vài chục ngựa) nên
 // lấy cả danh sách ngựa một lần rồi tính trên máy; các số y tế lấy từ /medical/dashboard.
 import { listAllHorses } from '../../api/horses';
-import { listBarns } from '../../api/stable';
+import { listBarns, listStalls } from '../../api/stable';
 import { getCareInstructions, getMedicalDashboard, listCareSchedules, listExamRequests, listHorseCases } from '../../api/medical';
 import type { CareSchedule, HorseListItem, MedicalCase, MedicalDashboard } from '../../api/types';
 import type { WeekDay, WeekItem } from '../../components/WeekStrip';
 import { careTypeLabel } from '../../lib/api-labels';
-import { addDays, formatTime, toDateKey } from '../../lib/format';
+import { addDays, daysBetween, formatDateShort, formatTime, toDateKey } from '../../lib/format';
 import { links } from '../../lib/links';
 import { now } from '../../lib/clock';
 
@@ -69,6 +69,60 @@ export function medicalWeek(dashboard: MedicalDashboard | undefined, care: { sch
   return days;
 }
 
+/**
+ * Việc y tế đã quá hạn (nhóm "Quá hạn" đầu lịch): khám định kỳ quá hạn, hẹn tái khám đã qua, lịch chăm sóc quá hạn.
+ * Quá hạn hơn 7 ngày tô đỏ (mốc bác sĩ và quản lý nhận thông báo), còn lại hổ phách. Quá hạn lâu nhất lên trên.
+ */
+export function medicalOverdue(dashboard: MedicalDashboard | undefined, care: { schedule: CareSchedule; horseName: string }[], horseIds?: Set<string>): WeekItem[] {
+  const today = toDateKey(now());
+  const allowed = (id: string) => !horseIds || horseIds.has(id);
+  const late = (date: string) => -daysBetween(now(), date);
+  const items: { days: number; item: WeekItem }[] = [];
+  dashboard?.checkups
+    .filter((item) => allowed(item.horseId) && item.daysLeft < 0)
+    .forEach((item) =>
+      items.push({
+        days: -item.daysLeft,
+        item: {
+          id: `od-due-${item.horseId}`,
+          title: item.horseName,
+          detail: `Khám định kỳ quá hạn ${-item.daysLeft} ngày${item.appointment ? ` · đã hẹn ${formatDateShort(item.appointment.scheduledAt)}` : ''}`,
+          tone: item.daysLeft < -7 ? 'danger' : 'warn',
+          to: links.periodic,
+        },
+      }),
+    );
+  dashboard?.openCases
+    .filter((item) => allowed(item.horseId) && item.nextVisitAt && toDateKey(item.nextVisitAt) < today)
+    .forEach((item) =>
+      items.push({
+        days: late(item.nextVisitAt!),
+        item: {
+          id: `od-visit-${item.caseId}`,
+          title: item.horseName,
+          detail: `Quá hẹn tái khám ${late(item.nextVisitAt!)} ngày · ${item.initialDiagnosis}`,
+          tone: 'warn',
+          to: links.case(item.caseId),
+        },
+      }),
+    );
+  care
+    .filter((item) => item.schedule.status === 'SCHEDULED' && allowed(item.schedule.horseId) && toDateKey(item.schedule.dueAt) < today)
+    .forEach(({ schedule, horseName }) =>
+      items.push({
+        days: late(schedule.dueAt),
+        item: {
+          id: `od-care-${schedule.id}`,
+          title: horseName,
+          detail: `${careTypeLabel[schedule.type]} quá hạn ${late(schedule.dueAt)} ngày`,
+          tone: late(schedule.dueAt) > 7 ? 'danger' : 'warn',
+          to: links.horseMedical(schedule.horseId),
+        },
+      }),
+    );
+  return items.sort((a, b) => b.days - a.days).map((entry) => entry.item);
+}
+
 /** Lịch chăm sóc đến hạn trong dashboard y tế (quá hạn + 3 ngày tới) đổi sang dạng chung. */
 function dashboardCare(dashboard: MedicalDashboard): { schedule: CareSchedule; horseName: string }[] {
   return dashboard.careSchedules.map((item) => ({
@@ -93,36 +147,43 @@ export const todayKey = () => toDateKey(now());
 /* ===== Quản lý câu lạc bộ ===== */
 
 export async function loadManager() {
-  const [horses, barns, medical] = await Promise.all([listAllHorses(), listBarns(), getMedicalDashboard()]);
+  const [horses, barns, stalls, medical] = await Promise.all([listAllHorses(), listBarns(), listStalls(), getMedicalDashboard()]);
   const club = horses.filter(inClub);
+  const care = dashboardCare(medical);
   return {
     horses: club,
     barns,
+    stalls,
     medical,
-    week: medicalWeek(medical, dashboardCare(medical)),
+    week: medicalWeek(medical, care),
+    overdue: medicalOverdue(medical, care),
   };
 }
 
 /* ===== Huấn luyện viên trưởng ===== */
 
 export async function loadTrainer(userId: string) {
-  const [horses, barns, medical] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), getMedicalDashboard()]);
+  const [horses, barns, stalls, medical] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard()]);
   const mine = horses.filter(inClub);
   const ids = new Set(mine.map((horse) => horse.id));
+  const care = dashboardCare(medical);
   return {
     horses: mine,
     barns: barns.filter((barn) => barn.headTrainerId === userId),
+    stalls,
     medical,
     ids,
-    week: medicalWeek(medical, dashboardCare(medical), ids),
+    week: medicalWeek(medical, care, ids),
+    overdue: medicalOverdue(medical, care, ids),
   };
 }
 
 /* ===== Bác sĩ thú y ===== */
 
 export async function loadVet() {
-  const medical = await getMedicalDashboard();
-  return { medical, week: medicalWeek(medical, dashboardCare(medical)) };
+  const [medical, barns, stalls] = await Promise.all([getMedicalDashboard(), listBarns(), listStalls()]);
+  const care = dashboardCare(medical);
+  return { medical, barns, stalls, week: medicalWeek(medical, care), overdue: medicalOverdue(medical, care) };
 }
 
 /* ===== Nhân viên chăm sóc ===== */
@@ -142,6 +203,7 @@ export async function loadGroom() {
     notes: notes.filter((item) => item.current),
     requests: requests?.items ?? [],
     week: medicalWeek(undefined, schedules),
+    overdue: medicalOverdue(undefined, schedules),
   };
 }
 
@@ -164,5 +226,6 @@ export async function loadOwner() {
     medicalCost: cases.reduce((sum, entry) => sum + (entry.totalCost ?? 0), 0),
     schedules,
     week: medicalWeek(undefined, schedules),
+    overdue: medicalOverdue(undefined, schedules),
   };
 }

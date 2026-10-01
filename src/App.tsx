@@ -13,7 +13,6 @@ import HorseList from './pages/horses/HorseList';
 import HorseForm from './pages/horses/HorseForm';
 import HorseDetail from './pages/horses/HorseDetail';
 import StableMap from './pages/stable/StableMap';
-import ZoneCatalog from './pages/stable/ZoneCatalog';
 
 import SubjectList from './pages/training/subjects/SubjectList';
 import ProgramList from './pages/training/programs/ProgramList';
@@ -42,7 +41,7 @@ import VisitNew from './pages/medical/VisitNew';
 import CaseClose from './pages/medical/CaseClose';
 import CareNew from './pages/medical/CareNew';
 
-import { AdminPermissions, AdminUsers } from './pages/admin/AdminPages';
+import { AdminUsers } from './pages/admin/AdminPages';
 import { NotFound, Skeleton } from './components/ui';
 
 const ProtectedRoute = () => {
@@ -120,7 +119,7 @@ function App() {
             <Route path="horses/:id" element={<HorseDetail />} />
             <Route path="horses/:id/edit" element={<HorseForm />} />
             <Route path="stable" element={<StableMap />} />
-            <Route path="stable/zones" element={<ZoneCatalog />} />
+            <Route path="stable/zones" element={<Navigate to="/stable" replace />} />
 
             {/* Flow 2 — huấn luyện (tạm ẩn) */}
             {trainingRoutes()}
@@ -142,8 +141,7 @@ function App() {
 
             {/* Quản trị */}
             <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/permissions" element={<AdminPermissions />} />
-            <Route path="admin/zones" element={<Navigate to="/stable/zones" replace />} />
+            <Route path="admin/zones" element={<Navigate to="/stable" replace />} />
             <Route path="admin/*" element={<Navigate to="/dashboard" replace />} />
 
             <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />

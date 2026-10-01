@@ -15,12 +15,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
-  ShieldCheck,
   Stethoscope,
   Syringe,
   UserCog,
   Users,
-  Warehouse,
   X,
 } from 'lucide-react';
 import Lenis from 'lenis';
@@ -61,7 +59,6 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
           items: [
             { name: 'Ngựa', path: links.horses, icon: Users },
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
-            { name: 'Khu và ô chuồng', path: links.zones, icon: Warehouse },
           ],
         },
         medical([
@@ -76,7 +73,6 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
           group: 'Quản trị',
           items: [
             { name: 'Nhân sự', path: links.adminUsers, icon: UserCog },
-            { name: 'Phân quyền', path: links.adminPermissions, icon: ShieldCheck },
           ],
         },
       ];
@@ -269,7 +265,7 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === links.dashboard || item.path === links.stable}
+                end={item.path === links.dashboard}
                 onClick={onNavigate}
                 className={({ isActive }) =>
                   cn(

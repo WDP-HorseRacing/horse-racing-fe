@@ -35,7 +35,6 @@ export const links = {
   horse: (id: string, tab?: string) => `/horses/${id}${tab ? `?tab=${tab}` : ''}`,
   horseEdit: (id: string) => `/horses/${id}/edit`,
   stable: '/stable',
-  zones: '/stable/zones',
 
   subjects: '/training/subjects',
   programs: '/training/programs',
@@ -76,7 +75,6 @@ export const links = {
   costReport: '/medical/costs',
 
   adminUsers: '/admin/users',
-  adminPermissions: '/admin/permissions',
   adminAudit: '/admin/audit',
   adminSystem: '/admin/system',
 };
