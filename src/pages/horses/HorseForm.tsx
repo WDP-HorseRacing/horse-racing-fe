@@ -15,7 +15,6 @@ import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
 import {
-  Avatar,
   Button,
   Card,
   CharCount,
@@ -40,7 +39,10 @@ import { formatDate, toDateKey } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { links } from '../../lib/links';
 import { BREEDS, COLORS, breedLabel, breedText, canonical, colorLabel, colorText, isPreset, optionText, type HorseOption } from '../../lib/horse-options';
-import AvatarPicker from './components/AvatarPicker';
+import { PhotoDropzone } from './components/PhotoDropzone';
+import { ProfileCompleteness, type CompletenessItem } from './components/ProfileCompleteness';
+import { DatePicker } from '../../components/ui/DatePicker';
+import { TurfPlaceholder } from '../../components/TurfPlaceholder';
 import { barnBlocker } from '../stable/components/barn';
 
 interface FormState {
@@ -417,7 +419,22 @@ export default function HorseForm() {
   const ownerMissing = !!horse?.ownerId && !!owners.data && !owners.data.some((item) => item.id === horse.ownerId);
   const currentPhoto = photoPreview ?? (photoRemoved ? undefined : photo.data);
   const loadingList = (loading: boolean, data: unknown) => loading && !data;
+  // Lịch ngày sinh mở sẵn ở khoảng 3 năm trước (tuổi thường gặp của ngựa mới vào câu lạc bộ).
+  const birthDefault = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
   const noChanges = editing && changes.length === 0;
+  const completeness: CompletenessItem[] = [
+    { key: 'mediaId', label: 'Ảnh', done: !!currentPhoto },
+    { key: 'breed', label: 'Giống', done: !!form.breed.trim() },
+    { key: 'color', label: 'Màu lông', done: !!form.color.trim() },
+    { key: 'dateOfBirth', label: 'Ngày sinh', done: !!form.dateOfBirth },
+    { key: 'microchipId', label: 'Số chip', done: !!form.microchipId.trim() },
+    { key: 'sireId', label: 'Cha', done: !!form.sireId },
+    { key: 'damId', label: 'Mẹ', done: !!form.damId },
+    { key: 'ownerId', label: 'Chủ sở hữu', done: !!form.ownerId },
+    editing
+      ? { key: 'barn', label: 'Khu chuồng', done: !!horse?.location.barn, readOnly: true }
+      : { key: 'barnId', label: 'Khu chuồng', done: !!form.barnId },
+  ];
   const tags = [
     form.gender ? sexLabel[form.gender] : undefined,
     breedLabel(text(form.breed)),
@@ -448,26 +465,8 @@ export default function HorseForm() {
 
           {!aptitudeOnly && (
             <Card>
-              <SectionTitle>Ảnh và định danh</SectionTitle>
+              <SectionTitle>Định danh</SectionTitle>
               <div className="space-y-5">
-                <div data-field="mediaId" data-invalid={err('mediaId') ? 'true' : undefined}>
-                  <AvatarPicker
-                    preview={currentPhoto}
-                    name={form.name}
-                    onPick={(file, preview) => {
-                      setPhotoFile(file);
-                      setPhotoPreview(preview);
-                      setPhotoRemoved(false);
-                      if (serverField === 'mediaId') action.clearError();
-                    }}
-                    onClear={() => {
-                      setPhotoFile(undefined);
-                      setPhotoPreview(undefined);
-                      setPhotoRemoved(true);
-                    }}
-                  />
-                  {err('mediaId') && <p className="mt-2 text-xs font-medium text-red-600">{err('mediaId')}</p>}
-                </div>
                 <div className="grid gap-x-4 gap-y-5 sm:grid-cols-6">
                   <Field label="Tên ngựa" required name="name" error={err('name')} counter={<CharCount value={form.name} max={NAME_MAX} />} className="sm:col-span-4">
                     <Input
@@ -504,13 +503,14 @@ export default function HorseForm() {
                     <PresetSelect options={COLORS} value={form.color} onChange={(value) => set('color', value)} maxLength={40} placeholder="Màu lông" emptyLabel="Chưa chọn" />
                   </Field>
                   <Field label="Ngày sinh" name="dateOfBirth" error={err('dateOfBirth')} className="sm:col-span-3">
-                    <Input
-                      type="date"
+                    <DatePicker
                       value={form.dateOfBirth}
                       max={today}
-                      onChange={(event) => set('dateOfBirth', event.target.value)}
+                      defaultView="year"
+                      defaultMonth={birthDefault}
+                      onChange={(value) => set('dateOfBirth', value)}
                       onBlur={() => touch('dateOfBirth')}
-                      className={cn(err('dateOfBirth') && invalidClass)}
+                      invalid={!!err('dateOfBirth')}
                     />
                   </Field>
                   <Field label="Số chip" name="microchipId" error={err('microchipId')} className="sm:col-span-3">
@@ -649,20 +649,37 @@ export default function HorseForm() {
           )}
         </div>
 
-        {/* Cột phải: xem trước hồ sơ, điều sẽ xảy ra khi lưu, nút lưu */}
+        {/* Cột phải: thẻ hồ sơ — ảnh lớn (bấm / kéo thả để chọn), mức đầy đủ, điều sẽ xảy ra khi lưu, nút lưu */}
         <aside className="lg:sticky lg:top-6 lg:col-span-4">
-          <div className="overflow-hidden rounded-2xl bg-white shadow-[0_18px_40px_-24px_rgba(6,78,59,0.35)] ring-1 ring-gray-200/80">
-            <div className="relative flex h-36 items-end bg-emerald-950/4 px-5 pb-4">
-              {currentPhoto && <img src={currentPhoto} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />}
-              {currentPhoto && <div className="absolute inset-0 bg-linear-to-t from-black/45 to-transparent" />}
-              <div className="relative flex min-w-0 items-end gap-3">
-                <Avatar src={currentPhoto} name={form.name || '?'} size={56} className="rounded-2xl ring-4 ring-white" />
-                <div className="min-w-0 pb-0.5">
-                  <p className={cn('truncate text-lg font-bold', currentPhoto ? 'text-white' : 'text-gray-900')}>{form.name.trim() || 'Ngựa chưa đặt tên'}</p>
-                  <p className={cn('truncate font-mono text-xs', currentPhoto ? 'text-white/80' : 'text-gray-500')}>{form.microchipId.trim() || 'Chưa có số chip'}</p>
-                </div>
+          <div className="overflow-hidden rounded-3xl bg-white shadow-[0_24px_50px_-30px_rgba(6,78,59,0.45)] ring-1 ring-gray-200/80">
+            {aptitudeOnly ? (
+              <div className="relative aspect-[16/9] overflow-hidden">
+                {currentPhoto ? <img src={currentPhoto} alt={form.name} className="absolute inset-0 h-full w-full object-cover" /> : <TurfPlaceholder name={form.name} className="absolute inset-0" />}
+                <span className="absolute inset-0 bg-linear-to-t from-emerald-950/80 via-transparent to-transparent" />
+                <span className="absolute inset-x-0 bottom-0 p-5">
+                  <span className="block truncate text-2xl font-bold tracking-tight text-white">{form.name}</span>
+                  <span className="block truncate font-mono text-xs text-white/75">{form.microchipId || 'Chưa có số chip'}</span>
+                </span>
               </div>
-            </div>
+            ) : (
+              <PhotoDropzone
+                preview={currentPhoto}
+                name={form.name}
+                chip={form.microchipId}
+                error={err('mediaId')}
+                onPick={(file, preview) => {
+                  setPhotoFile(file);
+                  setPhotoPreview(preview);
+                  setPhotoRemoved(false);
+                  if (serverField === 'mediaId') action.clearError();
+                }}
+                onClear={() => {
+                  setPhotoFile(undefined);
+                  setPhotoPreview(undefined);
+                  setPhotoRemoved(true);
+                }}
+              />
+            )}
 
             <div className="space-y-4 p-5">
               {tags.length > 0 ? (
@@ -674,7 +691,7 @@ export default function HorseForm() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">Thông tin bạn nhập sẽ hiện ở đây.</p>
+                <p className="text-sm text-gray-400">Giới tính, giống, tuổi bạn nhập sẽ hiện ở đây.</p>
               )}
 
               {!aptitudeOnly && (sire || dam || owner) && (
@@ -700,13 +717,15 @@ export default function HorseForm() {
                 </dl>
               )}
 
+              {!aptitudeOnly && <ProfileCompleteness items={completeness} />}
+
               {!editing && (
-                <div className="flex items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-sm text-gray-700">
+                <div className="flex items-start gap-2.5 rounded-xl bg-emerald-50/60 p-3 text-sm text-gray-700 ring-1 ring-emerald-100">
                   <MapPinned size={15} className="mt-0.5 shrink-0 text-emerald-700" />
                   {barn && !barnBlocker(barn) ? (
                     <span>
                       Vào <span className="font-semibold">{barn.name}</span>
-                      {barn.headTrainerFullName ? `, HT ${barn.headTrainerFullName} xếp ô và Groom sau.` : ', chờ xếp ô và Groom.'}
+                      {barn.headTrainerFullName ? `, HT ${barn.headTrainerFullName} xếp ô sau.` : ', chờ xếp ô.'}
                     </span>
                   ) : (
                     <span>Vào danh sách Chờ xếp khu.</span>
@@ -739,7 +758,7 @@ export default function HorseForm() {
 
               <div className="space-y-2 border-t border-gray-100 pt-4">
                 <Button className="h-11 w-full text-[0.95rem]" onClick={submit} disabled={action.pending || noChanges}>
-                  {action.pending ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo hồ sơ'}
+                  {action.pending ? (photoFile ? 'Đang tải ảnh và lưu…' : 'Đang lưu…') : editing ? 'Lưu thay đổi' : 'Tạo hồ sơ'}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => navigate(backTo)} disabled={action.pending}>
                   Hủy
