@@ -1,4 +1,5 @@
 import type { BarnListItem, HealthStatus, HorseListItem, Stall } from '../../../api/types';
+import { healthLabel } from '../../../lib/labels';
 
 /**
  * Số ô tối đa của một khu. Sơ đồ mỗi khu là lưới 3×3 nên giao diện chặn tạo quá 9 ô.
@@ -74,4 +75,19 @@ export function occupantsByStall(horses: HorseListItem[]): Map<string, StallOccu
       .filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED' && horse.location.stall?.id)
       .map((horse) => [horse.location.stall!.id!, occupantFromHorse(horse)]),
   );
+}
+
+/** Màu vạch tình trạng của ô có ngựa (lưới khu và chế độ phóng to). */
+export function occupantBarClass(occupant: StallOccupant) {
+  if (occupant.retired) return 'bg-gray-300';
+  if (occupant.healthStatus === 'QUARANTINED') return 'border-2 border-red-500 bg-white';
+  if (occupant.locked || occupant.healthStatus === 'INJURED') return 'bg-red-500';
+  if (occupant.healthStatus === 'UNDER_OBSERVATION') return 'bg-amber-500';
+  return 'bg-emerald-500';
+}
+
+export function occupantStatusText(occupant: StallOccupant) {
+  if (occupant.retired) return 'Đã giải nghệ';
+  if (occupant.locked) return 'Khóa huấn luyện';
+  return healthLabel[occupant.healthStatus];
 }

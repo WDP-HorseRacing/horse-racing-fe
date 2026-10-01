@@ -243,10 +243,10 @@ export default function OverviewTab({
               </Row>
               <Row
                 label="Groom"
-                tone={horse.groom ? 'default' : stall ? 'waiting' : 'muted'}
-                actions={permissions.canAssignStallAndGroom && horse.groom && textButton('Đổi', () => setGroomOpen(true))}
+                tone={horse.groom ? 'default' : barn ? 'waiting' : 'muted'}
+                actions={permissions.canAssignStallAndGroom && barn && textButton(horse.groom ? 'Đổi' : 'Giao Groom', () => setGroomOpen(true), !horse.groom)}
               >
-                {horse.groom ? horse.groom.fullName : stall ? 'Chưa có Groom' : 'Phân công khi xếp ô'}
+                {horse.groom ? horse.groom.fullName : barn ? 'Chưa có Groom' : 'Chưa có khu'}
               </Row>
             </>
           )}
@@ -285,7 +285,7 @@ export default function OverviewTab({
       </div>
 
       <AssignZoneDialog horse={zoneOpen ? placementHorse : null} onClose={() => setZoneOpen(false)} onDone={onChanged} />
-      <AssignStallDialog horse={stallOpen ? placementHorse : null} onClose={() => setStallOpen(false)} onDone={onChanged} />
+      <AssignStallDialog horse={stallOpen ? placementHorse : null} onClose={() => setStallOpen(false)} onDone={onChanged} onAssignGroom={() => setGroomOpen(true)} />
       <GroomDialog horse={groomOpen ? placementHorse : null} onClose={() => setGroomOpen(false)} onDone={onChanged} />
       <RemoveStallDialog horse={removeOpen ? placementHorse : null} onClose={() => setRemoveOpen(false)} onDone={onChanged} />
       <OwnerDialog

@@ -6,7 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { FolderPlus, Info } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getMedicalDashboard, listHorseCases } from '../../api/medical';
-import { listMyOwnedHorses } from '../../api/horses';
+import { listAllHorses } from '../../api/horses';
+import { useMyScope } from '../../hooks/useMyScope';
+import { scopeDashboard } from './components/scope';
 import type { CaseStatus, MedicalCase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
@@ -27,22 +29,34 @@ function StaffCases() {
   const user = useStore((state) => state.currentUser);
   const canOpen = can(user, 'case.open');
   const board = useService(() => getMedicalDashboard(), []);
+  // HT chỉ thấy bệnh án của ngựa trong khu mình phụ trách và khu cách ly.
+  const { scope, loading: scopeLoading } = useMyScope();
+  const trainer = user?.role === 'HEAD_TRAINER';
   const [search, setSearch] = useState('');
-  const all = useMemo(() => board.data?.openCases ?? [], [board.data]);
+  const all = useMemo(() => {
+    if (!board.data) return [];
+    if (!trainer) return board.data.openCases;
+    return scope?.visibleBarnIds ? scopeDashboard(board.data, scope.visibleBarnIds).openCases : [];
+  }, [board.data, trainer, scope]);
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return all.filter((row) => !term || `${row.horseName} ${row.initialDiagnosis}`.toLowerCase().includes(term));
   }, [all, search]);
   const today = todayKey();
 
-  if (board.loading && !board.data) return <Skeleton rows={6} />;
+  if ((board.loading || (trainer && scopeLoading)) && !board.data) return <Skeleton rows={6} />;
+  if (trainer && scopeLoading) return <Skeleton rows={6} />;
   if (board.error) return <ErrorBox message={board.error} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bệnh án đang điều trị"
-        description="Mỗi ngựa tối đa một bệnh án đang mở. Hẹn tái khám sớm nhất lên trên."
+        description={
+          trainer
+            ? 'Bệnh án đang mở của ngựa trong khu bạn phụ trách và khu cách ly. Hẹn tái khám sớm nhất lên trên.'
+            : 'Mỗi ngựa tối đa một bệnh án đang mở. Hẹn tái khám sớm nhất lên trên.'
+        }
         actions={
           canOpen && (
             <Button onClick={() => navigate(links.visitNew({ conclusion: 'ISSUE', back: links.cases }))}>
@@ -108,7 +122,8 @@ type OwnerCase = MedicalCase & { horseName: string };
 function OwnerCases() {
   const navigate = useNavigate();
   const list = useService(async () => {
-    const horses = await listMyOwnedHorses();
+    // GET /horses của Chủ ngựa đã chỉ trả ngựa của chính họ (BE bỏ /owners/me/horses).
+    const horses = await listAllHorses();
     const lists = await Promise.all(horses.map((horse) => listHorseCases(horse.id).then((result) => result.items.map((item) => ({ ...item, horseName: horse.name })))));
     return lists.flat().sort((a, b) => b.openedAt.localeCompare(a.openedAt));
   }, []);

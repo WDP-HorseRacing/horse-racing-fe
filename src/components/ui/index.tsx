@@ -243,7 +243,7 @@ export function EmptyState({
 
 export function Skeleton({ rows = 3, className = '' }: { rows?: number; className?: string }) {
   return (
-    <div className={cn('space-y-3', className)}>
+    <div className={cn('skeleton-delay space-y-3', className)} role="status" aria-label="Đang tải">
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="skeleton h-14 w-full" />
       ))}
@@ -1034,38 +1034,52 @@ export function Avatar({
   className?: string;
 }) {
   const letter = name.trim().split(/\s+/).pop()?.[0]?.toUpperCase() ?? '?';
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        style={{ width: size, height: size }}
-        className={cn('shrink-0 rounded-[12px] object-cover ring-1 ring-black/5', className)}
-      />
-    );
-  }
+  // Ảnh tải xong mới hiện dần lên trên ô chữ cái; lỗi (vd. link ký sẵn hết hạn) thì giữ ô chữ cái.
+  const [state, setState] = useState<{ src?: string; status: 'loading' | 'loaded' | 'failed' }>({ src, status: 'loading' });
+  const status = state.src === src ? state.status : 'loading';
+  if (state.src !== src) setState({ src, status: 'loading' });
+  const showImage = !!src && status !== 'failed';
   return (
     <span
       style={{ width: size, height: size, fontSize: size * 0.4 }}
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-[12px] bg-gray-100 font-semibold text-gray-600',
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-emerald-50 font-semibold text-emerald-800/70',
+        showImage && 'ring-1 ring-black/5',
         className,
       )}
     >
-      {letter}
+      <span aria-hidden={showImage || undefined}>{letter}</span>
+      {showImage && (
+        <img
+          src={src}
+          alt={name}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setState({ src, status: 'loaded' })}
+          onError={() => setState({ src, status: 'failed' })}
+          className={cn('absolute inset-0 h-full w-full object-cover transition-opacity duration-300', status === 'loaded' ? 'opacity-100' : 'opacity-0')}
+        />
+      )}
     </span>
   );
 }
 
 /* ===== Thông báo nổi ===== */
 
+/** Nút phụ trong thông báo nổi, ví dụ "Giao Groom" ngay sau khi xếp ô. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: number;
   message: string;
   tone: 'success' | 'error' | 'info';
+  action?: ToastAction;
 }
 
-const ToastContext = createContext<{ push: (message: string, tone?: Toast['tone']) => void }>({
+const ToastContext = createContext<{ push: (message: string, tone?: Toast['tone'], action?: ToastAction) => void }>({
   push: () => {},
 });
 
@@ -1079,11 +1093,12 @@ export function ToastHost({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-      push: (message: string, tone: Toast['tone'] = 'info') => {
+      push: (message: string, tone: Toast['tone'] = 'info', action?: ToastAction) => {
         counter.current += 1;
         const id = counter.current;
-        setToasts((current) => [...current, { id, message, tone }]);
-        setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 5000);
+        setToasts((current) => [...current, { id, message, tone, action }]);
+        // Thông báo có nút thì giữ lâu hơn để kịp bấm.
+        setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), action ? 9000 : 5000);
       },
     }),
     [],
@@ -1102,9 +1117,21 @@ export function ToastHost({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={cn('anim-pop pointer-events-auto rounded-xl px-4 py-3 text-sm font-medium ring-1', tones[toast.tone])}
+            className={cn('anim-pop pointer-events-auto flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ring-1', tones[toast.tone])}
           >
-            {toast.message}
+            <span className="min-w-0 flex-1">{toast.message}</span>
+            {toast.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.action?.onClick();
+                  setToasts((current) => current.filter((item) => item.id !== toast.id));
+                }}
+                className="shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              >
+                {toast.action.label}
+              </button>
+            )}
           </div>
         ))}
       </div>

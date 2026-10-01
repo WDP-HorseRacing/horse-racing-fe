@@ -402,7 +402,7 @@ function ManagerDashboard({ name }: { name: string }) {
           {
             key: 'pending-stall',
             level: 'info' as const,
-            title: `${pendingStall.length} ngựa chờ HT xếp ô và phân công Groom`,
+            title: `${pendingStall.length} ngựa chờ HT xếp ô`,
             detail: pendingStall.map((horse) => horse.name).join(', '),
             to: links.stable,
             cta: 'Sơ đồ chuồng',
@@ -496,7 +496,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
     ...pendingStall.map((horse) => ({
       key: `stall-${horse.id}`,
       level: 'warn' as const,
-      title: `${horse.name} chờ xếp ô và phân công Groom`,
+      title: `${horse.name} chờ xếp ô`,
       detail: horse.location.barn?.name,
       to: horse.location.barn?.id ? `${links.stable}?zone=${horse.location.barn.id}` : links.stable,
       cta: 'Xếp ô',

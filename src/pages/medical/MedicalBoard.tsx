@@ -1,6 +1,7 @@
 // F3.1 — Bảng điều khiển y tế (VET, CM, HT) từ GET /medical/dashboard.
 // Nguyên tắc: phần bình thường để trung tính; chỉ yêu cầu khẩn, quá hạn, sức khỏe bất thường mới có màu.
 // Bộ lọc khu và sức khỏe áp cho cả 5 khối, kể cả số đếm (BA chốt: đếm theo bộ lọc).
+// Head Trainer chỉ thấy ngựa thuộc khu mình phụ trách và khu cách ly (BE trả toàn câu lạc bộ, FE lọc).
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarClock, ClipboardList, FolderOpen, Map as MapIcon, Stethoscope, Syringe } from 'lucide-react';
@@ -11,6 +12,10 @@ import type { HealthStatus, MedicalDashboard } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { Button, Card, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, Tabs, cn } from '../../components/ui';
+import { MedicalBoardSkeleton } from '../../components/skeletons';
+import { canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
+import { primeZoneScope } from '../../hooks/useMyScope';
+import { scopeDashboard } from './components/scope';
 import { healthDot } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
 import { careTypeLabel } from '../../lib/api-labels';
@@ -44,12 +49,31 @@ export default function MedicalBoard() {
   const isVet = can(user, 'exam.record');
   const [barnId, setBarnId] = useState('');
   const [health, setHealth] = useState<HealthStatus | ''>('');
-  const barns = useService(() => Promise.all([listBarns(), listStalls()]).then(([items, stalls]) => ({ items, stalls })), []);
-  const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined, healthStatus: health || undefined }), [barnId, health]);
+  const trainer = user?.role === 'HEAD_TRAINER';
+  const barns = useService(
+    () =>
+      Promise.all([listBarns(), listStalls()]).then(([items, stalls]) => {
+        const scope = computeZoneScope(user, items, stalls);
+        if (user && scope.trainer) primeZoneScope(user.id, items, stalls);
+        // HT: chỉ các khu được xem (khu mình + khu cách ly).
+        return { items: items.filter((barn) => canSeeBarn(scope, barn.id)), stalls, scope };
+      }),
+    [user?.id, user?.role],
+  );
+  // HT: gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE, để số đếm từng tab tính đúng trong phạm vi khu.
+  const board = useService(
+    () => getMedicalDashboard({ barnId: barnId || undefined, healthStatus: trainer ? undefined : health || undefined }),
+    [barnId, trainer ? '' : health],
+  );
   const people = usePeople();
   const exam = (params: VisitParams = {}) => navigate(links.visitNew({ ...params, back: links.medicalBoard }));
 
-  const data = board.data;
+  const visible = barns.data?.scope.visibleBarnIds;
+  const data = useMemo(() => {
+    if (!board.data) return undefined;
+    if (!trainer) return board.data;
+    return visible ? scopeDashboard(board.data, visible, health) : undefined;
+  }, [board.data, trainer, visible, health]);
 
   // Sơ đồ đàn: mỗi khu một lưới 3×3 ô như Sơ đồ chuồng. Ô có ngựa không khớp bộ lọc sức khỏe hiện mờ.
   const herd = useMemo(() => {
@@ -68,10 +92,11 @@ export default function MedicalBoard() {
         cells: buildCells(barn.id, barns.data!.stalls, occupants),
         waiting: data.herd.horses.filter((horse) => horse.barnId === barn.id && !horse.stallId),
       }));
-    return { zones, noBarn: data.herd.horses.filter((horse) => !horse.barnId) };
-  }, [data, barns.data, barnId]);
+    return { zones, noBarn: trainer ? [] : data.herd.horses.filter((horse) => !horse.barnId) };
+  }, [data, barns.data, barnId, trainer]);
 
-  if (board.loading && !data) return <Skeleton rows={6} />;
+  // HT chờ có phạm vi khu rồi mới hiện, để không lóe dữ liệu toàn câu lạc bộ.
+  if ((board.loading || (trainer && barns.loading)) && !data) return <MedicalBoardSkeleton />;
   if (board.error && !data) return <ErrorBox message={board.error} />;
   if (!data) return null;
 
@@ -86,7 +111,11 @@ export default function MedicalBoard() {
     <div className="space-y-6">
       <PageHeader
         title="Bảng điều khiển y tế"
-        description="Yêu cầu khám đang chờ, bệnh án đang mở, lịch khám định kỳ, lịch chăm sóc và sức khỏe toàn đàn."
+        description={
+          trainer
+            ? 'Yêu cầu khám, bệnh án đang mở, lịch khám và lịch chăm sóc của ngựa trong khu bạn phụ trách và khu cách ly.'
+            : 'Yêu cầu khám đang chờ, bệnh án đang mở, lịch khám định kỳ, lịch chăm sóc và sức khỏe toàn đàn.'
+        }
         actions={
           isVet && (
             <Button variant="secondary" onClick={() => exam()}>
@@ -103,14 +132,14 @@ export default function MedicalBoard() {
           active={health}
           onChange={(key) => setHealth(key as HealthStatus | '')}
           tabs={[
-            { key: '', label: 'Toàn đàn', count: health ? undefined : total },
+            { key: '', label: trainer ? 'Ngựa trong khu' : 'Toàn đàn', count: health ? undefined : total },
             ...HEALTH_SEVERITY.map((status) => ({ key: status, label: healthLabel[status], count: counts[status] })),
           ]}
         />
         <div className="flex items-center gap-2 pb-1.5">
           {board.loading && <span className="text-xs text-gray-400">Đang tải…</span>}
           <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
-            <option value="">Mọi khu</option>
+            <option value="">{trainer ? 'Mọi khu của bạn' : 'Mọi khu'}</option>
             {barns.data?.items.map((barn) => (
               <option key={barn.id} value={barn.id}>
                 {barn.name}
@@ -285,6 +314,8 @@ export default function MedicalBoard() {
                 variant="nested"
                 barn={zone.barn}
                 cells={zone.cells}
+                mine={barns.data?.scope.myBarnIds.has(zone.barn.id)}
+                isolation={barns.data?.scope.isolationBarnIds.has(zone.barn.id)}
                 cellLink={(cell) => (cell.occupant ? links.horseMedical(cell.occupant.id) : undefined)}
                 footer={
                   zone.waiting.length > 0 ? (
