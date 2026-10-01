@@ -18,6 +18,7 @@ import { usePeople } from './components/people';
 import { RequestMeta, RequestText } from './components/parts';
 import { MAX_COST, dateToIso, formatMoneyInput, parseMoney, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 const CONCLUSION_MAX = 4000;
 
@@ -167,7 +168,7 @@ export default function CaseClose() {
               {show('decision') && <p className="text-xs font-medium text-red-600">{show('decision')}</p>}
               {decision === 'KEEP' && (
                 <Field label="Ngày dự kiến gỡ" required name="keepDate" error={show('keepDate')} className="sm:max-w-xs">
-                  <Input type="date" value={keepDate} min={todayKey()} onChange={(event) => setKeepDate(event.target.value)} className={cn(show('keepDate') && invalidClass)} />
+                  <DatePicker value={keepDate} min={todayKey()} onChange={setKeepDate} invalid={!!show('keepDate')} />
                 </Field>
               )}
             </FormSection>

@@ -34,6 +34,7 @@ import { links } from '../../../lib/links';
 import { CARE_TYPES, careDaysLeft, useCareRights } from './care-rules';
 import { usePeople, type People } from './people';
 import { localToIso, toLocalInput, todayKey } from './utils';
+import { DateTimePicker } from '../../../components/ui/DatePicker';
 
 /** Hạn lịch chăm sóc: còn hạn xám · trong 3 ngày / quá hạn tới 7 ngày hổ phách · quá hạn hơn 7 ngày đỏ. */
 export function CareDue({ dueAt, status = 'SCHEDULED' }: { dueAt: string; status?: CareSchedule['status'] }) {
@@ -154,7 +155,7 @@ export function CareFormModal({
           </Field>
         )}
         <Field label="Ngày đến hạn" required error={dayError} hint="Hệ thống nhắc bác sĩ và người được giao lúc 7 giờ sáng ngày đến hạn.">
-          <Input type="datetime-local" value={dueAt} min={`${todayKey()}T00:00`} onChange={(event) => setDueAt(event.target.value)} />
+          <DateTimePicker value={dueAt} min={`${todayKey()}T00:00`} onChange={setDueAt} />
         </Field>
         {dueChanged && (
           <Field label="Lý do dời ngày" required>
@@ -235,7 +236,7 @@ export function CompleteCareModal({
         {schedule.notes && <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-700">{schedule.notes}</p>}
         {manage ? (
           <Field label="Hẹn lần tới" hint="Không bắt buộc. Nhập thì hệ thống tạo lịch mới cùng loại, giữ người được giao nếu còn hợp lệ.">
-            <Input type="datetime-local" value={next} min={`${todayKey()}T00:00`} onChange={(event) => setNext(event.target.value)} />
+            <DateTimePicker value={next} min={`${todayKey()}T00:00`} onChange={setNext} />
           </Field>
         ) : (
           <p className="text-sm text-gray-600">Xác nhận bạn đã thực hiện xong. Bác sĩ sẽ hẹn lần tiếp theo nếu cần.</p>

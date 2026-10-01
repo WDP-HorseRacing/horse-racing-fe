@@ -7,11 +7,12 @@ import { useService } from '../../hooks/useService';
 import { getCostReport } from '../../api/medical';
 import { listBarns } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
-import { Card, DataTable, ErrorBox, FilterSelect, Input, Meter, PageHeader, Skeleton, Toolbar } from '../../components/ui';
+import { Card, DataTable, ErrorBox, FilterSelect, Meter, PageHeader, Skeleton, Toolbar } from '../../components/ui';
 import { formatDate, formatMoney, toDateKey } from '../../lib/format';
 import { links } from '../../lib/links';
 import { now } from '../../lib/clock';
 import { HorseChip } from './components/parts';
+import { DatePicker } from '../../components/ui/DatePicker';
 
 function monthStart(): string {
   const date = now();
@@ -43,11 +44,11 @@ export default function CostReport() {
       <Toolbar>
         <label className="flex items-center gap-2 text-sm text-gray-500">
           Từ
-          <Input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} className="h-9 w-40 py-0" />
+          <DatePicker value={from} max={to || undefined} onChange={setFrom} size="sm" className="w-40" />
         </label>
         <label className="flex items-center gap-2 text-sm text-gray-500">
           đến
-          <Input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} className="h-9 w-40 py-0" />
+          <DatePicker value={to} min={from || undefined} onChange={setTo} size="sm" className="w-40" />
         </label>
         <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
           <option value="">Mọi khu</option>

@@ -25,6 +25,7 @@ import Lenis from 'lenis';
 import { useStore } from '../store/store';
 import { Avatar, ToastHost, Tip, cn, useToast } from '../components/ui';
 import { Logo } from '../components/Logo';
+import { TopProgress } from '../components/TopProgress';
 import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
@@ -364,6 +365,7 @@ function Shell() {
 
   return (
     <div className="flex h-dvh bg-canvas font-sans">
+      <TopProgress />
       {/* Sidebar máy tính — thu gọn được thành rail icon */}
       <aside
         className={cn(

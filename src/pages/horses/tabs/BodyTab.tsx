@@ -29,6 +29,7 @@ import { TEMP_ALERT_C } from '../../../lib/rules';
 import { addDays, formatDateShort, formatDateTime } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { ReasonDialog } from '../../stable/components/PlacementDialogs';
+import { DateTimePicker } from '../../../components/ui/DatePicker';
 
 const TYPES: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 // Bốn biểu đồ dùng chung một màu — màu chỉ để nói "bất thường", không để phân biệt loại chỉ số.
@@ -306,7 +307,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
             })}
           </div>
           <Field label="Thời điểm đo" required>
-            <Input type="datetime-local" value={measuredAt} min={minInput} max={toLocalInput(now())} onChange={(event) => setMeasuredAt(event.target.value)} />
+            <DateTimePicker value={measuredAt} min={minInput} max={toLocalInput(now())} onChange={setMeasuredAt} />
           </Field>
           {values.TEMPERATURE && (
             <p className="text-xs text-gray-500">
