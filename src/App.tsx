@@ -1,50 +1,53 @@
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
 import { FEATURES } from './config/features';
 
-import LandingPage from './pages/LandingPage';
 import { Login } from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
-import Dashboard from './pages/dashboard/Dashboard';
-import Profile from './pages/Profile';
 
-import HorseList from './pages/horses/HorseList';
-import HorseForm from './pages/horses/HorseForm';
-import HorseDetail from './pages/horses/HorseDetail';
-import StableMap from './pages/stable/StableMap';
 
-import SubjectList from './pages/training/subjects/SubjectList';
-import ProgramList from './pages/training/programs/ProgramList';
-import ProgramEditor from './pages/training/programs/ProgramEditor';
-import ProgramDetail from './pages/training/programs/ProgramDetail';
-import ClassList from './pages/training/classes/ClassList';
-import ClassForm from './pages/training/classes/ClassForm';
-import ClassDetail from './pages/training/classes/ClassDetail';
-import SchedulePage from './pages/training/SchedulePage';
-import TodaySessions from './pages/training/TodaySessions';
-import SessionPage from './pages/training/SessionPage';
-import LiveList from './pages/training/LiveList';
-import ReviewList from './pages/training/ReviewList';
-import ProgressBoard from './pages/training/ProgressBoard';
-import HeartRatePage from './pages/training/HeartRatePage';
 
-import MedicalBoard from './pages/medical/MedicalBoard';
-import ExamRequests from './pages/medical/ExamRequests';
-import CaseList from './pages/medical/CaseList';
-import CaseDetail from './pages/medical/CaseDetail';
-import PeriodicExams from './pages/medical/PeriodicExams';
-import CareSchedules from './pages/medical/CareSchedules';
-import CostReport from './pages/medical/CostReport';
-import HorseMedical from './pages/medical/HorseMedical';
-import VisitNew from './pages/medical/VisitNew';
-import CaseClose from './pages/medical/CaseClose';
-import CareNew from './pages/medical/CareNew';
 
-import { AdminUsers } from './pages/admin/AdminPages';
-import { NotFound, Skeleton } from './components/ui';
+import { NotFound } from './components/ui';
+import { BootScreen, PageSkeleton } from './components/skeletons';
+import {
+  LandingPage,
+  Dashboard,
+  Profile,
+  HorseList,
+  HorseForm,
+  HorseDetail,
+  StableMap,
+  SubjectList,
+  ProgramList,
+  ProgramEditor,
+  ProgramDetail,
+  ClassList,
+  ClassForm,
+  ClassDetail,
+  SchedulePage,
+  TodaySessions,
+  SessionPage,
+  LiveList,
+  ReviewList,
+  ProgressBoard,
+  HeartRatePage,
+  MedicalBoard,
+  ExamRequests,
+  CaseList,
+  CaseDetail,
+  PeriodicExams,
+  CareSchedules,
+  CostReport,
+  HorseMedical,
+  VisitNew,
+  CaseClose,
+  CareNew,
+  AdminUsers,
+} from './routes/pages';
 
 const ProtectedRoute = () => {
   const isAuthenticated = useStore((state) => state.isAuthenticated);
@@ -52,11 +55,7 @@ const ProtectedRoute = () => {
   const sessionEnded = useStore((state) => state.sessionEnded);
   const location = useLocation();
   if (booting) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-canvas p-8">
-        <Skeleton rows={3} className="w-full max-w-md" />
-      </div>
-    );
+    return <BootScreen />;
   }
   if (isAuthenticated) return <Outlet />;
   // Chưa đăng nhập hoặc vừa hết phiên: về đăng nhập, nhớ trang đang xem để quay lại sau khi đăng nhập.
@@ -108,7 +107,14 @@ function App() {
     <MotionConfig reducedMotion="user">
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
+              <LandingPage />
+            </Suspense>
+          }
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
 
