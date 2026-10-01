@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import * as Popover from '@radix-ui/react-popover';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
@@ -26,6 +26,9 @@ import { useStore } from '../store/store';
 import { Avatar, ToastHost, Tip, cn, useToast } from '../components/ui';
 import { Logo } from '../components/Logo';
 import { TopProgress } from '../components/TopProgress';
+import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
+import { PageSkeleton } from '../components/skeletons';
+import { preloadRoute } from '../routes/pages';
 import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
@@ -269,6 +272,9 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
                 to={item.path}
                 end={item.path === links.dashboard}
                 onClick={onNavigate}
+                // Rê chuột / focus vào menu thì tải trước mã trang.
+                onMouseEnter={() => preloadRoute(item.path)}
+                onFocus={() => preloadRoute(item.path)}
                 className={cn(
                   'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900',
                   'aria-[current=page]:bg-emerald-50 aria-[current=page]:font-semibold aria-[current=page]:text-emerald-800 aria-[current=page]:hover:bg-emerald-50',
@@ -486,7 +492,12 @@ function Shell() {
         <div id="main-scroll" className="flex-1 overflow-y-auto">
           {/* Nội dung giãn toàn bộ bề ngang — không còn cột hẹp căn giữa */}
           <div className="w-full px-4 pb-16 pt-6 sm:px-6 lg:px-8 2xl:px-10">
-            <Outlet />
+            {/* Lỗi một trang không làm trắng cả ứng dụng; trang chưa tải xong thì hiện khung chờ. */}
+            <RouteErrorBoundary key={location.pathname}>
+              <Suspense fallback={<PageSkeleton />}>
+                <Outlet />
+              </Suspense>
+            </RouteErrorBoundary>
           </div>
         </div>
       </main>

@@ -55,7 +55,7 @@ export function HeroStat({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group relative flex min-w-0 flex-col justify-between gap-3 rounded-2xl bg-white/[0.07] p-4 text-left ring-1 ring-white/12 backdrop-blur-sm transition disabled:cursor-default',
+        'group relative flex min-w-0 flex-col justify-start gap-3 rounded-2xl bg-white/[0.07] p-4 text-left ring-1 ring-white/12 backdrop-blur-sm transition disabled:cursor-default',
         onClick && 'hover:-translate-y-0.5 hover:bg-white/[0.12] hover:ring-white/25',
       )}
     >
