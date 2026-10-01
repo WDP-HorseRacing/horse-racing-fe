@@ -279,3 +279,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .card-rise { animation: none; }
 }
+
+/* === Tổng quan: hàng bento 7/5 rồi 5/7 xen kẽ === */
+@media (min-width: 1024px) {
+  .bento-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .bento-row:nth-of-type(even) { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+}
+/* Nút trên dải hero xanh rừng: nút chính sáng màu cỏ non để nổi trên nền tối. */
+.hero-actions button { box-shadow: none; }
+.hero-actions button:not([class*="bg-white"]) { background: #34d399; color: #022c22; }
+.hero-actions button:not([class*="bg-white"]):hover { background: #6ee7b7; }
