@@ -1,6 +1,6 @@
-// Tổng quan theo vai trò — cùng một khung:
-//   1. Lời chào + 4 ô số liệu (trung tính, chỉ tô màu khi có vấn đề).
-//   2. Các hàng 50/50: khu chuồng (sơ đồ nhỏ) · "Cần xử lý"; bệnh án đang điều trị · hoạt động gần đây;
+// Tổng quan theo vai trò — cùng một khung bento:
+//   1. Dải chào xanh rừng: ngày, lời chào, nút tắt và 4 số liệu đếm động (chỉ tô màu khi có vấn đề).
+//   2. Các hàng bất đối xứng 7/5 rồi 5/7: khu chuồng (sơ đồ nhỏ) · "Cần xử lý"; bệnh án đang điều trị · hoạt động gần đây;
 //      lịch y tế 7 ngày tới (danh sách theo ngày, có nhóm Quá hạn) · khối riêng của vai trò.
 // Phần huấn luyện (Flow 2) tạm ẩn cho tới khi có API thật.
 import type { ReactNode } from 'react';
@@ -9,7 +9,9 @@ import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, Lock, M
 import { useStore } from '../../store/store';
 import { useService } from '../../hooks/useService';
 import type { BarnListItem, HealthStatus, HorseListItem, Stall } from '../../api/types';
-import { Avatar, Button, Card, Dot, ErrorBox, PageHeader, Reveal, SectionTitle, Skeleton, Stat, cn } from '../../components/ui';
+import { Avatar, Button, Card, Dot, ErrorBox, Reveal, SectionTitle, cn } from '../../components/ui';
+import { DashboardSkeleton } from '../../components/skeletons';
+import { DashboardHero, HeroStat as Stat } from './DashboardHero';
 import { CaseStatusPill, HealthPill, LifecyclePill, PlacementStatusPill, UrgentPill, notificationTone } from '../../components/ui/status';
 import DayAgenda from '../../components/DayAgenda';
 import { careTypeLabel, requestSourceLabel } from '../../lib/api-labels';
@@ -47,10 +49,10 @@ interface Attention {
 
 const levelOrder = { danger: 0, warn: 1, info: 2 };
 
-/** Một hàng hai thẻ 50/50, hai thẻ cao bằng nhau. */
+/** Một hàng bento hai thẻ cao bằng nhau: 7/5 rồi 5/7 xen kẽ giữa các hàng (xem .bento-row trong index.css). */
 function Row({ children }: { children: ReactNode }) {
   return (
-    <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0" data-reveal>
+    <div className="bento-row grid gap-5 [&>*]:min-w-0" data-reveal>
       {children}
     </div>
   );
@@ -218,26 +220,8 @@ function ZonesPanel({
   );
 }
 
-function StatRow({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>;
-}
-
 function Loading() {
-  return (
-    <div className="space-y-5">
-      <Skeleton rows={1} className="max-w-md" />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Skeleton rows={1} />
-        <Skeleton rows={1} />
-        <Skeleton rows={1} />
-        <Skeleton rows={1} />
-      </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Skeleton rows={4} />
-        <Skeleton rows={4} />
-      </div>
-    </div>
-  );
+  return <DashboardSkeleton />;
 }
 
 /** Danh sách ngựa gọn: ảnh, tên, chỗ ở, sức khỏe. */
@@ -413,8 +397,7 @@ function ManagerDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <div data-reveal>
-        <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, ${name}`}
           actions={
@@ -426,18 +409,12 @@ function ManagerDashboard({ name }: { name: string }) {
                 <Plus size={15} /> Thêm ngựa mới
               </Button>
             </>
-          }
-        />
-      </div>
-
-      <div data-reveal>
-        <StatRow>
+          }>
           <Stat value={horses.length} label="Ngựa ở câu lạc bộ" hint={`${blocked.length} không tập được`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={pendingBarn.length + pendingStall.length} label="Chờ xếp chỗ" hint="chờ xếp khu hoặc chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
           <Stat value={urgent.length} label="Yêu cầu khám khẩn" hint={`${medical.pendingRequests.length} yêu cầu đang chờ`} icon={<AlertOctagon size={18} />} tone="danger" onClick={() => navigate(links.requests)} />
           <Stat value={overdueAlert.length} label="Quá hạn khám > 7 ngày" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
-        </StatRow>
-      </div>
+      </DashboardHero>
 
       <Row>
         <ZonesPanel title="Khu chuồng" barns={barns} stalls={stalls} occupants={occupantsByStall(horses)} cellLink={horseLink} empty="Chưa có khu chuồng nào." className="h-full" />
@@ -521,8 +498,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <div data-reveal>
-        <PageHeader
+      <DashboardHero
           eyebrow={`${todayLabel()} · ${barns.map((barn) => barn.name).join(', ') || 'chưa được giao khu'}`}
           title={`${greeting()}, ${name}`}
           actions={
@@ -534,18 +510,12 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
                 <MapPinned size={15} /> Sơ đồ chuồng
               </Button>
             </>
-          }
-        />
-      </div>
-
-      <div data-reveal>
-        <StatRow>
+          }>
           <Stat value={horses.length} label="Ngựa trong khu" hint={`${watch.length} cần theo dõi`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={pendingStall.length} label="Chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
           <Stat value={requests.length} label="Yêu cầu khám đang chờ" hint={`${requests.filter((item) => item.urgent).length} khẩn`} icon={<ClipboardCheck size={18} />} tone="warning" onClick={() => navigate(links.requests)} />
           <Stat value={blocked.length} label="Ngựa không tập được" icon={<AlertOctagon size={18} />} tone="danger" />
-        </StatRow>
-      </div>
+      </DashboardHero>
 
       <Row>
         <ZonesPanel title="Khu của tôi" barns={barns} stalls={stalls} occupants={occupantsByStall(horses)} cellLink={horseLink} empty="Bạn chưa được giao khu nào." className="h-full" />
@@ -639,8 +609,7 @@ function VetDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <div data-reveal>
-        <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, bác sĩ ${name}`}
           actions={
@@ -652,12 +621,7 @@ function VetDashboard({ name }: { name: string }) {
                 <Stethoscope size={15} /> Xử lý yêu cầu khám
               </Button>
             </>
-          }
-        />
-      </div>
-
-      <div data-reveal>
-        <StatRow>
+          }>
           <Stat
             value={medical.pendingRequests.length}
             label="Yêu cầu khám đang chờ"
@@ -669,8 +633,7 @@ function VetDashboard({ name }: { name: string }) {
           <Stat value={overdue.length} label="Quá hạn khám định kỳ" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
           <Stat value={medical.openCases.length} label="Bệnh án đang điều trị" icon={<ClipboardCheck size={18} />} onClick={() => navigate(links.cases)} />
           <Stat value={careDue.length} label="Lịch chăm sóc đến hạn" icon={<CalendarClock size={18} />} tone="warning" onClick={() => navigate(links.careSchedules)} />
-        </StatRow>
-      </div>
+      </DashboardHero>
 
       <Row>
         <ZonesPanel
@@ -759,26 +722,19 @@ function GroomDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <div data-reveal>
-        <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, ${name}`}
           actions={
             <Button onClick={() => navigate(links.requests)}>
               <Stethoscope size={15} /> Gửi yêu cầu khám
             </Button>
-          }
-        />
-      </div>
-
-      <div data-reveal>
-        <StatRow>
+          }>
           <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={due.length} label="Việc chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
           <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
           <Stat value={data.requests.length} label="Yêu cầu khám chờ bác sĩ" icon={<Stethoscope size={18} />} onClick={() => navigate(links.requests)} />
-        </StatRow>
-      </div>
+      </DashboardHero>
 
       <Row>
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
@@ -844,18 +800,12 @@ function OwnerDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <div data-reveal>
-        <PageHeader eyebrow={todayLabel()} title={`${greeting()}, ${name}`} />
-      </div>
-
-      <div data-reveal>
-        <StatRow>
+      <DashboardHero eyebrow={todayLabel()} title={`${greeting()}, ${name}`}>
           <Stat value={data.active.length} label="Ngựa đang ở câu lạc bộ" hint={data.horses.length > data.active.length ? `${data.horses.length - data.active.length} đã chuyển nhượng` : undefined} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={data.openCases.length} label="Đang điều trị" icon={<Stethoscope size={18} />} tone="warning" onClick={() => navigate(links.cases)} />
           <Stat value={weekCount} label="Việc chăm sóc 7 ngày tới" icon={<CalendarClock size={18} />} />
           <Stat value={formatMoney(data.medicalCost)} label="Chi phí y tế đã chốt" icon={<Wallet size={18} />} onClick={() => navigate(links.cases)} />
-        </StatRow>
-      </div>
+      </DashboardHero>
 
       <Row>
         <Panel title="Ngựa của tôi" to={links.horses} flush className="h-full">
