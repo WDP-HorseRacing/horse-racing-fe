@@ -173,25 +173,21 @@ export function MedicalBoardSkeleton() {
   return (
     <Frame className="space-y-5" label="Đang tải bảng điều khiển y tế">
       <HeaderBones />
-      <div className="flex gap-2">
-        {Array.from({ length: 5 }, (_, index) => (
-          <Bone key={index} className="h-9 w-24 rounded-lg" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Bone key={index} className="h-24 rounded-2xl" />
         ))}
       </div>
       <div className="grid gap-5 lg:grid-cols-12">
-        <div className="space-y-4 lg:col-span-8">
-          <CardBones rows={4} />
-          <CardBones rows={2} />
+        <div className="lg:col-span-8">
+          <CardBones rows={6} />
         </div>
         <div className="space-y-4 lg:col-span-4">
-          <CardBones rows={4} />
+          <Bone className="h-48 rounded-2xl" />
+          <CardBones rows={2} />
         </div>
       </div>
-      <div className="grid gap-4 rounded-2xl bg-white p-4 ring-1 ring-gray-200/70 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Bone key={index} className="h-48 rounded-xl" />
-        ))}
-      </div>
+      <Bone className="h-14 rounded-2xl" />
     </Frame>
   );
 }
