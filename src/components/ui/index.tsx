@@ -8,13 +8,15 @@ import {
   useMemo,
   useRef,
   useState,
+  isValidElement,
+  Children,
   type ReactNode,
 } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as RadixTabs from '@radix-ui/react-tabs';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, Eye, EyeOff, Inbox, MoreHorizontal, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Inbox, MoreHorizontal, Search, X } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import gsap from 'gsap';
@@ -416,19 +418,56 @@ export function FilterSelect({
   className?: string;
   label?: string;
 }) {
+  const options = Children.toArray(children)
+    .map((child) => {
+      if (isValidElement(child) && child.type === 'option') {
+        const props = child.props as any;
+        return { value: props.value ?? '', label: props.children };
+      }
+      return null;
+    })
+    .filter(Boolean) as { value: string; label: ReactNode }[];
+
+  const selectedOption = options.find((opt) => String(opt.value) === String(value));
+  const displayLabel = selectedOption ? selectedOption.label : label;
+
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className={cn(
-        'h-9 rounded-lg border border-gray-200 bg-white pl-3 pr-8 text-sm text-gray-700 transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
-        value && 'border-gray-400 font-medium text-gray-900',
-        className,
-      )}
-    >
-      {children}
-    </select>
+    <Dropdown.Root modal={false}>
+      <Dropdown.Trigger
+        aria-label={label}
+        className={cn(
+          'inline-flex h-9 items-center justify-between gap-2 rounded-full border border-gray-200 bg-white pl-4 pr-3 text-sm text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
+          value && 'border-emerald-600/30 bg-emerald-50 font-medium text-emerald-900',
+          className,
+        )}
+      >
+        <span className="truncate">{displayLabel}</span>
+        <ChevronDown size={14} className={cn('shrink-0 transition-colors', value ? 'text-emerald-700' : 'text-gray-400')} />
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content
+          align="start"
+          sideOffset={6}
+          className="anim-pop z-50 max-h-80 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl bg-white p-1 shadow-float ring-1 ring-gray-200"
+        >
+          {options.map((opt, index) => (
+            <Dropdown.Item
+              key={index}
+              onSelect={() => onChange(opt.value)}
+              className={cn(
+                'flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
+                String(opt.value) === String(value)
+                  ? 'bg-emerald-50 font-medium text-emerald-900'
+                  : 'text-gray-700 data-[highlighted]:bg-gray-100',
+              )}
+            >
+              {opt.label}
+              {String(opt.value) === String(value) && <Check size={14} className="ml-auto text-emerald-600" />}
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
   );
 }
 
@@ -959,12 +998,11 @@ export function Tabs({
               className={cn(
                 'relative -mb-px flex shrink-0 items-center gap-2 rounded-t-xl border px-4 py-2.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/30',
                 isActive
-                  ? 'z-1 border-gray-200 border-b-white bg-white font-semibold text-gray-900 shadow-[0_-6px_14px_-10px_rgba(6,78,59,0.35)]'
+                  ? 'z-1 border-gray-200 border-b-white bg-white font-semibold text-emerald-900'
                   : 'border-transparent font-medium text-gray-500 hover:bg-white/60 hover:text-gray-800',
                 tab.count === 0 && !isActive && 'text-gray-400',
               )}
             >
-              {isActive && <span className="absolute inset-x-3 top-0 h-0.5 rounded-b-full bg-emerald-600" aria-hidden />}
               {tab.label}
               {number !== undefined && (
                 <span

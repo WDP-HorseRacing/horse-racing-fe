@@ -56,6 +56,7 @@ export function AdminUsers() {
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return (data ?? [])
+      .filter((user) => user.id !== me?.id)
       .filter((user) => !roleFilter || user.role === roleFilter)
       .filter((user) => !term || `${user.fullName} ${user.email}`.toLowerCase().includes(term));
   }, [data, roleFilter, search]);

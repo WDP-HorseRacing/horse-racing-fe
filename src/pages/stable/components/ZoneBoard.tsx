@@ -298,7 +298,7 @@ export function ZoneBoard({
   return (
     <section id={id} className={cn('relative transition-shadow', !layoutId && surface, full ? 'p-4 sm:p-5' : 'p-3.5', className)}>
       {layoutId && <motion.div layoutId={layoutId} className={cn('absolute inset-0', surface)} transition={{ type: 'spring', bounce: 0.12, duration: 0.5 }} aria-hidden />}
-      <div className="relative">
+      <div className="relative flex flex-col flex-1">
         <header className={cn('flex items-start justify-between gap-3', full ? 'mb-4' : 'mb-3')}>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -350,7 +350,9 @@ export function ZoneBoard({
           ))}
         </div>
 
-        {footer && <div className={cn('border-t border-gray-100', full ? 'mt-4 pt-3' : 'mt-3 pt-2.5')}>{footer}</div>}
+        <div className="mt-auto">
+          {footer && <div className={cn('border-t border-gray-100', full ? 'mt-4 pt-3' : 'mt-3 pt-2.5')}>{footer}</div>}
+        </div>
       </div>
     </section>
   );

@@ -261,7 +261,7 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
             (collapsed ? (
               <div className="mx-auto my-2 h-px w-6 bg-gray-200" />
             ) : (
-              <p className="mb-1 px-3 text-xs font-medium text-gray-400">{group.group}</p>
+              <p className="mb-1 px-3 text-xs font-medium text-gray-400 uppercase tracking-wider">{group.group}</p>
             ))}
           {group.items.map((item) => {
             // className phải là chuỗi: Tooltip.Trigger (asChild) ghép class bằng nối chuỗi nên làm hỏng className dạng hàm.
@@ -276,8 +276,8 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
                 onMouseEnter={() => preloadRoute(item.path)}
                 onFocus={() => preloadRoute(item.path)}
                 className={cn(
-                  'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900',
-                  'aria-[current=page]:bg-emerald-50 aria-[current=page]:font-semibold aria-[current=page]:text-emerald-800 aria-[current=page]:hover:bg-emerald-50',
+                  'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-emerald-50 hover:text-emerald-700',
+                  'aria-[current=page]:bg-emerald-50 aria-[current=page]:font-semibold aria-[current=page]:text-emerald-800',
                   collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
                 )}
               >
@@ -375,7 +375,7 @@ function Shell() {
       {/* Sidebar máy tính — thu gọn được thành rail icon */}
       <aside
         className={cn(
-          'hidden shrink-0 flex-col border-r border-gray-200/80 bg-white/80 py-5 backdrop-blur transition-[width] duration-300 lg:flex',
+          'hidden shrink-0 flex-col bg-white border-r border-gray-200/80 py-5 transition-[width] duration-300 lg:flex',
           collapsed ? 'w-[72px] px-2' : 'w-60 px-3',
         )}
       >
@@ -383,23 +383,25 @@ function Shell() {
           <Brand collapsed={collapsed} />
         </div>
         <NavList groups={groups} collapsed={collapsed} />
-        <div className="mt-4 space-y-2 border-t border-gray-200/80 pt-4">
+        <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
           {!collapsed && (
             <div className="flex items-center gap-3 px-1">
               <Avatar name={currentUser?.name ?? '?'} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
                 <p className="truncate text-xs text-gray-500">{currentUser ? roleLabel[currentUser.role] : ''}</p>
-                <p className="truncate text-xs text-gray-400" title={scope}>
-                  Phạm vi: {scope}
-                </p>
+                {currentUser?.role !== 'CLUB_MANAGER' && currentUser?.role !== 'VETERINARIAN' && (
+                  <p className="truncate text-xs text-gray-400" title={scope}>
+                    Phạm vi: {scope}
+                  </p>
+                )}
               </div>
             </div>
           )}
           <button
             onClick={() => setCollapsed((value) => !value)}
             className={cn(
-              'flex items-center gap-2 rounded-xl text-sm font-medium text-gray-400 transition hover:bg-gray-100 hover:text-gray-900',
+              'flex items-center gap-2 rounded-xl text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-700',
               collapsed ? 'mx-auto h-10 w-10 justify-center' : 'w-full px-3 py-2',
             )}
             aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
