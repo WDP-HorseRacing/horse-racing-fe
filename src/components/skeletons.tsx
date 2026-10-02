@@ -2,6 +2,7 @@
 // Bọc ngoài là `.skeleton-delay`: chỉ hiện sau ~150ms nên API trả nhanh thì không bị nháy.
 import type { ReactNode } from 'react';
 import { cn } from './ui';
+import { HorseLine } from './Logo';
 
 export function Bone({ className = '' }: { className?: string }) {
   return <div className={cn('skeleton', className)} aria-hidden />;
@@ -216,9 +217,7 @@ export function BootScreen() {
       <div className="relative h-14 w-14">
         <span className="absolute inset-0 animate-ping rounded-2xl bg-emerald-500/20" />
         <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-[0_18px_36px_-16px_rgba(6,78,59,0.7)]">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M5 22c-.2-7 .9-12.8 3.2-16.7l.4-3 2 2.1c3.9 1.6 7.6 5.4 10.2 9.6.8 1.4.3 3.5-1.3 4.1-1.4.5-3.1.2-4.5-.6-1.4-.8-2.9-1.2-4-.7-.5 1.6 0 3.5 1 5.2" />
-          </svg>
+          <HorseLine size={38} paint="#fdf8ea" />
         </span>
       </div>
       <p className="text-sm text-gray-500">Đang mở HorseRacing…</p>
