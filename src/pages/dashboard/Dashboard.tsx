@@ -8,18 +8,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, Lock, MapPinned, Plus, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { useService } from '../../hooks/useService';
-import type { BarnListItem, HealthStatus, HorseListItem, Stall } from '../../api/types';
-import { Avatar, Button, Card, Dot, ErrorBox, Reveal, SectionTitle, cn, PageHeader, Stat } from '../../components/ui';
+import type { HorseListItem } from '../../api/types';
+import { Avatar, Button, Card, Dot, ErrorBox, Reveal, SectionTitle, cn, Stat } from '../../components/ui';
 import { DashboardSkeleton } from '../../components/skeletons';
-import { CaseStatusPill, HealthPill, LifecyclePill, PlacementStatusPill, UrgentPill, notificationTone } from '../../components/ui/status';
+import { DashboardHero } from './DashboardHero';
+import { CheckupCard, CostTrendCard, HerdHealthCard, OccupancyCard, RequestTrendCard } from './ChartPanels';
+import { countHealth } from './charts';
+import { CaseStatusPill, HealthPill, LifecyclePill, PlacementStatusPill, UrgentPill } from '../../components/ui/status';
 import DayAgenda from '../../components/DayAgenda';
+import WeekStrip from '../../components/WeekStrip';
 import { careTypeLabel, requestSourceLabel } from '../../lib/api-labels';
-import { healthLabel } from '../../lib/labels';
 import { links } from '../../lib/links';
 import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, addDays } from '../../lib/format';
 import { now } from '../../lib/clock';
-import { ZoneBoard } from '../stable/components/ZoneBoard';
-import { buildCells, occupantsByStall, type StallOccupant, type ZoneCell } from '../stable/components/barn';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
 
 /* ===== Mảnh ghép dùng chung ===== */
@@ -133,32 +134,6 @@ function Panel({
   );
 }
 
-/** Hoạt động gần đây = thông báo nhận được trong phiên đăng nhập này (realtime). */
-function RecentActivity({ className = '' }: { className?: string }) {
-  const notifications = useStore((state) => state.notifications);
-  const items = notifications.slice(0, 6);
-  return (
-    <Panel title="Hoạt động gần đây" flush className={className}>
-      {items.length === 0 ? (
-        <p className="px-5 py-5 text-sm text-gray-500">Chưa có thông báo mới trong phiên này. Thông báo đến sẽ hiện ở đây ngay khi xảy ra.</p>
-      ) : (
-        <ul className="divide-y divide-gray-100">
-          {items.map((item) => (
-            <li key={item.id} className="flex gap-3 px-5 py-3">
-              <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', notificationTone[item.level].dot)} />
-              <span className="min-w-0 flex-1">
-                <span className={cn('block truncate text-sm', item.readAt ? 'text-gray-600' : 'font-medium text-gray-900')}>{item.title}</span>
-                <span className="block truncate text-xs text-gray-500">{item.body}</span>
-              </span>
-              <span className="shrink-0 text-xs text-gray-400">{formatRelative(item.createdAt, now())}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
 /** Danh sách bệnh án đang mở (dạng gọn). */
 function CaseRows({ items, empty }: { items: { key: string; to: string; horse: string; line: string }[]; empty: string }) {
   if (items.length === 0) return <p className="text-sm text-gray-500">{empty}</p>;
@@ -174,48 +149,6 @@ function CaseRows({ items, empty }: { items: { key: string; to: string; horse: s
         </Link>
       ))}
     </div>
-  );
-}
-
-/** Sơ đồ nhỏ các khu (lưới 3×3), rê chuột vào ô để xem ngựa. */
-function ZonesPanel({
-  title,
-  barns,
-  stalls,
-  occupants,
-  cellLink,
-  empty,
-  className = '',
-}: {
-  title: string;
-  barns: BarnListItem[];
-  stalls: Stall[];
-  occupants: Map<string, StallOccupant>;
-  cellLink: (cell: ZoneCell) => string | undefined;
-  empty: string;
-  className?: string;
-}) {
-  const sorted = [...barns].sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }));
-  return (
-    <Panel title={title} to={links.stable} toLabel="Sơ đồ chuồng" className={className}>
-      {sorted.length === 0 ? (
-        <p className="text-sm text-gray-500">{empty}</p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sorted.map((barn) => (
-            <ZoneBoard
-              key={barn.id}
-              size="compact"
-              variant="nested"
-              barn={barn}
-              cells={buildCells(barn.id, stalls, occupants)}
-              titleTo={`${links.stable}?zone=${barn.id}`}
-              cellLink={cellLink}
-            />
-          ))}
-        </div>
-      )}
-    </Panel>
   );
 }
 
@@ -267,44 +200,6 @@ function priority(horse: HorseListItem) {
 }
 const byPriority = (a: HorseListItem, b: HorseListItem) => priority(a) - priority(b) || a.name.localeCompare(b.name, 'vi');
 
-const HEALTH_ORDER: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
-const HEALTH_BAR: Record<HealthStatus, string> = {
-  ELIGIBLE: 'bg-emerald-500',
-  UNDER_OBSERVATION: 'bg-amber-400',
-  INJURED: 'bg-red-500',
-  QUARANTINED: 'bg-red-300',
-};
-
-/** Sức khỏe đàn: một thanh xếp chồng 4 trạng thái + các ngựa không đủ điều kiện. */
-function HerdHealth({ counts, horses, className = '' }: { counts: Record<HealthStatus, number>; horses: HorseListItem[]; className?: string }) {
-  const total = HEALTH_ORDER.reduce((sum, status) => sum + counts[status], 0);
-  const abnormal = horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE' && (horse.healthStatus !== 'ELIGIBLE' || isLocked(horse))).sort(byPriority);
-  return (
-    <Panel title="Sức khỏe đàn" to={links.medicalBoard} toLabel="Bảng điều khiển y tế" flush className={className}>
-      <div className="px-5 py-4">
-        <div className="flex h-3 overflow-hidden rounded-full bg-gray-100">
-          {total > 0 &&
-            HEALTH_ORDER.filter((status) => counts[status] > 0).map((status) => (
-              <span key={status} className={cn('h-full', HEALTH_BAR[status])} style={{ width: `${(counts[status] / total) * 100}%` }} title={`${healthLabel[status]}: ${counts[status]}`} />
-            ))}
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
-          {HEALTH_ORDER.map((status) => (
-            <div key={status} className="flex items-center gap-2 text-xs text-gray-600">
-              <span className={cn('h-2.5 w-2.5 shrink-0 rounded-sm', HEALTH_BAR[status])} />
-              <span className="truncate">{healthLabel[status]}</span>
-              <span className="ml-auto font-semibold tabular-nums text-gray-900">{counts[status]}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="border-t border-gray-100">
-        <HorseRows horses={abnormal.slice(0, 6)} empty="Cả đàn đang đủ điều kiện, không có ngựa bị khóa huấn luyện." />
-      </div>
-    </Panel>
-  );
-}
-
 /* ===== Trang ===== */
 
 export default function Dashboard() {
@@ -317,8 +212,6 @@ export default function Dashboard() {
   if (user.role === 'HORSE_OWNER') return <OwnerDashboard name={name} />;
   return <ManagerDashboard name={name} />;
 }
-
-const horseLink = (cell: ZoneCell) => (cell.occupant ? links.horse(cell.occupant.id) : undefined);
 
 /* ===== Quản lý câu lạc bộ ===== */
 
@@ -396,7 +289,7 @@ function ManagerDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, ${name}`}
           actions={
@@ -408,18 +301,21 @@ function ManagerDashboard({ name }: { name: string }) {
                 <Plus size={15} /> Thêm ngựa mới
               </Button>
             </>
-          }
-      />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          }>
         <Stat value={horses.length} label="Ngựa ở câu lạc bộ" hint={`${blocked.length} không tập được`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
         <Stat value={pendingBarn.length + pendingStall.length} label="Chờ xếp chỗ" hint="chờ xếp khu hoặc chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
         <Stat value={urgent.length} label="Yêu cầu khám khẩn" hint={`${medical.pendingRequests.length} yêu cầu đang chờ`} icon={<AlertOctagon size={18} />} tone="danger" onClick={() => navigate(links.requests)} />
         <Stat value={overdueAlert.length} label="Quá hạn khám > 7 ngày" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
-      </div>
+      </DashboardHero>
 
       <Row>
-        <ZonesPanel title="Khu chuồng" barns={barns} stalls={stalls} occupants={occupantsByStall(horses)} cellLink={horseLink} empty="Chưa có khu chuồng nào." className="h-full" />
+        <OccupancyCard barns={barns} stalls={stalls} to={links.stable} onOpen={(barnId) => navigate(`${links.stable}?focus=${barnId}`)} className="h-full" />
         <AttentionList items={attention} className="h-full" />
+      </Row>
+
+      <Row>
+        <HerdHealthCard counts={medical.herd.counts} onSelect={(status) => navigate(`${links.medicalBoard}?health=${status}`)} className="h-full" />
+        <CostTrendCard months={data.costs} className="h-full" />
       </Row>
 
       <Row>
@@ -434,13 +330,19 @@ function ManagerDashboard({ name }: { name: string }) {
             }))}
           />
         </Panel>
-        <RecentActivity className="h-full" />
+        <CheckupCard items={data.checkups} className="h-full" />
       </Row>
 
-      <Row>
-        <DayAgenda days={data.week} overdue={data.overdue} title="Lịch y tế 7 ngày tới" to={links.periodic} toLabel="Khám định kỳ" className="h-full" />
-        <HerdHealth counts={medical.herd.counts} horses={horses} className="h-full" />
-      </Row>
+      <div data-reveal>
+        <WeekStrip
+          days={data.week}
+          title="Lịch y tế 7 ngày tới"
+          to={links.periodic}
+          toLabel="Khám định kỳ"
+          empty="Trống"
+          extra={data.overdue.length > 0 ? <span className="tint-amber rounded-md px-2 py-0.5 text-xs font-semibold">{data.overdue.length} việc quá hạn</span> : undefined}
+        />
+      </div>
     </Reveal>
   );
 }
@@ -499,7 +401,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <PageHeader
+      <DashboardHero
           eyebrow={`${todayLabel()} · ${barns.map((barn) => barn.name).join(', ') || 'chưa được giao khu'}`}
           title={`${greeting()}, ${name}`}
           actions={
@@ -511,17 +413,18 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
                 <MapPinned size={15} /> Sơ đồ chuồng
               </Button>
             </>
-          }
-      />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          }>
           <Stat value={horses.length} label="Ngựa trong khu" hint={`${watch.length} cần theo dõi`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={pendingStall.length} label="Chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
           <Stat value={requests.length} label="Yêu cầu khám đang chờ" hint={`${requests.filter((item) => item.urgent).length} khẩn`} icon={<ClipboardCheck size={18} />} tone="warning" onClick={() => navigate(links.requests)} />
           <Stat value={blocked.length} label="Ngựa không tập được" icon={<AlertOctagon size={18} />} tone="danger" />
-      </div>
+      </DashboardHero>
 
       <Row>
-        <ZonesPanel title="Khu của tôi" barns={barns} stalls={stalls} occupants={occupantsByStall(horses)} cellLink={horseLink} empty="Bạn chưa được giao khu nào." className="h-full" />
+        <div className="space-y-5">
+          <OccupancyCard barns={barns} stalls={stalls} title="Công suất khu của tôi" to={links.stable} onOpen={(barnId) => navigate(`${links.stable}?focus=${barnId}`)} />
+          <HerdHealthCard counts={countHealth(horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE'))} title="Sức khỏe ngựa trong khu" onSelect={(status) => navigate(`${links.medicalBoard}?health=${status}`)} />
+        </div>
         <AttentionList items={attention} className="h-full" />
       </Row>
 
@@ -537,15 +440,19 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
             }))}
           />
         </Panel>
-        <RecentActivity className="h-full" />
-      </Row>
-
-      <Row>
-        <DayAgenda days={data.week} overdue={data.overdue} title="Lịch y tế 7 ngày tới của khu" className="h-full" />
         <Panel title="Ngựa trong khu" to={links.horses} toLabel="Danh sách ngựa" flush className="h-full">
           <HorseRows horses={[...horses].sort(byPriority)} empty="Khu của bạn chưa có ngựa." />
         </Panel>
       </Row>
+
+      <div data-reveal>
+        <WeekStrip
+          days={data.week}
+          title="Lịch y tế 7 ngày tới của khu"
+          empty="Trống"
+          extra={data.overdue.length > 0 ? <span className="tint-amber rounded-md px-2 py-0.5 text-xs font-semibold">{data.overdue.length} việc quá hạn</span> : undefined}
+        />
+      </div>
     </Reveal>
   );
 }
@@ -558,7 +465,7 @@ function VetDashboard({ name }: { name: string }) {
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được dữ liệu'} />;
 
-  const { medical, barns, stalls } = data;
+  const { medical } = data;
   const today = todayKey();
   const tomorrow = toDateKey(addDays(now(), 1));
   const overdue = medical.checkups.filter((item) => item.daysLeft < 0);
@@ -602,17 +509,9 @@ function VetDashboard({ name }: { name: string }) {
     })),
   ];
 
-  const herdAbnormal = medical.herd.horses.filter((horse) => horse.healthStatus !== 'ELIGIBLE');
-  const caseByHorse = new Map(medical.openCases.map((item) => [item.horseId, item.initialDiagnosis]));
-  const occupants = new Map<string, StallOccupant>(
-    medical.herd.horses
-      .filter((horse) => horse.stallId)
-      .map((horse) => [horse.stallId!, { id: horse.horseId, name: horse.horseName, healthStatus: horse.healthStatus, openCase: caseByHorse.get(horse.horseId) }]),
-  );
-
   return (
     <Reveal className="space-y-5">
-      <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, bác sĩ ${name}`}
           actions={
@@ -624,9 +523,7 @@ function VetDashboard({ name }: { name: string }) {
                 <Stethoscope size={15} /> Xử lý yêu cầu khám
               </Button>
             </>
-          }
-      />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          }>
           <Stat
             value={medical.pendingRequests.length}
             label="Yêu cầu khám đang chờ"
@@ -638,18 +535,13 @@ function VetDashboard({ name }: { name: string }) {
           <Stat value={overdue.length} label="Quá hạn khám định kỳ" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
           <Stat value={medical.openCases.length} label="Bệnh án đang điều trị" icon={<ClipboardCheck size={18} />} onClick={() => navigate(links.cases)} />
           <Stat value={careDue.length} label="Lịch chăm sóc đến hạn" icon={<CalendarClock size={18} />} tone="warning" onClick={() => navigate(links.careSchedules)} />
-      </div>
+      </DashboardHero>
 
       <Row>
-        <ZonesPanel
-          title="Sơ đồ đàn"
-          barns={barns}
-          stalls={stalls}
-          occupants={occupants}
-          cellLink={(cell) => (cell.occupant ? links.horseMedical(cell.occupant.id) : undefined)}
-          empty="Chưa có khu chuồng nào."
-          className="h-full"
-        />
+        <div className="space-y-5">
+          <RequestTrendCard requests={data.requests} />
+          <HerdHealthCard counts={medical.herd.counts} onSelect={(status) => navigate(`${links.medicalBoard}?health=${status}`)} />
+        </div>
         <AttentionList items={attention} empty="Không có yêu cầu khám hay lịch khám nào cần xử lý" className="h-full" />
       </Row>
 
@@ -665,31 +557,19 @@ function VetDashboard({ name }: { name: string }) {
             }))}
           />
         </Panel>
-        <RecentActivity className="h-full" />
+        <CheckupCard items={data.checkups} className="h-full" />
       </Row>
 
-      <Row>
-        <DayAgenda days={data.week} overdue={data.overdue} title="Lịch y tế 7 ngày tới" to={links.periodic} toLabel="Khám định kỳ" className="h-full" />
-        <Panel title="Ngựa có vấn đề sức khỏe" to={links.medicalBoard} toLabel="Bảng điều khiển y tế" flush className="h-full">
-          {herdAbnormal.length === 0 ? (
-            <p className="px-5 py-5 text-sm text-gray-500">Cả đàn đang đủ điều kiện.</p>
-          ) : (
-            <ul className="divide-y divide-gray-100">
-              {herdAbnormal.map((horse) => (
-                <li key={horse.horseId}>
-                  <Link to={links.horseMedical(horse.horseId)} className="flex items-center justify-between gap-3 px-5 py-2.5 transition hover:bg-gray-50">
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-gray-900">{horse.horseName}</span>
-                      <span className="block text-xs text-gray-500">{horse.stallCode ? `Ô ${horse.stallCode}` : 'Chưa xếp ô'}</span>
-                    </span>
-                    <HealthPill status={horse.healthStatus} />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </Row>
+      <div data-reveal>
+        <WeekStrip
+          days={data.week}
+          title="Lịch y tế 7 ngày tới"
+          to={links.periodic}
+          toLabel="Khám định kỳ"
+          empty="Trống"
+          extra={data.overdue.length > 0 ? <span className="tint-amber rounded-md px-2 py-0.5 text-xs font-semibold">{data.overdue.length} việc quá hạn</span> : undefined}
+        />
+      </div>
     </Reveal>
   );
 }
@@ -727,21 +607,19 @@ function GroomDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <PageHeader
+      <DashboardHero
           eyebrow={todayLabel()}
           title={`${greeting()}, ${name}`}
           actions={
             <Button onClick={() => navigate(links.requests)}>
               <Stethoscope size={15} /> Gửi yêu cầu khám
             </Button>
-          }
-      />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          }>
           <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={due.length} label="Việc chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
           <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
           <Stat value={data.requests.length} label="Yêu cầu khám chờ bác sĩ" icon={<Stethoscope size={18} />} onClick={() => navigate(links.requests)} />
-      </div>
+      </DashboardHero>
 
       <Row>
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
@@ -767,7 +645,7 @@ function GroomDashboard({ name }: { name: string }) {
             </div>
           )}
         </Panel>
-        <RecentActivity className="h-full" />
+        <HerdHealthCard counts={countHealth(data.horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE'))} title="Sức khỏe ngựa bạn phụ trách" className="h-full" />
       </Row>
 
       <Row>
@@ -807,13 +685,12 @@ function OwnerDashboard({ name }: { name: string }) {
 
   return (
     <Reveal className="space-y-5">
-      <PageHeader eyebrow={todayLabel()} title={`${greeting()}, ${name}`} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <DashboardHero eyebrow={todayLabel()} title={`${greeting()}, ${name}`}>
           <Stat value={data.active.length} label="Ngựa đang ở câu lạc bộ" hint={data.horses.length > data.active.length ? `${data.horses.length - data.active.length} đã chuyển nhượng` : undefined} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={data.openCases.length} label="Đang điều trị" icon={<Stethoscope size={18} />} tone="warning" onClick={() => navigate(links.cases)} />
           <Stat value={weekCount} label="Việc chăm sóc 7 ngày tới" icon={<CalendarClock size={18} />} />
           <Stat value={formatMoney(data.medicalCost)} label="Chi phí y tế đã chốt" icon={<Wallet size={18} />} onClick={() => navigate(links.cases)} />
-      </div>
+      </DashboardHero>
 
       <Row>
         <Panel title="Ngựa của tôi" to={links.horses} flush className="h-full">
@@ -865,7 +742,7 @@ function OwnerDashboard({ name }: { name: string }) {
             </ul>
           )}
         </Panel>
-        <RecentActivity className="h-full" />
+        <HerdHealthCard counts={countHealth(data.active.filter((horse) => horse.lifecycleStatus === 'ACTIVE'))} title="Sức khỏe ngựa của tôi" className="h-full" />
       </Row>
 
       <div data-reveal>
