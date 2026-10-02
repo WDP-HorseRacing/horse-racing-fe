@@ -40,7 +40,7 @@ import { now } from '../../lib/clock';
 import { links } from '../../lib/links';
 import { BREEDS, COLORS, breedLabel, breedText, canonical, colorLabel, colorText, isPreset, optionText, type HorseOption } from '../../lib/horse-options';
 import { PhotoDropzone } from './components/PhotoDropzone';
-import { ProfileCompleteness, type CompletenessItem } from './components/ProfileCompleteness';
+import { PedigreeMini } from './components/PedigreeMini';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { TurfPlaceholder } from '../../components/TurfPlaceholder';
 import { barnBlocker } from '../stable/components/barn';
@@ -422,19 +422,19 @@ export default function HorseForm() {
   // Lịch ngày sinh mở sẵn ở khoảng 3 năm trước (tuổi thường gặp của ngựa mới vào câu lạc bộ).
   const birthDefault = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
   const noChanges = editing && changes.length === 0;
-  const completeness: CompletenessItem[] = [
-    { key: 'mediaId', label: 'Ảnh', done: !!currentPhoto },
-    { key: 'breed', label: 'Giống', done: !!form.breed.trim() },
-    { key: 'color', label: 'Màu lông', done: !!form.color.trim() },
-    { key: 'dateOfBirth', label: 'Ngày sinh', done: !!form.dateOfBirth },
-    { key: 'microchipId', label: 'Số chip', done: !!form.microchipId.trim() },
-    { key: 'sireId', label: 'Cha', done: !!form.sireId },
-    { key: 'damId', label: 'Mẹ', done: !!form.damId },
-    { key: 'ownerId', label: 'Chủ sở hữu', done: !!form.ownerId },
-    editing
-      ? { key: 'barn', label: 'Khu chuồng', done: !!horse?.location.barn, readOnly: true }
-      : { key: 'barnId', label: 'Khu chuồng', done: !!form.barnId },
-  ];
+  // Cây phả hệ: ông bà lấy từ cha mẹ đã chọn, tra trong danh sách ngựa đực / cái đã tải sẵn.
+  const byId = new Map([...sires, ...dams].map((item) => [item.id, item]));
+  const node = (horseId?: string | null) => {
+    if (!horseId) return null;
+    const found = byId.get(horseId);
+    return { id: horseId, name: found?.name ?? 'Đã khai báo' };
+  };
+  const grand = {
+    sireSire: node(sire?.sireId),
+    sireDam: node(sire?.damId),
+    damSire: node(dam?.sireId),
+    damDam: node(dam?.damId),
+  };
   const tags = [
     form.gender ? sexLabel[form.gender] : undefined,
     breedLabel(text(form.breed)),
@@ -694,20 +694,8 @@ export default function HorseForm() {
                 <p className="text-sm text-gray-400">Giới tính, giống, tuổi bạn nhập sẽ hiện ở đây.</p>
               )}
 
-              {!aptitudeOnly && (sire || dam || owner) && (
+              {!aptitudeOnly && owner && (
                 <dl className="space-y-1.5 text-sm">
-                  {sire && (
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-gray-500">Cha</dt>
-                      <dd className="truncate font-medium text-gray-900">{sire.name}</dd>
-                    </div>
-                  )}
-                  {dam && (
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-gray-500">Mẹ</dt>
-                      <dd className="truncate font-medium text-gray-900">{dam.name}</dd>
-                    </div>
-                  )}
                   {owner && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-gray-500">Chủ</dt>
@@ -717,7 +705,7 @@ export default function HorseForm() {
                 </dl>
               )}
 
-              {!aptitudeOnly && <ProfileCompleteness items={completeness} />}
+              {!aptitudeOnly && <PedigreeMini name={form.name} sire={sire ? { id: sire.id, name: sire.name } : null} dam={dam ? { id: dam.id, name: dam.name } : null} grand={grand} />}
 
               {!editing && (
                 <div className="flex items-start gap-2.5 rounded-xl bg-emerald-50/60 p-3 text-sm text-gray-700 ring-1 ring-emerald-100">
