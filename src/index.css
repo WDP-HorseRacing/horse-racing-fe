@@ -232,12 +232,6 @@ body {
     repeating-linear-gradient(100deg, transparent 0 34px, rgba(255, 255, 255, 0.5) 34px 68px),
     radial-gradient(120% 90% at 20% 0%, rgba(255, 255, 255, 0.55), transparent 60%);
 }
-.turf-dark {
-  background-color: #0c3a2b;
-  background-image:
-    repeating-linear-gradient(100deg, transparent 0 56px, rgba(255, 255, 255, 0.035) 56px 112px),
-    radial-gradient(90% 120% at 100% 0%, rgba(52, 211, 153, 0.16), transparent 55%);
-}
 
 /* === Mã ô kiểu số áo đua === */
 .saddle-tag {
@@ -285,7 +279,18 @@ body {
   .bento-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   .bento-row:nth-of-type(even) { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
 }
-/* Nút trên dải hero xanh rừng: nút chính sáng màu cỏ non để nổi trên nền tối. */
-.hero-actions button { box-shadow: none; }
-.hero-actions button:not([class*="bg-white"]) { background: #34d399; color: #022c22; }
-.hero-actions button:not([class*="bg-white"]):hover { background: #6ee7b7; }
+/* === Bạc hà nhạt: bề mặt nhấn của trang (dải chào, header phóng to khu, header y tế).
+   Màu vừa đủ để nịnh mắt, chữ vẫn tối, hòa với các thẻ trắng xung quanh. === */
+.turf-soft {
+  background-color: #eef7f1;
+  background-image:
+    repeating-linear-gradient(100deg, transparent 0 48px, rgba(255, 255, 255, 0.55) 48px 96px),
+    radial-gradient(80% 140% at 100% 0%, rgba(209, 250, 229, 0.75), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0) 55%, rgba(255, 255, 255, 0.7));
+}
+
+/* Nền nhạt theo ý nghĩa: dùng cho chip icon, pill trạng thái, ô số liệu cần chú ý. */
+.tint-emerald { background-color: #ecfdf5; color: #047857; box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18); }
+.tint-amber { background-color: #fffbeb; color: #b45309; box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.22); }
+.tint-red { background-color: #fef2f2; color: #b91c1c; box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.2); }
+.tint-gray { background-color: #f4f5f4; color: #4b5563; box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.06); }

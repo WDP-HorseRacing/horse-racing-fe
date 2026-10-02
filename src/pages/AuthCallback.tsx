@@ -67,19 +67,19 @@ export default function AuthCallback() {
   }, [params, navigate, loginWithOidc]);
 
   return (
-    <div className="turf-dark flex min-h-dvh flex-col items-center justify-center gap-6 p-8 text-center text-white">
-      <Logo size={44} textClassName="text-xl text-white" />
+    <div className="turf-soft flex min-h-dvh flex-col items-center justify-center gap-6 p-8 text-center text-gray-900">
+      <Logo size={44} textClassName="text-xl text-gray-900" />
       {failed ? (
         <div className="max-w-sm space-y-4">
-          <p className="text-base text-white/85">{failed}</p>
-          <Link to="/login" className="inline-flex rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50">
+          <p className="text-base text-gray-700">{failed}</p>
+          <Link to="/login" className="inline-flex rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600">
             Về trang đăng nhập
           </Link>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-3" role="status">
-          <span className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white" />
-          <p className="text-sm text-white/80">Đang hoàn tất đăng nhập với Google…</p>
+          <span className="h-7 w-7 animate-spin rounded-full border-2 border-emerald-200 border-t-emerald-700" />
+          <p className="text-sm text-gray-600">Đang hoàn tất đăng nhập với Google…</p>
         </div>
       )}
     </div>
