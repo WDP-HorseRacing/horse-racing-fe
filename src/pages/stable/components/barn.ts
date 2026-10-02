@@ -91,3 +91,24 @@ export function occupantStatusText(occupant: StallOccupant) {
   if (occupant.locked) return 'Khóa huấn luyện';
   return healthLabel[occupant.healthStatus];
 }
+
+/* ===== Số ô thêm được ===== */
+
+/**
+ * Số ô tối đa của khu = sức chứa (BE chặn tạo ô khi số ô ≥ sức chứa) nhưng không quá 9 (lưới 3×3).
+ * Khu không đặt sức chứa thì tối đa 9.
+ */
+export function stallLimit(barn: Pick<BarnListItem, 'capacity'>) {
+  return Math.min(MAX_STALLS_PER_BARN, barn.capacity ?? MAX_STALLS_PER_BARN);
+}
+
+/** Số ô còn thêm được vào khu đang có `count` ô. */
+export function stallRoom(barn: Pick<BarnListItem, 'capacity'>, count: number) {
+  return Math.max(0, stallLimit(barn) - count);
+}
+
+/** Lý do không thêm được ô (để ghi vào nhãn nút / menu), hoặc undefined nếu còn thêm được. */
+export function stallFullReason(barn: Pick<BarnListItem, 'capacity'>, count: number) {
+  if (stallRoom(barn, count) > 0) return undefined;
+  return barn.capacity !== null && barn.capacity < MAX_STALLS_PER_BARN ? `đã đạt sức chứa ${barn.capacity} ô` : `đã đủ ${MAX_STALLS_PER_BARN} ô`;
+}

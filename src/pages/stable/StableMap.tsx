@@ -22,7 +22,7 @@ import { healthLabel } from '../../lib/labels';
 import { links } from '../../lib/links';
 import { AssignStallDialog, AssignZoneDialog, GroomDialog, RemoveStallDialog, type PlacementHorse } from './components/PlacementDialogs';
 import { AddStallsDialog, HeadTrainerDialog, MaintenanceDialog, UnassignTrainerDialog, ZoneFormDialog, ZoneStatusDialog } from './components/ZoneDialogs';
-import { MAX_STALLS_PER_BARN, barnBlocker, buildCells, isLockedHorse, occupantsByStall, type ZoneCell } from './components/barn';
+import { barnBlocker, buildCells, isLockedHorse, occupantsByStall, stallFullReason, type ZoneCell } from './components/barn';
 import { ZoneBoard, ZoneLegend } from './components/ZoneBoard';
 import { ZoneFocus } from './components/ZoneFocus';
 import { loadZoneDetail } from './components/zone-detail';
@@ -304,12 +304,13 @@ export default function StableMap() {
   const zoneMenu = (zone: MapZone): MenuAction[] => {
     if (!isManager) return [];
     const blockers = zoneDeleteBlockers(zone);
-    const full = zone.stalls.length >= MAX_STALLS_PER_BARN;
+    // Không quá sức chứa của khu (BE chặn) và không quá 9 ô (lưới 3×3).
+    const full = stallFullReason(zone.barn, zone.stalls.length);
     const items: MenuAction[] = [
       { label: 'Sửa tên, sức chứa, mô tả', onSelect: () => setFormOpen({ zone: zone.barn }) },
       { label: zone.barn.headTrainerId ? 'Đổi HT phụ trách' : 'Gán HT phụ trách', onSelect: () => setTrainerZone(zone.barn) },
       { label: 'Đổi trạng thái', onSelect: () => setStatusZone(zone.barn) },
-      { label: full ? `Thêm ô (đã đủ ${MAX_STALLS_PER_BARN} ô)` : 'Thêm ô', disabled: full, onSelect: () => setStallsZone(zone) },
+      { label: full ? `Thêm ô (${full})` : 'Thêm ô', disabled: !!full, onSelect: () => setStallsZone(zone) },
     ];
     if (zone.barn.headTrainerId) {
       items.push({
@@ -433,7 +434,7 @@ export default function StableMap() {
             cellMenu={focused.readOnly ? undefined : cellMenu(focused)}
             cellLink={focused.readOnly ? readOnlyLink : undefined}
             emptyLabel={(cell) => (cell.stall.status === 'AVAILABLE' && focused.canManage && focused.waitingStall.length > 0 ? 'Trống · bấm để xếp ngựa' : undefined)}
-            onAddStall={isManager ? () => setStallsZone(focused) : undefined}
+            onAddStall={isManager && !stallFullReason(focused.barn, focused.stalls.length) ? () => setStallsZone(focused) : undefined}
             footer={zoneFooter(focused)}
             onClose={closeFocus}
           />
@@ -538,7 +539,8 @@ export default function StableMap() {
                     {pendingZones.map((zone) => {
                       const noTrainer = !zone.barn.headTrainerId || !zone.barn.hasActiveHeadTrainer;
                       const inactive = zone.barn.status !== 'ACTIVE';
-                      const canAdd = zone.stalls.length < MAX_STALLS_PER_BARN;
+                      const fullReason = stallFullReason(zone.barn, zone.stalls.length);
+                      const canAdd = !fullReason;
                       return (
                         <li key={zone.barn.id} className="flex items-center justify-between gap-3 py-2.5">
                           <div className="min-w-0">
@@ -558,7 +560,7 @@ export default function StableMap() {
                               Thêm ô
                             </Button>
                           ) : (
-                            <span className="text-xs text-gray-400">Đủ {MAX_STALLS_PER_BARN} ô</span>
+                            <span className="text-xs text-gray-400">{fullReason}</span>
                           )}
                         </li>
                       );
@@ -594,7 +596,7 @@ export default function StableMap() {
                         cellMenu={zone.readOnly ? undefined : cellMenu(zone)}
                         cellLink={zone.readOnly ? readOnlyLink : undefined}
                         emptyLabel={(cell) => (cell.stall.status === 'AVAILABLE' && zone.canManage && zone.waitingStall.length > 0 ? 'Trống · bấm để xếp' : undefined)}
-                        onAddStall={isManager ? () => setStallsZone(zone) : undefined}
+                        onAddStall={isManager && !stallFullReason(zone.barn, zone.stalls.length) ? () => setStallsZone(zone) : undefined}
                         onExpand={() => openFocus(zone.barn.id)}
                         footer={zoneFooter(zone)}
                       />
@@ -629,7 +631,17 @@ export default function StableMap() {
       <HeadTrainerDialog zone={trainerZone} headTrainers={headTrainers} barns={barns} onClose={() => setTrainerZone(null)} onDone={reload} />
       <UnassignTrainerDialog zone={unassignZone?.barn ?? null} horseCount={unassignZone?.horseCount ?? 0} onClose={() => setUnassignZone(null)} onDone={reload} />
       <ZoneStatusDialog zone={statusZone} onClose={() => setStatusZone(null)} onDone={reload} />
-      <AddStallsDialog zone={stallsZone?.barn ?? null} stalls={stallsZone?.stalls ?? []} onClose={() => setStallsZone(null)} onDone={reload} />
+      <AddStallsDialog
+        zone={stallsZone?.barn ?? null}
+        stalls={stallsZone?.stalls ?? []}
+        onClose={() => setStallsZone(null)}
+        onDone={reload}
+        onEditZone={() => {
+          const zone = stallsZone?.barn;
+          setStallsZone(null);
+          if (zone) setFormOpen({ zone });
+        }}
+      />
       <MaintenanceDialog stall={maintStall} onClose={() => setMaintStall(null)} onDone={reload} />
 
       <ConfirmDialog
