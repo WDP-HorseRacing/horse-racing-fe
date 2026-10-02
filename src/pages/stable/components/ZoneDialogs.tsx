@@ -8,7 +8,7 @@ import { Button, ConfirmDialog, ErrorBox, Field, Input, Modal, Notice, Select, T
 import { ChoiceList } from '../../../components/ui/ChoiceList';
 import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
-import { MAX_STALLS_PER_BARN } from './barn';
+import { MAX_STALLS_PER_BARN, stallLimit, stallRoom } from './barn';
 
 /* ===== Thêm / sửa khu ===== */
 
@@ -43,12 +43,14 @@ export function ZoneFormDialog({
   }, [open, zone?.id]);
 
   const capacityValue = capacity.trim() ? Number(capacity) : undefined;
-  const capacityInvalid = capacityValue !== undefined && (!Number.isInteger(capacityValue) || capacityValue < 1);
+  // Lưới mỗi khu 3×3 nên sức chứa tối đa 9; để trống = không đặt sức chứa (tối đa 9 ô).
+  const capacityInvalid = capacityValue !== undefined && (!Number.isInteger(capacityValue) || capacityValue < 1 || capacityValue > MAX_STALLS_PER_BARN);
 
   const submit = async () => {
     const done = await action.run(async () => {
       const input = { name: name.trim(), description: description.trim() || undefined, capacity: capacityValue };
-      if (zone) return updateBarn(zone.id, input);
+      // Sửa khu: xóa trống sức chứa thì gửi null để bỏ giới hạn (undefined = giữ nguyên).
+      if (zone) return updateBarn(zone.id, { ...input, capacity: capacityValue ?? null });
       const created = await createBarn(input);
       // Khu mới chưa có HT; gán luôn nếu CM đã chọn.
       if (headTrainerId) await updateBarn(created.id, { headTrainerId });
@@ -66,7 +68,7 @@ export function ZoneFormDialog({
       open={open}
       onClose={onClose}
       title={zone ? `Sửa ${zone.name}` : 'Thêm khu chuồng'}
-      description="Tên khu không trùng với khu khác đang dùng. Sức chứa là số ô tối đa; để trống nếu không giới hạn."
+      description="Tên khu không trùng với khu khác đang dùng. Sức chứa là số ô tối đa của khu (1–9)."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -82,8 +84,12 @@ export function ZoneFormDialog({
         <Field label="Tên khu" required>
           <Input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Khu D" />
         </Field>
-        <Field label="Sức chứa (số ô tối đa)" error={capacityInvalid ? 'Sức chứa là số nguyên từ 1 trở lên' : undefined}>
-          <Input inputMode="numeric" value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder="Không giới hạn" />
+        <Field
+          label="Sức chứa (số ô tối đa)"
+          error={capacityInvalid ? `Sức chứa là số nguyên từ 1 đến ${MAX_STALLS_PER_BARN}` : undefined}
+          hint={`Không tạo được nhiều ô hơn sức chứa. Tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3); để trống = ${MAX_STALLS_PER_BARN} ô.`}
+        >
+          <Input inputMode="numeric" value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder={`Để trống = ${MAX_STALLS_PER_BARN} ô`} />
         </Field>
         <Field label="Mô tả">
           <Textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-16" placeholder="Vị trí, tiện nghi…" />
@@ -302,15 +308,22 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem
 /* ===== Thêm ô ===== */
 
 /** Gợi ý tiền tố và số tiếp theo từ các mã ô sẵn có, ví dụ "SD-A07" → tiền tố "SD-A", số 8. */
-function suggestCodes(stalls: Stall[], zoneName: string) {
-  const parsed = stalls.map((stall) => stall.code.match(/^(.*?)(\d+)$/)).filter(Boolean) as RegExpMatchArray[];
+function suggestCodes(codesInZone: string[], zoneName: string) {
+  const parsed = codesInZone.map((code) => code.match(/^(.*?)(\d+)$/)).filter(Boolean) as RegExpMatchArray[];
   if (parsed.length) {
     const prefix = parsed[0][1];
     const width = parsed[0][2].length;
     const max = Math.max(...parsed.filter((item) => item[1] === prefix).map((item) => Number(item[2])));
     return { prefix, next: max + 1, width };
   }
-  const letter = zoneName.replace(/^khu\s+/i, '').trim().slice(0, 2).toUpperCase() || 'X';
+  // "Khu C (seed)" → "C-": bỏ chữ "Khu", phần trong ngoặc và khoảng trắng.
+  const letter =
+    zoneName
+      .replace(/\(.*?\)/g, '')
+      .replace(/^\s*khu\s+/i, '')
+      .replace(/\s+/g, '')
+      .slice(0, 2)
+      .toUpperCase() || 'X';
   return { prefix: `${letter}-`, next: 1, width: 2 };
 }
 
@@ -319,11 +332,14 @@ export function AddStallsDialog({
   stalls,
   onClose,
   onDone,
+  onEditZone,
 }: {
   zone: BarnListItem | null;
   stalls: Stall[];
   onClose: () => void;
   onDone: () => void;
+  /** Mở hộp sửa khu (để tăng sức chứa) khi khu đã đầy. */
+  onEditZone?: () => void;
 }) {
   const toast = useToast();
   const [count, setCount] = useState('1');
@@ -333,21 +349,30 @@ export function AddStallsDialog({
   const [type, setType] = useState<StallType>('STANDARD');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  // Ô vừa tạo trong lần mở hộp thoại này: tính vào số ô hiện có và gợi ý mã tiếp theo,
+  // để thử lại sau khi lỗi giữa chừng không bị trùng mã.
+  const [created, setCreated] = useState<string[]>([]);
 
   useEffect(() => {
     if (!zone) return;
-    const suggestion = suggestCodes(stalls, zone.name);
+    const suggestion = suggestCodes(
+      stalls.map((stall) => stall.code),
+      zone.name,
+    );
     setPrefix(suggestion.prefix);
     setStart(String(suggestion.next));
     setWidth(suggestion.width);
     setCount('1');
     setType('STANDARD');
     setError(undefined);
+    setCreated([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
-  // Sơ đồ mỗi khu là lưới 3×3 nên khu có tối đa MAX_STALLS_PER_BARN ô.
-  const room = Math.max(0, MAX_STALLS_PER_BARN - stalls.length);
+  const current = stalls.length + created.filter((code) => !stalls.some((stall) => stall.code === code)).length;
+  const limit = zone ? stallLimit(zone) : MAX_STALLS_PER_BARN;
+  const room = zone ? stallRoom(zone, current) : 0;
+  const capped = !!zone?.capacity && zone.capacity < MAX_STALLS_PER_BARN;
   const n = Number(count);
   const first = Number(start);
   const valid = Number.isInteger(n) && n >= 1 && n <= room && Number.isInteger(first) && first >= 0 && prefix.trim().length > 0;
@@ -358,19 +383,27 @@ export function AddStallsDialog({
     if (!zone) return;
     setPending(true);
     setError(undefined);
-    const created: string[] = [];
+    const done: string[] = [];
     try {
       for (const code of codes) {
         await createStall({ barnId: zone.id, code, type });
-        created.push(code);
+        done.push(code);
       }
-      toast.push(`Đã thêm ${created.length} ô: ${created.join(', ')}`, 'success');
+      toast.push(`Đã thêm ${done.length} ô: ${done.join(', ')}`, 'success');
       onDone();
       onClose();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Đã xảy ra lỗi';
-      setError(created.length ? `Đã thêm ${created.join(', ')}; dừng ở ô tiếp theo: ${message}` : message);
-      if (created.length) onDone();
+      setError(done.length ? `Đã thêm ${done.join(', ')}; dừng ở ô tiếp theo: ${message}` : message);
+      if (done.length) {
+        // Gợi ý lại số bắt đầu và số ô còn lại để bấm thử tiếp không trùng mã đã tạo.
+        const all = [...created, ...done];
+        setCreated(all);
+        const next = suggestCodes([...stalls.map((stall) => stall.code), ...all], zone.name);
+        if (next.prefix === prefix.trim()) setStart(String(next.next));
+        setCount(String(Math.max(1, n - done.length)));
+        onDone();
+      }
     } finally {
       setPending(false);
     }
@@ -394,8 +427,18 @@ export function AddStallsDialog({
       }
     >
       <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 ring-1 ring-gray-100">
+          <span className="text-2xl font-bold tabular-nums text-gray-900">
+            {current}
+            <span className="text-base font-semibold text-gray-400">/{limit}</span>
+          </span>
+          <span className="min-w-0 flex-1">
+            Khu đang có {current} ô · {capped ? `sức chứa ${zone?.capacity} ô` : `tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3)`}
+            <span className="block text-xs text-gray-500">{room > 0 ? `Thêm được ${room} ô nữa.` : 'Không thêm được ô nào nữa.'}</span>
+          </span>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Số ô" required error={tooMany ? `Chỉ thêm được ${room} ô nữa` : undefined} hint={`Khu đang có ${stalls.length}/${MAX_STALLS_PER_BARN} ô`}>
+          <Field label="Số ô" required error={tooMany ? `Chỉ thêm được ${room} ô nữa` : undefined}>
             <Input inputMode="numeric" value={count} disabled={room === 0} onChange={(event) => setCount(event.target.value)} />
           </Field>
           <Field label="Tiền tố mã" required>
@@ -419,8 +462,21 @@ export function AddStallsDialog({
             Sẽ tạo: <span className="font-mono">{codes.join(', ')}</span>
           </p>
         )}
-        {room === 0 && <Notice tone="warning">Khu đã đủ {MAX_STALLS_PER_BARN} ô, không thêm được nữa.</Notice>}
-        {zone?.capacity && <p className="text-xs text-gray-500">Sức chứa tối đa của khu: {zone.capacity} ô.</p>}
+        {room === 0 &&
+          (capped ? (
+            <Notice tone="warning">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span>Khu đã đạt sức chứa ({zone?.capacity} ô). Tăng sức chứa của khu để thêm ô.</span>
+                {onEditZone && (
+                  <Button size="sm" variant="secondary" onClick={onEditZone}>
+                    Sửa sức chứa
+                  </Button>
+                )}
+              </span>
+            </Notice>
+          ) : (
+            <Notice tone="warning">Khu đã đủ {MAX_STALLS_PER_BARN} ô (lưới 3×3), không thêm được nữa.</Notice>
+          ))}
         {error && <ErrorBox message={error} />}
       </div>
     </Modal>

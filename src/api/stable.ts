@@ -19,7 +19,7 @@ export const createBarn = (input: { name: string; description?: string; capacity
   http.post<Barn>('/barns', input);
 export const updateBarn = (
   id: string,
-  input: { name?: string; description?: string; capacity?: number; status?: BarnStatus; headTrainerId?: string | null },
+  input: { name?: string; description?: string; capacity?: number | null; status?: BarnStatus; headTrainerId?: string | null },
 ) => http.patch<Barn>(`/barns/${id}`, input);
 export const deleteBarn = (id: string) => http.del<void>(`/barns/${id}`);
 
