@@ -2,8 +2,10 @@
 // lấy cả danh sách ngựa một lần rồi tính trên máy; các số y tế lấy từ /medical/dashboard.
 import { listAllHorses } from '../../api/horses';
 import { listBarns, listStalls } from '../../api/stable';
-import { getCareInstructions, getMedicalDashboard, listCareSchedules, listExamRequests, listHorseCases } from '../../api/medical';
-import type { CareSchedule, HorseListItem, MedicalCase, MedicalDashboard } from '../../api/types';
+import { getCareInstructions, getCostReport, getMedicalDashboard, listCareSchedules, listCheckups, listExamRequests, listHorseCases } from '../../api/medical';
+import { fetchAll } from '../../api/http';
+import type { CareSchedule, ExamRequest, ExamRequestStatus, HorseListItem, MedicalCase, MedicalDashboard } from '../../api/types';
+import { lastMonths } from './charts';
 import type { WeekDay, WeekItem } from '../../components/WeekStrip';
 import { careTypeLabel } from '../../lib/api-labels';
 import { addDays, daysBetween, formatDateShort, formatTime, toDateKey } from '../../lib/format';
@@ -148,7 +150,22 @@ export const todayKey = () => toDateKey(now());
 /* ===== Quản lý câu lạc bộ ===== */
 
 export async function loadManager() {
-  const [horses, barns, stalls, medical] = await Promise.all([listAllHorses(), listBarns(), listStalls(), getMedicalDashboard()]);
+  // Chi phí 6 tháng: BE chưa gom theo tháng nên gọi cost-report cho từng tháng (song song).
+  const months = lastMonths(6);
+  const [horses, barns, stalls, medical, checkups, costs] = await Promise.all([
+    listAllHorses(),
+    listBarns(),
+    listStalls(),
+    getMedicalDashboard(),
+    listCheckups().catch(() => []),
+    Promise.all(
+      months.map((month) =>
+        getCostReport({ from: month.from, to: month.to })
+          .then((report) => ({ key: month.key, label: month.label, total: report.totalCost, count: report.caseCount }))
+          .catch(() => ({ key: month.key, label: month.label, total: 0, count: 0 })),
+      ),
+    ),
+  ]);
   const club = horses.filter(inClub);
   const care = dashboardCare(medical);
   return {
@@ -156,6 +173,8 @@ export async function loadManager() {
     barns,
     stalls,
     medical,
+    checkups,
+    costs,
     week: medicalWeek(medical, care),
     overdue: medicalOverdue(medical, care),
   };
@@ -183,9 +202,17 @@ export async function loadTrainer(userId: string) {
 /* ===== Bác sĩ thú y ===== */
 
 export async function loadVet() {
-  const [medical, barns, stalls] = await Promise.all([getMedicalDashboard(), listBarns(), listStalls()]);
+  // Yêu cầu khám theo tuần: /exam-requests chưa lọc theo ngày, nên lấy đủ 3 trạng thái rồi gom ở FE.
+  const statuses: ExamRequestStatus[] = ['PENDING', 'EXAMINED', 'DISMISSED'];
+  const [medical, barns, stalls, checkups, requests] = await Promise.all([
+    getMedicalDashboard(),
+    listBarns(),
+    listStalls(),
+    listCheckups().catch(() => []),
+    Promise.all(statuses.map((status) => fetchAll<ExamRequest>('/exam-requests', { status }).catch(() => []))).then((lists) => lists.flat()),
+  ]);
   const care = dashboardCare(medical);
-  return { medical, barns, stalls, week: medicalWeek(medical, care), overdue: medicalOverdue(medical, care) };
+  return { medical, barns, stalls, checkups, requests, week: medicalWeek(medical, care), overdue: medicalOverdue(medical, care) };
 }
 
 /* ===== Nhân viên chăm sóc ===== */
