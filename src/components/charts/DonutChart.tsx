@@ -48,14 +48,13 @@ export function DonutChart({
   const visible = segments.filter((item) => item.value > 0);
   // Khe 2px giữa các mảng, tính theo góc trên bán kính giữa.
   const gap = visible.length > 1 ? 2 / r : 0;
-  let cursor = 0;
-  const arcs = visible.map((item) => {
+  const arcs = visible.reduce<(DonutSegment & { start: number; end: number; offset: number })[]>((list, item) => {
+    const offset = list.length ? list[list.length - 1].offset : 0;
     const sweep = (item.value / total) * Math.PI * 2;
-    const start = cursor + gap / 2;
-    const end = cursor + sweep - gap / 2;
-    cursor += sweep;
-    return { ...item, start, end: Math.max(start + 0.001, end) };
-  });
+    const start = offset + gap / 2;
+    const end = Math.max(start + 0.001, offset + sweep - gap / 2);
+    return [...list, { ...item, start, end, offset: offset + sweep }];
+  }, []);
   const focusKey = hover ?? selected;
   const pct = (value: number) => (total ? Math.round((value / total) * 100) : 0);
 
