@@ -123,7 +123,7 @@ function Header({ horse, photo, photoLoading, onPhotoExpired }: { horse: HorseDe
     { label: 'Chủ', value: horse.owner?.fullName ?? 'Chưa có chủ' },
   ];
   return (
-    <section data-reveal className="relative overflow-hidden rounded-3xl bg-white ring-1 ring-gray-200/80 p-3 shadow-card sm:p-4">
+    <section data-reveal className="turf-soft relative overflow-hidden rounded-3xl p-3 ring-1 ring-emerald-900/6 sm:p-4">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-stretch">
         <HorseMedia src={photo} name={horse.name} loading={photoLoading} onExpired={onPhotoExpired} className="aspect-[4/3] w-full shrink-0 sm:aspect-auto sm:h-auto sm:w-64 lg:w-72" />
         <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 p-2 sm:py-3 sm:pr-4">
@@ -152,7 +152,7 @@ function Header({ horse, photo, photoLoading, onPhotoExpired }: { horse: HorseDe
                 </div>
               ))}
             </dl>
-            <Link to={links.horse(horse.id)} className="inline-flex items-center gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-200/80 transition hover:bg-gray-100 hover:text-gray-900">
+            <Link to={links.horse(horse.id)} className="inline-flex items-center gap-1 rounded-xl bg-white/85 px-3 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-200/80 transition hover:bg-white hover:text-gray-900">
               Hồ sơ ngựa <ArrowUpRight size={14} />
             </Link>
           </div>

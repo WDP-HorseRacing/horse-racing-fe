@@ -1265,11 +1265,12 @@ export function Stat({
     danger: 'text-red-700',
     warning: 'text-amber-700',
   };
-  const accent: Record<StatTone, string> = {
-    default: '',
-    success: '',
-    danger: 'shadow-[inset_3px_0_0_0_#ef4444]',
-    warning: 'shadow-[inset_3px_0_0_0_#f59e0b]',
+  // Chấm icon: xanh cỏ khi bình thường, hổ phách / đỏ nhạt khi có việc cần chú ý.
+  const chip: Record<StatTone, string> = {
+    default: 'tint-emerald',
+    success: 'tint-emerald',
+    danger: 'tint-red',
+    warning: 'tint-amber',
   };
   return (
     <button
@@ -1277,21 +1278,45 @@ export function Stat({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group flex w-full items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3.5 text-left ring-1 ring-gray-200/80 transition-colors duration-150 disabled:cursor-default',
-        accent[effective],
-        onClick && 'hover:bg-gray-50',
-        active && 'bg-gray-50 ring-gray-400',
+        'group flex w-full items-start justify-between gap-3 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_10px_26px_-22px_rgba(6,78,59,0.55)] ring-1 ring-gray-200/70 transition duration-150 disabled:cursor-default',
+        onClick && 'hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-22px_rgba(6,78,59,0.6)] hover:ring-emerald-200',
+        active && 'ring-2 ring-emerald-500/60',
         className,
       )}
     >
       <div className="min-w-0">
-        <p className={cn('text-2xl font-bold leading-none tabular-nums', valueTones[effective])}>{value}</p>
-        <p className="mt-1.5 text-sm text-gray-600">{label}</p>
-        {hint && <p className="mt-0.5 text-xs text-gray-500">{hint}</p>}
+        <p className={cn('text-[1.75rem] font-bold leading-none tabular-nums', valueTones[effective])}>
+          <CountUp value={value} />
+        </p>
+        <p className="mt-2 text-sm font-medium text-gray-700">{label}</p>
+        {hint && <p className="mt-0.5 truncate text-xs text-gray-500">{hint}</p>}
       </div>
-      {icon && <div className="mt-0.5 shrink-0 text-gray-400">{icon}</div>}
+      {icon && <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', chip[effective])}>{icon}</div>}
     </button>
   );
+}
+
+/** Số đếm từ 0 lên khi vào trang (chỉ với số; chuỗi như số tiền thì hiện thẳng). */
+function CountUp({ value }: { value: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (typeof value !== 'number' || value === 0 || !ref.current || prefersReducedMotion()) return;
+    const counter = { n: 0 };
+    const tween = gsap.to(counter, {
+      n: value,
+      duration: 0.9,
+      ease: 'power3.out',
+      delay: 0.1,
+      onUpdate: () => {
+        if (ref.current) ref.current.textContent = String(Math.round(counter.n));
+      },
+    });
+    return () => {
+      tween.kill();
+      if (ref.current) ref.current.textContent = String(value);
+    };
+  }, [value]);
+  return <span ref={ref}>{value}</span>;
 }
 
 /** Thanh tiến độ mảnh. */

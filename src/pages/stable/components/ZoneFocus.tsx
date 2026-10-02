@@ -199,19 +199,19 @@ export function ZoneFocus({
         aria-hidden
       />
       <motion.div className="relative" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12, duration: 0.3 }}>
-        <header className="turf-dark relative overflow-hidden rounded-t-3xl px-5 pb-5 pt-5 text-white sm:px-7">
+        <header className="turf-soft relative overflow-hidden rounded-t-3xl border-b border-emerald-900/6 px-5 pb-5 pt-5 text-gray-900 sm:px-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-3xl font-bold tracking-tight">{barn.name}</h2>
                 {inactive && <ZoneStatusPill status={barn.status} />}
-                {mine && <span className="rounded-md bg-emerald-400/15 px-2 py-0.5 text-xs font-medium text-emerald-200 ring-1 ring-emerald-300/25">Khu của bạn</span>}
-                {isolation && <span className="rounded-md bg-red-400/15 px-2 py-0.5 text-xs font-medium text-red-200 ring-1 ring-red-300/25">Khu cách ly</span>}
-                {readOnly && <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs font-medium text-white/75 ring-1 ring-white/15">Chỉ xem</span>}
+                {mine && <span className="tint-emerald rounded-md px-2 py-0.5 text-xs font-medium">Khu của bạn</span>}
+                {isolation && <span className="tint-red rounded-md px-2 py-0.5 text-xs font-medium">Khu cách ly</span>}
+                {readOnly && <span className="tint-gray rounded-md px-2 py-0.5 text-xs font-medium">Chỉ xem</span>}
               </div>
-              <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-50/75">
+              <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
                 <UserRound size={14} /> {barn.headTrainerFullName ? `HT ${barn.headTrainerFullName}` : 'Chưa có HT phụ trách'}
-                {barn.description ? <span className="text-emerald-50/50">· {barn.description}</span> : null}
+                {barn.description ? <span className="text-gray-400">· {barn.description}</span> : null}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -219,7 +219,7 @@ export function ZoneFocus({
                 <ActionMenu
                   items={zoneMenu}
                   trigger={
-                    <button type="button" className="rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15">
+                    <button type="button" className="rounded-xl bg-white/80 px-3 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-200 transition hover:bg-white">
                       Quản lý khu
                     </button>
                   }
@@ -228,9 +228,9 @@ export function ZoneFocus({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-3.5 py-2 text-sm font-semibold text-emerald-900 shadow-[0_10px_24px_-14px_rgba(0,0,0,0.5)] transition hover:bg-emerald-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-3.5 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_-14px_rgba(4,120,87,0.9)] transition hover:bg-emerald-600"
               >
-                <Minimize2 size={15} /> Thu nhỏ <kbd className="rounded bg-emerald-900/8 px-1 font-mono text-[10px] text-emerald-900/60">Esc</kbd>
+                <Minimize2 size={15} /> Thu nhỏ <kbd className="rounded bg-white/15 px-1 font-mono text-[10px] text-white/80">Esc</kbd>
               </button>
             </div>
           </div>
@@ -238,15 +238,15 @@ export function ZoneFocus({
             <div>
               <p className="text-4xl font-bold tabular-nums leading-none">
                 {occupied}
-                <span className="text-xl font-semibold text-emerald-100/60">/{cells.length}</span>
+                <span className="text-xl font-semibold text-gray-400">/{cells.length}</span>
               </p>
-              <p className="mt-1 text-xs text-emerald-50/65">ô có ngựa</p>
+              <p className="mt-1 text-xs text-gray-500">ô có ngựa</p>
             </div>
             <div className="min-w-48 flex-1">
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <motion.div className="h-full rounded-full bg-emerald-400" initial={{ width: 0 }} animate={{ width: `${ratio * 100}%` }} transition={{ delay: 0.2, duration: 0.6, ease: 'easeOut' }} />
+              <div className="h-2 overflow-hidden rounded-full bg-emerald-900/8">
+                <motion.div className="h-full rounded-full bg-emerald-500" initial={{ width: 0 }} animate={{ width: `${ratio * 100}%` }} transition={{ delay: 0.2, duration: 0.6, ease: 'easeOut' }} />
               </div>
-              <p className={cn('mt-1.5 text-xs', blocker && !inactive ? 'text-amber-200' : 'text-emerald-50/65')}>
+              <p className={cn('mt-1.5 text-xs', blocker && !inactive ? 'font-medium text-amber-700' : 'text-gray-500')}>
                 {blocker ?? `Còn nhận ${barn.availableStallCount} ngựa`}
               </p>
             </div>
