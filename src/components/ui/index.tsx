@@ -8,8 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  isValidElement,
-  Children,
   type ReactNode,
 } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -21,6 +19,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import gsap from 'gsap';
 import { prefersReducedMotion } from '../../lib/motion';
+import { OptionMenu } from './OptionMenu';
+import { readOptions } from './option-utils';
 
 /** Ghép class Tailwind, class truyền sau thắng class mặc định. */
 export function cn(...inputs: ClassValue[]) {
@@ -362,7 +362,7 @@ export function scrollToFirstError(root: ParentNode = document) {
     const field = root.querySelector<HTMLElement>('[data-invalid="true"]');
     if (!field) return;
     field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    field.querySelector<HTMLElement>('input, select, textarea')?.focus({ preventScroll: true });
+    field.querySelector<HTMLElement>('input, select, textarea, button[data-select-trigger]')?.focus({ preventScroll: true });
   });
 }
 
@@ -400,11 +400,56 @@ export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return <textarea {...props} className={cn(inputClass, 'min-h-24', props.className)} />;
 }
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cn(inputClass, 'pr-8', props.className)} />;
+export function Select({
+  value,
+  onChange,
+  onBlur,
+  children,
+  disabled,
+  className,
+  id,
+  title,
+  'aria-label': ariaLabel,
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  // Ô chọn tự thiết kế, giữ nguyên cách dùng của <select>: <Select value onChange={(e) => e.target.value}><option/></Select>.
+  const options = readOptions(children);
+  const current = String(value ?? '');
+  const selected = options.find((option) => option.value === current) ?? options[0];
+  const placeholder = !selected || selected.value === '';
+  return (
+    <OptionMenu
+      options={options}
+      value={current}
+      disabled={disabled}
+      onSelect={(next) => {
+        if (next === current) return;
+        onChange?.({ target: { value: next }, currentTarget: { value: next } } as unknown as React.ChangeEvent<HTMLSelectElement>);
+      }}
+      onClosed={() => onBlur?.({ target: { value: current } } as unknown as React.FocusEvent<HTMLSelectElement>)}
+      trigger={
+        <button
+          type="button"
+          id={id}
+          title={title}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          aria-haspopup="listbox"
+          data-select-trigger
+          className={cn(
+            inputClass,
+            'flex items-center justify-between gap-2 text-left data-[state=open]:border-emerald-500 data-[state=open]:ring-2 data-[state=open]:ring-emerald-500/15',
+            className,
+          )}
+        >
+          <span className={cn('min-w-0 flex-1 truncate', placeholder && 'text-gray-500')}>{selected?.label ?? '—'}</span>
+          <ChevronDown size={16} className="shrink-0 text-gray-400 transition-transform [[data-state=open]_&]:rotate-180" />
+        </button>
+      }
+    />
+  );
 }
 
-/** Select gọn dùng trong thanh lọc. */
+/** Ô chọn gọn dạng pill dùng trong thanh lọc. */
 export function FilterSelect({
   value,
   onChange,
@@ -418,56 +463,29 @@ export function FilterSelect({
   className?: string;
   label?: string;
 }) {
-  const options = Children.toArray(children)
-    .map((child) => {
-      if (isValidElement(child) && child.type === 'option') {
-        const props = child.props as any;
-        return { value: props.value ?? '', label: props.children };
-      }
-      return null;
-    })
-    .filter(Boolean) as { value: string; label: ReactNode }[];
-
-  const selectedOption = options.find((opt) => String(opt.value) === String(value));
-  const displayLabel = selectedOption ? selectedOption.label : label;
-
+  const options = readOptions(children);
+  const selected = options.find((option) => option.value === String(value));
   return (
-    <Dropdown.Root modal={false}>
-      <Dropdown.Trigger
-        aria-label={label}
-        className={cn(
-          'inline-flex h-9 items-center justify-between gap-2 rounded-full border border-gray-200 bg-white pl-4 pr-3 text-sm text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
-          value && 'border-emerald-600/30 bg-emerald-50 font-medium text-emerald-900',
-          className,
-        )}
-      >
-        <span className="truncate">{displayLabel}</span>
-        <ChevronDown size={14} className={cn('shrink-0 transition-colors', value ? 'text-emerald-700' : 'text-gray-400')} />
-      </Dropdown.Trigger>
-      <Dropdown.Portal>
-        <Dropdown.Content
-          align="start"
-          sideOffset={6}
-          className="anim-pop z-50 max-h-80 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-xl bg-white p-1 shadow-float ring-1 ring-gray-200"
+    <OptionMenu
+      options={options}
+      value={String(value)}
+      onSelect={onChange}
+      trigger={
+        <button
+          type="button"
+          aria-label={label}
+          aria-haspopup="listbox"
+          className={cn(
+            'inline-flex h-9 max-w-64 items-center justify-between gap-2 rounded-full border border-gray-200 bg-white pl-4 pr-3 text-sm text-gray-700 shadow-sm transition hover:border-gray-300 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15',
+            value && 'border-emerald-600/30 bg-emerald-50 font-medium text-emerald-900',
+            className,
+          )}
         >
-          {options.map((opt, index) => (
-            <Dropdown.Item
-              key={index}
-              onSelect={() => onChange(opt.value)}
-              className={cn(
-                'flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
-                String(opt.value) === String(value)
-                  ? 'bg-emerald-50 font-medium text-emerald-900'
-                  : 'text-gray-700 data-[highlighted]:bg-gray-100',
-              )}
-            >
-              {opt.label}
-              {String(opt.value) === String(value) && <Check size={14} className="ml-auto text-emerald-600" />}
-            </Dropdown.Item>
-          ))}
-        </Dropdown.Content>
-      </Dropdown.Portal>
-    </Dropdown.Root>
+          <span className="truncate">{selected ? selected.label : label}</span>
+          <ChevronDown size={14} className={cn('shrink-0 transition-colors', value ? 'text-emerald-700' : 'text-gray-400')} />
+        </button>
+      }
+    />
   );
 }
 
