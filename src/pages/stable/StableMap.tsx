@@ -440,21 +440,21 @@ export default function StableMap() {
         ) : (
           <div className="grid items-start gap-5 lg:grid-cols-12">
             {/* ===== Cột trái ===== */}
-            <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
-              <Card className="p-4">
+            <aside className="space-y-4 rounded-3xl bg-emerald-50/40 p-4 ring-1 ring-emerald-900/5 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
+              <Card className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
                 <SectionTitle icon={<Warehouse size={16} />} className="mb-3">
                   {trainer ? 'Khu của bạn' : 'Tổng quan chuồng'}
                 </SectionTitle>
                 <div className="grid grid-cols-2 gap-2">
                   <MiniStat value={`${totals.active}/${workZones.length}`} label="khu hoạt động" />
                   <MiniStat value={totals.free} label="ô trống" />
-                  <MiniStat value={totals.maintenance} label="ô bảo trì" warn={totals.maintenance > 0} />
-                  <MiniStat value={totals.receiving} label="còn nhận ngựa" warn={totals.receiving === 0} />
+                  <MiniStat value={totals.maintenance} label="bảo trì" warn={totals.maintenance > 0} />
+                  <MiniStat value={totals.receiving} label="nhận ngựa" warn={totals.receiving === 0} />
                 </div>
               </Card>
 
               {!trainer && (
-                <Card tone={noZone.length ? 'warning' : 'default'} className="p-4">
+                <Card tone={noZone.length ? 'warning' : 'default'} className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
                   <SectionTitle icon={<Building2 size={16} />} action={<Count value={noZone.length} />} className="mb-1">
                     Chờ xếp khu
                   </SectionTitle>
@@ -482,7 +482,7 @@ export default function StableMap() {
                 </Card>
               )}
 
-              <Card tone={waitingStall.length ? 'warning' : 'default'} className="p-4">
+              <Card tone={waitingStall.length ? 'warning' : 'default'} className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
                 <SectionTitle action={<Count value={waitingStall.length} />} className="mb-1">
                   Chờ xếp ô
                 </SectionTitle>
@@ -510,7 +510,7 @@ export default function StableMap() {
               </Card>
 
               {attention.length > 0 && (
-                <Card className="p-4">
+                <Card className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
                   <SectionTitle icon={<AlertTriangle size={16} />} action={<Count value={attention.length} />} className="mb-1">
                     Cần chú ý
                   </SectionTitle>
@@ -532,7 +532,7 @@ export default function StableMap() {
               )}
 
               {isManager && pendingZones.length > 0 && (
-                <Card variant="flat" className="p-4">
+                <Card variant="flat" className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
                   <SectionTitle className="mb-1">Khu cần xử lý</SectionTitle>
                   <ul className="divide-y divide-gray-100">
                     {pendingZones.map((zone) => {
@@ -579,9 +579,10 @@ export default function StableMap() {
               ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,440px),1fr))] gap-4">
                   {zones.map((zone) => (
-                    <div key={zone.barn.id}>
+                    <div key={zone.barn.id} className="h-full">
                       <ZoneBoard
                         id={`zone-${zone.barn.id}`}
+                        className="h-full flex flex-col"
                         layoutId={`zone-plate-${zone.barn.id}`}
                         barn={zone.barn}
                         cells={zone.cells}

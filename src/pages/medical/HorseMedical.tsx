@@ -108,10 +108,10 @@ export default function HorseMedical() {
 /* ===== Đầu trang ===== */
 
 const HEALTH_SURFACE: Record<HorseDetail['healthStatus'], string> = {
-  ELIGIBLE: 'bg-emerald-400/15 text-emerald-100 ring-emerald-300/30',
-  UNDER_OBSERVATION: 'bg-amber-400/20 text-amber-100 ring-amber-300/35',
-  INJURED: 'bg-red-500/25 text-red-100 ring-red-300/40',
-  QUARANTINED: 'bg-red-500/25 text-red-100 ring-red-300/40',
+  ELIGIBLE: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60',
+  UNDER_OBSERVATION: 'bg-amber-50 text-amber-700 ring-amber-200/60',
+  INJURED: 'bg-red-50 text-red-700 ring-red-200/60',
+  QUARANTINED: 'bg-red-50 text-red-700 ring-red-200/60',
 };
 
 /** Dải hero xanh rừng: ảnh ngựa, tên, trạng thái sức khỏe nổi bật, khóa huấn luyện, chỗ ở và người phụ trách. */
@@ -123,36 +123,36 @@ function Header({ horse, photo, photoLoading, onPhotoExpired }: { horse: HorseDe
     { label: 'Chủ', value: horse.owner?.fullName ?? 'Chưa có chủ' },
   ];
   return (
-    <section data-reveal className="turf-dark relative overflow-hidden rounded-3xl p-3 text-white shadow-[0_30px_60px_-40px_rgba(6,78,59,0.9)] sm:p-4">
+    <section data-reveal className="relative overflow-hidden rounded-3xl bg-white ring-1 ring-gray-200/80 p-3 shadow-card sm:p-4">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-stretch">
         <HorseMedia src={photo} name={horse.name} loading={photoLoading} onExpired={onPhotoExpired} className="aspect-[4/3] w-full shrink-0 sm:aspect-auto sm:h-auto sm:w-64 lg:w-72" />
         <div className="flex min-w-0 flex-1 flex-col justify-between gap-4 p-2 sm:py-3 sm:pr-4">
           <div>
-            <p className="text-sm text-emerald-200/75">Hồ sơ y tế</p>
+            <p className="text-sm font-medium text-gray-500">Hồ sơ y tế</p>
             <div className="mt-1 flex flex-wrap items-center gap-3">
-              <h2 className="truncate text-4xl font-bold tracking-tight">{horse.name}</h2>
+              <h2 className="truncate text-4xl font-bold tracking-tight text-gray-900">{horse.name}</h2>
               <span className={cn('inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ring-1', HEALTH_SURFACE[horse.healthStatus])}>
                 <Dot tone={healthDot[horse.healthStatus]} hollow={horse.healthStatus === 'QUARANTINED'} />
                 {healthLabel[horse.healthStatus]}
               </span>
               {horse.activeTrainingLock && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1 text-sm font-semibold text-white shadow-[0_10px_24px_-12px_rgba(239,68,68,0.9)]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-semibold text-red-700 ring-1 ring-red-200/60">
                   <Lock size={13} /> Đang khóa huấn luyện
                 </span>
               )}
             </div>
-            <p className="mt-2 max-w-2xl text-sm text-emerald-50/70">{healthHint[horse.healthStatus]}</p>
+            <p className="mt-2 max-w-2xl text-sm text-gray-500">{healthHint[horse.healthStatus]}</p>
           </div>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <dl className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-3">
               {facts.map((fact) => (
                 <div key={fact.label} className="min-w-0">
-                  <dt className="text-xs text-emerald-100/55">{fact.label}</dt>
-                  <dd className="truncate text-sm font-semibold text-white">{fact.value}</dd>
+                  <dt className="text-xs text-gray-500">{fact.label}</dt>
+                  <dd className="truncate text-sm font-semibold text-gray-900">{fact.value}</dd>
                 </div>
               ))}
             </dl>
-            <Link to={links.horse(horse.id)} className="inline-flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/15 transition hover:bg-white/15">
+            <Link to={links.horse(horse.id)} className="inline-flex items-center gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 ring-1 ring-gray-200/80 transition hover:bg-gray-100 hover:text-gray-900">
               Hồ sơ ngựa <ArrowUpRight size={14} />
             </Link>
           </div>

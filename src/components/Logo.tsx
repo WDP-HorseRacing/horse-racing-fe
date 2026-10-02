@@ -37,12 +37,13 @@ export function Logo({
 }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
-      <span
-        className="flex shrink-0 items-center justify-center bg-emerald-700 text-white"
-        style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
-      >
-        <HorseMark size={Math.round(size * 0.68)} strokeWidth={size < 24 ? 2.4 : 2} />
-      </span>
+      <img
+        src="/logo.png"
+        alt="Logo"
+        width={size}
+        height={size}
+        className="shrink-0 object-contain"
+      />
       {withText && <span className={cn('text-lg font-bold tracking-tight', textClassName)}>HorseRacing</span>}
     </span>
   );

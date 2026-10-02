@@ -115,8 +115,6 @@ export const Login = () => {
           />
         )}
         <div className="absolute inset-0 bg-linear-to-t from-emerald-950 via-emerald-950/55 to-emerald-950/25" />
-        <div className="absolute inset-0 bg-[repeating-linear-gradient(100deg,transparent_0_64px,rgba(255,255,255,0.025)_64px_128px)]" />
-
         <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
           <div className="flex items-center justify-between">
             <Logo size={40} textClassName="text-xl text-white" />
