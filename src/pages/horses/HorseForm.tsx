@@ -272,7 +272,10 @@ export default function HorseForm() {
       else if (form.dateOfBirth > today) result.dateOfBirth = 'Ngày sinh không được ở tương lai';
     }
     const chip = form.microchipId.trim();
-    if (chip && chipCheck?.value === chip && chipCheck.holder) result.microchipId = `Số chip đã dùng cho ${chipCheck.holder}`;
+    if (chip) {
+      if (!/^\d{15}$/.test(chip)) result.microchipId = 'Số chip phải gồm đúng 15 chữ số';
+      else if (chipCheck?.value === chip && chipCheck.holder) result.microchipId = `Số chip đã dùng cho ${chipCheck.holder}`;
+    }
     const parentError = (parent: HorseListItem | undefined) =>
       parent && !bornBefore(parent, form.dateOfBirth)
         ? `${parent.name} sinh ngày ${formatDate(parent.dateOfBirth)}, không trước ngày sinh của ngựa này`
@@ -747,9 +750,8 @@ export default function HorseForm() {
               )}
 
               {action.error && !serverField && <ErrorBox message={action.error} />}
-              {serverField && <p className="text-sm text-red-600">Chưa lưu được — xem ô báo lỗi bên trái.</p>}
               {stale && (
-                <Button variant="secondary" className="w-full" onClick={() => detail.reload()}>
+                <Button variant="secondary" className="w-full" onClick={() => { detail.reload(); action.clearError(); }}>
                   <RefreshCw size={14} /> Tải lại hồ sơ mới nhất
                 </Button>
               )}

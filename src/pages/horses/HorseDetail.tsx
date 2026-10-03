@@ -158,23 +158,25 @@ export default function HorseDetail() {
         />
 
         <div className="flex min-w-0 flex-col gap-4 p-1 sm:p-2 lg:col-span-7">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            {horse.isDeleted ? <DeletedPill /> : <LifecyclePill status={horse.lifecycleStatus} />}
-            {!horse.isDeleted && <HealthPill status={horse.healthStatus} className="text-sm" />}
-            {horse.activeTrainingLock && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-sm font-medium text-red-700 ring-1 ring-red-100">
-                <Lock size={13} /> Khóa huấn luyện
-              </span>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-4xl font-bold leading-[1.05] tracking-tight text-gray-900 sm:text-5xl">{horse.name}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] text-gray-600">
-              {summary.length > 0 && <span>{summary.join(' · ')}</span>}
-              {!blocked && !horse.isDeleted && <EligibilityView eligibility={horse.eligibility} lifecycle={horse.lifecycleStatus} />}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-4xl font-bold leading-[1.05] tracking-tight text-gray-900 sm:text-5xl">{horse.name}</h2>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px] text-gray-600">
+                {summary.length > 0 && <span>{summary.join(' · ')}</span>}
+                {!blocked && !horse.isDeleted && <EligibilityView eligibility={horse.eligibility} lifecycle={horse.lifecycleStatus} />}
+              </div>
+              <p className="mt-1.5 font-mono text-xs text-gray-500">{horse.microchipId ? `Chip ${horse.microchipId}` : 'Chưa có số chip'}</p>
             </div>
-            <p className="mt-1.5 font-mono text-xs text-gray-500">{horse.microchipId ? `Chip ${horse.microchipId}` : 'Chưa có số chip'}</p>
+            
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 pt-1 lg:justify-end">
+              {horse.isDeleted ? <DeletedPill /> : <LifecyclePill status={horse.lifecycleStatus} />}
+              {!horse.isDeleted && <HealthPill status={horse.healthStatus} className="text-sm" />}
+              {horse.activeTrainingLock && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-sm font-medium text-red-700 ring-1 ring-red-100">
+                  <Lock size={13} /> Khóa huấn luyện
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
@@ -252,8 +254,7 @@ export default function HorseDetail() {
       )}
       {!horse.isDeleted && horse.lifecycleStatus === 'TRANSFERRED' && (
         <Notice>
-          Ngựa đã chuyển nhượng khỏi câu lạc bộ{horse.lifecycleChangedAt ? ` ngày ${formatDate(horse.lifecycleChangedAt)}` : ''}. Hồ sơ chỉ đọc, giữ tên chủ cũ
-          {horse.owner ? ` (${horse.owner.fullName})` : ''}.{permissions.canChangeLifecycle ? ' Khi câu lạc bộ mua lại, dùng "Kích hoạt lại" trong menu Vòng đời.' : ''}
+          Ngựa đã chuyển nhượng khỏi câu lạc bộ{horse.lifecycleChangedAt ? ` ngày ${formatDate(horse.lifecycleChangedAt)}` : ''}.
         </Notice>
       )}
 

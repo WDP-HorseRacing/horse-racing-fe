@@ -315,10 +315,10 @@ export function GroomDialog({
   const grooms = useService(() => (horse ? listGroomWorkload() : Promise.resolve([])), [horse?.id]);
 
   useEffect(() => {
-    setGroomId('');
+    setGroomId(horse?.groomId ?? '');
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [horse?.id]);
+  }, [horse?.id, horse?.groomId]);
 
   const submit = async () => {
     if (!horse) return;
@@ -346,8 +346,8 @@ export function GroomDialog({
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!groomId || action.pending}>
-            {action.pending ? 'Đang lưu…' : 'Giao Groom'}
+          <Button onClick={submit} disabled={!groomId || groomId === horse?.groomId || action.pending}>
+            {action.pending ? 'Đang lưu…' : horse?.groomId ? 'Đổi Groom' : 'Giao Groom'}
           </Button>
         </>
       }

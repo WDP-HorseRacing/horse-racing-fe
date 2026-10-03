@@ -13,11 +13,11 @@ export interface HorseOption {
 export const BREEDS: HorseOption[] = [
   { value: 'Thoroughbred', label: 'Thuần chủng Anh' },
   { value: 'Arabian', label: 'Ả Rập' },
-  { value: 'Anglo-Arabian', label: 'Anh – Ả Rập' },
+  { value: 'Anglo Arabian', label: 'Anh Ả Rập' },
   { value: 'Quarter Horse', label: 'Quarter Horse' },
   { value: 'Standardbred', label: 'Standardbred' },
   { value: 'Appaloosa', label: 'Appaloosa' },
-  { value: 'Akhal-Teke', label: 'Akhal-Teke' },
+  { value: 'Akhal Teke', label: 'Akhal Teke' },
   { value: 'Vietnamese Native', label: 'Ngựa nội Việt Nam' },
 ];
 
