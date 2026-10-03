@@ -1175,11 +1175,17 @@ export function ToastHost({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <Toaster 
-        position="top-right" 
-        richColors 
-        closeButton
+        position="top-right"
         toastOptions={{
           className: 'font-sans',
+          classNames: {
+            toast: 'group rounded-xl border shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur px-4 py-3',
+            title: 'text-sm font-semibold',
+            success: '!border-emerald-200 !text-emerald-900 !bg-emerald-50/95',
+            error: '!border-red-200 !text-red-900 !bg-red-50/95',
+            info: '!border-gray-200 !text-gray-900 !bg-white/95',
+            actionButton: '!bg-emerald-100 !text-emerald-800 hover:!bg-emerald-200 font-semibold rounded-lg px-2.5 py-1',
+          }
         }}
       />
     </ToastContext.Provider>

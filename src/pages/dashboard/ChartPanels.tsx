@@ -51,7 +51,7 @@ export function HerdHealthCard({
   );
 }
 
-export function OccupancyCard({ barns, stalls, title = 'Công suất chuồng', to, onOpen, className }: { barns: BarnListItem[]; stalls: Stall[]; title?: string; to?: string; onOpen?: (barnId: string) => void; className?: string }) {
+export function OccupancyCard({ barns, stalls, title = 'Tình trạng ô chuồng', to, onOpen, className }: { barns: BarnListItem[]; stalls: Stall[]; title?: string; to?: string; onOpen?: (barnId: string) => void; className?: string }) {
   const ids = new Set(barns.map((barn) => barn.id));
   const own = stalls.filter((stall) => ids.has(stall.barnId));
   const { rate, occupied, usable } = occupancyRate(own);

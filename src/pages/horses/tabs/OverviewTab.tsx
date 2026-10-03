@@ -10,7 +10,7 @@ import { getCareInstructions } from '../../../api/medical';
 import type { HorseDetail, HorsePermissions } from '../../../api/types';
 import { Button, Card, InfoGrid, SectionTitle, Skeleton, cn } from '../../../components/ui';
 import { EligibilityView, HealthPill } from '../../../components/ui/status';
-import { distanceHint, distanceLabel, sexLabel } from '../../../lib/labels';
+import { distanceHint, distanceLabel, sexLabel, lifecycleLabel } from '../../../lib/labels';
 import { measurementSpec, placementStatusLabel } from '../../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
@@ -203,10 +203,27 @@ export default function OverviewTab({
             )}
           </Row>
           {horse.lifecycleReason && (
-            <Row label="Đổi vòng đời gần nhất" tone="muted">
-              {horse.lifecycleChangedAt ? `${formatDate(horse.lifecycleChangedAt)} — ` : ''}
-              {horse.lifecycleReason}
-            </Row>
+            <div className="pt-2">
+              <h4 className="mb-2 text-sm font-semibold text-gray-900">Lịch sử vòng đời</h4>
+              <div className="rounded-xl border border-gray-100 bg-gray-50/50 p-3 text-sm">
+                <p className="font-medium text-gray-900">
+                  {horse.lifecycleChangedAt ? formatDate(horse.lifecycleChangedAt) : 'Chưa rõ ngày'}
+                  <span className="font-normal text-gray-400"> · Chuyển sang trạng thái </span>
+                  <span className={cn(
+                    "font-semibold",
+                    horse.lifecycleStatus === 'ACTIVE' && 'text-emerald-700',
+                    horse.lifecycleStatus === 'RETIRED' && 'text-gray-700',
+                    horse.lifecycleStatus === 'TRANSFERRED' && 'text-blue-700'
+                  )}>
+                    {lifecycleLabel[horse.lifecycleStatus]}
+                  </span>
+                </p>
+                <p className="mt-1.5 text-gray-600">
+                  <span className="font-medium text-gray-700">Lý do: </span>
+                  {horse.lifecycleReason}
+                </p>
+              </div>
+            </div>
           )}
         </Card>
       </div>
