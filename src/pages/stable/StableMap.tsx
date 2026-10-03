@@ -370,7 +370,7 @@ export default function StableMap() {
   const readOnlyLink = (cell: ZoneCell) => (cell.occupant ? links.horse(cell.occupant.id) : undefined);
 
   const zoneFooter = (zone: MapZone) =>
-    zone.waitingStall.length > 0 || zone.barn.description ? (
+    zone.waitingStall.length > 0 ? (
       <div className="space-y-1.5 text-sm">
         {zone.waitingStall.length > 0 && (
           <p className="flex flex-wrap items-center gap-1.5">
@@ -393,7 +393,6 @@ export default function StableMap() {
             )}
           </p>
         )}
-        {zone.barn.description && <p className="text-xs text-gray-500">{zone.barn.description}</p>}
       </div>
     ) : undefined;
 

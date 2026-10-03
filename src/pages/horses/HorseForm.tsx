@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Info, Lock, MapPinned, RefreshCw } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
+import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { createHorse, getHorse, getPermissions, getPhotoUrl, listAllHorses, listHorses, updateHorse } from '../../api/horses';
 import { listBarns } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
@@ -198,6 +199,8 @@ export default function HorseForm() {
   const photo = useService(() => (horse?.mediaId ? getPhotoUrl(horse.id).then((result) => result.url) : Promise.resolve(undefined)), [horse?.id, horse?.mediaId]);
 
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [dirty, setDirty] = useState(false);
+  useLeaveConfirm(dirty);
   const [photoFile, setPhotoFile] = useState<File>();
   const [photoPreview, setPhotoPreview] = useState<string>();
   const [photoRemoved, setPhotoRemoved] = useState(false);
@@ -242,6 +245,7 @@ export default function HorseForm() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setDirty(true);
     if (serverField === key) action.clearError();
   };
   const touch = (key: FieldKey) => setTouched((current) => (current[key] ? current : { ...current, [key]: true }));
@@ -395,6 +399,7 @@ export default function HorseForm() {
         return createHorse(input);
       });
       if (created) {
+        setDirty(false);
         toast.push(`Đã tạo hồ sơ ${created.name}`, 'success');
         navigate(links.horse(created.id));
       }
@@ -422,6 +427,7 @@ export default function HorseForm() {
       return updateHorse(horse.id, input);
     });
     if (saved) {
+      setDirty(false);
       toast.push('Đã lưu hồ sơ', 'success');
       navigate(links.horse(horse.id));
     }
@@ -684,12 +690,14 @@ export default function HorseForm() {
                   setPhotoFile(file);
                   setPhotoPreview(preview);
                   setPhotoRemoved(false);
+                  setDirty(true);
                   if (serverField === 'mediaId') action.clearError();
                 }}
                 onClear={() => {
                   setPhotoFile(undefined);
                   setPhotoPreview(undefined);
                   setPhotoRemoved(true);
+                  setDirty(true);
                 }}
               />
             )}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CalendarCheck, Check, Info } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
+import { useLeaveConfirm } from '../../../hooks/useLeaveConfirm';
 import {
   CLASS_LIMITS,
   createClass,
@@ -79,6 +80,14 @@ function ClassFormBody({
   const [startDate, setStartDate] = useState(toDateKey(addDays(now(), 1)));
   const [capacity, setCapacity] = useState<number>(CLASS_LIMITS.defaultCapacity);
 
+  const [dirty, setDirty] = useState(false);
+  useLeaveConfirm(dirty);
+
+  const setDirtyAnd = <T,>(setter: React.Dispatch<React.SetStateAction<T>>) => (val: React.SetStateAction<T>) => {
+    setter(val);
+    setDirty(true);
+  };
+
   const program = programs.find((item) => item.id === programId);
   const zone = zones.find((item) => item.id === zoneId);
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(startDate);
@@ -99,6 +108,7 @@ function ClassFormBody({
       createClass({ name: name.trim() || suggestion, programId, zoneId, slotId, startDate, capacity }),
     );
     if (id) {
+      setDirty(false);
       toast.push('Đã mở lớp và sinh toàn bộ buổi học', 'success');
       navigate(links.class(id, 'horses'));
     }
@@ -155,7 +165,7 @@ function ClassFormBody({
                       type="button"
                       role="radio"
                       aria-checked={selected}
-                      onClick={() => setProgramId(option.id)}
+                      onClick={() => setDirtyAnd(setProgramId)(option.id)}
                       className={cn(
                         'block w-full rounded-xl p-3.5 text-left ring-1 transition',
                         selected ? 'bg-white ring-2 ring-emerald-600' : 'bg-white ring-gray-200 hover:ring-gray-300',
@@ -193,10 +203,10 @@ function ClassFormBody({
             <SectionTitle>Thông tin lớp</SectionTitle>
             <div className="space-y-4">
               <Field label="Tên lớp" required error={fieldError('name')} hint={!name && suggestion ? `Để trống sẽ dùng "${suggestion}"` : undefined}>
-                <Input value={name} maxLength={60} placeholder={suggestion || 'Ví dụ: Tăng tốc A2'} onChange={(event) => setName(event.target.value)} />
+                <Input value={name} maxLength={60} placeholder={suggestion || 'Ví dụ: Tăng tốc A2'} onChange={(event) => setDirtyAnd(setName)(event.target.value)} />
               </Field>
               <Field label="Khu chuồng" required error={fieldError('zoneId')} hint="Lớp chỉ nhận ngựa thuộc khu này; bạn chỉ chọn được khu mình phụ trách">
-                <Select value={zoneId} onChange={(event) => setZoneId(event.target.value)}>
+                <Select value={zoneId} onChange={(event) => setDirtyAnd(setZoneId)(event.target.value)}>
                   <option value="">Chọn khu…</option>
                   {zones.map((item) => (
                     <option key={item.id} value={item.id} disabled={!item.active}>
@@ -212,7 +222,7 @@ function ClassFormBody({
                     <button
                       key={slot.id}
                       type="button"
-                      onClick={() => setSlotId(slot.id)}
+                      onClick={() => setDirtyAnd(setSlotId)(slot.id)}
                       className={cn(
                         'rounded-lg py-2.5 text-sm font-medium tabular-nums ring-1 transition',
                         slot.id === slotId
@@ -232,7 +242,7 @@ function ClassFormBody({
                   error={pastDate ? 'Ngày bắt đầu không được ở quá khứ' : fieldError('startDate')}
                   hint={validDate ? weekdayLong(startDate) : undefined}
                 >
-                  <Input type="date" min={today} value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                  <Input type="date" min={today} value={startDate} onChange={(event) => setDirtyAnd(setStartDate)(event.target.value)} />
                 </Field>
                 <Field label="Sĩ số tối đa" required error={fieldError('capacity')} hint={`${CLASS_LIMITS.minCapacity}–${CLASS_LIMITS.maxCapacity} ngựa, đủ thì chặn đăng ký`}>
                   <Stepper
@@ -241,7 +251,7 @@ function ClassFormBody({
                     min={CLASS_LIMITS.minCapacity}
                     max={CLASS_LIMITS.maxCapacity}
                     suffix="ngựa"
-                    onChange={setCapacity}
+                    onChange={setDirtyAnd(setCapacity)}
                   />
                 </Field>
               </div>
