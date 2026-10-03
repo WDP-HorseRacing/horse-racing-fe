@@ -217,7 +217,7 @@ export function AdminUsers() {
           </Field>
           <Field label="Vai trò" required>
             <Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })}>
-              {ROLES.map((value) => (
+              {ROLES.filter((r) => r !== 'CLUB_MANAGER').map((value) => (
                 <option key={value} value={value}>
                   {roleLabel[value]}
                 </option>
@@ -270,7 +270,7 @@ export function AdminUsers() {
           </Field>
           <Field label="Vai trò">
             <Select value={editRole} onChange={(event) => setEditRole(event.target.value as Role)} disabled={editing?.id === me?.id}>
-              {ROLES.map((value) => (
+              {ROLES.filter((r) => r !== 'CLUB_MANAGER' || editing?.role === 'CLUB_MANAGER').map((value) => (
                 <option key={value} value={value}>
                   {roleLabel[value]}
                 </option>
