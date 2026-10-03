@@ -18,6 +18,7 @@ import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeO
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import gsap from 'gsap';
+import { Toaster, toast as sonnerToast } from 'sonner';
 import { prefersReducedMotion } from '../../lib/motion';
 import { OptionMenu } from './OptionMenu';
 import { readOptions } from './option-utils';
@@ -1143,54 +1144,44 @@ export function useToast() {
   return useContext(ToastContext);
 }
 
-export function ToastHost({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const counter = useRef(0);
 
+
+export function ToastHost({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       push: (message: string, tone: Toast['tone'] = 'info', action?: ToastAction) => {
-        counter.current += 1;
-        const id = counter.current;
-        setToasts((current) => [...current, { id, message, tone, action }]);
-        // Thông báo có nút thì giữ lâu hơn để kịp bấm.
-        setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), action ? 9000 : 5000);
+        const options = action
+          ? {
+              action: {
+                label: action.label,
+                onClick: action.onClick,
+              },
+            }
+          : undefined;
+
+        if (tone === 'success') {
+          sonnerToast.success(message, options);
+        } else if (tone === 'error') {
+          sonnerToast.error(message, options);
+        } else {
+          sonnerToast.info(message, options);
+        }
       },
     }),
     [],
   );
 
-  const tones = {
-    success: 'bg-white text-gray-800 ring-gray-200 shadow-float',
-    error: 'bg-white text-red-700 ring-red-200 shadow-float',
-    info: 'bg-white text-gray-700 ring-gray-200 shadow-float',
-  };
-
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-6 right-6 z-[60] flex w-80 flex-col gap-2">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={cn('anim-pop pointer-events-auto flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ring-1', tones[toast.tone])}
-          >
-            <span className="min-w-0 flex-1">{toast.message}</span>
-            {toast.action && (
-              <button
-                type="button"
-                onClick={() => {
-                  toast.action?.onClick();
-                  setToasts((current) => current.filter((item) => item.id !== toast.id));
-                }}
-                className="shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
-              >
-                {toast.action.label}
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+      <Toaster 
+        position="top-right" 
+        richColors 
+        closeButton
+        toastOptions={{
+          className: 'font-sans',
+        }}
+      />
     </ToastContext.Provider>
   );
 }

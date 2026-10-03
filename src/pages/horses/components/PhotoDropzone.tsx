@@ -2,7 +2,8 @@
 // nằm trên ảnh. Chỉ chọn và xem trước — tệp được tải lên khi bấm lưu hồ sơ.
 import { useRef, useState } from 'react';
 import { Camera, ImagePlus, Trash2 } from 'lucide-react';
-import { IMAGE_ACCEPT, readImageFile } from '../../../lib/files';
+import imageCompression from 'browser-image-compression';
+import { IMAGE_ACCEPT, getRealMimeType } from '../../../lib/files';
 import { useFileDrop } from '../../../hooks/useFileDrop';
 import { TurfPlaceholder } from '../../../components/TurfPlaceholder';
 import { cn } from '../../../components/ui';
@@ -33,7 +34,14 @@ export function PhotoDropzone({
     setReadError(undefined);
     setBusy(true);
     try {
-      onPick(file, await readImageFile(file));
+      await getRealMimeType(file); // Check magic number first
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 0.4, // Max size around 400kb
+        maxWidthOrHeight: 1600,
+        useWebWorker: true,
+      });
+      const processedFile = new File([compressed], file.name, { type: compressed.type });
+      onPick(processedFile, URL.createObjectURL(processedFile));
     } catch (caught) {
       setReadError(caught instanceof Error ? caught.message : 'Không đọc được ảnh');
     } finally {
