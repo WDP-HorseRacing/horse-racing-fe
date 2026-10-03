@@ -258,9 +258,19 @@ export default function HorseForm() {
   const errors = useMemo(() => {
     const result: Partial<Record<FieldKey, string>> = {};
     if (aptitudeOnly) return result;
+    const onlyLetters = /^[\p{L}\s]+$/u;
     if (!form.name.trim()) result.name = 'Nhập tên ngựa';
+    else if (!onlyLetters.test(form.name)) result.name = 'Chỉ được dùng chữ cái và khoảng trắng';
+
     if (!form.gender) result.gender = 'Chọn giới tính';
-    if (form.dateOfBirth && form.dateOfBirth > today) result.dateOfBirth = 'Ngày sinh không được ở tương lai';
+
+    if (form.breed.trim() && !onlyLetters.test(form.breed)) result.breed = 'Chỉ được dùng chữ cái và khoảng trắng';
+    if (form.color.trim() && !onlyLetters.test(form.color)) result.color = 'Chỉ được dùng chữ cái và khoảng trắng';
+
+    if (form.dateOfBirth) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth)) result.dateOfBirth = 'Ngày không hợp lệ';
+      else if (form.dateOfBirth > today) result.dateOfBirth = 'Ngày sinh không được ở tương lai';
+    }
     const chip = form.microchipId.trim();
     if (chip && chipCheck?.value === chip && chipCheck.holder) result.microchipId = `Số chip đã dùng cho ${chipCheck.holder}`;
     const parentError = (parent: HorseListItem | undefined) =>

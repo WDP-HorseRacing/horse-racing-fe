@@ -1,5 +1,6 @@
 // Tải ảnh ngựa lên kho lưu trữ theo 3 bước: xin link → PUT tệp → xác nhận.
 import { AppError } from '../lib/errors';
+import { getRealMimeType } from '../lib/files';
 import { http } from './http';
 import type { UploadRequest } from './types';
 
@@ -8,19 +9,22 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Trả về mediaId để gắn vào hồ sơ ngựa (POST/PATCH /horses). */
 export async function uploadHorsePhoto(file: File): Promise<string> {
-  if (!ALLOWED.includes(file.type)) throw new AppError('Ảnh đại diện phải có định dạng JPEG, PNG hoặc WebP', 'mediaId');
+  const mimeType = await getRealMimeType(file).catch(() => {
+    throw new AppError('Ảnh đại diện phải có định dạng JPEG, PNG hoặc WebP', 'mediaId');
+  });
+  if (!ALLOWED.includes(mimeType)) throw new AppError('Ảnh đại diện phải có định dạng JPEG, PNG hoặc WebP', 'mediaId');
   if (file.size > MAX_BYTES) throw new AppError('Ảnh đại diện không được vượt quá 10 MB', 'mediaId');
 
   const upload = await http.post<UploadRequest>('/media/upload-requests', {
     purpose: 'HORSE_PHOTO',
     fileName: file.name,
-    mimeType: file.type,
+    mimeType: mimeType,
     byteSize: file.size,
   });
-  // Trình duyệt tự đặt Content-Length; chỉ cần gửi đúng Content-Type đã ký.
-  const headers: Record<string, string> = {};
+  // Trình duyệt tự đặt Content-Length; nhưng ta phải đưa đúng Content-Type đã ký để kho lưu trữ chấp nhận.
+  const headers: Record<string, string> = { 'Content-Type': mimeType };
   Object.entries(upload.headers ?? {}).forEach(([key, value]) => {
-    if (key.toLowerCase() !== 'content-length') headers[key] = value;
+    if (key.toLowerCase() !== 'content-length' && key.toLowerCase() !== 'content-type') headers[key] = value;
   });
   let response: Response;
   try {

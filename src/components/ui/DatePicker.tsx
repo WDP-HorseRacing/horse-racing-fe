@@ -294,8 +294,9 @@ export function DatePicker({
   const [draft, setDraft] = useState(displayKey(value));
   const [editing, setEditing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const lastSelected = useRef<string | null>(null);
   // Giá trị từ ngoài đổi (chọn trên lịch, form nạp lại) thì cập nhật chữ trong ô, trừ khi đang gõ.
-  const shown = editing ? draft : displayKey(value);
+  const shown = editing ? draft : (parseKey(value) ? displayKey(value) : value);
 
   const commit = () => {
     setEditing(false);
@@ -304,13 +305,17 @@ export function DatePicker({
       return;
     }
     const key = parseTyped(draft);
-    if (key && inRange(key, min, max)) {
+    if (key) {
       if (key !== value) onChange(key);
       setDraft(displayKey(key));
-    } else setDraft(displayKey(value));
+    } else {
+      if (draft !== value) onChange(draft);
+      setDraft(draft);
+    }
   };
 
   const select = (key: string) => {
+    lastSelected.current = key;
     onChange(key);
     setDraft(displayKey(key));
     setEditing(false);
@@ -340,8 +345,10 @@ export function DatePicker({
             placeholder={placeholder}
             value={shown}
             onFocus={() => {
-              setDraft(displayKey(value));
+              const actualValue = lastSelected.current ?? value;
+              setDraft(parseKey(actualValue) ? displayKey(actualValue) : actualValue);
               setEditing(true);
+              lastSelected.current = null;
             }}
             onChange={(event) => setDraft(maskTyped(event.target.value))}
             onBlur={() => {

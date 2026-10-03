@@ -26,15 +26,20 @@ function isWebp(bytes: Uint8Array) {
   return text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP';
 }
 
+export async function getRealMimeType(file: File): Promise<string> {
+  const bytes = await magic(file);
+  if (isJpeg(bytes)) return 'image/jpeg';
+  if (isPng(bytes)) return 'image/png';
+  if (isWebp(bytes)) return 'image/webp';
+  throw new Error('Chỉ nhận ảnh JPG, PNG hoặc WebP');
+}
+
 /** Chặn tệp không phải ảnh JPEG/PNG/WebP thật (xét byte đầu) hoặc lớn hơn 10 MB. */
 export async function validateImageFile(file: File): Promise<void> {
   if (file.size > MAX_IMAGE_BYTES) {
     throw new Error('Ảnh vượt quá 10 MB');
   }
-  const bytes = await magic(file);
-  if (!isJpeg(bytes) && !isPng(bytes) && !isWebp(bytes)) {
-    throw new Error('Chỉ nhận ảnh JPG, PNG hoặc WebP');
-  }
+  await getRealMimeType(file);
 }
 
 /**
