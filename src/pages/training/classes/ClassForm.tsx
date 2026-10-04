@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CalendarCheck, Check, Info } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
@@ -81,7 +82,7 @@ function ClassFormBody({
   const [capacity, setCapacity] = useState<number>(CLASS_LIMITS.defaultCapacity);
 
   const [dirty, setDirty] = useState(false);
-  useLeaveConfirm(dirty);
+  const leaveConfirmModal = useLeaveConfirm(dirty);
 
   const setDirtyAnd = <T,>(setter: React.Dispatch<React.SetStateAction<T>>) => (val: React.SetStateAction<T>) => {
     setter(val);
@@ -108,7 +109,9 @@ function ClassFormBody({
       createClass({ name: name.trim() || suggestion, programId, zoneId, slotId, startDate, capacity }),
     );
     if (id) {
-      setDirty(false);
+      flushSync(() => {
+        setDirty(false);
+      });
       toast.push('Đã mở lớp và sinh toàn bộ buổi học', 'success');
       navigate(links.class(id, 'horses'));
     }
@@ -292,6 +295,7 @@ function ClassFormBody({
           </Notice>
         </aside>
       </div>
+      {leaveConfirmModal}
     </div>
   );
 }

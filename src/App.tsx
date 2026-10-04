@@ -1,6 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, useLocation, useParams } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
 import { FEATURES } from './config/features';
@@ -97,6 +97,65 @@ function trainingRoutes() {
   );
 }
 
+import { createBrowserRouter, createRoutesFromElements, RouterProvider } from 'react-router-dom';
+
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route>
+      <Route
+        path="/"
+        element={
+          <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
+            <LandingPage />
+          </Suspense>
+        }
+      />
+      <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<MainLayout />}>
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="profile" element={<Profile />} />
+
+          {/* Flow 1 — hồ sơ và lý lịch ngựa */}
+          <Route path="horses" element={<HorseList />} />
+          <Route path="horses/new" element={<HorseForm />} />
+          <Route path="horses/:id" element={<HorseDetail />} />
+          <Route path="horses/:id/edit" element={<HorseForm />} />
+          <Route path="stable" element={<StableMap />} />
+          <Route path="stable/zones" element={<Navigate to="/stable" replace />} />
+
+          {/* Flow 2 — huấn luyện (tạm ẩn) */}
+          {trainingRoutes()}
+
+          {/* Flow 3 — y tế và xử lý chấn thương */}
+          <Route path="medical/board" element={<MedicalBoard />} />
+          <Route path="medical/requests" element={<ExamRequests />} />
+          <Route path="medical/cases" element={<CaseList />} />
+          <Route path="medical/cases/:id" element={<CaseDetail />} />
+          <Route path="medical/cases/:id/close" element={<CaseClose />} />
+          <Route path="medical/horses/:id" element={<HorseMedical />} />
+          <Route path="medical/visits/new" element={<VisitNew />} />
+          <Route path="medical/periodic" element={<PeriodicExams />} />
+          <Route path="medical/care" element={<CareSchedules />} />
+          <Route path="medical/care/new" element={<CareNew />} />
+          <Route path="medical/costs" element={<CostReport />} />
+          <Route path="medical/locks" element={<Navigate to="/medical/board" replace />} />
+          <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />
+
+          {/* Quản trị */}
+          <Route path="admin/users" element={<AdminUsers />} />
+          <Route path="admin/zones" element={<Navigate to="/stable" replace />} />
+          <Route path="admin/*" element={<Navigate to="/dashboard" replace />} />
+
+          <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />
+        </Route>
+      </Route>
+    </Route>
+  )
+);
+
 function App() {
   const bootstrap = useStore((state) => state.bootstrap);
   useEffect(() => {
@@ -105,60 +164,7 @@ function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-    <BrowserRouter>
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <Suspense fallback={<div className="p-8"><PageSkeleton /></div>}>
-              <LandingPage />
-            </Suspense>
-          }
-        />
-        <Route path="/login" element={<Login />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-
-        <Route element={<ProtectedRoute />}>
-          <Route element={<MainLayout />}>
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="profile" element={<Profile />} />
-
-            {/* Flow 1 — hồ sơ và lý lịch ngựa */}
-            <Route path="horses" element={<HorseList />} />
-            <Route path="horses/new" element={<HorseForm />} />
-            <Route path="horses/:id" element={<HorseDetail />} />
-            <Route path="horses/:id/edit" element={<HorseForm />} />
-            <Route path="stable" element={<StableMap />} />
-            <Route path="stable/zones" element={<Navigate to="/stable" replace />} />
-
-            {/* Flow 2 — huấn luyện (tạm ẩn) */}
-            {trainingRoutes()}
-
-            {/* Flow 3 — y tế và xử lý chấn thương */}
-            <Route path="medical/board" element={<MedicalBoard />} />
-            <Route path="medical/requests" element={<ExamRequests />} />
-            <Route path="medical/cases" element={<CaseList />} />
-            <Route path="medical/cases/:id" element={<CaseDetail />} />
-            <Route path="medical/cases/:id/close" element={<CaseClose />} />
-            <Route path="medical/horses/:id" element={<HorseMedical />} />
-            <Route path="medical/visits/new" element={<VisitNew />} />
-            <Route path="medical/periodic" element={<PeriodicExams />} />
-            <Route path="medical/care" element={<CareSchedules />} />
-            <Route path="medical/care/new" element={<CareNew />} />
-            <Route path="medical/costs" element={<CostReport />} />
-            <Route path="medical/locks" element={<Navigate to="/medical/board" replace />} />
-            <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />
-
-            {/* Quản trị */}
-            <Route path="admin/users" element={<AdminUsers />} />
-            <Route path="admin/zones" element={<Navigate to="/stable" replace />} />
-            <Route path="admin/*" element={<Navigate to="/dashboard" replace />} />
-
-            <Route path="*" element={<NotFound message="Đường dẫn này không tồn tại trong hệ thống." />} />
-          </Route>
-        </Route>
-      </Routes>
-    </BrowserRouter>
+      <RouterProvider router={router} />
     </MotionConfig>
   );
 }
