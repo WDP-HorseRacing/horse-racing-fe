@@ -3,6 +3,7 @@
 // Kiểm tra ngay tại ô: lỗi chỉ hiện khi rời ô hoặc bấm lưu, nằm dưới đúng ô gây lỗi; không ghi luật nghiệp vụ
 // thành chú thích. Ô chọn cha mẹ chỉ liệt kê ngựa hợp lệ thay vì để chọn sai rồi báo lỗi.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Info, Lock, MapPinned, RefreshCw } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
@@ -199,11 +200,31 @@ export default function HorseForm() {
   const photo = useService(() => (horse?.mediaId ? getPhotoUrl(horse.id).then((result) => result.url) : Promise.resolve(undefined)), [horse?.id, horse?.mediaId]);
 
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [dirty, setDirty] = useState(false);
-  useLeaveConfirm(dirty);
+  const [forceClean, setForceClean] = useState(false);
   const [photoFile, setPhotoFile] = useState<File>();
-  const [photoPreview, setPhotoPreview] = useState<string>();
   const [photoRemoved, setPhotoRemoved] = useState(false);
+
+  const isDirty = (() => {
+    if (forceClean) return false;
+    if (photoFile || photoRemoved) return true;
+    if (!editing) return JSON.stringify(form) !== JSON.stringify(EMPTY);
+    if (!horse) return false;
+    const text = (value: string) => (value.trim() ? value.trim() : null);
+    if (aptitudeOnly) return (form.raceAptitude || null) !== horse.raceAptitude;
+    return (
+      form.name.trim() !== horse.name ||
+      (form.gender || undefined) !== (horse.gender || undefined) ||
+      text(form.breed) !== (horse.breed || null) ||
+      text(form.color) !== (horse.color || null) ||
+      (form.dateOfBirth || null) !== (horse.dateOfBirth || null) ||
+      text(form.microchipId) !== (horse.microchipId || null) ||
+      (form.sireId || null) !== (horse.sireId || null) ||
+      (form.damId || null) !== (horse.damId || null) ||
+      (form.ownerId || null) !== (horse.ownerId || null)
+    );
+  })();
+  const leaveConfirmModal = useLeaveConfirm(isDirty);
+  const [photoPreview, setPhotoPreview] = useState<string>();
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [attempted, setAttempted] = useState(false);
   const [chipCheck, setChipCheck] = useState<{ value: string; holder?: string } | null>(null);
@@ -245,7 +266,6 @@ export default function HorseForm() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
-    setDirty(true);
     if (serverField === key) action.clearError();
   };
   const touch = (key: FieldKey) => setTouched((current) => (current[key] ? current : { ...current, [key]: true }));
@@ -374,6 +394,8 @@ export default function HorseForm() {
     }
   }
 
+  const noChanges = editing && changes.length === 0 && !photoFile && !photoRemoved;
+
   const submit = async () => {
     setAttempted(true);
     if (Object.keys(errors).length > 0) {
@@ -399,7 +421,9 @@ export default function HorseForm() {
         return createHorse(input);
       });
       if (created) {
-        setDirty(false);
+        flushSync(() => {
+          setForceClean(true);
+        });
         toast.push(`Đã tạo hồ sơ ${created.name}`, 'success');
         navigate(links.horse(created.id));
       }
@@ -427,7 +451,9 @@ export default function HorseForm() {
       return updateHorse(horse.id, input);
     });
     if (saved) {
-      setDirty(false);
+      flushSync(() => {
+        setForceClean(true);
+      });
       toast.push('Đã lưu hồ sơ', 'success');
       navigate(links.horse(horse.id));
     }
@@ -440,7 +466,6 @@ export default function HorseForm() {
   const loadingList = (loading: boolean, data: unknown) => loading && !data;
   // Lịch ngày sinh mở sẵn ở khoảng 3 năm trước (tuổi thường gặp của ngựa mới vào câu lạc bộ).
   const birthDefault = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
-  const noChanges = editing && changes.length === 0;
   // Cây phả hệ: ông bà lấy từ cha mẹ đã chọn, tra trong danh sách ngựa đực / cái đã tải sẵn.
   const byId = new Map([...sires, ...dams].map((item) => [item.id, item]));
   const node = (horseId?: string | null) => {
@@ -690,14 +715,12 @@ export default function HorseForm() {
                   setPhotoFile(file);
                   setPhotoPreview(preview);
                   setPhotoRemoved(false);
-                  setDirty(true);
                   if (serverField === 'mediaId') action.clearError();
                 }}
                 onClear={() => {
                   setPhotoFile(undefined);
                   setPhotoPreview(undefined);
                   setPhotoRemoved(true);
-                  setDirty(true);
                 }}
               />
             )}
@@ -776,6 +799,7 @@ export default function HorseForm() {
           </div>
         </aside>
       </div>
+      {leaveConfirmModal}
     </div>
   );
 }
