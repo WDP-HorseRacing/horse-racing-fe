@@ -616,5 +616,6 @@ export interface LiveNotificationPayload {
   priority: 'NORMAL' | 'HIGH' | 'URGENT';
   title: string;
   message: string;
+  link?: string;
   createdAt: string;
 }

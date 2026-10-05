@@ -113,7 +113,7 @@ export default function CaseClose() {
         <div className="space-y-5 lg:col-span-8">
           {preview.healthWarning && (
             <Notice tone="warning">
-              Ngựa vẫn đang <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Vẫn đóng được bệnh án; nếu ngựa đã hồi phục, nhớ đổi trạng thái sức khỏe.
+              Lưu ý: Ngựa vẫn đang trong trạng thái <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Nếu ngựa đã hoàn toàn hồi phục, xin hãy nhớ cập nhật lại trạng thái sức khỏe cho phù hợp.
             </Notice>
           )}
 
@@ -227,7 +227,6 @@ export default function CaseClose() {
               {lock && decision === 'RELEASE' && <Outcome>Gỡ khóa huấn luyện</Outcome>}
               {lock && decision === 'KEEP' && <Outcome tone="warning">Giữ khóa{keepDate ? ` tới khoảng ${formatDate(keepDate)}` : ''}</Outcome>}
             </ul>
-            {attempted && Object.keys(errors).length > 0 && <p className="text-sm text-red-600">Còn {Object.keys(errors).length} ô cần sửa ở bên trái.</p>}
             {action.error && <ErrorBox message={action.error} />}
             <div className="space-y-2 border-t border-gray-100 pt-4">
               <Button className="h-11 w-full" onClick={submit} disabled={action.pending}>

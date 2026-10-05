@@ -8,7 +8,9 @@ import {
   useMemo,
   useRef,
   useState,
+  forwardRef,
   type ReactNode,
+  type FormEvent,
 } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as RadixTabs from '@radix-ui/react-tabs';
@@ -397,9 +399,24 @@ export function PasswordInput({ className, wrapperClassName = '', ...props }: Om
   );
 }
 
-export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={cn(inputClass, 'min-h-24', props.className)} />;
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, onInput, ...props }, ref) => {
+    const handleInput = (e: FormEvent<HTMLTextAreaElement>) => {
+      const target = e.currentTarget;
+      target.style.height = 'auto';
+      target.style.height = `${target.scrollHeight + 2}px`;
+      if (onInput) onInput(e as unknown as any);
+    };
+    return (
+      <textarea 
+        {...props} 
+        ref={ref}
+        onInput={handleInput}
+        className={cn(inputClass, 'min-h-24 resize-none overflow-hidden', className)} 
+      />
+    );
+  }
+);
 
 export function Select({
   value,

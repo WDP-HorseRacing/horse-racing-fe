@@ -6,7 +6,7 @@
 // Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, back.
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bandage, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bandage, Check, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2 } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
 import { createFollowUpVisit, createStandaloneVisit, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
@@ -308,7 +308,7 @@ function VisitForm(props: VisitOptions) {
 
   const needsConfirm = action.field === 'confirmAbnormal';
   const cancelTo = back ?? (horse ? links.horseMedical(horse.id) : links.medicalBoard);
-  const errorCount = Object.keys(errors).length + Object.keys(metricErrors).length;
+
 
   return (
     <div className="space-y-5" ref={formRef}>
@@ -425,9 +425,9 @@ function VisitForm(props: VisitOptions) {
                   title="Yêu cầu khám được xử lý"
                   aside={pendingRows.length > 0 ? <span className="text-xs text-gray-500">Đã chọn {selectedIds.length}/{pendingRows.length}</span> : undefined}
                 >
-                  <div data-field="requests" data-invalid={show('requests') ? 'true' : undefined} className="space-y-2">
+                  <div data-field="requests" data-invalid={show('requests') ? 'true' : undefined} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     {pendingRows.length === 0 ? (
-                      <p className="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-500">Ngựa không có yêu cầu khám đang chờ.</p>
+                      <p className="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-500 lg:col-span-2">Ngựa không có yêu cầu khám đang chờ.</p>
                     ) : (
                       pendingRows.map((row) => {
                         const checked = selectedIds.includes(row.id);
@@ -435,31 +435,39 @@ function VisitForm(props: VisitOptions) {
                           <label
                             key={row.id}
                             className={cn(
-                              'flex cursor-pointer gap-3 rounded-xl bg-white p-3 ring-1 transition',
-                              checked ? 'ring-emerald-600/50' : 'ring-gray-200 hover:ring-gray-300',
-                              row.urgent && 'shadow-[inset_3px_0_0_0_#ef4444]',
+                              'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-300',
+                              checked
+                                ? 'bg-emerald-50/50 ring-2 ring-emerald-500 shadow-[0_8px_30px_rgb(16,185,129,0.12)]'
+                                : 'ring-1 ring-gray-200 hover:shadow-lg hover:shadow-gray-200/50 hover:-translate-y-0.5',
+                              row.urgent && !checked && 'shadow-[inset_4px_0_0_0_#ef4444]',
                             )}
                           >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) => setSelected(event.target.checked ? [...selectedIds, row.id] : selectedIds.filter((id) => id !== row.id))}
-                              className="mt-1 h-4 w-4 accent-emerald-600"
-                            />
                             <span className="min-w-0 flex-1">
                               <span className="flex flex-wrap items-center gap-2">
                                 {row.urgent && <UrgentPill urgent />}
                                 <RequestMeta request={row} people={people} showUrgent={false} />
                               </span>
-                              <span className="mt-1 block">
+                              <span className="mt-2 block text-sm">
                                 <RequestText text={row.description} />
                               </span>
                             </span>
+                            <div className={cn(
+                              'mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+                              checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white group-hover:border-emerald-400'
+                            )}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => setSelected(event.target.checked ? [...selectedIds, row.id] : selectedIds.filter((id) => id !== row.id))}
+                                className="peer sr-only"
+                              />
+                              {checked && <Check size={14} strokeWidth={3} />}
+                            </div>
                           </label>
                         );
                       })
                     )}
-                    {show('requests') && <p className="text-xs font-medium text-red-600">{show('requests')}</p>}
+                    {show('requests') && <p className="text-xs font-medium text-red-600 lg:col-span-2">{show('requests')}</p>}
                   </div>
                 </FormSection>
               )}
@@ -486,6 +494,12 @@ function VisitForm(props: VisitOptions) {
                           onChange={(event) => {
                             setMetrics({ ...metrics, [type]: event.target.value });
                             if (needsConfirm) action.clearError();
+                          }}
+                          onBlur={() => {
+                            const val = metrics[type].trim().replace(',', '.');
+                            if (val && !isNaN(Number(val))) {
+                              setMetrics({ ...metrics, [type]: Number(val).toFixed(2).replace(/\.00$/, '') });
+                            }
                           }}
                           placeholder={`${spec.min}–${spec.max}`}
                           className={cn('tabular-nums', metricErrors[type] && invalidClass)}
@@ -544,20 +558,35 @@ function VisitForm(props: VisitOptions) {
                       const update = (patch: Partial<PrescriptionRow>) => setPrescriptions(prescriptions.map((item) => (item.key === row.key ? { ...item, ...patch } : item)));
                       const rowError = show(`rx.${row.key}`);
                       return (
-                        <div key={row.key} data-field={`rx.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-3', rowError && 'ring-1 ring-red-200')}>
-                          <div className="grid gap-2 sm:grid-cols-6">
-                            <Input className="sm:col-span-3" placeholder="Tên thuốc" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
-                            <Input className="sm:col-span-3" placeholder="Liều (ví dụ 2 g)" maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
-                            <Input className="sm:col-span-2" placeholder="Tần suất (1 lần/ngày)" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
-                            <DatePicker className="sm:col-span-2" title="Ngày bắt đầu" value={row.startDate} onChange={(value) => update({ startDate: value })} />
-                            <div className="flex gap-2 sm:col-span-2">
-                              <DatePicker title="Ngày kết thúc" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
-                              <Button size="icon" variant="ghost" title="Bỏ thuốc này" onClick={() => setPrescriptions(prescriptions.filter((item) => item.key !== row.key))}>
-                                <Trash2 size={15} />
+                        <div key={row.key} data-field={`rx.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-4', rowError && 'ring-1 ring-red-200')}>
+                          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-12">
+                            <div className="sm:col-span-5">
+                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tên thuốc</label>
+                              <Input placeholder="Ví dụ: Amoxicillin" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
+                            </div>
+                            <div className="sm:col-span-4">
+                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Liều lượng</label>
+                              <Input placeholder="Ví dụ: 2 viên, 50ml, ..." maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tần suất</label>
+                              <Input placeholder="Ví dụ: 2 lần/ngày" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
+                            </div>
+                            <div className="sm:col-span-12 flex items-end gap-3">
+                              <div className="flex-1">
+                                <label className="mb-1.5 block text-xs font-medium text-gray-700">Thời gian dùng thuốc</label>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <DatePicker className="w-[140px]" value={row.startDate} onChange={(value) => update({ startDate: value })} />
+                                  <span className="text-sm font-medium text-gray-400">→</span>
+                                  <DatePicker className="w-[140px]" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
+                                </div>
+                              </div>
+                              <Button type="button" size="icon" variant="ghost" className="mb-0.5 shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50" title="Bỏ thuốc này" onClick={() => setPrescriptions(prescriptions.filter((item) => item.key !== row.key))}>
+                                <Trash2 size={18} />
                               </Button>
                             </div>
                           </div>
-                          {rowError && <p className="mt-2 text-xs font-medium text-red-600">{rowError}</p>}
+                          {rowError && <p className="mt-3 text-xs font-medium text-red-600">{rowError}</p>}
                         </div>
                       );
                     })}
@@ -711,7 +740,6 @@ function VisitForm(props: VisitOptions) {
                 <p className="mt-1.5 text-xs">Giá trị đúng thì bấm "Xác nhận và lưu"; bản ghi được đánh dấu bất thường.</p>
               </Notice>
             )}
-            {attempted && errorCount > 0 && <p className="text-sm text-red-600">Còn {errorCount} ô cần sửa ở bên trái.</p>}
             {action.error && !needsConfirm && <ErrorBox message={action.error} />}
 
             <div className="space-y-2 border-t border-gray-100 pt-4">

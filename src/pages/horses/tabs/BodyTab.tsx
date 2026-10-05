@@ -100,6 +100,19 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
     (item) => Number.isNaN(item.value) || item.value < measurementSpec[item.type].hardMin || item.value > measurementSpec[item.type].hardMax,
   );
 
+  // Kiểm tra trùng ngày: mỗi ngày chỉ được ghi tay 1 lần cho mỗi loại chỉ số
+  const getLocalDate = (isoString: string) => new Date(isoString).toLocaleDateString('en-CA'); // YYYY-MM-DD local
+  const selectedDateStr = measuredAt ? getLocalDate(measuredAt) : '';
+  const duplicate = entered.find((item) =>
+    rows.some((row) => row.type === item.type && getLocalDate(row.measuredAt) === selectedDateStr),
+  );
+
+  const dateValue = measuredAt ? new Date(measuredAt).getTime() : 0;
+  const dateError =
+    dateValue && (dateValue > now().getTime() + 60_000 || dateValue < addDays(now(), -7).getTime())
+      ? 'Không ghi thời điểm ở tương lai, nhập lùi tối đa 7 ngày'
+      : undefined;
+
   const save = async (confirmAbnormal: boolean) => {
     setPending(true);
     setFormError(undefined);
@@ -262,7 +275,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <div className="space-y-3">
         <Segmented
           value={filter}
-          onChange={setFilter}
+          onChange={(val) => setFilter(val as MeasurementType | 'ALL')}
           options={[{ value: 'ALL', label: 'Tất cả' }, ...TYPES.map((type) => ({ value: type, label: measurementSpec[type].name }))]}
         />
         <DataTable rows={filtered} columns={columns} rowKey={(row) => row.id} pageSize={10} emptyTitle="Chưa có bản ghi chỉ số" />
@@ -272,19 +285,25 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title="Ghi chỉ số cơ thể"
-        description="Nhập một hoặc nhiều chỉ số của cùng một lần đo. Không ghi thời điểm ở tương lai, nhập lùi tối đa 7 ngày. Ghi sai thì bác sĩ xóa kèm lý do rồi đo lại."
+        description="Nhập một hoặc nhiều chỉ số của cùng một lần đo. Ghi sai thì bác sĩ xóa kèm lý do rồi đo lại."
         footer={
           <>
             <Button variant="secondary" onClick={() => setFormOpen(false)}>
               Quay lại
             </Button>
-            <Button onClick={() => save(false)} disabled={pending || entered.length === 0 || !!invalid || !measuredAt}>
+            <Button
+              onClick={() => save(false)}
+              disabled={pending || entered.length === 0 || !!invalid || !!duplicate || !!dateError || !measuredAt}
+            >
               {pending ? 'Đang lưu…' : 'Lưu chỉ số'}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
+          {duplicate && (
+            <ErrorBox message={`Đã có bản ghi ${measurementSpec[duplicate.type].name.toLowerCase()} trong ngày này. Ghi sai vui lòng xóa bản ghi cũ rồi đo lại.`} />
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             {TYPES.map((type) => {
               const spec = measurementSpec[type];
@@ -306,7 +325,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
               );
             })}
           </div>
-          <Field label="Thời điểm đo" required>
+          <Field label="Thời điểm đo" required error={dateError}>
             <DateTimePicker value={measuredAt} min={minInput} max={toLocalInput(now())} onChange={setMeasuredAt} />
           </Field>
           {values.TEMPERATURE && (
