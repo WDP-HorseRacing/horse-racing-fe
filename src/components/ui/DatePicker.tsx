@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { AnimatePresence, motion } from 'motion/react';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
-import { VI_MONTHS, VI_WEEKDAYS, displayKey, inRange, keyOf, maskTyped, monthGrid, parseKey, parseTime, parseTyped, shiftKey, todayKey } from '../../lib/calendar';
+import { VI_MONTHS, VI_WEEKDAYS, displayKey, inRange, keyOf, monthGrid, parseKey, parseTime, parseTyped, shiftKey, todayKey } from '../../lib/calendar';
 import { cn, invalidClass } from './index';
 
 type View = 'day' | 'month' | 'year';
@@ -350,7 +350,7 @@ export function DatePicker({
               setEditing(true);
               lastSelected.current = null;
             }}
-            onChange={(event) => setDraft(maskTyped(event.target.value))}
+            onChange={(event) => setDraft(event.target.value)}
             onBlur={() => {
               commit();
               if (!open) onBlur?.();
@@ -442,24 +442,17 @@ export function DateTimePicker({
   const [editing, setEditing] = useState(false);
   const shownTime = editing ? draft : time;
 
-  /** Giờ nhỏ nhất / lớn nhất chỉ áp khi chọn đúng ngày đầu / cuối của khoảng. */
-  const clampTime = (day: string, hhmm: string) => {
-    const full = `${day}T${hhmm}`;
-    if (min && full < min.slice(0, 16)) return min.slice(11, 16);
-    if (max && full > max.slice(0, 16)) return max.slice(11, 16);
-    return hhmm;
-  };
+
   const setDate = (next: string) => {
     if (!next) return onChange('');
-    onChange(`${next}T${clampTime(next, time || '08:00')}`);
+    onChange(`${next}T${time || '08:00'}`);
   };
   const commitTime = () => {
     setEditing(false);
     const parsed = parseTime(draft);
     if (!parsed || !date) return setDraft(time);
-    const next = clampTime(date, parsed);
-    setDraft(next);
-    if (next !== time) onChange(`${date}T${next}`);
+    setDraft(parsed);
+    if (parsed !== time) onChange(`${date}T${parsed}`);
   };
 
   return (

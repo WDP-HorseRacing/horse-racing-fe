@@ -59,6 +59,7 @@ function toNotification(payload: LiveNotificationPayload, userId: string): AppNo
     level: payload.priority,
     title: payload.title,
     body: payload.message,
+    link: payload.link,
     createdAt: payload.createdAt,
     updatedAt: payload.createdAt,
     version: 1,
