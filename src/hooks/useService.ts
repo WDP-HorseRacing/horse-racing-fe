@@ -51,28 +51,44 @@ export function useService<T>(fn: () => Promise<T>, deps: unknown[] = [], option
   return { ...state, refreshing: state.loading && state.data !== undefined, reload };
 }
 
-/** Bọc một thao tác ghi: trả về hàm chạy, trạng thái đang gửi và lỗi tiếng Việt. */
+const NO_FIELD_ERRORS: Record<string, string> = {};
+
+/**
+ * Bọc một thao tác ghi: trả về hàm chạy, trạng thái đang gửi và lỗi tiếng Việt.
+ * `fieldErrors` là lỗi theo từng ô backend trả về (tên ô trong body → câu lỗi).
+ */
 export function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [field, setField] = useState<string | undefined>();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(NO_FIELD_ERRORS);
 
   const run = useCallback(async <T,>(fn: () => Promise<T>, onDone?: (result: T) => void) => {
     setPending(true);
     setError(undefined);
     setField(undefined);
+    setFieldErrors(NO_FIELD_ERRORS);
     try {
       const result = await track(fn());
       onDone?.(result);
       return result;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Đã xảy ra lỗi');
-      if (caught instanceof AppError) setField(caught.field);
+      if (caught instanceof AppError) {
+        setField(caught.field);
+        setFieldErrors(caught.fieldErrors);
+      }
       return undefined;
     } finally {
       setPending(false);
     }
   }, []);
 
-  return { run, pending, error, field, clearError: () => setError(undefined) };
+  const clearError = useCallback(() => {
+    setError(undefined);
+    setField(undefined);
+    setFieldErrors(NO_FIELD_ERRORS);
+  }, []);
+
+  return { run, pending, error, field, fieldErrors, clearError };
 }

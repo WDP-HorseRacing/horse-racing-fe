@@ -1,5 +1,5 @@
 // Gọi REST API của backend: gắn token, tự làm mới token một lần khi hết hạn,
-// đổi lỗi của BE ({ code, message, details }) thành ApiError có câu tiếng Việt.
+// đổi lỗi của BE ({ code, message, details, errors }) thành ApiError có câu tiếng Việt.
 import { ApiError, humanizeMessage } from '../lib/errors';
 import { clearTokens, getTokens, setTokens } from './tokens';
 import type { Page } from './types';
@@ -114,15 +114,24 @@ export async function request<T>(method: string, path: string, options: RequestO
       const wait = Number(response.headers.get('retry-after'));
       throw new ApiError(429, wait > 0 ? `Bạn thao tác quá nhanh, vui lòng thử lại sau ${Math.ceil(wait)} giây` : fallbackMessage(429));
     }
-    const body = (data && typeof data === 'object' ? data : {}) as { message?: string | string[]; details?: string[] | null };
-    let message = Array.isArray(body.message) ? body.message.join('; ') : body.message;
+    const body = (data && typeof data === 'object' ? data : {}) as {
+      message?: string | string[];
+      details?: string[] | null;
+      errors?: { field?: string; message?: string }[];
+    };
+    let message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
     const details = body.details ?? null;
     if (message === 'Validation failed') {
-      message = details?.length ? `Dữ liệu chưa hợp lệ: ${details.join('; ')}` : 'Dữ liệu chưa hợp lệ';
+      message = details?.length ? `Dữ liệu chưa hợp lệ: ${details.join('. ')}` : 'Dữ liệu chưa hợp lệ';
+    }
+    // Lỗi 400 có thể kèm `errors` theo từng ô: màn hình gắn câu lỗi ngay dưới ô đó.
+    const fieldErrors: Record<string, string> = {};
+    for (const item of body.errors ?? []) {
+      if (item.field && item.message && !fieldErrors[item.field]) fieldErrors[item.field] = humanizeMessage(item.message);
     }
     // 422 chỉ dùng cho số đo ngoài khoảng bình thường chưa xác nhận: màn hình hỏi lại người dùng.
-    const field = response.status === 422 ? 'confirmAbnormal' : undefined;
-    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field);
+    const field = response.status === 422 ? 'confirmAbnormal' : Object.keys(fieldErrors)[0];
+    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field, fieldErrors);
   }
   return data as T;
 }
