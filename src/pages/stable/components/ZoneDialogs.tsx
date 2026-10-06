@@ -10,6 +10,12 @@ import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
 import { MAX_STALLS_PER_BARN, stallLimit, stallRoom } from './barn';
 
+/**
+ * Loại ô được chọn khi thêm ô. Bỏ "Sinh sản": câu lạc bộ chỉ quản lý ngựa từ 1 tuổi nên không có ngựa đẻ tại câu lạc bộ.
+ * Nhãn vẫn giữ trong stallTypeLabel để ô cũ (nếu có) vẫn hiện đúng tên.
+ */
+const SELECTABLE_STALL_TYPES: StallType[] = ['STANDARD', 'ISOLATION', 'RECOVERY'];
+
 /* ===== Thêm / sửa khu ===== */
 
 export function ZoneFormDialog({
@@ -450,7 +456,7 @@ export function AddStallsDialog({
         </div>
         <Field label="Loại ô">
           <Select value={type} onChange={(event) => setType(event.target.value as StallType)}>
-            {(Object.keys(stallTypeLabel) as StallType[]).map((item) => (
+            {SELECTABLE_STALL_TYPES.map((item) => (
               <option key={item} value={item}>
                 {stallTypeLabel[item]}
               </option>
