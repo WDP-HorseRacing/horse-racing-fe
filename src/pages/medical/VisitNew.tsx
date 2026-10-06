@@ -45,6 +45,7 @@ import { HealthPicker, RequestMeta, RequestText } from './components/parts';
 import { isSevere, localToIso, toLocalInput, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { DatePicker, DateTimePicker } from '../../components/ui/DatePicker';
+import { leftClub, leftClubText } from '../../lib/horse-rules';
 
 const METRICS: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 const REGIONS = Object.keys(bodyRegionLabel) as BodyRegion[];
@@ -170,7 +171,7 @@ function VisitForm(props: VisitOptions) {
   const ctx = context.data;
   const horse = ctx?.horse;
   const people = usePeople(horse?.groom ? [horse.groom] : []);
-  const transferred = horse?.lifecycleStatus === 'TRANSFERRED';
+  const transferred = !!horse && leftClub(horse.lifecycleStatus);
   const caseId = fixedCaseId ?? ctx?.openCase?.id;
   const followUp = !!caseId;
   const openCase = ctx?.openCase;
@@ -348,7 +349,7 @@ function VisitForm(props: VisitOptions) {
               </Field>
             )}
             {context.loading && horseId && !ctx ? <Skeleton rows={2} /> : context.error ? <ErrorBox message={context.error} /> : null}
-            {transferred && <ErrorBox message="Ngựa đã chuyển nhượng, hồ sơ chỉ được xem." />}
+            {transferred && horse && <ErrorBox message={leftClubText(horse.lifecycleStatus)} />}
 
             {horse && !transferred &&
               (followUp ? (

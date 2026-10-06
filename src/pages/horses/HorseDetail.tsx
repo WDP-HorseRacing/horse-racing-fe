@@ -3,7 +3,7 @@
 // Hồ sơ và cờ quyền tải song song; ảnh tải riêng để không chặn trang. Nút nào hiện là do cờ quyền quyết định.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
+import { ArrowLeft, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
 import { uploadHorsePhoto } from '../../api/media';
@@ -23,7 +23,8 @@ import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
 import LifecycleDialog from './components/LifecycleDialog';
 import { HorseMedia } from './components/HorseMedia';
-import { lifecycleActionLabel, lifecycleActionsFor, type LifecycleAction } from './components/lifecycle';
+import { destructiveActions, lifecycleActionLabel, lifecycleActionsFor, type LifecycleAction } from './components/lifecycle';
+import { horseAgeText } from '../../lib/horse-rules';
 import { AssignZoneDialog } from '../stable/components/PlacementDialogs';
 
 /** Một ô thông tin trong lưới bento của hero. `waiting` = đang chờ xử lý (chữ và viền hổ phách). */
@@ -55,15 +56,6 @@ function Fact({ label, value, waiting, mono, to, className = '' }: { label: stri
   ) : (
     <div className={tile}>{body}</div>
   );
-}
-
-function ageOf(dateOfBirth: string | null) {
-  if (!dateOfBirth) return undefined;
-  const born = new Date(`${dateOfBirth}T00:00:00`);
-  const today = new Date();
-  let age = today.getFullYear() - born.getFullYear();
-  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
-  return Math.max(0, age);
 }
 
 export default function HorseDetail() {
@@ -130,10 +122,9 @@ export default function HorseDetail() {
     }
   };
 
-  const age = ageOf(horse.dateOfBirth);
   const summary = [
     horse.gender ? sexLabel[horse.gender] : undefined,
-    age !== undefined ? `${age} tuổi` : undefined,
+    horseAgeText(horse.dateOfBirth, horse.dateOfDeath)?.toLowerCase(),
     horse.raceAptitude ? `Sở trường ${distanceLabel[horse.raceAptitude].toLowerCase()}` : undefined,
   ].filter(Boolean);
   const photoSrc = preview ?? photo.data;
@@ -190,7 +181,15 @@ export default function HorseDetail() {
             <Fact label="Chủ sở hữu" className="col-span-2 sm:col-span-3" value={horse.owner?.fullName} waiting={inClub ? 'Chưa có chủ' : undefined} />
             <Fact label="Groom phụ trách" className="sm:col-span-2" value={horse.groom?.fullName} waiting={inClub && barn ? 'Chưa có Groom' : undefined} />
             <Fact label="Giống · màu lông" className="sm:col-span-2" value={[breedLabel(horse.breed), colorLabel(horse.color)].filter(Boolean).join(' · ') || undefined} />
-            <Fact label="Ngày sinh" className="col-span-2 sm:col-span-2" value={horse.dateOfBirth ? formatDate(horse.dateOfBirth) : undefined} />
+            {horse.dateOfDeath ? (
+              <Fact
+                label="Ngày sinh · ngày mất"
+                className="col-span-2 sm:col-span-2"
+                value={`${horse.dateOfBirth ? formatDate(horse.dateOfBirth) : 'Chưa rõ'} · ${formatDate(horse.dateOfDeath)}`}
+              />
+            ) : (
+              <Fact label="Ngày sinh" className="col-span-2 sm:col-span-2" value={horse.dateOfBirth ? formatDate(horse.dateOfBirth) : undefined} />
+            )}
           </div>
 
           <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
@@ -213,8 +212,17 @@ export default function HorseDetail() {
               <ActionMenu
                 items={actions.map((item) => ({
                   label: lifecycleActionLabel[item],
-                  danger: item === 'DELETE' || item === 'TRANSFERRED',
-                  icon: item === 'DELETE' ? <Trash2 size={14} /> : item === 'RESTORE' || item === 'ACTIVE' ? <Undo2 size={14} /> : <UserX size={14} />,
+                  danger: destructiveActions.has(item),
+                  icon:
+                    item === 'DELETE' ? (
+                      <Trash2 size={14} />
+                    ) : item === 'DECEASED' ? (
+                      <HeartOff size={14} />
+                    ) : item === 'RESTORE' || item === 'ACTIVE' ? (
+                      <Undo2 size={14} />
+                    ) : (
+                      <UserX size={14} />
+                    ),
                   onSelect: () => setLifecycle(item),
                 }))}
                 trigger={
@@ -249,12 +257,18 @@ export default function HorseDetail() {
 
       {horse.isDeleted && (
         <Notice tone="danger">
-          Hồ sơ đã bị xóa và chỉ còn Quản lý câu lạc bộ xem được. Hồ sơ chỉ đọc{permissions.canRestore ? ' — dùng menu Vòng đời để khôi phục.' : '.'}
+          Hồ sơ đã bị xóa và chỉ còn Quản lý câu lạc bộ xem được. Hồ sơ chỉ đọc.{permissions.canRestore ? ' Dùng menu Vòng đời để khôi phục.' : ''}
         </Notice>
       )}
       {!horse.isDeleted && horse.lifecycleStatus === 'TRANSFERRED' && (
         <Notice>
           Ngựa đã chuyển nhượng khỏi câu lạc bộ{horse.lifecycleChangedAt ? ` ngày ${formatDate(horse.lifecycleChangedAt)}` : ''}.
+        </Notice>
+      )}
+      {!horse.isDeleted && horse.lifecycleStatus === 'DECEASED' && (
+        <Notice icon={<HeartOff size={16} />}>
+          <span className="font-semibold">Ngựa đã mất{horse.dateOfDeath ? ` ngày ${formatDate(horse.dateOfDeath)}` : ''}.</span> Hồ sơ chỉ được xem.
+          {horse.lifecycleReason && <span className="mt-1 block">Nguyên nhân: {horse.lifecycleReason}</span>}
         </Notice>
       )}
 
@@ -268,7 +282,12 @@ export default function HorseDetail() {
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
       </div>
 
-      <LifecycleDialog horse={{ id: horse.id, name: horse.name }} action={lifecycle} onClose={() => setLifecycle(null)} onDone={reload} />
+      <LifecycleDialog
+        horse={{ id: horse.id, name: horse.name, dateOfBirth: horse.dateOfBirth }}
+        action={lifecycle}
+        onClose={() => setLifecycle(null)}
+        onDone={reload}
+      />
       <AssignZoneDialog
         horse={
           barnOpen

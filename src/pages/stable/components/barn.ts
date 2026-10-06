@@ -1,5 +1,6 @@
 import type { BarnListItem, HealthStatus, HorseListItem, Stall } from '../../../api/types';
 import { healthLabel } from '../../../lib/labels';
+import { isReadOnlyHorse } from '../../../lib/horse-rules';
 
 /**
  * Số ô tối đa của một khu. Sơ đồ mỗi khu là lưới 3×3 nên giao diện chặn tạo quá 9 ô.
@@ -72,7 +73,7 @@ export function buildCells(barnId: string, stalls: Stall[], occupantByStall: Map
 export function occupantsByStall(horses: HorseListItem[]): Map<string, StallOccupant> {
   return new Map(
     horses
-      .filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED' && horse.location.stall?.id)
+      .filter((horse) => !isReadOnlyHorse(horse) && horse.location.stall?.id)
       .map((horse) => [horse.location.stall!.id!, occupantFromHorse(horse)]),
   );
 }

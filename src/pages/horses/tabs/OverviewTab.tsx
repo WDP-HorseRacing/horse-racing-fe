@@ -15,6 +15,7 @@ import { measurementSpec, placementStatusLabel } from '../../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
 import { breedLabel, colorLabel } from '../../../lib/horse-options';
+import { horseAgeText } from '../../../lib/horse-rules';
 import { useStore } from '../../../store/store';
 import OwnerDialog from '../components/OwnerDialog';
 import { AssignStallDialog, AssignZoneDialog, GroomDialog, RemoveStallDialog, type PlacementHorse } from '../../stable/components/PlacementDialogs';
@@ -50,12 +51,9 @@ function Row({
   );
 }
 
-function ageText(dateOfBirth: string) {
-  const born = new Date(`${dateOfBirth}T00:00:00`);
-  const today = new Date();
-  let age = today.getFullYear() - born.getFullYear();
-  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
-  return `${formatDate(dateOfBirth)} · ${Math.max(0, age)} tuổi`;
+/** "07/05/2024 · 2 tuổi". Ngựa đã mất: tuổi tính tới ngày mất. */
+function birthText(dateOfBirth: string, dateOfDeath: string | null) {
+  return `${formatDate(dateOfBirth)} · ${horseAgeText(dateOfBirth, dateOfDeath)?.toLowerCase()}`;
 }
 
 export default function OverviewTab({
@@ -111,7 +109,8 @@ export default function OverviewTab({
     { label: 'Giới tính', value: horse.gender ? sexLabel[horse.gender] : undefined },
     { label: 'Giống', value: breedLabel(horse.breed) },
     { label: 'Màu lông', value: colorLabel(horse.color) },
-    { label: 'Ngày sinh', value: horse.dateOfBirth ? ageText(horse.dateOfBirth) : undefined },
+    { label: 'Ngày sinh', value: horse.dateOfBirth ? birthText(horse.dateOfBirth, horse.dateOfDeath) : undefined },
+    ...(horse.dateOfDeath ? [{ label: 'Ngày mất', value: formatDate(horse.dateOfDeath) }] : []),
     { label: 'Số chip', value: horse.microchipId ? <span className="font-mono">{horse.microchipId}</span> : undefined },
     {
       label: 'Sở trường cự ly',
@@ -209,17 +208,12 @@ export default function OverviewTab({
                 <p className="font-medium text-gray-900">
                   {horse.lifecycleChangedAt ? formatDate(horse.lifecycleChangedAt) : 'Chưa rõ ngày'}
                   <span className="font-normal text-gray-400"> · Chuyển sang trạng thái </span>
-                  <span className={cn(
-                    "font-semibold",
-                    horse.lifecycleStatus === 'ACTIVE' && 'text-emerald-700',
-                    horse.lifecycleStatus === 'RETIRED' && 'text-gray-700',
-                    horse.lifecycleStatus === 'TRANSFERRED' && 'text-blue-700'
-                  )}>
+                  <span className={cn('font-semibold', horse.lifecycleStatus === 'ACTIVE' ? 'text-emerald-700' : 'text-gray-900')}>
                     {lifecycleLabel[horse.lifecycleStatus]}
                   </span>
                 </p>
                 <p className="mt-1.5 text-gray-600">
-                  <span className="font-medium text-gray-700">Lý do: </span>
+                  <span className="font-medium text-gray-700">{horse.lifecycleStatus === 'DECEASED' ? 'Nguyên nhân: ' : 'Lý do: '}</span>
                   {horse.lifecycleReason}
                 </p>
               </div>
@@ -233,7 +227,11 @@ export default function OverviewTab({
           <SectionTitle>Chuồng trại và phụ trách</SectionTitle>
           {!inClub ? (
             <p className="text-sm text-gray-500">
-              {horse.isDeleted ? 'Hồ sơ đã xóa nên không có chỗ ở.' : 'Ngựa không còn ở câu lạc bộ nên không có chỗ ở.'}
+              {horse.isDeleted
+                ? 'Hồ sơ đã xóa nên không có chỗ ở.'
+                : horse.lifecycleStatus === 'DECEASED'
+                  ? 'Ngựa đã mất nên không còn chỗ ở.'
+                  : 'Ngựa không còn ở câu lạc bộ nên không có chỗ ở.'}
             </p>
           ) : (
             <>
@@ -276,6 +274,7 @@ export default function OverviewTab({
               <>
                 {horse.owner.fullName}
                 {horse.lifecycleStatus === 'TRANSFERRED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm chuyển nhượng</span>}
+                {horse.lifecycleStatus === 'DECEASED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm ngựa mất</span>}
               </>
             ) : (
               'Chưa có chủ sở hữu'

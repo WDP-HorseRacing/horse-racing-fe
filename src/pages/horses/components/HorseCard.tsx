@@ -11,6 +11,7 @@ import { healthLabel, sexLabel } from '../../../lib/labels';
 import { placementStatusLabel } from '../../../lib/api-labels';
 import { breedLabel } from '../../../lib/horse-options';
 import { links } from '../../../lib/links';
+import { isReadOnlyHorse } from '../../../lib/horse-rules';
 
 const HEALTH_BADGE: Record<string, string> = {
   UNDER_OBSERVATION: 'bg-amber-500/90 text-white',
@@ -23,7 +24,7 @@ export function HorseCard({ horse, age, index = 0 }: { horse: HorseListItem; age
   const [failed, setFailed] = useState(false);
   const { barn, stall, placementStatus } = horse.location;
   const locked = !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus === 'ELIGIBLE' && !horse.canRegisterRace;
-  const muted = horse.isDeleted || horse.lifecycleStatus === 'TRANSFERRED';
+  const muted = isReadOnlyHorse(horse);
   const identity = [horse.gender ? sexLabel[horse.gender] : undefined, breedLabel(horse.breed), age !== undefined ? `${age} tuổi` : undefined].filter(Boolean).join(' · ');
   const place =
     placementStatus === 'PLACED'

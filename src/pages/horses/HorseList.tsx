@@ -32,9 +32,9 @@ import { distanceLabel, healthLabel, lifecycleLabel, sexLabel } from '../../lib/
 import { placementStatusLabel } from '../../lib/api-labels';
 import { links } from '../../lib/links';
 import { breedLabel } from '../../lib/horse-options';
-import { now } from '../../lib/clock';
 import { HorseCard } from './components/HorseCard';
 import { HorseCardsSkeleton, HorseRowsSkeleton } from '../../components/skeletons';
+import { horseAge, isReadOnlyHorse } from '../../lib/horse-rules';
 
 type View = 'cards' | 'table';
 const VIEW_KEY = 'horseracing_horse_view';
@@ -49,15 +49,6 @@ function readView(): View {
 
 type ChipValue = 'ALL' | HealthStatus;
 const HEALTH: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
-
-function ageOf(dateOfBirth: string | null): number | undefined {
-  if (!dateOfBirth) return undefined;
-  const born = new Date(`${dateOfBirth}T00:00:00`);
-  const today = now();
-  let age = today.getFullYear() - born.getFullYear();
-  if (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate())) age -= 1;
-  return Math.max(0, age);
-}
 
 /**
  * Một cột "Tình trạng" thay cho hai cột Được tập / Được đua: bình thường để "—", chỉ lên tiếng khi bị chặn.
@@ -173,7 +164,7 @@ export default function HorseList() {
       key: 'identity',
       header: 'Giới tính · giống · tuổi',
       render: (row) => {
-        const age = ageOf(row.dateOfBirth);
+        const age = horseAge(row.dateOfBirth, row.dateOfDeath);
         return (
           <div className="text-sm text-gray-700">
             <p>{row.gender ? sexLabel[row.gender] : <span className="text-gray-400">Chưa rõ</span>}</p>
@@ -341,7 +332,7 @@ export default function HorseList() {
           ) : (
             <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-4 transition-opacity', list.refreshing && 'opacity-60')}>
               {(list.data ?? []).map((horse, index) => (
-                <HorseCard key={horse.id} horse={horse} age={ageOf(horse.dateOfBirth)} index={index} />
+                <HorseCard key={horse.id} horse={horse} age={horseAge(horse.dateOfBirth, horse.dateOfDeath)} index={index} />
               ))}
             </div>
           )
@@ -355,7 +346,7 @@ export default function HorseList() {
             pageSize={12}
             emptyTitle={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
             emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
-            rowClassName={(row) => cn((row.isDeleted || row.lifecycleStatus === 'TRANSFERRED') && 'opacity-60')}
+            rowClassName={(row) => cn(isReadOnlyHorse(row) && 'opacity-60')}
           />
         )}
       </FilterTabs>

@@ -12,8 +12,9 @@ import { addDays, daysBetween, formatDateShort, formatTime, toDateKey } from '..
 import { links } from '../../lib/links';
 import { primeZoneScope } from '../../hooks/useMyScope';
 import { now } from '../../lib/clock';
+import { isReadOnlyHorse } from '../../lib/horse-rules';
 
-export const inClub = (horse: HorseListItem) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED';
+export const inClub = (horse: HorseListItem) => !isReadOnlyHorse(horse);
 /** Ngựa đang hoạt động, sức khỏe đủ điều kiện mà không được đua ⇒ đang bị khóa huấn luyện. */
 export const isLocked = (horse: HorseListItem) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus === 'ELIGIBLE' && !horse.canRegisterRace;
 export const cannotTrain = (horse: HorseListItem) =>

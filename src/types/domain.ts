@@ -13,8 +13,9 @@ export type HorseSex = 'MALE' | 'FEMALE' | 'GELDING';
 export type DistancePreference = 'SPRINTER' | 'MILER' | 'STAYER';
 /** Trạng thái sức khỏe — Flow 3 sở hữu, Flow 1 và Flow 2 chỉ đọc. */
 export type HealthStatus = 'ELIGIBLE' | 'UNDER_OBSERVATION' | 'INJURED' | 'QUARANTINED';
-/** Trạng thái vòng đời — Flow 1 sở hữu. */
-export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED';
+/** Trạng thái vòng đời (Flow 1 sở hữu). Một nguồn duy nhất với kiểu của API. */
+import type { LifecycleStatus } from '../api/types';
+export type { LifecycleStatus };
 export type ZoneStatus = 'ACTIVE' | 'MAINTENANCE' | 'CLOSED';
 /** AVAILABLE và OCCUPIED do hệ thống tự đặt; người dùng chỉ chuyển AVAILABLE ⇄ MAINTENANCE. */
 export type StallStatus = 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';

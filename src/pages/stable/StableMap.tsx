@@ -26,6 +26,7 @@ import { barnBlocker, buildCells, isLockedHorse, occupantsByStall, stallFullReas
 import { ZoneBoard, ZoneLegend } from './components/ZoneBoard';
 import { ZoneFocus } from './components/ZoneFocus';
 import { loadZoneDetail } from './components/zone-detail';
+import { isReadOnlyHorse } from '../../lib/horse-rules';
 
 interface MapZone {
   barn: BarnListItem;
@@ -52,7 +53,7 @@ async function loadMap(user: User | null, isManager: boolean) {
   // HT chỉ thấy khu mình phụ trách và khu cách ly; các vai trò khác thấy toàn câu lạc bộ.
   const scope = computeZoneScope(user, barns, stalls);
   if (user && scope.trainer) primeZoneScope(user.id, barns, stalls);
-  const inClub = horses.filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED');
+  const inClub = horses.filter((horse) => !isReadOnlyHorse(horse));
   const occupants = occupantsByStall(inClub);
   const horseByStall = new Map(inClub.filter((horse) => horse.location.stall?.id).map((horse) => [horse.location.stall!.id!, horse]));
   const zones: MapZone[] = barns
