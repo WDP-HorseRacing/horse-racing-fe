@@ -15,6 +15,7 @@ import { Button, Card, ErrorBox, Field, PageHeader, PasswordInput, SectionTitle,
 import { roleLabel, SCOPE_TEXT } from '../lib/profile-labels';
 import { links } from '../lib/links';
 import { useCrumbs } from '../components/Breadcrumb';
+import { isReadOnlyHorse } from '../lib/horse-rules';
 
 interface WorkStat {
   value: number | string;
@@ -71,7 +72,7 @@ async function loadWork(role: UserRole, userId: string): Promise<{ stats: WorkSt
     }
     default: {
       const horses = await listAllHorses();
-      const active = horses.filter((horse) => !horse.isDeleted && horse.lifecycleStatus !== 'TRANSFERRED');
+      const active = horses.filter((horse) => !isReadOnlyHorse(horse));
       const unwell = active.filter((horse) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus !== 'ELIGIBLE').length;
       return {
         stats: [

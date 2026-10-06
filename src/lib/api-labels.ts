@@ -30,6 +30,7 @@ export const eligibilityReasonLabel: Record<EligibilityReason, string> = {
   PROFILE_DELETED: 'Hồ sơ đã xóa',
   LIFECYCLE_RETIRED: 'Đã giải nghệ',
   LIFECYCLE_TRANSFERRED: 'Đã chuyển nhượng',
+  LIFECYCLE_DECEASED: 'Đã mất',
   HEALTH_UNDER_OBSERVATION: 'Đang cần theo dõi',
   HEALTH_INJURED: 'Đang chấn thương',
   HEALTH_QUARANTINED: 'Đang cách ly',

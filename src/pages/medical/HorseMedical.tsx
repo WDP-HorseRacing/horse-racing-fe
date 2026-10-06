@@ -1,7 +1,7 @@
 // F3.10 — Hồ sơ y tế của một con ngựa: màn riêng của Flow 3, tách khỏi hồ sơ ngựa (Flow 1).
 // CM, HT, VET, OWNER xem đủ; GROOM chỉ thấy ghi chú chăm sóc và lịch chăm sóc được giao cho mình.
 // HT không có chi phí; OWNER không thấy liều thuốc (backend lọc), không xem yêu cầu khám.
-// Mọi thao tác ghi do backend kiểm lại; ngựa đã chuyển nhượng chỉ xem.
+// Mọi thao tác ghi do backend kiểm lại. Ngựa đã chuyển nhượng hoặc đã mất thì chỉ xem.
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -50,6 +50,7 @@ import { CreateRequestModal, HealthChangeModal, PlaceLockModal, ReleaseLockModal
 import { usePeople } from './components/people';
 import { CheckupDue, HealthShift } from './components/parts';
 import { healthText } from './components/utils';
+import { leftClub, leftClubText } from '../../lib/horse-rules';
 
 type Dialog =
   | { kind: 'health' }
@@ -179,7 +180,7 @@ function GroomView({ horse }: { horse: HorseDetail }) {
   const user = useStore((state) => state.currentUser);
   const note = useService(() => getCareInstructions(horse.id).catch(() => null), [horse.id]);
   const [requesting, setRequesting] = useState(false);
-  const canRequest = can(user, 'examRequest.create') && horse.lifecycleStatus !== 'TRANSFERRED';
+  const canRequest = can(user, 'examRequest.create') && !leftClub(horse.lifecycleStatus);
   return (
     <div className="grid items-start gap-5 lg:grid-cols-12">
       <div className="space-y-5 lg:col-span-7">
@@ -201,7 +202,7 @@ function GroomView({ horse }: { horse: HorseDetail }) {
         <p className="px-1 text-xs text-gray-500">Bệnh án, buổi khám và chẩn đoán không hiển thị với vai trò của bạn.</p>
       </div>
       <div className="lg:col-span-5">
-        <CareScheduleSection horse={{ id: horse.id, name: horse.name, groom: horse.groom }} readOnly={horse.lifecycleStatus === 'TRANSFERRED'} />
+        <CareScheduleSection horse={{ id: horse.id, name: horse.name, groom: horse.groom }} readOnly={leftClub(horse.lifecycleStatus)} />
       </div>
       <CreateRequestModal open={requesting} onClose={() => setRequesting(false)} horse={{ id: horse.id, name: horse.name }} />
     </div>
@@ -234,7 +235,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const navigate = useNavigate();
   const user = useStore((state) => state.currentUser);
   const isOwner = user?.role === 'HORSE_OWNER';
-  const readOnly = horse.lifecycleStatus === 'TRANSFERRED';
+  const readOnly = leftClub(horse.lifecycleStatus);
   const isVet = can(user, 'exam.record') && !readOnly;
   const canRequest = can(user, 'examRequest.create') && !readOnly;
   const canCare = can(user, 'care.manage') && !readOnly;
@@ -350,7 +351,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
               </Button>
             )}
             {menu.length > 0 && <ActionMenu items={menu} />}
-            {readOnly && <span className="text-sm text-gray-500">Ngựa đã chuyển nhượng, hồ sơ chỉ xem.</span>}
+            {readOnly && <span className="text-sm text-gray-500">{leftClubText(horse.lifecycleStatus)}</span>}
           </div>
         )}
       </section>

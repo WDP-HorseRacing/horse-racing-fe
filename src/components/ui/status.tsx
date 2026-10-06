@@ -11,6 +11,7 @@ import {
   examUrgencyLabel,
   healthLabel,
   intensityLabel,
+  lifecycleEligibilityText,
   lifecycleLabel,
   placementLabel,
   sessionStatusLabel,
@@ -80,7 +81,7 @@ export function HealthPill({ status, className = '' }: { status: HealthStatus; c
 /** Đang hoạt động là trạng thái bình thường nên mặc định không hiện. */
 export function LifecyclePill({ status, showActive = false }: { status: LifecycleStatus; showActive?: boolean }) {
   if (status === 'ACTIVE' && !showActive) return null;
-  return <Pill tone="gray">{lifecycleLabel[status]}</Pill>;
+  return <Pill tone={status === 'DECEASED' ? 'slate' : 'gray'}>{lifecycleLabel[status]}</Pill>;
 }
 
 export function DeletedPill() {
@@ -209,7 +210,7 @@ export function LockPill({ reason }: { reason?: string }) {
   return (
     <Pill tone="red" className="max-w-full" title={reason}>
       <Lock size={11} />
-      <span className="truncate">{reason ? `Khóa huấn luyện — ${reason}` : 'Khóa huấn luyện'}</span>
+      <span className="truncate">{reason ? `Khóa huấn luyện · ${reason}` : 'Khóa huấn luyện'}</span>
     </Pill>
   );
 }
@@ -272,10 +273,10 @@ export function EligibilityLine({
   variant?: 'line' | 'banner';
   action?: React.ReactNode;
 }) {
-  // Giải nghệ / chuyển nhượng: không tập không đua là điều hiển nhiên — không cảnh báo đỏ.
+  // Giải nghệ, chuyển nhượng, đã mất: không tập không đua là điều hiển nhiên, không cảnh báo đỏ.
   if (lifecycle && lifecycle !== 'ACTIVE') {
     if (variant === 'banner') return null;
-    return <span className="text-sm text-gray-500">{lifecycle === 'RETIRED' ? 'Không học lớp, không đua (đã giải nghệ)' : 'Đã rời câu lạc bộ'}</span>;
+    return <span className="text-sm text-gray-500">{lifecycleEligibilityText[lifecycle]}</span>;
   }
   if (train.allowed && race.allowed) {
     if (variant === 'banner') return null;
@@ -307,7 +308,7 @@ export function EligibilityLine({
     >
       <div className="min-w-0 text-sm">
         <span className={cn('font-semibold', severe ? 'text-red-700' : 'text-amber-800')}>{title}</span>
-        {reason && <span className="text-gray-700"> — {reason}</span>}
+        {reason && <span className="text-gray-700"> · {reason}</span>}
       </div>
       {action}
     </div>
@@ -349,7 +350,7 @@ export function EligibilityView({
 }) {
   if (lifecycle && lifecycle !== 'ACTIVE') {
     if (variant === 'banner') return null;
-    return <span className="text-sm text-gray-500">{lifecycle === 'RETIRED' ? 'Không học lớp, không đua (đã giải nghệ)' : 'Đã rời câu lạc bộ'}</span>;
+    return <span className="text-sm text-gray-500">{lifecycleEligibilityText[lifecycle]}</span>;
   }
   const train = eligibility.trainingEligible;
   const race = eligibility.racingEligible;
@@ -383,7 +384,7 @@ export function EligibilityView({
     >
       <div className="min-w-0 text-sm">
         <span className={cn('font-semibold', severe ? 'text-red-700' : 'text-amber-800')}>{title}</span>
-        {reason && <span className="text-gray-700"> — {reason}</span>}
+        {reason && <span className="text-gray-700"> · {reason}</span>}
       </div>
       {action}
     </div>

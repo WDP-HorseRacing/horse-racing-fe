@@ -49,12 +49,13 @@ export interface UserAccount {
 export type Gender = 'MALE' | 'FEMALE' | 'GELDING';
 export type RaceAptitude = 'SPRINTER' | 'MILER' | 'STAYER';
 export type HealthStatus = 'ELIGIBLE' | 'UNDER_OBSERVATION' | 'INJURED' | 'QUARANTINED';
-export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED';
+export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED' | 'DECEASED';
 export type PlacementStatus = 'PENDING_BARN' | 'PENDING_STALL' | 'PLACED' | 'NOT_APPLICABLE';
 export type EligibilityReason =
   | 'PROFILE_DELETED'
   | 'LIFECYCLE_RETIRED'
   | 'LIFECYCLE_TRANSFERRED'
+  | 'LIFECYCLE_DECEASED'
   | 'HEALTH_UNDER_OBSERVATION'
   | 'HEALTH_INJURED'
   | 'HEALTH_QUARANTINED'
@@ -79,6 +80,8 @@ export interface HorseBase {
   lifecycleStatus: LifecycleStatus;
   lifecycleReason: string | null;
   lifecycleChangedAt: string | null;
+  /** Ngày mất (YYYY-MM-DD), null nếu ngựa chưa mất. */
+  dateOfDeath: string | null;
   version: number;
 }
 
@@ -244,6 +247,7 @@ export interface DeletionPreview {
   horseId: string;
   allowed: boolean;
   transferred: boolean;
+  deceased: boolean;
   businessData: string[];
   isParent: boolean;
 }

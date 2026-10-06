@@ -47,8 +47,13 @@ export const assignBarn = (id: string, barnId: string, reason?: string) =>
 /* Vòng đời, xóa, khôi phục (CM) */
 export const previewLifecycle = (id: string, lifecycleStatus: LifecycleStatus) =>
   http.get<LifecyclePreview>(`/horses/${id}/lifecycle-status/preview`, { lifecycleStatus });
-export const changeLifecycle = (id: string, lifecycleStatus: LifecycleStatus, reason: string) =>
-  http.patch<HorseBase>(`/horses/${id}/lifecycle-status`, { lifecycleStatus, reason });
+/** `dateOfDeath` chỉ gửi khi ghi nhận ngựa mất: backend trả 400 nếu gửi kèm trạng thái khác. */
+export const changeLifecycle = (id: string, input: { lifecycleStatus: LifecycleStatus; reason: string; dateOfDeath?: string }) =>
+  http.patch<HorseBase>(`/horses/${id}/lifecycle-status`, {
+    lifecycleStatus: input.lifecycleStatus,
+    reason: input.reason,
+    ...(input.lifecycleStatus === 'DECEASED' ? { dateOfDeath: input.dateOfDeath } : {}),
+  });
 export const previewDeletion = (id: string) => http.get<DeletionPreview>(`/horses/${id}/deletion-preview`);
 export const deleteHorse = (id: string, reason: string) => http.del<void>(`/horses/${id}`, { reason });
 export const previewRestore = (id: string) => http.get<RestorePreview>(`/horses/${id}/restore-preview`);

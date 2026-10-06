@@ -37,7 +37,7 @@ import {
 } from '../../components/ui';
 import { distanceHint, distanceLabel, lifecycleLabel, sexLabel } from '../../lib/labels';
 import { fieldFromMessage } from '../../lib/errors';
-import { PARENT_AGE_GAP_YEARS, birthDateError, birthDateRange, parentOldEnough } from '../../lib/horse-rules';
+import { PARENT_AGE_GAP_YEARS, birthDateError, birthDateRange, isReadOnlyHorse, leftClubText, parentOldEnough } from '../../lib/horse-rules';
 import { formatDate, toDateKey } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { links } from '../../lib/links';
@@ -341,7 +341,7 @@ export default function HorseForm() {
     try {
       const page = await listHorses({ search: chip, includeDeleted: true, limit: 20 });
       const hit = page.items.find((item) => item.id !== id && item.microchipId?.trim() === chip);
-      const status = hit?.isDeleted ? 'đã xóa' : hit?.lifecycleStatus === 'TRANSFERRED' ? 'đã chuyển nhượng' : '';
+      const status = hit?.isDeleted ? 'đã xóa' : hit?.lifecycleStatus === 'TRANSFERRED' ? 'đã chuyển nhượng' : hit?.lifecycleStatus === 'DECEASED' ? 'đã mất' : '';
       // Ghi chú trạng thái, trừ khi tên đã có sẵn chữ đó.
       const note = hit && status && !hit.name.toLowerCase().includes(status) ? ` (${status})` : '';
       setChipCheck({ value: chip, holder: hit ? `${hit.name}${note}` : undefined });
@@ -354,14 +354,16 @@ export default function HorseForm() {
   if (editing && detail.loading) return <Skeleton rows={6} />;
   if (editing && (detail.error || !horse)) return <NotFound message={detail.error} />;
   if (!editing && !can(user, 'horse.create')) return <NotFound message="Chỉ Quản lý câu lạc bộ được tạo hồ sơ ngựa." />;
-  const readOnly = !!horse && (horse.isDeleted || horse.lifecycleStatus === 'TRANSFERRED');
+  const readOnly = !!horse && isReadOnlyHorse(horse);
   if (editing && horse && (readOnly || (!isManager && !aptitudeOnly))) {
     return (
       <div className="space-y-6">
         <PageHeader title={`Sửa hồ sơ ${horse.name}`} />
         <Notice tone="warning" icon={<Lock size={16} />}>
           {readOnly
-            ? 'Hồ sơ đã chuyển nhượng hoặc đã xóa nên chỉ xem được.'
+            ? horse.isDeleted
+              ? 'Hồ sơ đã xóa nên chỉ xem được.'
+              : leftClubText(horse.lifecycleStatus)
             : 'Bạn không có quyền sửa hồ sơ con ngựa này (ngoài phạm vi khu bạn phụ trách).'}{' '}
           <Link to={links.horse(horse.id)} className="font-semibold underline">
             Quay lại hồ sơ

@@ -90,6 +90,14 @@ export const lifecycleLabel: Record<LifecycleStatus, string> = {
   ACTIVE: 'Đang hoạt động',
   RETIRED: 'Đã giải nghệ',
   TRANSFERRED: 'Đã chuyển nhượng',
+  DECEASED: 'Đã mất',
+};
+
+/** Câu thay cho "được tập / được đua" khi ngựa không còn hoạt động: không tập không đua là hiển nhiên. */
+export const lifecycleEligibilityText: Record<Exclude<LifecycleStatus, 'ACTIVE'>, string> = {
+  RETIRED: 'Không học lớp, không đua (đã giải nghệ)',
+  TRANSFERRED: 'Đã rời câu lạc bộ',
+  DECEASED: 'Ngựa đã mất',
 };
 
 export const zoneStatusLabel: Record<ZoneStatus, string> = {

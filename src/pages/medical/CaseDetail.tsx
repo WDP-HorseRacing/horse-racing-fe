@@ -18,6 +18,7 @@ import { InjuryProgress, VisitTimeline } from './components/ExamTimeline';
 import { AdjustCostModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisitModal } from './components/modals';
 import { usePeople, type People } from './components/people';
 import { useCrumbs } from '../../components/Breadcrumb';
+import { leftClub, leftClubText } from '../../lib/horse-rules';
 
 type Dialog =
   | { kind: 'cost' }
@@ -94,7 +95,7 @@ export default function CaseDetail() {
   const horseActiveLock = (extra.data?.locks ?? []).find((lock) => lock.status === 'ACTIVE');
   const linkedRequests = (extra.data?.requests ?? []).filter((request) => request.medicalRecordId && visitIds.has(request.medicalRecordId));
   const horseName = horse?.name ?? 'Ngựa';
-  const transferred = horse?.lifecycleStatus === 'TRANSFERRED';
+  const transferred = !!horse && leftClub(horse.lifecycleStatus);
 
   const reload = () => {
     detail.reload();
@@ -172,7 +173,7 @@ export default function CaseDetail() {
         </div>
       </Card>
 
-      {transferred && <Notice tone="info">Ngựa đã chuyển nhượng, hồ sơ chỉ được xem.</Notice>}
+      {transferred && horse && <Notice tone="info">{leftClubText(horse.lifecycleStatus)}</Notice>}
 
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Dòng thời gian buổi khám */}
