@@ -21,7 +21,7 @@ function ChartCard({ title, sub, to, toLabel = 'Xem chi tiết', children, class
           {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
         </div>
         {to && (
-          <Link to={to} className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-gray-500 hover:text-emerald-700">
+          <Link to={to} className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
             {toLabel} <ArrowRight size={14} />
           </Link>
         )}
