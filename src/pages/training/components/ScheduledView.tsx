@@ -280,7 +280,7 @@ function HorseRow({
             </Button>
           )}
           {row.canMarkAbsent && (
-            <Button size="sm" variant="ghost" onClick={onAbsent}>
+            <Button size="sm" variant="inline" onClick={onAbsent}>
               {isGroom ? 'Báo không thực hiện được' : 'Đánh dấu vắng'}
             </Button>
           )}

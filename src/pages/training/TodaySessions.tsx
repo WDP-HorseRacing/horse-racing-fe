@@ -376,7 +376,7 @@ function SessionCard({
             </Button>
           )}
           {!(running && flags.canViewLive) && (
-            <Button variant="ghost" onClick={onOpen}>
+            <Button variant="inline" onClick={onOpen}>
               Chi tiết
             </Button>
           )}
@@ -474,7 +474,7 @@ function HorseLine({
         )}
         {absent && horse.absenceNote && <span className="max-w-md text-xs text-gray-500">{horse.absenceNote}</span>}
         {horse.canMarkAbsent && (
-          <Button size="sm" variant="ghost" onClick={onAbsent}>
+          <Button size="sm" variant="inline" onClick={onAbsent}>
             {isGroom ? 'Báo không thực hiện được' : 'Cho nghỉ buổi này'}
           </Button>
         )}

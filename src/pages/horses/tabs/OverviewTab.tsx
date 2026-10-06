@@ -2,7 +2,7 @@
 // Trình bày dạng danh sách nhãn – giá trị trên nền trắng; chỉ điều cần xử lý mới có màu.
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Stethoscope } from 'lucide-react';
+import { ArrowLeftRight, ArrowRight, Plus, Stethoscope, X } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
 import { getPedigree, listOwnerships } from '../../../api/horses';
 import { listGroomHistory } from '../../../api/stable';
@@ -127,8 +127,10 @@ export default function OverviewTab({
   ];
 
   const inClub = placementStatus !== 'NOT_APPLICABLE' && !horse.isDeleted;
-  const textButton = (label: ReactNode, onClick: () => void, primary = false) => (
-    <Button size="sm" variant={primary ? 'secondary' : 'ghost'} onClick={onClick}>
+  // Nút thao tác trong dòng: có nền, viền và icon để nhìn là biết bấm được. "add" khi chưa có, "change" khi đổi, "remove" khi gỡ.
+  const actionButton = (label: string, onClick: () => void, kind: 'add' | 'change' | 'remove' = 'change') => (
+    <Button size="sm" variant={kind === 'remove' ? 'inlineDanger' : 'inline'} onClick={onClick} className="h-7 gap-1.5 px-2.5">
+      {kind === 'add' ? <Plus size={13} /> : kind === 'remove' ? <X size={13} /> : <ArrowLeftRight size={13} />}
       {label}
     </Button>
   );
@@ -147,8 +149,8 @@ export default function OverviewTab({
             action={
               canReadCare &&
               !horse.isDeleted && (
-                <Link to={links.horseMedical(horse.id)} className="text-sm font-medium text-emerald-700 hover:underline">
-                  {permissions.canViewMedicalTab ? 'Hồ sơ y tế' : 'Lịch chăm sóc'} →
+                <Link to={links.horseMedical(horse.id)} className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
+                  {permissions.canViewMedicalTab ? 'Hồ sơ y tế' : 'Lịch chăm sóc'} <ArrowRight size={14} />
                 </Link>
               )
             }
@@ -244,7 +246,7 @@ export default function OverviewTab({
               <Row
                 label="Khu chuồng"
                 tone={barn ? 'default' : 'waiting'}
-                actions={permissions.canAssignBarn && textButton(barn ? 'Đổi khu' : 'Xếp khu', () => setZoneOpen(true), !barn)}
+                actions={permissions.canAssignBarn && actionButton(barn ? 'Đổi khu' : 'Xếp khu', () => setZoneOpen(true), barn ? 'change' : 'add')}
               >
                 {barn ? barn.name : placementStatusLabel.PENDING_BARN}
               </Row>
@@ -254,8 +256,8 @@ export default function OverviewTab({
                 actions={
                   permissions.canAssignStallAndGroom && (
                     <>
-                      {textButton(stall ? 'Chuyển ô' : 'Xếp ô', () => setStallOpen(true), !stall)}
-                      {stall && textButton('Gỡ', () => setRemoveOpen(true))}
+                      {actionButton(stall ? 'Chuyển ô' : 'Xếp ô', () => setStallOpen(true), stall ? 'change' : 'add')}
+                      {stall && actionButton('Gỡ ô', () => setRemoveOpen(true), 'remove')}
                     </>
                   )
                 }
@@ -265,7 +267,7 @@ export default function OverviewTab({
               <Row
                 label="Groom"
                 tone={horse.groom ? 'default' : barn ? 'waiting' : 'muted'}
-                actions={permissions.canAssignStallAndGroom && barn && textButton(horse.groom ? 'Đổi' : 'Giao Groom', () => setGroomOpen(true), !horse.groom)}
+                actions={permissions.canAssignStallAndGroom && barn && actionButton(horse.groom ? 'Đổi Groom' : 'Giao Groom', () => setGroomOpen(true), horse.groom ? 'change' : 'add')}
               >
                 {horse.groom ? horse.groom.fullName : barn ? 'Chưa có Groom' : 'Chưa có khu'}
               </Row>
@@ -274,7 +276,7 @@ export default function OverviewTab({
           <Row
             label="Chủ sở hữu"
             tone={horse.owner ? 'default' : 'muted'}
-            actions={permissions.canEditProfile && (horse.owner ? textButton('Chuyển chủ', onTransferOwnership) : textButton('Gán chủ', () => setOwnerOpen(true), true))}
+            actions={permissions.canEditProfile && (horse.owner ? actionButton('Chuyển chủ', onTransferOwnership) : actionButton('Gán chủ', () => setOwnerOpen(true), 'add'))}
           >
             {horse.owner ? (
               <>

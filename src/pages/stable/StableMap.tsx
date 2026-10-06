@@ -548,15 +548,15 @@ export default function StableMap() {
                             <p className="truncate text-xs text-amber-700">{barnBlocker(zone.barn)}</p>
                           </div>
                           {inactive ? (
-                            <Button size="sm" variant="ghost" onClick={() => setStatusZone(zone.barn)}>
+                            <Button size="sm" variant="inline" onClick={() => setStatusZone(zone.barn)}>
                               Đổi trạng thái
                             </Button>
                           ) : noTrainer ? (
-                            <Button size="sm" variant="ghost" onClick={() => setTrainerZone(zone.barn)}>
+                            <Button size="sm" variant="inline" onClick={() => setTrainerZone(zone.barn)}>
                               Gán HT
                             </Button>
                           ) : canAdd ? (
-                            <Button size="sm" variant="ghost" onClick={() => setStallsZone(zone)}>
+                            <Button size="sm" variant="inline" onClick={() => setStallsZone(zone)}>
                               Thêm ô
                             </Button>
                           ) : (

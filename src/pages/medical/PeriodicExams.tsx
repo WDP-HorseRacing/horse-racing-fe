@@ -148,7 +148,7 @@ export default function PeriodicExams() {
                 isVet || canAppoint ? (
                   <div className="flex justify-end gap-1">
                     {canAppoint && (
-                      <Button size="sm" variant="ghost" onClick={() => setAppointing(row)}>
+                      <Button size="sm" variant="inline" onClick={() => setAppointing(row)}>
                         {row.appointment ? 'Dời hẹn' : 'Đặt hẹn'}
                       </Button>
                     )}

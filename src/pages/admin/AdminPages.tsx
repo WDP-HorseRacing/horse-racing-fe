@@ -154,7 +154,7 @@ export function AdminUsers() {
                   {row.id !== me?.id && (
                     <Button
                       size="sm"
-                      variant={row.status === 'ACTIVE' ? 'ghost' : 'soft'}
+                      variant={row.status === 'ACTIVE' ? 'inlineDanger' : 'inline'}
                       onClick={async () => {
                         if (row.status === 'ACTIVE') {
                           action.clearError();

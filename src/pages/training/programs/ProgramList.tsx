@@ -144,7 +144,7 @@ function ProgramCard({
               <CalendarPlus size={14} /> Mở lớp từ giáo án này
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={onOpen}>
+          <Button size="sm" variant="inline" onClick={onOpen}>
             Chi tiết <ArrowRight size={14} />
           </Button>
         </div>

@@ -70,7 +70,7 @@ export function ClassHorsesTab({
                   )}
                 </div>
                 {row.canWithdraw && (
-                  <Button size="sm" variant="ghost" onClick={() => onWithdraw(row)}>
+                  <Button size="sm" variant="inlineDanger" onClick={() => onWithdraw(row)}>
                     <LogOut size={14} /> Rút khỏi lớp
                   </Button>
                 )}

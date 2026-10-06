@@ -125,7 +125,7 @@ export default function HeartRatePage() {
       render: (row) => (
         <div className="flex justify-end gap-1" onClick={(event) => event.stopPropagation()}>
           {row.canEdit && (
-            <Button size="sm" variant={row.current === undefined ? 'secondary' : 'ghost'} onClick={() => setEditFor(row)}>
+            <Button size="sm" variant={row.current === undefined ? 'secondary' : 'inline'} onClick={() => setEditFor(row)}>
               {row.current === undefined ? (
                 <>
                   <HeartPulse size={13} /> Đặt ngưỡng

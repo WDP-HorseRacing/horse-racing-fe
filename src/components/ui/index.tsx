@@ -126,7 +126,11 @@ export function SectionTitle({
 
 /* ===== Nút ===== */
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'soft';
+/**
+ * `inline` / `inlineDanger`: nút thao tác nằm trong một dòng thông tin (Đổi khu, Gỡ…). Có nền và viền nhạt
+ * để nhìn là biết bấm được, khác `ghost` chỉ là chữ xám (dùng cho nút Hủy của biểu mẫu).
+ */
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'soft' | 'inline' | 'inlineDanger';
 
 export function Button({
   children,
@@ -153,6 +157,8 @@ export function Button({
     danger: 'bg-red-600 text-white hover:bg-red-500',
     ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
     soft: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
+    inline: 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100 hover:ring-emerald-300',
+    inlineDanger: 'bg-white text-red-700 ring-1 ring-inset ring-red-200 hover:bg-red-50 hover:ring-red-300',
   };
   const sizes = { sm: 'h-8 px-3 text-xs', md: 'h-9 px-3.5 text-sm', icon: 'h-9 w-9 p-0' };
   return (

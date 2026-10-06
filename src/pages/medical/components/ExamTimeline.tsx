@@ -168,7 +168,7 @@ export function VisitCard({
 
       {onVoid && !voided && (
         <div className="mt-3 flex justify-end">
-          <Button size="sm" variant="ghost" onClick={onVoid}>
+          <Button size="sm" variant="inlineDanger" onClick={onVoid}>
             <Ban size={14} /> Hủy buổi khám
           </Button>
         </div>

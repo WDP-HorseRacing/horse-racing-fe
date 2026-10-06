@@ -82,8 +82,9 @@ function AttentionList({ items, empty = 'Không có việc nào cần xử lý',
                   <p className={cn('truncate text-sm font-medium', item.level === 'danger' ? 'text-red-700' : 'text-gray-900')}>{item.title}</p>
                   {item.detail && <p className="truncate text-xs text-gray-500">{item.detail}</p>}
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-gray-500 group-hover:text-emerald-700">
-                  {item.cta} <ArrowRight size={14} />
+                {/* Nhãn thao tác của dòng: nền và viền nhạt để nhìn là biết bấm được. */}
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200 transition group-hover:bg-emerald-100 group-hover:ring-emerald-300">
+                  {item.cta} <ArrowRight size={13} />
                 </span>
               </Link>
             </li>
@@ -112,7 +113,7 @@ function Panel({
   flush?: boolean;
 }) {
   const action = to ? (
-    <Link to={to} className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-emerald-700">
+    <Link to={to} className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
       {toLabel} <ArrowRight size={14} />
     </Link>
   ) : undefined;

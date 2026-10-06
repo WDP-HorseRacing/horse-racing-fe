@@ -3,7 +3,7 @@
 // Hồ sơ và cờ quyền tải song song; ảnh tải riêng để không chặn trang. Nút nào hiện là do cờ quyền quyết định.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
 import { uploadHorsePhoto } from '../../api/media';
@@ -252,8 +252,8 @@ export default function HorseDetail() {
           lifecycle={horse.lifecycleStatus}
           action={
             permissions.canViewMedicalTab ? (
-              <Link to={links.horseMedical(horse.id)} className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:underline">
-                Xem hồ sơ y tế →
+              <Link to={links.horseMedical(horse.id)} className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
+                Xem hồ sơ y tế <ArrowRight size={14} />
               </Link>
             ) : undefined
           }

@@ -543,7 +543,7 @@ function VisitForm(props: VisitOptions) {
                   prescriptions.length < 20 && (
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="inline"
                       onClick={() => setPrescriptions([...prescriptions, { key: nextKey(), medicine: '', dosage: '', frequency: '', startDate: todayKey(), endDate: '' }])}
                     >
                       <Plus size={14} /> Thêm thuốc
@@ -602,7 +602,7 @@ function VisitForm(props: VisitOptions) {
                   title="Chấn thương và hẹn tái khám"
                   aside={
                     injuries.length < 20 && (
-                      <Button size="sm" variant="ghost" onClick={() => setInjuries([...injuries, { key: nextKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
+                      <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
                         <Plus size={14} /> Thêm chấn thương
                       </Button>
                     )
