@@ -33,11 +33,12 @@ function Row({
   tone?: 'default' | 'waiting' | 'danger' | 'muted';
 }) {
   return (
-    <div className="flex items-start gap-4 border-b border-gray-100 py-3 last:border-0 last:pb-0 first:pt-0">
+    // Thẻ hẹp: nút thao tác xuống dòng dưới giá trị thay vì ép cột giá trị.
+    <div className="flex flex-wrap items-start gap-x-4 gap-y-2 border-b border-gray-100 py-3 last:border-0 last:pb-0 first:pt-0">
       <span className="w-32 shrink-0 pt-px text-sm text-gray-500">{label}</span>
       <div
         className={cn(
-          'min-w-0 flex-1 text-sm',
+          'min-w-[7rem] flex-1 text-sm',
           tone === 'default' && 'font-medium text-gray-900',
           tone === 'waiting' && 'font-medium text-amber-700',
           tone === 'danger' && 'font-medium text-red-700',
@@ -46,7 +47,7 @@ function Row({
       >
         {children}
       </div>
-      {actions && <div className="-my-1 flex shrink-0 items-center gap-1">{actions}</div>}
+      {actions && <div className="-my-1 ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
     </div>
   );
 }
