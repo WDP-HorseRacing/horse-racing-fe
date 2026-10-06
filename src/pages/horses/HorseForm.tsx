@@ -277,6 +277,7 @@ export default function HorseForm() {
   const savedBirth = horse?.dateOfBirth;
   const savedSire = horse?.sireId;
   const savedDam = horse?.damId;
+  const savedChip = horse?.microchipId;
   const sires = parents.data?.sires ?? [];
   const dams = parents.data?.dams ?? [];
   const sire = sires.find((item) => item.id === form.sireId);
@@ -303,10 +304,14 @@ export default function HorseForm() {
     const birthChanged = changed(form.dateOfBirth, savedBirth);
     if (form.dateOfBirth) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth)) result.dateOfBirth = 'Ngày không hợp lệ';
-      else if (birthChanged) result.dateOfBirth = birthDateError(form.dateOfBirth, today);
+      else if (birthChanged) {
+        const birthError = birthDateError(form.dateOfBirth, today);
+        if (birthError) result.dateOfBirth = birthError;
+      }
     }
     const chip = form.microchipId.trim();
-    if (chip) {
+    // Số chip cũ (dữ liệu nhập trước khi có luật 15 chữ số) không chặn việc sửa các trường khác.
+    if (chip && changed(chip, savedChip)) {
       if (!/^\d{15}$/.test(chip)) result.microchipId = 'Số chip phải gồm đúng 15 chữ số';
       else if (chipCheck?.value === chip && chipCheck.holder) result.microchipId = `Số chip đã dùng cho ${chipCheck.holder}`;
     }
@@ -320,7 +325,7 @@ export default function HorseForm() {
     if (damError) result.damId = damError;
     if (barn && barnBlocker(barn)) result.barnId = `${barn.name}: ${barnBlocker(barn)!.toLowerCase()}`;
     return result;
-  }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam]);
+  }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam, savedChip]);
 
   /** Lỗi hiển thị: ô đã chạm hoặc đã bấm lưu. Lỗi backend luôn hiện, ưu tiên lỗi theo từng ô. */
   const err = (key: FieldKey) =>
