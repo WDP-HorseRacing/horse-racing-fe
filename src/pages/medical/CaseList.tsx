@@ -18,6 +18,7 @@ import { formatDate, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
 import { HorseChip } from './components/parts';
 import { todayKey } from './components/utils';
+import { HIDDEN_COST_TEXT, isCostHidden, isOwnClosed } from './components/case-cost';
 
 export default function CaseList() {
   const user = useStore((state) => state.currentUser);
@@ -141,7 +142,9 @@ function OwnerCases() {
   if (list.error) return <ErrorBox message={list.error} />;
 
   const closed = all.filter((row) => row.status === 'CLOSED');
-  const totalCost = closed.reduce((sum, row) => sum + (row.totalCost ?? 0), 0);
+  // Tổng chỉ gồm bệnh án đóng trong thời gian bạn sở hữu. Bệnh án của chủ trước bị ẩn chi phí.
+  const ownClosed = closed.filter(isOwnClosed);
+  const totalCost = ownClosed.reduce((sum, row) => sum + (row.totalCost ?? 0), 0);
   const count = (value: CaseStatus) => all.filter((row) => row.status === value).length;
 
   return (
@@ -161,7 +164,8 @@ function OwnerCases() {
           <>
             <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc chẩn đoán…" className="min-w-60 flex-1" />
             <p className="text-sm text-gray-500">
-              Tổng chi phí {closed.length} bệnh án đã đóng <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
+              Tổng chi phí {ownClosed.length} bệnh án đã đóng{ownClosed.length < closed.length ? ' trong thời gian bạn sở hữu' : ''}{' '}
+              <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
             </p>
           </>
         }
@@ -196,7 +200,11 @@ function OwnerCases() {
               className: 'text-right',
               render: (row) =>
                 row.status === 'CLOSED' ? (
-                  <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost)}</span>
+                  isCostHidden(row) ? (
+                    <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
+                  ) : (
+                    <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost)}</span>
+                  )
                 ) : (
                   <span className="text-xs text-gray-500">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
                 ),

@@ -22,6 +22,8 @@ import OverviewTab from './tabs/OverviewTab';
 import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
 import LifecycleDialog from './components/LifecycleDialog';
+import OwnershipTransferDialog from './components/OwnershipTransferDialog';
+import TransferChooser from './components/TransferChooser';
 import { HorseMedia } from './components/HorseMedia';
 import { destructiveActions, lifecycleActionLabel, lifecycleActionsFor, type LifecycleAction } from './components/lifecycle';
 import { horseAgeText } from '../../lib/horse-rules';
@@ -72,6 +74,9 @@ export default function HorseDetail() {
   const mediaId = data?.horse.mediaId;
   const photo = useService(() => (mediaId ? getPhotoUrl(id).then((result) => result.url) : Promise.resolve(undefined)), [id, mediaId], { silent: true });
   const [lifecycle, setLifecycle] = useState<LifecycleAction | null>(null);
+  // "Chuyển nhượng" mở hộp chọn: bán ra ngoài (đổi vòng đời) hay chuyển cho chủ khác trong câu lạc bộ.
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [barnOpen, setBarnOpen] = useState(false);
   const [avatarPending, setAvatarPending] = useState(false);
   // Ảnh vừa chọn hiện ngay trong lúc tải lên.
@@ -223,7 +228,7 @@ export default function HorseDetail() {
                     ) : (
                       <UserX size={14} />
                     ),
-                  onSelect: () => setLifecycle(item),
+                  onSelect: () => (item === 'TRANSFERRED' ? setChooserOpen(true) : setLifecycle(item)),
                 }))}
                 trigger={
                   <button
@@ -277,7 +282,7 @@ export default function HorseDetail() {
       </div>
 
       <div data-reveal>
-        {tab === 'overview' && <OverviewTab horse={horse} permissions={permissions} onChanged={reload} />}
+        {tab === 'overview' && <OverviewTab horse={horse} permissions={permissions} onChanged={reload} onTransferOwnership={() => setTransferOpen(true)} />}
         {tab === 'pedigree' && <PedigreeTab horseId={horse.id} />}
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
       </div>
@@ -286,6 +291,28 @@ export default function HorseDetail() {
         horse={{ id: horse.id, name: horse.name, dateOfBirth: horse.dateOfBirth }}
         action={lifecycle}
         onClose={() => setLifecycle(null)}
+        onDone={reload}
+      />
+      <TransferChooser
+        open={chooserOpen}
+        horseName={horse.name}
+        internalBlockedReason={
+          !horse.owner ? 'Ngựa chưa có chủ sở hữu. Hãy gán chủ trước.' : !permissions.canEditProfile ? 'Bạn không có quyền đổi chủ sở hữu.' : undefined
+        }
+        onClose={() => setChooserOpen(false)}
+        onExternal={() => {
+          setChooserOpen(false);
+          setLifecycle('TRANSFERRED');
+        }}
+        onInternal={() => {
+          setChooserOpen(false);
+          setTransferOpen(true);
+        }}
+      />
+      <OwnershipTransferDialog
+        open={transferOpen}
+        horse={{ id: horse.id, name: horse.name, version: horse.version, owner: horse.owner, ownerSince: horse.ownerSince }}
+        onClose={() => setTransferOpen(false)}
         onDone={reload}
       />
       <AssignZoneDialog
