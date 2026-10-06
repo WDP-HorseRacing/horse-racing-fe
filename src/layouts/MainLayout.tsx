@@ -33,6 +33,7 @@ import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel } from '../lib/labels';
 import { links } from '../lib/links';
+import { notificationTarget } from '../lib/notification-target';
 import { useMyScope } from '../hooks/useMyScope';
 import { formatRelative } from '../lib/format';
 import { now } from '../lib/clock';
@@ -140,17 +141,23 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
 function NotificationBell() {
   const notifications = useStore((state) => state.notifications);
   const unread = useStore((state) => state.unreadCount);
+  const loaded = useStore((state) => state.notificationsLoaded);
+  const cursor = useStore((state) => state.notificationCursor);
+  const loadMore = useStore((state) => state.loadMoreNotifications);
   const markRead = useStore((state) => state.markRead);
   const markAllRead = useStore((state) => state.markAllRead);
+  const role = useStore((state) => state.currentUser?.role);
   const [open, setOpen] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
   const seen = useRef<Set<string>>(new Set());
   const primed = useRef(false);
 
-  // Cảnh báo khẩn hiện thông báo nổi kèm tiếng bíp ngắn.
+  // Cảnh báo khẩn mới đến hiện thông báo nổi kèm tiếng bíp ngắn. Thông báo cũ tải lúc vào phiên thì không.
   useEffect(() => {
-    const urgent = notifications.filter((item) => item.level === 'URGENT' && !item.readAt);
+    if (!loaded) return;
+    const urgent = notifications.filter((item) => item.priority === 'URGENT' && !item.readAt);
     if (!primed.current) {
       urgent.forEach((item) => seen.current.add(item.id));
       primed.current = true;
@@ -159,10 +166,21 @@ function NotificationBell() {
     const fresh = urgent.filter((item) => !seen.current.has(item.id));
     fresh.forEach((item) => {
       seen.current.add(item.id);
-      toast.push(`${item.title} — ${item.body}`, 'error');
+      toast.push(`${item.title}. ${item.message}`, 'error');
     });
     if (fresh.length > 0) playAlertBeep();
-  }, [notifications, toast]);
+  }, [notifications, loaded, toast]);
+
+  const more = async () => {
+    setLoadingMore(true);
+    try {
+      await loadMore();
+    } catch {
+      toast.push('Không tải được thông báo cũ hơn', 'error');
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -174,7 +192,7 @@ function NotificationBell() {
           <Bell size={17} />
           {unread > 0 && (
             <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white tabular-nums">
-              {unread}
+              {unread > 99 ? '99+' : unread}
             </span>
           )}
         </button>
@@ -198,43 +216,56 @@ function NotificationBell() {
           </div>
           <div className="max-h-[26rem] overflow-y-auto custom-scrollbar">
             {notifications.length === 0 && (
-              <p className="px-4 py-10 text-center text-sm font-light text-gray-400">
-                Chưa có thông báo mới. Thông báo đến trong lúc bạn đang đăng nhập sẽ hiện ở đây.
-              </p>
+              <p className="px-4 py-10 text-center text-sm font-light text-gray-400">{loaded ? 'Chưa có thông báo nào.' : 'Đang tải thông báo…'}</p>
             )}
-            {notifications.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  markRead(item.id);
-                  setOpen(false);
-                  if (item.link) navigate(item.link);
-                }}
-                className={cn(
-                  'flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50',
-                  item.readAt && 'opacity-55',
-                )}
-              >
-                <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', notificationTone[item.level].dot)} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="block text-sm font-semibold text-gray-800">{item.title}</span>
-                    {item.level !== 'NORMAL' && (
-                      <span
-                        className={cn(
-                          'rounded-md px-1.5 text-[10px] font-semibold',
-                          item.level === 'URGENT' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700',
-                        )}
-                      >
-                        {notificationTone[item.level].label}
-                      </span>
-                    )}
+            {notifications.map((item) => {
+              const target = notificationTarget(item, role);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    markRead(item.id);
+                    if (!target) return;
+                    setOpen(false);
+                    navigate(target);
+                  }}
+                  className={cn(
+                    'flex w-full gap-3 border-b border-gray-50 px-4 py-3 text-left transition last:border-0 hover:bg-gray-50',
+                    item.readAt && 'opacity-55',
+                    !target && 'cursor-default',
+                  )}
+                >
+                  <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', notificationTone[item.priority].dot)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="block text-sm font-semibold text-gray-800">{item.title}</span>
+                      {item.priority !== 'NORMAL' && (
+                        <span
+                          className={cn(
+                            'rounded-md px-1.5 text-[10px] font-semibold',
+                            item.priority === 'URGENT' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700',
+                          )}
+                        >
+                          {notificationTone[item.priority].label}
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block text-xs font-light text-gray-500">{item.message}</span>
+                    <span className="mt-1 block text-[11px] text-gray-400">{formatRelative(item.createdAt, now())}</span>
                   </span>
-                  <span className="mt-0.5 block text-xs font-light text-gray-500">{item.body}</span>
-                  <span className="mt-1 block text-[11px] text-gray-400">{formatRelative(item.createdAt, now())}</span>
-                </span>
+                </button>
+              );
+            })}
+            {cursor && (
+              <button
+                type="button"
+                onClick={more}
+                disabled={loadingMore}
+                className="w-full px-4 py-2.5 text-center text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60"
+              >
+                {loadingMore ? 'Đang tải…' : 'Xem thông báo cũ hơn'}
               </button>
-            ))}
+            )}
           </div>
         </Popover.Content>
       </Popover.Portal>
