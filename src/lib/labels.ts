@@ -40,9 +40,9 @@ export const roleLabel: Record<UserRole, string> = {
 
 export const roleShortLabel: Record<UserRole, string> = {
   CLUB_MANAGER: 'Quản lý',
-  HEAD_TRAINER: 'Huấn luyện viên',
+  HEAD_TRAINER: 'HLV trưởng',
   VETERINARIAN: 'Bác sĩ',
-  GROOM: 'Chăm sóc',
+  GROOM: 'Groom',
   HORSE_OWNER: 'Chủ ngựa',
 };
 

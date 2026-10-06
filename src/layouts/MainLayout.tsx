@@ -31,7 +31,8 @@ import { PageSkeleton } from '../components/skeletons';
 import { preloadRoute } from '../routes/pages';
 import { Breadcrumbs } from '../components/Breadcrumb';
 import { notificationTone } from '../components/ui/status';
-import { roleLabel } from '../lib/labels';
+import { roleLabel, roleShortLabel } from '../lib/labels';
+import { DEFAULT_FAVICON, faviconHref, roleCssVars, roleTheme } from '../lib/role-theme';
 import { links } from '../lib/links';
 import { notificationTarget } from '../lib/notification-target';
 import { useMyScope } from '../hooks/useMyScope';
@@ -292,11 +293,12 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
             (collapsed ? (
               <div className="mx-auto my-2 h-px w-6 bg-gray-200" />
             ) : (
-              <p className="mb-1 px-3 text-xs font-medium text-gray-400 uppercase tracking-wider">{group.group}</p>
+              <p className="mb-1 px-3 text-xs font-medium text-gray-400">{group.group}</p>
             ))}
           {group.items.map((item) => {
             // className phải là chuỗi: Tooltip.Trigger (asChild) ghép class bằng nối chuỗi nên làm hỏng className dạng hàm.
             // Mục đang mở nhận aria-current="page" từ NavLink, tô màu bằng biến thể aria-[current=page].
+            // Mục đang chọn mang màu vai trò (biến --role đặt ở khung ngoài): nền nhạt, vạch trái, icon cùng màu.
             const link = (
               <NavLink
                 key={item.path}
@@ -307,12 +309,12 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
                 onMouseEnter={() => preloadRoute(item.path)}
                 onFocus={() => preloadRoute(item.path)}
                 className={cn(
-                  'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-emerald-50 hover:text-emerald-700',
-                  'aria-[current=page]:bg-emerald-50 aria-[current=page]:font-semibold aria-[current=page]:text-emerald-800',
+                  'group flex items-center gap-3 rounded-lg text-sm font-medium text-gray-600 transition-colors duration-150 hover:bg-gray-100 hover:text-gray-900',
+                  'aria-[current=page]:bg-(--role-soft) aria-[current=page]:font-semibold aria-[current=page]:text-gray-900 aria-[current=page]:shadow-[inset_3px_0_0_0_var(--role)]',
                   collapsed ? 'mx-auto h-10 w-10 justify-center' : 'px-3 py-2',
                 )}
               >
-                <item.icon size={17} className="shrink-0" />
+                <item.icon size={17} className="shrink-0 group-aria-[current=page]:text-(--role)" />
                 {!collapsed && <span className="truncate">{item.name}</span>}
               </NavLink>
             );
@@ -330,10 +332,12 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
   );
 }
 
-function Brand({ collapsed }: { collapsed: boolean }) {
+/** Logo trong ứng dụng mang màu vai trò đang đăng nhập. */
+function Brand({ collapsed, role }: { collapsed: boolean; role?: UserRole }) {
+  const theme = role ? roleTheme[role] : undefined;
   return (
     <Link to={links.dashboard} className={cn('flex items-center gap-2.5', collapsed ? 'justify-center' : 'px-1')}>
-      <Logo size={36} withText={!collapsed} />
+      <Logo size={36} withText={!collapsed} color={theme?.color} shadow={theme?.shadow} />
     </Link>
   );
 }
@@ -346,6 +350,18 @@ function Shell() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isTrainer = currentUser?.role === 'HEAD_TRAINER';
   const myScope = useMyScope();
+
+  // Favicon đổi màu theo vai trò: mở nhiều tab khi demo, nhìn icon tab là biết tab của vai trò nào.
+  const role = currentUser?.role;
+  useEffect(() => {
+    if (!role) return;
+    const icon = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+    if (!icon) return;
+    icon.href = faviconHref(roleTheme[role].color);
+    return () => {
+      icon.href = DEFAULT_FAVICON;
+    };
+  }, [role]);
 
   useEffect(() => {
     try {
@@ -401,7 +417,7 @@ function Shell() {
   };
 
   return (
-    <div className="flex h-dvh bg-canvas font-sans">
+    <div className="flex h-dvh bg-canvas font-sans" style={role ? roleCssVars(role) : undefined}>
       <TopProgress />
       {/* Sidebar máy tính — thu gọn được thành rail icon */}
       <aside
@@ -411,7 +427,7 @@ function Shell() {
         )}
       >
         <div className="mb-6">
-          <Brand collapsed={collapsed} />
+          <Brand collapsed={collapsed} role={role} />
         </div>
         <NavList groups={groups} collapsed={collapsed} />
         <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
@@ -420,7 +436,7 @@ function Shell() {
               <Avatar name={currentUser?.name ?? '?'} size={36} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
-                <p className="truncate text-xs text-gray-500">{currentUser ? roleLabel[currentUser.role] : ''}</p>
+                <p className="truncate text-xs font-medium text-(--role)">{currentUser ? roleLabel[currentUser.role] : ''}</p>
                 {currentUser?.role !== 'CLUB_MANAGER' && currentUser?.role !== 'VETERINARIAN' && (
                   <p className="truncate text-xs text-gray-400" title={scope}>
                     Phạm vi: {scope}
@@ -453,7 +469,7 @@ function Shell() {
           >
             <Dialog.Title className="sr-only">Menu</Dialog.Title>
             <div className="mb-6 flex items-center justify-between">
-              <Brand collapsed={false} />
+              <Brand collapsed={false} role={role} />
               <Dialog.Close className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
                 <X size={18} />
               </Dialog.Close>
@@ -480,9 +496,15 @@ function Shell() {
             >
               <Menu size={18} />
             </button>
-            <Breadcrumbs groups={groups} />
+            <Breadcrumbs groups={groups} titlePrefix={role ? roleShortLabel[role] : undefined} />
           </div>
           <div className="flex items-center gap-2.5">
+            {role && (
+              <span className="hidden h-8 items-center gap-1.5 rounded-lg bg-(--role-soft) px-2.5 text-xs font-semibold text-(--role) ring-1 ring-(--role-ring) sm:inline-flex">
+                <span className="h-1.5 w-1.5 rounded-full bg-(--role)" aria-hidden />
+                {roleLabel[role]}
+              </span>
+            )}
             <NotificationBell />
             <Dropdown.Root modal={false}>
               <Dropdown.Trigger asChild>
@@ -497,6 +519,11 @@ function Shell() {
                   sideOffset={8}
                   className="anim-pop z-50 w-56 rounded-2xl bg-white p-1.5 shadow-float ring-1 ring-gray-200"
                 >
+                  <div className="px-3 pb-2 pt-1.5">
+                    <p className="truncate text-sm font-semibold text-gray-900">{currentUser?.name}</p>
+                    <p className="truncate text-xs font-medium text-(--role)">{role ? roleLabel[role] : ''}</p>
+                  </div>
+                  <Dropdown.Separator className="mb-1 h-px bg-gray-100" />
                   <Dropdown.Item
                     onSelect={() => navigate(links.profile)}
                     className="cursor-pointer rounded-lg px-3 py-2 text-sm text-gray-700 outline-none data-[highlighted]:bg-gray-100"
