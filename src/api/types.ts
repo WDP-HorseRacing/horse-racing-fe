@@ -120,10 +120,25 @@ export interface Person {
   fullName: string;
 }
 
+/** Một giai đoạn sở hữu ngựa. Chủ ngựa chỉ nhận các giai đoạn của chính mình. */
+export interface OwnershipPeriod {
+  id: string;
+  owner: Person;
+  startedAt: string;
+  /** null là giai đoạn hiện tại. */
+  endedAt: string | null;
+  /** Lý do hoặc số hợp đồng, null với dữ liệu chuyển đổi. */
+  reason: string | null;
+  /** Người ghi nhận, null với dữ liệu chuyển đổi. */
+  recordedBy: Person | null;
+}
+
 export interface HorseDetail extends HorseBase {
   location: HorseLocation;
   groom: Person | null;
   owner: Person | null;
+  /** Ngày bắt đầu sở hữu của chủ hiện tại (YYYY-MM-DD), null nếu chưa có chủ. */
+  ownerSince: string | null;
   latestMeasurements: LatestMeasurement[];
   activeTrainingLock: boolean;
   eligibility: Eligibility;
@@ -463,8 +478,10 @@ export interface MedicalCase {
   initialDiagnosis: string;
   closedAt: string | null;
   finalConclusion: string | null;
-  /** Không có key với HT; null khi bệnh án chưa đóng. */
+  /** Không có key với HT. null khi bệnh án chưa đóng, hoặc khi chi phí thuộc chủ khác (costHidden). */
   totalCost?: number | null;
+  /** Chủ ngựa xem bệnh án đóng trong thời gian chủ khác sở hữu: chi phí bị ẩn. Không có key với HT. */
+  costHidden?: boolean;
 }
 
 export interface MedicalCaseList {

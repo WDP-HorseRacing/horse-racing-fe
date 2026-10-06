@@ -88,7 +88,7 @@ export default function CostReport() {
               <p className="mt-1 text-xs text-gray-500">
                 {formatDate(report.data.from)} – {formatDate(report.data.to)}
               </p>
-              <p className="mt-4 text-xs text-gray-500">Bệnh án đang mở hoặc đã hủy không tính. Chủ ngựa lọc theo chủ hiện ghi trên hồ sơ.</p>
+              <p className="mt-4 text-xs text-gray-500">Bệnh án đang mở hoặc đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: bệnh án thuộc người làm chủ lúc bệnh án được đóng.</p>
             </Card>
             <div className="lg:col-span-8">
               <DataTable

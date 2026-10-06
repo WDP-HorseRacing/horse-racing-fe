@@ -457,7 +457,8 @@ export default function HorseForm() {
         if ((form.dateOfBirth || null) !== horse.dateOfBirth) input.dateOfBirth = form.dateOfBirth || null;
         if ((form.sireId || null) !== horse.sireId) input.sireId = form.sireId || null;
         if ((form.damId || null) !== horse.damId) input.damId = form.damId || null;
-        if ((form.ownerId || null) !== horse.ownerId) input.ownerId = form.ownerId || null;
+        // Chỉ gán chủ cho ngựa chưa có chủ. Đổi chủ đi qua chuyển nhượng nội bộ, không bao giờ gửi null.
+        if (!horse.ownerId && form.ownerId) input.ownerId = form.ownerId;
         if (photoFile) input.mediaId = await uploadHorsePhoto(photoFile);
         else if (photoRemoved && horse.mediaId) input.mediaId = null;
       }
@@ -475,6 +476,8 @@ export default function HorseForm() {
   const stale = action.error?.includes('vừa được người khác cập nhật') ?? false;
 
   const ownerMissing = !!horse?.ownerId && !!owners.data && !owners.data.some((item) => item.id === horse.ownerId);
+  // Ngựa đã có chủ: ô chủ chỉ để xem, đổi chủ bằng chuyển nhượng nội bộ trên hồ sơ.
+  const ownerLocked = editing && !!horse?.ownerId;
   const currentPhoto = photoPreview ?? (photoRemoved ? undefined : photo.data);
   const loadingList = (loading: boolean, data: unknown) => loading && !data;
   // Lịch ngày sinh mở sẵn ở khoảng 3 năm trước (tuổi thường gặp của ngựa mới vào câu lạc bộ).
@@ -663,10 +666,15 @@ export default function HorseForm() {
             <Card>
               <SectionTitle>{editing ? 'Chủ sở hữu' : 'Chủ sở hữu và khu chuồng'}</SectionTitle>
               <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
-                <Field label="Chủ sở hữu" name="ownerId" error={err('ownerId')}>
+                <Field
+                  label="Chủ sở hữu"
+                  name="ownerId"
+                  error={err('ownerId')}
+                  hint={ownerLocked ? 'Đổi chủ bằng nút Chuyển chủ trên hồ sơ ngựa.' : undefined}
+                >
                   <Select
                     value={form.ownerId}
-                    disabled={loadingList(owners.loading, owners.data)}
+                    disabled={ownerLocked || loadingList(owners.loading, owners.data)}
                     onChange={(event) => set('ownerId', event.target.value)}
                     className={cn(err('ownerId') && invalidClass)}
                   >

@@ -22,6 +22,7 @@ import { links } from '../../lib/links';
 import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, addDays } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
+import { HIDDEN_COST_TEXT, isCostHidden } from '../medical/components/case-cost';
 
 /* ===== Mảnh ghép dùng chung ===== */
 
@@ -686,7 +687,7 @@ function OwnerDashboard({ name }: { name: string }) {
   return (
     <Reveal className="space-y-5">
       <DashboardHero eyebrow={todayLabel()} title={`${greeting()}, ${name}`}>
-          <Stat value={data.active.length} label="Ngựa đang ở câu lạc bộ" hint={data.horses.length > data.active.length ? `${data.horses.length - data.active.length} đã chuyển nhượng` : undefined} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
+          <Stat value={data.active.length} label="Ngựa đang ở câu lạc bộ" hint={data.horses.length > data.active.length ? `${data.horses.length - data.active.length} đã rời câu lạc bộ` : undefined} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={data.openCases.length} label="Đang điều trị" icon={<Stethoscope size={18} />} tone="warning" onClick={() => navigate(links.cases)} />
           <Stat value={weekCount} label="Việc chăm sóc 7 ngày tới" icon={<CalendarClock size={18} />} />
           <Stat value={formatMoney(data.medicalCost)} label="Chi phí y tế đã chốt" icon={<Wallet size={18} />} onClick={() => navigate(links.cases)} />
@@ -719,7 +720,7 @@ function OwnerDashboard({ name }: { name: string }) {
         <Panel title="Chi phí y tế đã chốt" flush className="h-full">
           <div className="px-5 py-4">
             <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(data.medicalCost)}</p>
-            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các bệnh án đã đóng.</p>
+            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các bệnh án đã đóng trong thời gian bạn sở hữu.</p>
           </div>
           {data.closedCases.length > 0 && (
             <ul className="divide-y divide-gray-100 border-t border-gray-100">
@@ -734,7 +735,11 @@ function OwnerDashboard({ name }: { name: string }) {
                     </span>
                     <span className="flex shrink-0 items-center gap-3">
                       <CaseStatusPill status={item.status} />
-                      <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
+                      {isCostHidden(item) ? (
+                        <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
+                      ) : (
+                        <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
+                      )}
                     </span>
                   </Link>
                 </li>

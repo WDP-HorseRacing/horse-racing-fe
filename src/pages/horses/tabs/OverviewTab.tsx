@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Stethoscope } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
-import { getPedigree } from '../../../api/horses';
+import { getPedigree, listOwnerships } from '../../../api/horses';
 import { listGroomHistory } from '../../../api/stable';
 import { getCareInstructions } from '../../../api/medical';
 import type { HorseDetail, HorsePermissions } from '../../../api/types';
@@ -15,7 +15,7 @@ import { measurementSpec, placementStatusLabel } from '../../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
 import { breedLabel, colorLabel } from '../../../lib/horse-options';
-import { horseAgeText } from '../../../lib/horse-rules';
+import { horseAgeText, isReadOnlyHorse } from '../../../lib/horse-rules';
 import { useStore } from '../../../store/store';
 import OwnerDialog from '../components/OwnerDialog';
 import { AssignStallDialog, AssignZoneDialog, GroomDialog, RemoveStallDialog, type PlacementHorse } from '../../stable/components/PlacementDialogs';
@@ -60,10 +60,13 @@ export default function OverviewTab({
   horse,
   permissions,
   onChanged,
+  onTransferOwnership,
 }: {
   horse: HorseDetail;
   permissions: HorsePermissions;
   onChanged: () => void;
+  /** Mở hộp chuyển chủ trong câu lạc bộ (hộp thoại do trang hồ sơ giữ). */
+  onTransferOwnership: () => void;
 }) {
   const user = useStore((state) => state.currentUser);
   const [zoneOpen, setZoneOpen] = useState(false);
@@ -78,6 +81,9 @@ export default function OverviewTab({
   const pedigree = useService(() => getPedigree(horse.id), [horse.id, horse.version]);
   const care = useService(() => (canReadCare && !horse.isDeleted ? getCareInstructions(horse.id) : Promise.resolve(undefined)), [horse.id, canReadCare]);
   const grooms = useService(() => (isOwner ? Promise.resolve([]) : listGroomHistory(horse.id)), [horse.id, isOwner, horse.version]);
+  const ownerships = useService(() => listOwnerships(horse.id), [horse.id, horse.version]);
+  // Chỉ hiện lịch sử khi có hơn một giai đoạn hoặc có ghi chú chuyển nhượng; một giai đoạn từ đầu thì dòng chủ sở hữu đã đủ.
+  const showOwnerships = (ownerships.data?.length ?? 0) > 1 || (ownerships.data ?? []).some((item) => item.reason);
 
   const { barn, stall, placementStatus } = horse.location;
   const placementHorse: PlacementHorse = {
@@ -268,11 +274,14 @@ export default function OverviewTab({
           <Row
             label="Chủ sở hữu"
             tone={horse.owner ? 'default' : 'muted'}
-            actions={permissions.canEditProfile && textButton(horse.owner ? 'Đổi chủ' : 'Gán chủ', () => setOwnerOpen(true))}
+            actions={permissions.canEditProfile && (horse.owner ? textButton('Chuyển chủ', onTransferOwnership) : textButton('Gán chủ', () => setOwnerOpen(true), true))}
           >
             {horse.owner ? (
               <>
                 {horse.owner.fullName}
+                {horse.ownerSince && !isReadOnlyHorse(horse) && (
+                  <span className="block text-xs font-normal text-gray-500">Sở hữu từ {formatDate(horse.ownerSince)}</span>
+                )}
                 {horse.lifecycleStatus === 'TRANSFERRED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm chuyển nhượng</span>}
                 {horse.lifecycleStatus === 'DECEASED' && <span className="block text-xs font-normal text-gray-500">Chủ tại thời điểm ngựa mất</span>}
               </>
@@ -298,6 +307,25 @@ export default function OverviewTab({
             </ul>
           </Card>
         )}
+
+        {showOwnerships && (
+          <Card variant="flat">
+            <SectionTitle>{isOwner ? 'Thời gian bạn sở hữu' : 'Lịch sử chủ sở hữu'}</SectionTitle>
+            <ul className="space-y-3">
+              {(ownerships.data ?? []).map((item) => (
+                <li key={item.id} className="text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className={cn('truncate', item.endedAt ? 'text-gray-500' : 'font-medium text-gray-900')}>{item.owner.fullName}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-gray-500">
+                      {formatDate(item.startedAt)} – {item.endedAt ? formatDate(item.endedAt) : 'nay'}
+                    </span>
+                  </div>
+                  {item.reason && <p className="mt-0.5 text-xs text-gray-500">{item.reason}</p>}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </div>
 
       <AssignZoneDialog horse={zoneOpen ? placementHorse : null} onClose={() => setZoneOpen(false)} onDone={onChanged} />
@@ -306,7 +334,7 @@ export default function OverviewTab({
       <RemoveStallDialog horse={removeOpen ? placementHorse : null} onClose={() => setRemoveOpen(false)} onDone={onChanged} />
       <OwnerDialog
         open={ownerOpen}
-        horse={{ id: horse.id, name: horse.name, version: horse.version, ownerId: horse.ownerId }}
+        horse={{ id: horse.id, name: horse.name, version: horse.version }}
         onClose={() => setOwnerOpen(false)}
         onDone={onChanged}
       />

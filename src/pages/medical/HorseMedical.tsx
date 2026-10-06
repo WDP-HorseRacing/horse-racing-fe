@@ -51,6 +51,7 @@ import { usePeople } from './components/people';
 import { CheckupDue, HealthShift } from './components/parts';
 import { healthText } from './components/utils';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
+import { HIDDEN_COST_TEXT, isCostHidden, isOwnClosed } from './components/case-cost';
 
 type Dialog =
   | { kind: 'health' }
@@ -282,7 +283,9 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const lastOpenVisit = openCase ? activeVisits.find((record) => record.caseId === openCase.id) : undefined;
   const pendingRequests = (data.requests ?? []).filter((request) => request.status === 'PENDING');
   const urgentPending = pendingRequests.filter((request) => request.urgent).length;
-  const closedCount = data.cases.items.filter((item) => item.status === 'CLOSED').length;
+  // Chỉ đếm bệnh án có chi phí tính cho người đang xem (chủ ngựa không tính bệnh án của chủ trước).
+  const closedCount = data.cases.items.filter(isOwnClosed).length;
+  const hiddenCount = data.cases.items.filter((item) => item.status === 'CLOSED' && isCostHidden(item)).length;
   const visit = () => navigate(links.visitNew({ horseId: horse.id, caseId: openCase?.id, back: here }));
 
   const menu = [
@@ -379,7 +382,9 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
           costVisible && (
             <Tile icon={<Wallet size={14} />} label="Chi phí y tế">
               <p className="text-xl font-bold tabular-nums text-gray-900">{formatMoney(data.cases.totalCost ?? 0)}</p>
-              <p className="text-xs text-gray-500">{closedCount} bệnh án đã đóng</p>
+              <p className="text-xs text-gray-500">
+                {closedCount} bệnh án đã đóng{hiddenCount > 0 ? ' trong thời gian bạn sở hữu' : ''}
+              </p>
             </Tile>
           )
         )}
@@ -420,7 +425,13 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
                           {item.finalConclusion && <p className="mt-1 line-clamp-2 text-sm text-gray-600">{item.finalConclusion}</p>}
                         </div>
                         <div className="flex items-center gap-3">
-                          {costVisible && item.status === 'CLOSED' && <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</span>}
+                          {costVisible &&
+                            item.status === 'CLOSED' &&
+                            (isCostHidden(item) ? (
+                              <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
+                            ) : (
+                              <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</span>
+                            ))}
                           <CaseStatusPill status={item.status} />
                         </div>
                       </Link>
@@ -541,7 +552,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
             <Card variant="flat">
               <SectionTitle icon={<Wallet size={16} />}>Tổng chi phí y tế</SectionTitle>
               <p className="text-lg font-semibold tabular-nums text-gray-900">{formatMoney(data.cases.totalCost ?? 0)}</p>
-              <p className="mt-1 text-xs text-gray-500">{closedCount} bệnh án đã đóng. Bệnh án đang mở chưa có chi phí; khám định kỳ không tính phí.</p>
+              <p className="mt-1 text-xs text-gray-500">{closedCount} bệnh án đã đóng. Bệnh án đang mở chưa có chi phí, khám định kỳ không tính phí.</p>
             </Card>
           )}
           {!costVisible && closedCount > 0 && <p className="px-1 text-xs text-gray-500">Chi phí y tế không hiển thị với vai trò của bạn.</p>}

@@ -19,6 +19,7 @@ import { AdjustCostModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisi
 import { usePeople, type People } from './components/people';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
+import { HIDDEN_COST_TEXT, isCostHidden } from './components/case-cost';
 
 type Dialog =
   | { kind: 'cost' }
@@ -144,7 +145,11 @@ export default function CaseDetail() {
                   <Wallet size={13} className="text-gray-400" /> Chi phí điều trị
                 </p>
                 {item.status === 'CLOSED' ? (
-                  <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</p>
+                  isCostHidden(item) ? (
+                    <p className="text-sm text-gray-500">{HIDDEN_COST_TEXT}</p>
+                  ) : (
+                    <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</p>
+                  )
                 ) : (
                   <p className="text-sm text-gray-500">{isOpen ? 'Chốt khi đóng bệnh án' : 'Bệnh án đã hủy, không có chi phí'}</p>
                 )}

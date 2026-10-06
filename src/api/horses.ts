@@ -15,6 +15,7 @@ import type {
   LifecycleStatus,
   Measurement,
   MeasurementType,
+  OwnershipPeriod,
   Page,
   Pedigree,
   RestorePreview,
@@ -54,6 +55,12 @@ export const changeLifecycle = (id: string, input: { lifecycleStatus: LifecycleS
     reason: input.reason,
     ...(input.lifecycleStatus === 'DECEASED' ? { dateOfDeath: input.dateOfDeath } : {}),
   });
+/* Chuyển nhượng nội bộ: chủ mới bắt đầu sở hữu từ lúc lưu (CM) */
+export const transferOwnership = (id: string, input: { newOwnerId: string; reason: string; version: number }) =>
+  http.post<HorseBase>(`/horses/${id}/ownership-transfers`, input);
+/** Lịch sử sở hữu, mới nhất lên trên. Chủ ngựa chỉ nhận các giai đoạn của chính mình. */
+export const listOwnerships = (id: string) => http.get<OwnershipPeriod[]>(`/horses/${id}/ownerships`);
+
 export const previewDeletion = (id: string) => http.get<DeletionPreview>(`/horses/${id}/deletion-preview`);
 export const deleteHorse = (id: string, reason: string) => http.del<void>(`/horses/${id}`, { reason });
 export const previewRestore = (id: string) => http.get<RestorePreview>(`/horses/${id}/restore-preview`);
