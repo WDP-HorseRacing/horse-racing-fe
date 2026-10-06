@@ -1,12 +1,12 @@
-// Thông báo realtime qua Socket.IO (namespace /events). BE chưa có API đọc lại
-// thông báo, nên chuông chỉ hiện những gì nhận được từ lúc đăng nhập.
+// Thông báo realtime qua Socket.IO (namespace /events). Lịch sử thông báo tải qua REST (notifications.ts),
+// socket chỉ đẩy thông báo mới, cùng một dạng với REST.
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_URL } from './http';
 import { getTokens, onTokensChange } from './tokens';
-import type { LiveNotificationPayload } from './types';
+import type { NotificationItem } from './types';
 
 let socket: Socket | null = null;
-let handler: ((payload: LiveNotificationPayload) => void) | undefined;
+let handler: ((payload: NotificationItem) => void) | undefined;
 
 function connect() {
   disconnect();
@@ -18,7 +18,7 @@ function connect() {
     reconnection: true,
     reconnectionDelay: 2000,
   });
-  socket.on('notification.created', (payload: LiveNotificationPayload) => handler?.(payload));
+  socket.on('notification.created', (payload: NotificationItem) => handler?.(payload));
 }
 
 function disconnect() {
@@ -28,7 +28,7 @@ function disconnect() {
 }
 
 /** Bắt đầu nghe thông báo; tự nối lại khi token được làm mới, tự ngắt khi đăng xuất. */
-export function startRealtime(onNotification: (payload: LiveNotificationPayload) => void) {
+export function startRealtime(onNotification: (payload: NotificationItem) => void) {
   handler = onNotification;
   connect();
   const stop = onTokensChange((tokens) => (tokens ? connect() : disconnect()));

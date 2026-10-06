@@ -629,14 +629,42 @@ export interface CostReport {
   items: { horseId: string; horseName: string; caseCount: number; totalCost: number }[];
 }
 
-/* ===== Thông báo realtime ===== */
+/* ===== Thông báo (socket notification.created và REST /notifications dùng chung một dạng) ===== */
 
-export interface LiveNotificationPayload {
+export type NotificationCategory =
+  | 'MEASUREMENT_ALERT'
+  | 'EXAM_REQUEST'
+  | 'BARN_ASSIGNED'
+  | 'GROOM_ASSIGNMENT'
+  | 'TRAINING_LOCK'
+  | 'HEALTH_STATUS'
+  | 'MEDICAL_CASE'
+  | 'CARE_REMINDER'
+  | 'HORSE_LIFECYCLE'
+  | 'OWNERSHIP';
+export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
+
+/** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */
+export interface NotificationResource {
+  type: 'HORSE' | 'MEDICAL_CASE' | 'TRAINING_LOCK';
   id: string;
-  type: 'SYSTEM' | 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
-  priority: 'NORMAL' | 'HIGH' | 'URGENT';
+  /** Luôn có với thông báo mới. Thông báo cũ trong Mongo có thể thiếu. */
+  horseId?: string;
+}
+
+export interface NotificationItem {
+  id: string;
+  category: NotificationCategory;
+  priority: NotificationPriority;
   title: string;
   message: string;
-  link?: string;
+  /** null khi không có trang nào để mở (ví dụ chủ cũ đã bán ngựa). */
+  resource: NotificationResource | null;
+  readAt: string | null;
   createdAt: string;
+}
+
+export interface NotificationPage {
+  items: NotificationItem[];
+  nextCursor: string | null;
 }
