@@ -101,7 +101,7 @@ export function AddSessionModal({
             <option value="">Chọn môn học…</option>
             {subjects.data?.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.name} — {intensityLabel[item.intensity]} · {workoutLine(item.distanceM, item.repetitions)}
+                {item.name} · {intensityLabel[item.intensity]} · {workoutLine(item.distanceM, item.repetitions)}
               </option>
             ))}
           </Select>

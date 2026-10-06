@@ -181,7 +181,7 @@ export default function ClassList() {
 
       {data && !data.canCreate && data.rows.length > 0 && (
         <p className="text-xs text-gray-500">
-          Chỉ xem — mở, sửa, kết thúc sớm hoặc hủy lớp là việc của huấn luyện viên trưởng phụ trách khu.
+          Chỉ xem. Mở, sửa, kết thúc sớm hoặc hủy lớp là việc của huấn luyện viên trưởng phụ trách khu.
         </p>
       )}
     </div>

@@ -180,7 +180,7 @@ export default function CareSchedules() {
             )}
           </Card>
           <p className="px-1 text-xs leading-relaxed text-gray-500">
-            Người thực hiện là Groom đang phụ trách ngựa hoặc bác sĩ. Groom hoàn tất lịch được giao trong hồ sơ ngựa; khi hoàn tất, bác sĩ có thể hẹn luôn lần tới.
+            Người thực hiện là Groom đang phụ trách ngựa hoặc bác sĩ. Groom hoàn tất lịch được giao trong hồ sơ ngựa. Khi hoàn tất, bác sĩ có thể hẹn luôn lần tới.
           </p>
         </aside>
       </div>

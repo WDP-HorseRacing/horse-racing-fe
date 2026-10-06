@@ -233,7 +233,7 @@ function StaffView() {
           isVet
             ? 'Khẩn lên trước, rồi yêu cầu cũ nhất. Khám để gắn yêu cầu vào buổi khám, hoặc bỏ qua kèm lý do.'
             : user?.role === 'HEAD_TRAINER'
-              ? 'Theo dõi yêu cầu khám toàn câu lạc bộ; gửi yêu cầu cho ngựa thuộc khu bạn phụ trách.'
+              ? 'Theo dõi yêu cầu khám toàn câu lạc bộ. Gửi yêu cầu cho ngựa thuộc khu bạn phụ trách.'
               : 'Theo dõi yêu cầu khám toàn câu lạc bộ và gửi yêu cầu cho bất kỳ ngựa nào.'
         }
         actions={

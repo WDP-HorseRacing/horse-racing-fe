@@ -24,7 +24,7 @@ const flows: { icon: typeof Users; title: string; desc: string; points?: string[
   {
     icon: ClipboardList,
     title: 'Lập và thực hiện giáo án theo lớp',
-    desc: 'Huấn luyện viên soạn môn học, ghép thành giáo án theo giai đoạn rồi mở lớp với khung giờ và sĩ số. Ngựa đăng ký vào lớp; lịch tập của từng con được tính ra từ các lớp đang học. Buổi tập theo dõi nhịp tim và tốc độ từng giây, cảnh báo đỏ tới ngay người đang dắt ngựa.',
+    desc: 'Huấn luyện viên soạn môn học, ghép thành giáo án theo giai đoạn rồi mở lớp với khung giờ và sĩ số. Ngựa đăng ký vào lớp, lịch tập của từng con được tính ra từ các lớp đang học. Buổi tập theo dõi nhịp tim và tốc độ từng giây, cảnh báo đỏ tới ngay người đang dắt ngựa.',
     points: ['Môn học → giáo án → lớp → buổi học', 'Một buổi nhiều ngựa, chấm điểm từng con', 'Ngựa không đủ điều kiện chỉ vắng riêng, lớp vẫn chạy'],
     big: true,
   },
@@ -214,7 +214,7 @@ const LandingPage = () => {
               </h2>
             </div>
             <p className="text-lg font-light leading-relaxed text-gray-500 lg:col-span-5" data-reveal>
-              Bác sĩ đặt khóa huấn luyện thì ngựa tự vắng ở buổi kế tiếp mà lớp vẫn chạy; ngựa đổi khu thì tự rút khỏi
+              Bác sĩ đặt khóa huấn luyện thì ngựa tự vắng ở buổi kế tiếp mà lớp vẫn chạy. Ngựa đổi khu thì tự rút khỏi
               lớp của khu cũ. Không có thao tác nào phải làm tay hai lần.
             </p>
           </div>

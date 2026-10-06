@@ -133,7 +133,7 @@ export const Login = () => {
               </span>
             </h2>
             <p data-hero-line className="mt-5 max-w-md text-base leading-relaxed text-white/75">
-              Hồ sơ lý lịch, chuồng trại và y tế của câu lạc bộ — mỗi vai trò thấy đúng phần việc của mình.
+              Hồ sơ lý lịch, chuồng trại và y tế của câu lạc bộ. Mỗi vai trò thấy đúng phần việc của mình.
             </p>
             <div className="mt-8 flex flex-wrap gap-2">
               {HIGHLIGHTS.map(({ icon: Icon, label }) => (

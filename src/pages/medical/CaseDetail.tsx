@@ -78,7 +78,7 @@ export default function CaseDetail() {
   const people = usePeople(extra.data?.horse.groom ? [extra.data.horse.groom] : []);
   const [dialog, setDialog] = useState<Dialog>(null);
   const navigate = useNavigate();
-  const caseTitle = detail.data && extra.data ? `${extra.data.horse.name} — ${detail.data.initialDiagnosis}` : null;
+  const caseTitle = detail.data && extra.data ? `${extra.data.horse.name} · ${detail.data.initialDiagnosis}` : null;
   useCrumbs(caseTitle ? [{ label: caseTitle }] : null);
 
   if (detail.loading && !detail.data) return <Skeleton rows={6} />;

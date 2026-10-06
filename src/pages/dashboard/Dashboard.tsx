@@ -243,7 +243,7 @@ function ManagerDashboard({ name }: { name: string }) {
       key: `barn-${horse.id}`,
       level: 'warn' as const,
       title: `${horse.name} chờ xếp khu`,
-      detail: 'Ngựa chưa thuộc khu nào — chỉ Quản lý xử lý',
+      detail: 'Ngựa chưa thuộc khu nào, chỉ Quản lý xử lý',
       to: links.stable,
       cta: 'Xếp khu',
     })),

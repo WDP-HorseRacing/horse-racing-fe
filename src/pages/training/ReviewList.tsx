@@ -99,7 +99,7 @@ export default function ReviewList() {
       render: (row) =>
         row.overdue ? (
           <Pill tone="amber">
-            <Clock size={11} /> {row.hoursSinceEnd} giờ — quá 48 giờ
+            <Clock size={11} /> {row.hoursSinceEnd} giờ, quá 48 giờ
           </Pill>
         ) : (
           <span className="text-sm tabular-nums text-gray-500">{row.hoursSinceEnd} giờ</span>
@@ -119,7 +119,7 @@ export default function ReviewList() {
     <div className="space-y-6">
       <PageHeader
         title="Chờ đánh giá"
-        description="Chỉ số đã chốt — buổi chuyển sang Hoàn thành khi HT chấm đủ mọi ngựa có mặt."
+        description="Chỉ số đã chốt, buổi chuyển sang Hoàn thành khi HT chấm đủ mọi ngựa có mặt."
       />
 
       {error && <ErrorBox message={error} />}

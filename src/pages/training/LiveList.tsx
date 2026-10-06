@@ -109,7 +109,7 @@ function LiveCard({ row, className, onOpen }: { row: LiveSessionRow; className: 
             {row.horses.map((horse) => (
               <span
                 key={horse.id}
-                title={`${horse.name}${horse.stopped ? ' — đã dừng' : ''}${horse.hasRed ? ' — cảnh báo đỏ' : ''}`}
+                title={`${horse.name}${horse.stopped ? ', đã dừng' : ''}${horse.hasRed ? ', cảnh báo đỏ' : ''}`}
                 className={cn(
                   'rounded-[14px] ring-2',
                   horse.hasRed ? 'ring-red-500' : 'ring-white',

@@ -87,7 +87,7 @@ export default function ScheduledView({
               <span className="text-lg font-medium text-gray-400">/{horses.length}</span>
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              Tính lại mỗi lần xem; lúc bấm Bắt đầu hệ thống kiểm tra lại từng ngựa.
+              Tính lại mỗi lần xem. Lúc bấm Bắt đầu hệ thống kiểm tra lại từng ngựa.
             </p>
             {blocked.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-gray-100 pt-3 text-sm">
@@ -118,7 +118,7 @@ export default function ScheduledView({
                 <HeartPulse size={16} className="mt-0.5 shrink-0" />
                 <p>
                   <span className="font-semibold">{noThreshold.map((row) => row.horseName).join(', ')}</span> chưa được
-                  bác sĩ đặt nhịp tim tối đa — quy tắc R1 sẽ không chạy trong buổi.{' '}
+                  bác sĩ đặt nhịp tim tối đa, quy tắc R1 sẽ không chạy trong buổi.{' '}
                   <Link to={links.heartRate} className="font-semibold underline-offset-2 hover:underline">
                     Bảng nhịp tim
                   </Link>
@@ -208,8 +208,8 @@ function HorseRow({
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
               {row.healthStatus !== 'ELIGIBLE' && <HealthPill status={row.healthStatus} />}
               {!isGroom && row.r1Disabled && !absent && (
-                <span className="text-xs text-amber-700" title="Bác sĩ chưa đặt nhịp tim tối đa — quy tắc R1 không chạy">
-                  R1 tắt — chưa đặt ngưỡng
+                <span className="text-xs text-amber-700" title="Bác sĩ chưa đặt nhịp tim tối đa, quy tắc R1 không chạy">
+                  R1 tắt, chưa đặt ngưỡng
                 </span>
               )}
             </div>

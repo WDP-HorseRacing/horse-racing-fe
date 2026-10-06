@@ -105,12 +105,12 @@ export default function StartSessionModal({
             <ul className="mt-2 space-y-1.5 text-xs">
               {willBlock.map((row) => (
                 <li key={row.horseId} className="text-red-700">
-                  <span className="font-semibold">{row.horseName}</span> — chặn y tế: {row.readiness.reason}
+                  <span className="font-semibold">{row.horseName}</span>, chặn y tế: {row.readiness.reason}
                 </li>
               ))}
               {alreadyAbsent.map((row) => (
                 <li key={row.horseId} className="text-gray-600">
-                  <span className="font-semibold">{row.horseName}</span> — {row.absenceLabel}
+                  <span className="font-semibold">{row.horseName}</span>: {row.absenceLabel}
                   {row.absenceNote ? `: ${row.absenceNote}` : ''}
                 </li>
               ))}
@@ -122,7 +122,7 @@ export default function StartSessionModal({
         {willBlock.length > 0 && (
           <Notice tone="info" icon={<ShieldAlert size={16} />}>
             Lúc bấm Bắt đầu, hệ thống kiểm tra lại được tập cho từng ngựa. Ngựa không đạt được đánh dấu vắng
-            (chặn y tế) kèm lý do — buổi vẫn chạy với các ngựa còn lại.
+            (chặn y tế) kèm lý do, buổi vẫn chạy với các ngựa còn lại.
           </Notice>
         )}
 
@@ -161,7 +161,7 @@ export default function StartSessionModal({
               {willRun.map((row) => (
                 <option key={row.horseId} value={row.horseId}>
                   {row.horseName}
-                  {row.maxHeartRate === undefined ? ' — chưa đặt nhịp tim tối đa' : ` — ngưỡng ${row.maxHeartRate}`}
+                  {row.maxHeartRate === undefined ? ', chưa đặt nhịp tim tối đa' : `, ngưỡng ${row.maxHeartRate}`}
                 </option>
               ))}
             </Select>
@@ -170,19 +170,19 @@ export default function StartSessionModal({
 
         {scenario === 'HEART_OVER' && targetRow && targetRow.maxHeartRate === undefined && (
           <Notice tone="warning" icon={<HeartPulse size={16} />}>
-            {targetRow.horseName} chưa được bác sĩ đặt nhịp tim tối đa nên quy tắc R1 không chạy — sẽ không có cảnh báo
+            {targetRow.horseName} chưa được bác sĩ đặt nhịp tim tối đa nên quy tắc R1 không chạy, sẽ không có cảnh báo
             dù nhịp tim tăng cao.
           </Notice>
         )}
 
         {noThreshold.length > 0 && (
           <p className="text-xs text-amber-700">
-            Chưa đặt nhịp tim tối đa: {noThreshold.map((row) => row.horseName).join(', ')} — R1 tắt với các ngựa này.
+            Chưa đặt nhịp tim tối đa: {noThreshold.map((row) => row.horseName).join(', ')}, R1 tắt với các ngựa này.
           </p>
         )}
 
         <p className="text-xs text-gray-500">
-          Tốc độ mô phỏng hiện tại ×{speed}. Kịch bản và hạt giống được lưu cùng buổi — ai mở màn hình theo dõi cũng thấy
+          Tốc độ mô phỏng hiện tại ×{speed}. Kịch bản và hạt giống được lưu cùng buổi, ai mở màn hình theo dõi cũng thấy
           cùng số liệu.
         </p>
 

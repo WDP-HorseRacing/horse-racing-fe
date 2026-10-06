@@ -77,7 +77,7 @@ export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassRes
                         <Tip
                           content={
                             <span>
-                              Vắng{cell.absenceReason ? ` — ${absenceLabel[cell.absenceReason]}` : ''}
+                              Vắng{cell.absenceReason ? `: ${absenceLabel[cell.absenceReason]}` : ''}
                               {cell.absenceNote ? `. ${cell.absenceNote}` : ''}
                             </span>
                           }

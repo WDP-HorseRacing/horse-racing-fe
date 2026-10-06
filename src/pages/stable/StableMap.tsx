@@ -100,7 +100,7 @@ function toPlacement(horse: HorseListItem): PlacementHorse {
 function zoneDeleteBlockers(zone: MapZone): string[] {
   const list: string[] = [];
   if (zone.horseCount > 0) list.push(`Khu còn ${zone.horseCount} ngựa`);
-  if (zone.stalls.length > 0) list.push(`Khu còn ${zone.stalls.length} ô — xóa hết ô trước`);
+  if (zone.stalls.length > 0) list.push(`Khu còn ${zone.stalls.length} ô, cần xóa hết ô trước`);
   return list;
 }
 

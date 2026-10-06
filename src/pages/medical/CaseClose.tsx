@@ -51,7 +51,7 @@ export default function CaseClose() {
 
   const item = data.data?.item;
   const horse = data.data?.horse;
-  useCrumbs(item && horse ? [{ label: `${horse.name} — ${item.initialDiagnosis}`, to: links.case(item.id) }, { label: 'Đóng bệnh án' }] : null);
+  useCrumbs(item && horse ? [{ label: `${horse.name} · ${item.initialDiagnosis}`, to: links.case(item.id) }, { label: 'Đóng bệnh án' }] : null);
 
   if (!can(user, 'case.close')) return <NotFound message="Chỉ bác sĩ thú y đóng được bệnh án." />;
   if (data.loading && !data.data) return <Skeleton rows={6} />;

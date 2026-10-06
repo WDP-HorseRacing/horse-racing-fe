@@ -327,7 +327,7 @@ export default function HorseList() {
           (list.data ?? []).length === 0 ? (
             <EmptyState
               title={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
-              hint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
+              hint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách. Bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
             />
           ) : (
             <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 p-4 transition-opacity', list.refreshing && 'opacity-60')}>
@@ -345,7 +345,7 @@ export default function HorseList() {
             onRowClick={(row) => navigate(links.horse(row.id))}
             pageSize={12}
             emptyTitle={isOwner ? 'Bạn chưa sở hữu ngựa nào' : 'Không có ngựa phù hợp bộ lọc'}
-            emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách — bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
+            emptyHint={isOwner ? undefined : mine ? 'Đang chỉ xem ngựa bạn phụ trách. Bỏ chọn để xem toàn câu lạc bộ.' : 'Thử bỏ bớt điều kiện lọc hoặc tìm theo tên khác.'}
             rowClassName={(row) => cn(isReadOnlyHorse(row) && 'opacity-60')}
           />
         )}

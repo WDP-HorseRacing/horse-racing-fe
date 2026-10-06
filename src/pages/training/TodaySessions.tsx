@@ -100,7 +100,7 @@ export default function TodaySessions() {
         title="Buổi tập hôm nay"
         description={
           isGroom
-            ? 'Các buổi có ngựa bạn dắt — đánh dấu từng việc ngay khi làm xong.'
+            ? 'Các buổi có ngựa bạn dắt, đánh dấu từng việc ngay khi làm xong.'
             : 'Hệ thống kiểm tra lại được tập cho từng ngựa lúc bấm Bắt đầu.'
         }
         actions={
@@ -201,7 +201,7 @@ export default function TodaySessions() {
               })}
               {emptySlots.length > 0 && (
                 <p className="pl-23 text-xs text-gray-400 tabular-nums sm:pl-30">
-                  {emptySlots.map((slot) => slot.start).join(', ')} — không có buổi
+                  {emptySlots.map((slot) => slot.start).join(', ')}: không có buổi
                 </p>
               )}
             </div>
@@ -397,7 +397,7 @@ function SessionCard({
         ))}
         {row.hiddenCount > 0 && (
           <p className="px-5 py-2.5 text-xs text-gray-500 sm:px-6">
-            Buổi có {row.totalHorses} ngựa — {row.hiddenCount} ngựa khác không do bạn phụ trách.
+            Buổi có {row.totalHorses} ngựa, {row.hiddenCount} ngựa khác không do bạn phụ trách.
           </p>
         )}
         {row.horses.length === 0 && (
@@ -456,8 +456,8 @@ function HorseLine({
         )}
         {horse.stopped && <Pill tone="red">Đã dừng</Pill>}
         {horse.r1Disabled && !absent && !isGroom && (
-          <span className="text-xs text-amber-700" title="Bác sĩ chưa đặt nhịp tim tối đa — quy tắc R1 không chạy">
-            R1 tắt — chưa đặt ngưỡng
+          <span className="text-xs text-amber-700" title="Bác sĩ chưa đặt nhịp tim tối đa, quy tắc R1 không chạy">
+            R1 tắt, chưa đặt ngưỡng
           </span>
         )}
       </div>

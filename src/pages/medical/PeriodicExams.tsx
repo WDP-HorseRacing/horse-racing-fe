@@ -100,7 +100,7 @@ export default function PeriodicExams() {
           rowKey={(row) => row.horseId}
           pageSize={20}
           emptyTitle={all.length === 0 ? 'Chưa có ngựa nào cần khám định kỳ' : 'Không có ngựa phù hợp'}
-          emptyHint={all.length === 0 ? 'Ngựa đang hoạt động hoặc đã giải nghệ đều có hạn khám; ngựa đã chuyển nhượng thì không.' : 'Thử bỏ bộ lọc tình trạng hoặc khu.'}
+          emptyHint={all.length === 0 ? 'Ngựa đang hoạt động hoặc đã giải nghệ đều có hạn khám. Ngựa đã chuyển nhượng hoặc đã mất thì không.' : 'Thử bỏ bộ lọc tình trạng hoặc khu.'}
           columns={[
             {
               key: 'horse',
