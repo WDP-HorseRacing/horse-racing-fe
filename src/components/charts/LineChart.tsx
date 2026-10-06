@@ -6,6 +6,8 @@ export interface Series {
   label: string;
   color: string;
   points: { x: number; y: number }[];
+  /** Ghi chú thêm cho điểm đang rê chuột, ví dụ chênh lệch so với điểm liền trước. Điểm phải xếp theo x tăng dần. */
+  hint?: (point: { x: number; y: number }, previous: { x: number; y: number } | undefined) => string | undefined;
 }
 
 export interface Band {
@@ -31,9 +33,7 @@ export function LineChart({
   formatY?: (value: number) => string;
   threshold?: { value: number; label: string };
 }) {
-  const [hover, setHover] = useState<{ x: number; items: { label: string; value: number; color: string }[] } | null>(
-    null,
-  );
+  const [hover, setHover] = useState<{ x: number; items: { label: string; value: number; color: string; hint?: string }[] } | null>(null);
 
   // Đo bề rộng thật của khung để biểu đồ giãn theo layout, không bị kẹt ở 720px.
   const [box, boxRef] = useState<HTMLDivElement | null>(null);
@@ -100,13 +100,16 @@ export function LineChart({
           const dataX = bounds.minX + ((svgX - padding.left) / innerWidth) * (bounds.maxX - bounds.minX);
           const items = series
             .map((item) => {
-              const nearest = item.points.reduce(
-                (best, point) => (Math.abs(point.x - dataX) < Math.abs(best.x - dataX) ? point : best),
-                item.points[0],
+              if (item.points.length === 0) return null;
+              const index = item.points.reduce(
+                (best, point, at) => (Math.abs(point.x - dataX) < Math.abs(item.points[best].x - dataX) ? at : best),
+                0,
               );
-              return nearest ? { label: item.label, value: nearest.y, color: item.color, x: nearest.x } : null;
+              const nearest = item.points[index];
+              const hint = item.hint?.(nearest, index > 0 ? item.points[index - 1] : undefined);
+              return { label: item.label, value: nearest.y, color: item.color, x: nearest.x, hint };
             })
-            .filter(Boolean) as { label: string; value: number; color: string; x: number }[];
+            .filter(Boolean) as { label: string; value: number; color: string; x: number; hint?: string }[];
           if (items.length > 0) setHover({ x: items[0].x, items });
         }}
       >
@@ -203,6 +206,7 @@ export function LineChart({
             {hover.items.map((item) => (
               <span key={item.label} className="tabular-nums" style={{ color: item.color }}>
                 {item.label}: {formatY ? formatY(item.value) : Math.round(item.value * 100) / 100}
+                {item.hint && <span className="font-normal text-gray-500"> ({item.hint})</span>}
               </span>
             ))}
           </span>

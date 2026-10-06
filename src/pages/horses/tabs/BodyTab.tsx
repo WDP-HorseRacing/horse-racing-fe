@@ -2,7 +2,7 @@
 // Form ghi nhiều chỉ số trong một lần đo (backend hỏi xác nhận khi ngoài khoảng bình thường — mã 422),
 // bác sĩ xóa bản ghi ghi sai kèm lý do. Bản ghi từ buổi khám chỉ xử lý được ở hồ sơ y tế.
 import { useState } from 'react';
-import { Plus, Stethoscope, Trash2 } from 'lucide-react';
+import { Minus, Plus, Stethoscope, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
 import { addMeasurements, deleteMeasurement, listMeasurements } from '../../../api/horses';
 import type { CreatedMeasurement, Measurement, MeasurementType } from '../../../api/types';
@@ -30,6 +30,7 @@ import { addDays, formatDateShort, formatDateTime } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { ReasonDialog } from '../../stable/components/PlacementDialogs';
 import { DateTimePicker } from '../../../components/ui/DatePicker';
+import { measurementDelta } from './body-delta';
 
 const TYPES: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 // Bốn biểu đồ dùng chung một màu — màu chỉ để nói "bất thường", không để phân biệt loại chỉ số.
@@ -64,8 +65,8 @@ const unitText = (type: MeasurementType) => (measurementSpec[type].unit === '/9'
 
 function alertToast(created: CreatedMeasurement[]) {
   const alerts = created.flatMap((item) => item.alerts);
-  if (alerts.some((item) => item.alert === 'FEVER')) return 'Đã lưu. Thân nhiệt vượt ngưỡng sốt — đã báo khẩn bác sĩ, HT của khu và tạo yêu cầu khám khẩn';
-  if (alerts.some((item) => item.alert === 'WEIGHT_DROP')) return 'Đã lưu. Cân nặng giảm hơn 5% trong 14 ngày — đã báo bác sĩ, HT và tạo yêu cầu khám';
+  if (alerts.some((item) => item.alert === 'FEVER')) return 'Đã lưu. Thân nhiệt vượt ngưỡng sốt, đã báo khẩn bác sĩ, HLV trưởng của khu và tạo yêu cầu khám khẩn';
+  if (alerts.some((item) => item.alert === 'WEIGHT_DROP')) return 'Đã lưu. Cân nặng giảm hơn 5% trong 14 ngày, đã báo bác sĩ, HLV trưởng và tạo yêu cầu khám';
   return undefined;
 }
 
@@ -98,13 +99,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   const entered = TYPES.filter((type) => values[type].trim() !== '').map((type) => ({ type, value: Number(values[type].replace(',', '.')) }));
   const invalid = entered.find(
     (item) => Number.isNaN(item.value) || item.value < measurementSpec[item.type].hardMin || item.value > measurementSpec[item.type].hardMax,
-  );
-
-  // Kiểm tra trùng ngày: mỗi ngày chỉ được ghi tay 1 lần cho mỗi loại chỉ số
-  const getLocalDate = (isoString: string) => new Date(isoString).toLocaleDateString('en-CA'); // YYYY-MM-DD local
-  const selectedDateStr = measuredAt ? getLocalDate(measuredAt) : '';
-  const duplicate = entered.find((item) =>
-    rows.some((row) => row.type === item.type && getLocalDate(row.measuredAt) === selectedDateStr),
   );
 
   const dateValue = measuredAt ? new Date(measuredAt).getTime() : 0;
@@ -140,7 +134,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
     }
   };
 
-  const latest = (type: MeasurementType) => rows.find((row) => row.type === type);
+  // Các lần đo của một chỉ số, mới nhất lên trên: lần đầu là số hiện tại, lần thứ hai là "lần đo trước".
+  const byType = (type: MeasurementType) => rows.filter((row) => row.type === type).sort((a, b) => b.measuredAt.localeCompare(a.measuredAt));
 
   const columns: Column<Row>[] = [
     {
@@ -216,7 +211,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-500">Dải xám trên biểu đồ là khoảng bình thường; giá trị ngoài khoảng được đánh dấu bất thường.</p>
+        <p className="text-sm text-gray-500">Dải xám trên biểu đồ là khoảng bình thường. Giá trị ngoài khoảng được đánh dấu bất thường.</p>
         {canRecord && (
           <Button onClick={openForm}>
             <Plus size={16} /> Ghi chỉ số
@@ -227,7 +222,10 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <div className="grid gap-4 lg:grid-cols-12">
         {TYPES.map((type) => {
           const info = measurementSpec[type];
-          const record = latest(type);
+          const history = byType(type);
+          const record = history[0];
+          const previous = history[1];
+          const delta = record ? measurementDelta(type, record.value, previous?.value) : undefined;
           const severity = record ? severityOf(record) : null;
           const points = rows
             .filter((row) => row.type === type)
@@ -253,6 +251,19 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                       </span>
                     )}
                   </p>
+                  {delta && previous && (
+                    <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-gray-500">
+                      {delta.direction === 'up' ? (
+                        <TrendingUp size={13} className="text-gray-400" aria-hidden />
+                      ) : delta.direction === 'down' ? (
+                        <TrendingDown size={13} className="text-gray-400" aria-hidden />
+                      ) : (
+                        <Minus size={13} className="text-gray-400" aria-hidden />
+                      )}
+                      <span className="font-semibold tabular-nums text-gray-800">{delta.text}</span>
+                      <span>so với lần đo {formatDateShort(previous.measuredAt)}</span>
+                    </p>
+                  )}
                 </div>
                 <p className="text-right text-xs text-gray-500">
                   Bình thường {info.min}–{info.max} {unitText(type)}
@@ -261,7 +272,15 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
               </div>
               <LineChart
                 height={type === 'WEIGHT' || type === 'BODY_CONDITION' ? 200 : 180}
-                series={[{ key: type, label: info.name, color: LINE_COLOR, points }]}
+                series={[
+                  {
+                    key: type,
+                    label: info.name,
+                    color: LINE_COLOR,
+                    points,
+                    hint: (point, before) => (before ? measurementDelta(type, point.y, before.y)?.text : undefined),
+                  },
+                ]}
                 band={{ from: info.min, to: info.max }}
                 threshold={type === 'TEMPERATURE' ? { value: TEMP_ALERT_C, label: `Ngưỡng sốt ${TEMP_ALERT_C} °C` } : undefined}
                 formatX={(value) => formatDateShort(new Date(value))}
@@ -293,7 +312,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
             </Button>
             <Button
               onClick={() => save(false)}
-              disabled={pending || entered.length === 0 || !!invalid || !!duplicate || !!dateError || !measuredAt}
+              disabled={pending || entered.length === 0 || !!invalid || !!dateError || !measuredAt}
             >
               {pending ? 'Đang lưu…' : 'Lưu chỉ số'}
             </Button>
@@ -301,9 +320,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
         }
       >
         <div className="space-y-4">
-          {duplicate && (
-            <ErrorBox message={`Đã có bản ghi ${measurementSpec[duplicate.type].name.toLowerCase()} trong ngày này. Ghi sai vui lòng xóa bản ghi cũ rồi đo lại.`} />
-          )}
           <div className="grid gap-4 sm:grid-cols-2">
             {TYPES.map((type) => {
               const spec = measurementSpec[type];
@@ -355,7 +371,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
           deleting && (
             <p>
               Xóa bản ghi {measurementSpec[deleting.type].name.toLowerCase()} {formatValue(deleting.type, deleting.value)} {unitText(deleting.type)} lúc{' '}
-              {formatDateTime(deleting.measuredAt)}. Bản ghi bị ẩn khỏi lịch sử và mốc cảnh báo sụt cân; lý do được lưu vào nhật ký.
+              {formatDateTime(deleting.measuredAt)}. Bản ghi bị ẩn khỏi lịch sử và mốc cảnh báo sụt cân. Lý do được lưu vào nhật ký.
             </p>
           )
         }
