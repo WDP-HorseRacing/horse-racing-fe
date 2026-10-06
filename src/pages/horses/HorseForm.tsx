@@ -37,6 +37,7 @@ import {
 } from '../../components/ui';
 import { distanceHint, distanceLabel, lifecycleLabel, sexLabel } from '../../lib/labels';
 import { fieldFromMessage } from '../../lib/errors';
+import { PARENT_AGE_GAP_YEARS, birthDateError, birthDateRange, parentOldEnough } from '../../lib/horse-rules';
 import { formatDate, toDateKey } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { links } from '../../lib/links';
@@ -82,8 +83,8 @@ const OTHER = '__other__';
 const parentLabel = (item: HorseListItem) =>
   `${item.name}${item.dateOfBirth ? ` · ${item.dateOfBirth.slice(0, 4)}` : ''}${item.lifecycleStatus !== 'ACTIVE' ? ` · ${lifecycleLabel[item.lifecycleStatus]}` : ''}`;
 
-/** Cha/mẹ hợp lệ theo ngày sinh: sinh trước ngựa con (khi cả hai có ngày sinh). */
-const bornBefore = (parent: HorseListItem, childBirth: string) => !childBirth || !parent.dateOfBirth || parent.dateOfBirth < childBirth;
+/** Các ô của biểu mẫu: lỗi backend gắn tên ô khác (ví dụ ownerId khi ô đang khóa) thì hiện ở khung lỗi chung. */
+const FIELD_KEYS = new Set<string>([...Object.keys(EMPTY), 'mediaId']);
 
 function ageText(dateOfBirth: string) {
   const born = new Date(`${dateOfBirth}T00:00:00`);
@@ -230,8 +231,9 @@ export default function HorseForm() {
   const [chipCheck, setChipCheck] = useState<{ value: string; holder?: string } | null>(null);
 
   // Lỗi backend thuộc về một ô (trùng chip, cha mẹ sai…): hiện dưới ô đó, mất khi người dùng sửa ô.
+  // Backend trả tên ô trong `errors`; lỗi không kèm tên ô thì đoán theo câu lỗi.
   const rawField = action.field ?? fieldFromMessage(action.error);
-  const serverField = rawField && rawField !== 'confirmAbnormal' ? (rawField as FieldKey) : undefined;
+  const serverField = rawField && FIELD_KEYS.has(rawField) ? (rawField as FieldKey) : undefined;
 
   // Ảnh xem trước là object URL: thu hồi khi đổi ảnh hoặc rời trang.
   useEffect(() => {
@@ -266,11 +268,15 @@ export default function HorseForm() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if (serverField === key) action.clearError();
+    if (serverField === key || action.fieldErrors[key]) action.clearError();
   };
   const touch = (key: FieldKey) => setTouched((current) => (current[key] ? current : { ...current, [key]: true }));
 
   const today = toDateKey(now());
+  const birthRange = birthDateRange(today);
+  const savedBirth = horse?.dateOfBirth;
+  const savedSire = horse?.sireId;
+  const savedDam = horse?.damId;
   const sires = parents.data?.sires ?? [];
   const dams = parents.data?.dams ?? [];
   const sire = sires.find((item) => item.id === form.sireId);
@@ -291,9 +297,13 @@ export default function HorseForm() {
     if (form.breed.trim() && !onlyLetters.test(form.breed)) result.breed = 'Chỉ được dùng chữ cái và khoảng trắng';
     if (form.color.trim() && !onlyLetters.test(form.color)) result.color = 'Chỉ được dùng chữ cái và khoảng trắng';
 
+    // Như backend: chỉ kiểm khoảng 1–40 tuổi và cha mẹ khi tạo mới hoặc khi trường đó thật sự đổi,
+    // để hồ sơ cũ vẫn sửa được các trường khác.
+    const changed = (value: string, saved: string | null | undefined) => !editing || (value || null) !== (saved || null);
+    const birthChanged = changed(form.dateOfBirth, savedBirth);
     if (form.dateOfBirth) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth)) result.dateOfBirth = 'Ngày không hợp lệ';
-      else if (form.dateOfBirth > today) result.dateOfBirth = 'Ngày sinh không được ở tương lai';
+      else if (birthChanged) result.dateOfBirth = birthDateError(form.dateOfBirth, today);
     }
     const chip = form.microchipId.trim();
     if (chip) {
@@ -301,23 +311,24 @@ export default function HorseForm() {
       else if (chipCheck?.value === chip && chipCheck.holder) result.microchipId = `Số chip đã dùng cho ${chipCheck.holder}`;
     }
     const parentError = (parent: HorseListItem | undefined) =>
-      parent && !bornBefore(parent, form.dateOfBirth)
-        ? `${parent.name} sinh ngày ${formatDate(parent.dateOfBirth)}, không trước ngày sinh của ngựa này`
+      parent && !parentOldEnough(parent.dateOfBirth, form.dateOfBirth)
+        ? `${parent.name} sinh ngày ${formatDate(parent.dateOfBirth)}, chưa lớn hơn ngựa này ${PARENT_AGE_GAP_YEARS} tuổi`
         : undefined;
-    const sireError = parentError(sire);
-    const damError = parentError(dam);
+    const sireError = birthChanged || changed(form.sireId, savedSire) ? parentError(sire) : undefined;
+    const damError = birthChanged || changed(form.damId, savedDam) ? parentError(dam) : undefined;
     if (sireError) result.sireId = sireError;
     if (damError) result.damId = damError;
     if (barn && barnBlocker(barn)) result.barnId = `${barn.name}: ${barnBlocker(barn)!.toLowerCase()}`;
     return result;
-  }, [aptitudeOnly, form, today, chipCheck, sire, dam, barn]);
+  }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam]);
 
-  /** Lỗi hiển thị: ô đã chạm hoặc đã bấm lưu; lỗi backend luôn hiện. */
-  const err = (key: FieldKey) => (serverField === key ? action.error : touched[key] || attempted ? errors[key] : undefined);
+  /** Lỗi hiển thị: ô đã chạm hoặc đã bấm lưu. Lỗi backend luôn hiện, ưu tiên lỗi theo từng ô. */
+  const err = (key: FieldKey) =>
+    action.fieldErrors[key] ?? (serverField === key ? action.error : touched[key] || attempted ? errors[key] : undefined);
 
-  // Danh sách chỉ gồm cha mẹ hợp lệ; ngựa đang được chọn vẫn giữ để ô không bị trống (lỗi hiện ở ô đó).
-  const sireOptions = sires.filter((item) => bornBefore(item, form.dateOfBirth) || item.id === form.sireId);
-  const damOptions = dams.filter((item) => bornBefore(item, form.dateOfBirth) || item.id === form.damId);
+  // Danh sách chỉ gồm cha mẹ đủ lớn; ngựa đang được chọn vẫn giữ để ô không bị trống (lỗi hiện ở ô đó).
+  const sireOptions = sires.filter((item) => parentOldEnough(item.dateOfBirth, form.dateOfBirth) || item.id === form.sireId);
+  const damOptions = dams.filter((item) => parentOldEnough(item.dateOfBirth, form.dateOfBirth) || item.id === form.damId);
 
   const checkChip = async () => {
     touch('microchipId');
@@ -546,10 +557,11 @@ export default function HorseForm() {
                   <Field label="Màu lông" name="color" error={err('color')} className="sm:col-span-3">
                     <PresetSelect options={COLORS} value={form.color} onChange={(value) => set('color', value)} maxLength={40} placeholder="Màu lông" emptyLabel="Chưa chọn" />
                   </Field>
-                  <Field label="Ngày sinh" name="dateOfBirth" error={err('dateOfBirth')} className="sm:col-span-3">
+                  <Field label="Ngày sinh" name="dateOfBirth" error={err('dateOfBirth')} hint="Ngựa từ 1 đến 40 tuổi" className="sm:col-span-3">
                     <DatePicker
                       value={form.dateOfBirth}
-                      max={today}
+                      min={birthRange.min}
+                      max={birthRange.max}
                       defaultView="year"
                       defaultMonth={birthDefault}
                       onChange={(value) => set('dateOfBirth', value)}
