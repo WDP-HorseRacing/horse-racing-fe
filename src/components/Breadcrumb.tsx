@@ -7,6 +7,7 @@ import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import { Check, ChevronRight } from 'lucide-react';
 import { create } from 'zustand';
 import { cn } from './ui';
+import { DEFAULT_TITLE } from '../lib/role-theme';
 
 export interface Crumb {
   label: string;
@@ -52,7 +53,11 @@ function defaultTail(pathname: string, basePath: string): Crumb[] {
   return [{ label: 'Chi tiết' }];
 }
 
-export function Breadcrumbs({ groups }: { groups: NavLike[] }) {
+/**
+ * `titlePrefix`: tên vai trò đặt ở đầu tiêu đề tab trình duyệt, ví dụ "Bác sĩ · Hồ sơ y tế · HorseRacing".
+ * Khi demo bằng nhiều tab, nhìn tiêu đề tab là biết tab đó của vai trò nào.
+ */
+export function Breadcrumbs({ groups, titlePrefix }: { groups: NavLike[]; titlePrefix?: string }) {
   const { pathname } = useLocation();
   const declared = useCrumbStore((state) => state.declared);
 
@@ -79,6 +84,13 @@ export function Breadcrumbs({ groups }: { groups: NavLike[] }) {
     const trail = all.map((crumb, index) => (index === all.length - 1 || crumb.to === pathname ? { label: crumb.label } : crumb));
     return { trail, siblings: !own?.root && match?.group?.group ? match.group.items : undefined };
   }, [groups, pathname, declared]);
+
+  const pageLabel = trail[trail.length - 1]?.label;
+  useEffect(() => {
+    document.title = [titlePrefix, pageLabel, 'HorseRacing'].filter(Boolean).join(' · ');
+  }, [titlePrefix, pageLabel]);
+  // Rời khung ứng dụng (đăng xuất) thì trả tiêu đề mặc định.
+  useEffect(() => () => void (document.title = DEFAULT_TITLE), []);
 
   if (trail.length === 0) return <span className="truncate text-sm font-semibold text-gray-900">HorseRacing</span>;
 

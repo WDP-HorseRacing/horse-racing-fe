@@ -1,4 +1,4 @@
-// Logo HorseRacing: đầu ngựa nét mảnh màu trắng kem trên ô xanh cỏ.
+// Logo HorseRacing: đầu ngựa nét mảnh màu trắng kem trên ô màu (xanh cỏ, hoặc màu vai trò trong ứng dụng).
 import { useId } from 'react';
 import { cn } from './ui';
 import { HORSE_PATH, HORSE_VIEWBOX } from './horse-path';
@@ -28,25 +28,34 @@ export function HorseMark({ size = 20, className = '' }: { size?: number; stroke
   return <HorseLine size={size} className={className} />;
 }
 
-/** Ô logo bo góc nền xanh cỏ, nét ngựa trắng pha chút vàng kem; kèm chữ "HorseRacing" nếu cần. */
+/**
+ * Ô logo bo góc, nét ngựa trắng pha chút vàng kem, kèm chữ "HorseRacing" nếu cần.
+ * Mặc định nền xanh cỏ. Trong ứng dụng, nền đổi theo màu vai trò để người dùng biết mình đang ở vai trò nào.
+ */
 export function Logo({
   size = 36,
   withText = true,
   textClassName = 'text-gray-900',
   className = '',
+  color = '#047857',
+  shadow = 'rgba(4,120,87,0.7)',
 }: {
   size?: number;
   withText?: boolean;
   textClassName?: string;
   className?: string;
+  /** Màu nền ô logo. */
+  color?: string;
+  /** Màu bóng đổ dưới ô logo. */
+  shadow?: string;
 }) {
   const gradient = useId();
   const inner = Math.round(size * 0.8);
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <span
-        className="flex shrink-0 items-center justify-center bg-emerald-700 shadow-[0_8px_18px_-10px_rgba(4,120,87,0.7)]"
-        style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
+        className="flex shrink-0 items-center justify-center transition-colors duration-300"
+        style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), backgroundColor: color, boxShadow: `0 8px 18px -10px ${shadow}` }}
       >
         <svg width={0} height={0} className="absolute" aria-hidden>
           <defs>
