@@ -93,7 +93,7 @@ export default function SessionPage() {
 
       {header.status === 'CANCELLED' && (
         <Notice tone="info">
-          <p className="font-semibold">Buổi đã hủy{header.cancelKindLabel ? ` — ${header.cancelKindLabel}` : ''}</p>
+          <p className="font-semibold">Buổi đã hủy{header.cancelKindLabel ? `: ${header.cancelKindLabel}` : ''}</p>
           <p className="mt-0.5">{header.cancelReason ?? 'Không ghi lý do'}</p>
           <p className="mt-1 text-xs opacity-75">
             {header.cancelledByName ?? 'Hệ thống'} · {formatDateTime(header.cancelledAt)}. Hủy buổi áp dụng cho cả lớp.

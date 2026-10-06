@@ -58,8 +58,8 @@ export function canTrain(db: Database, horse: Horse, intensity: TrainingIntensit
       code: 'HEALTH',
       reason:
         horse.healthStatus === 'UNDER_OBSERVATION'
-          ? `Sức khỏe: ${healthLabel[horse.healthStatus]} — chỉ được tập Nhẹ và Trung bình, không được ${intensityLabel[intensity].toLowerCase()}`
-          : `Sức khỏe: ${healthLabel[horse.healthStatus]} — không được tập`,
+          ? `Sức khỏe: ${healthLabel[horse.healthStatus]}, chỉ được tập Nhẹ và Trung bình, không được ${intensityLabel[intensity].toLowerCase()}`
+          : `Sức khỏe: ${healthLabel[horse.healthStatus]}, không được tập`,
     };
   }
   return { allowed: true };
@@ -101,13 +101,13 @@ export function checkDayLimits(sameDay: DayItem[], candidate: DayItem): RuleChec
     return { allowed: false, reason: `Trùng khung giờ với ${clash.label ?? 'buổi khác'} ngày ${formatDate(candidate.date)}` };
   }
   if (sameDay.length >= 2) {
-    return { allowed: false, reason: `Ngày ${formatDate(candidate.date)} ngựa đã có 2 buổi — tối đa 2 buổi mỗi ngày` };
+    return { allowed: false, reason: `Ngày ${formatDate(candidate.date)} ngựa đã có 2 buổi, tối đa 2 buổi mỗi ngày` };
   }
   const mediumPlus = sameDay.filter((item) => item.intensity !== 'LIGHT');
   if (candidate.intensity !== 'LIGHT' && mediumPlus.length >= 1) {
     return {
       allowed: false,
-      reason: `Ngày ${formatDate(candidate.date)} đã có 1 buổi từ Trung bình trở lên — buổi còn lại phải là Nhẹ`,
+      reason: `Ngày ${formatDate(candidate.date)} đã có 1 buổi từ Trung bình trở lên, buổi còn lại phải là Nhẹ`,
     };
   }
   return { allowed: true };

@@ -21,7 +21,7 @@ export class RouteErrorBoundary extends Component<{ children: ReactNode }, State
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-3xl bg-white px-6 py-12 text-center ring-1 ring-gray-200/80">
         <p className="text-lg font-semibold text-gray-900">{chunk ? 'Có phiên bản mới của trang' : 'Trang gặp lỗi khi hiển thị'}</p>
-        <p className="text-sm text-gray-500">{chunk ? 'Tải lại trang để dùng bản mới nhất.' : 'Thử lại; nếu vẫn lỗi, tải lại trang hoặc báo nhóm phát triển.'}</p>
+        <p className="text-sm text-gray-500">{chunk ? 'Tải lại trang để dùng bản mới nhất.' : 'Thử lại. Nếu vẫn lỗi, tải lại trang hoặc báo nhóm phát triển.'}</p>
         <button
           type="button"
           onClick={() => (chunk ? window.location.reload() : this.setState({ error: undefined }))}

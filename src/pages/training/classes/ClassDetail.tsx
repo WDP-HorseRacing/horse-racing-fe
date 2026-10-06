@@ -95,7 +95,7 @@ export default function ClassDetail() {
     const result = await action.run(() => (classAction === 'end' ? endClassEarly(data.id, reason) : cancelClass(data.id, reason)));
     if (result) {
       toast.push(
-        `${classAction === 'end' ? 'Đã kết thúc sớm lớp' : 'Đã hủy lớp'} — ${result.cancelledSessions} buổi chưa diễn ra đã bị hủy`,
+        `${classAction === 'end' ? 'Đã kết thúc sớm lớp' : 'Đã hủy lớp'}, ${result.cancelledSessions} buổi chưa diễn ra đã bị hủy`,
         'success',
       );
       setClassAction(null);
@@ -192,7 +192,7 @@ export default function ClassDetail() {
           </p>
           <Meter value={data.enrolled} max={data.capacity} className="mt-1.5" />
           <p className="mt-1.5 text-xs text-gray-500">
-            {data.enrolled >= data.capacity ? 'Đủ sĩ số — đăng ký mới bị chặn' : `Còn ${data.capacity - data.enrolled} chỗ`}
+            {data.enrolled >= data.capacity ? 'Đủ sĩ số, đăng ký mới bị chặn' : `Còn ${data.capacity - data.enrolled} chỗ`}
           </p>
         </div>
         <div className="min-w-0">
@@ -283,7 +283,7 @@ export default function ClassDetail() {
         consequences={[
           'Đăng ký được đóng, ghi ngày rút và lý do',
           'Các buổi chưa diễn ra của lớp biến mất khỏi lịch của ngựa này',
-          'Không buổi học nào bị hủy; kết quả các buổi đã học giữ nguyên',
+          'Không buổi học nào bị hủy, kết quả các buổi đã học giữ nguyên',
           'Chủ ngựa và Groom phụ trách nhận thông báo',
         ]}
         label="Lý do rút"
@@ -307,8 +307,8 @@ export default function ClassDetail() {
           )
         }
         consequences={[
-          `Buổi bị hủy cho CẢ LỚP — ${cancellingSession?.horseCount ?? 0} ngựa đều không tập buổi này`,
-          'Muốn cho riêng một con nghỉ thì không hủy buổi — đánh dấu vắng con đó ở trang buổi học',
+          `Buổi bị hủy cho CẢ LỚP, ${cancellingSession?.horseCount ?? 0} ngựa đều không tập buổi này`,
+          'Muốn cho riêng một con nghỉ thì không hủy buổi, đánh dấu vắng con đó ở trang buổi học',
           'Groom của các ngựa trong buổi nhận thông báo',
         ]}
         label="Lý do hủy buổi"

@@ -162,7 +162,7 @@ export default function LiveBoard({ sessionId, onEnded }: { sessionId: string; o
 
               {!current.r1Enabled && (
                 <p className="text-sm text-amber-800">
-                  R1 tắt — chưa đặt ngưỡng nhịp tim tối đa cho {current.horseName}. Buổi đang chạy dùng giá trị đã chốt lúc
+                  R1 tắt, chưa đặt ngưỡng nhịp tim tối đa cho {current.horseName}. Buổi đang chạy dùng giá trị đã chốt lúc
                   bắt đầu.
                 </p>
               )}
@@ -258,7 +258,7 @@ export default function LiveBoard({ sessionId, onEnded }: { sessionId: string; o
                 {data.absent.map((item) => (
                   <li key={item.horseId}>
                     <span className="font-semibold text-gray-800">{item.horseName}</span>
-                    <span className="text-amber-800"> — {item.reasonLabel}</span>
+                    <span className="text-amber-800">, {item.reasonLabel}</span>
                     {item.note && <p className="text-xs text-gray-500">{item.note}</p>}
                   </li>
                 ))}
@@ -398,7 +398,7 @@ function HorseTile({ horse, active, onSelect }: { horse: LiveHorse; active: bool
         )}
         {!horse.r1Enabled && (
           <span className="text-amber-700" title="Chưa đặt ngưỡng nhịp tim tối đa">
-            R1 tắt — chưa đặt ngưỡng
+            R1 tắt, chưa đặt ngưỡng
           </span>
         )}
       </div>

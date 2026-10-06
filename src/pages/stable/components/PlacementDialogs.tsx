@@ -134,7 +134,7 @@ export function AssignZoneDialog({
               <ul className="space-y-1.5">
                 <li>
                   Ngựa vào danh sách "Chờ xếp ô" của {data.toBarnName}
-                  {data.newHeadTrainerName ? `; HT ${data.newHeadTrainerName} xếp ô và nhận thông báo.` : '.'}
+                  {data.newHeadTrainerName ? `. HLV trưởng ${data.newHeadTrainerName} xếp ô và nhận thông báo.` : '.'}
                 </li>
                 {data.stallReleased && <li>Ô {data.stallReleased} được trả về trống.</li>}
                 {isChange && (
@@ -144,7 +144,7 @@ export function AssignZoneDialog({
                       : 'Không phải rút khỏi lớp nào (khu mới cùng HT hoặc ngựa chưa học lớp)'}
                   </li>
                 )}
-                <li>{data.groomKept ? `Giữ nguyên Groom ${data.groomKept}` : 'Chưa có Groom — HT phân công khi xếp ô'}</li>
+                <li>{data.groomKept ? `Giữ nguyên Groom ${data.groomKept}` : 'Chưa có Groom, HLV trưởng phân công khi xếp ô'}</li>
               </ul>
             </div>
           </div>
@@ -281,7 +281,7 @@ export function AssignStallDialog({
         <p className="flex items-start gap-2 rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600">
           <UserRound size={15} className="mt-0.5 shrink-0 text-gray-400" />
           {moving ? (
-            <span>Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}; ô cũ được trả về trống.</span>
+            <span>Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}, ô cũ được trả về trống.</span>
           ) : currentGroom.loading ? (
             <span className="text-gray-400">Đang kiểm tra Groom phụ trách…</span>
           ) : currentGroom.data ? (

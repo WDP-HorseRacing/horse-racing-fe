@@ -22,7 +22,7 @@ export default function RosterStatusView({ detail, onChanged }: { detail: Sessio
             <div>
               <p className="font-bold">Dừng ngựa ngay: {alert.horseName}</p>
               <p className="text-sm text-red-100">
-                {alert.ruleLabel} — {alert.text}. Cho ngựa đi bộ chậm và chờ HT hoặc bác sĩ xác nhận.
+                {alert.ruleLabel}: {alert.text}. Cho ngựa đi bộ chậm và chờ HT hoặc bác sĩ xác nhận.
               </p>
             </div>
           </div>

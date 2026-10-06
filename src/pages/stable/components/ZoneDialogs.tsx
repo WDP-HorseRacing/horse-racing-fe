@@ -93,7 +93,7 @@ export function ZoneFormDialog({
         <Field
           label="Sức chứa (số ô tối đa)"
           error={capacityInvalid ? `Sức chứa là số nguyên từ 1 đến ${MAX_STALLS_PER_BARN}` : undefined}
-          hint={`Không tạo được nhiều ô hơn sức chứa. Tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3); để trống = ${MAX_STALLS_PER_BARN} ô.`}
+          hint={`Không tạo được nhiều ô hơn sức chứa. Tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3), để trống = ${MAX_STALLS_PER_BARN} ô.`}
         >
           <Input inputMode="numeric" value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder={`Để trống = ${MAX_STALLS_PER_BARN} ô`} />
         </Field>
@@ -103,7 +103,7 @@ export function ZoneFormDialog({
         {!zone && (
           <Field label="HT phụ trách" hint="Có thể gán sau. Khu chưa có HT thì chưa nhận ngựa.">
             <Select value={headTrainerId} onChange={(event) => setHeadTrainerId(event.target.value)}>
-              <option value="">— Chưa gán —</option>
+              <option value="">Chưa gán</option>
               {headTrainers.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.fullName}
@@ -304,7 +304,7 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem
             ))}
           </Select>
         </Field>
-        <Notice tone="info">Khu còn ngựa thì không chuyển sang Bảo trì hoặc Đóng — hãy đổi khu cho các ngựa trước. Khu không hoạt động không nhận ngựa mới.</Notice>
+        <Notice tone="info">Khu còn ngựa thì không chuyển sang Bảo trì hoặc Đóng. Hãy đổi khu cho các ngựa trước. Khu không hoạt động không nhận ngựa mới.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
@@ -400,7 +400,7 @@ export function AddStallsDialog({
       onClose();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Đã xảy ra lỗi';
-      setError(done.length ? `Đã thêm ${done.join(', ')}; dừng ở ô tiếp theo: ${message}` : message);
+      setError(done.length ? `Đã thêm ${done.join(', ')}. Dừng ở ô tiếp theo: ${message}` : message);
       if (done.length) {
         // Gợi ý lại số bắt đầu và số ô còn lại để bấm thử tiếp không trùng mã đã tạo.
         const all = [...created, ...done];

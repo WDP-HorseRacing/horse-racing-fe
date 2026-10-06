@@ -176,7 +176,7 @@ function EditorForm({
           </Link>
         }
         title={programId ? `Sửa giáo án "${initial?.name}"` : 'Soạn giáo án mới'}
-        description="Xếp môn học vào từng giai đoạn kèm số buổi mỗi tuần; ngày cụ thể chỉ sinh ra khi mở lớp."
+        description="Xếp môn học vào từng giai đoạn kèm số buổi mỗi tuần. Ngày cụ thể chỉ sinh ra khi mở lớp."
         actions={
           <Button onClick={submit} disabled={action.pending || (touched && blocking)}>
             <Save size={16} /> {action.pending ? 'Đang lưu…' : programId ? 'Lưu giáo án' : 'Tạo giáo án'}
@@ -277,7 +277,7 @@ function EditorForm({
                               <option value="">Chọn môn học…</option>
                               {subjects.map((option) => (
                                 <option key={option.id} value={option.id}>
-                                  {option.name} — {intensityLabel[option.intensity]} · {workoutLine(option.distanceM, option.repetitions)}
+                                  {option.name} · {intensityLabel[option.intensity]} · {workoutLine(option.distanceM, option.repetitions)}
                                 </option>
                               ))}
                             </Select>
@@ -426,7 +426,7 @@ function EditorForm({
 
           {warnings.length > 0 && (
             <Notice tone="warning" icon={<AlertTriangle size={15} />}>
-              <p className="font-semibold">Cảnh báo — vẫn lưu được</p>
+              <p className="font-semibold">Cảnh báo: vẫn lưu được</p>
               <ul className="mt-1.5 space-y-1.5">
                 {warnings.map((warning) => (
                   <li key={warning} className="flex gap-2">

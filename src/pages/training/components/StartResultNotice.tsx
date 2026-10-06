@@ -21,7 +21,7 @@ export default function StartResultNotice({
           </p>
           {result.absent.map((item) => (
             <p key={item.horseName}>
-              <span className="font-semibold">{item.horseName}</span> vắng — {item.reason}
+              <span className="font-semibold">{item.horseName}</span> vắng: {item.reason}
               {item.auto ? ' (hệ thống đánh dấu lúc bắt đầu)' : ''}
             </p>
           ))}

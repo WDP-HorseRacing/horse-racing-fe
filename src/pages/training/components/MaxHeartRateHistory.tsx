@@ -33,7 +33,7 @@ function HistoryBody({ horseId }: { horseId: string }) {
             <span className="ml-1 text-sm font-medium text-gray-500">nhịp/phút</span>
           </p>
         ) : (
-          <p className="mt-1 text-lg font-semibold text-amber-700">Chưa đặt — R1 không chạy</p>
+          <p className="mt-1 text-lg font-semibold text-amber-700">Chưa đặt, R1 không chạy</p>
         )}
       </div>
       {data.history.length === 0 ? (

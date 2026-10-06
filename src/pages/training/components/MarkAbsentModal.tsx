@@ -53,7 +53,7 @@ export default function MarkAbsentModal({
       open={open}
       onClose={onClose}
       title={byGroom ? 'Báo không thực hiện được' : 'Cho ngựa nghỉ buổi này'}
-      description={horse ? `${horse.name} — chỉ con ngựa này vắng, buổi của lớp vẫn diễn ra.` : undefined}
+      description={horse ? `${horse.name}: chỉ con ngựa này vắng, buổi của lớp vẫn diễn ra.` : undefined}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

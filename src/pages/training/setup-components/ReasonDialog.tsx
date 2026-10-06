@@ -49,7 +49,7 @@ export function ReasonDialog({
       onClose={onClose}
     >
       <div className="space-y-3">
-        <Field label={label} required hint="Bắt buộc — được ghi vào nhật ký thao tác">
+        <Field label={label} required hint="Bắt buộc, được ghi vào nhật ký thao tác">
           <Textarea
             autoFocus
             value={reason}

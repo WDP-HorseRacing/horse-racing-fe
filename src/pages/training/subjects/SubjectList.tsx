@@ -135,7 +135,7 @@ export default function SubjectList() {
       className: 'w-24 text-right',
       render: (row) => (
         <div className="flex justify-end gap-1">
-          <Tip content="Sửa môn học — buổi đã sinh giữ nguyên nội dung cũ">
+          <Tip content="Sửa môn học, buổi đã sinh giữ nguyên nội dung cũ">
             <button
               type="button"
               aria-label={`Sửa ${row.name}`}
@@ -173,7 +173,7 @@ export default function SubjectList() {
     <div className="space-y-6">
       <PageHeader
         title="Môn học"
-        description="Nội dung huấn luyện dùng lại được — giáo án xếp các môn này theo giai đoạn."
+        description="Nội dung huấn luyện dùng lại được, giáo án xếp các môn này theo giai đoạn."
         actions={
           canManage ? (
             <Button
@@ -201,7 +201,7 @@ export default function SubjectList() {
               <span className="font-medium text-gray-900 tabular-nums">{unused}</span> chưa dùng, xóa được
             </span>
           )}
-          {!canManage && <span className="text-gray-500">Chỉ xem — thêm, sửa, xóa môn học là việc của huấn luyện viên trưởng</span>}
+          {!canManage && <span className="text-gray-500">Chỉ xem. Thêm, sửa, xóa môn học là việc của huấn luyện viên trưởng</span>}
         </div>
       )}
 

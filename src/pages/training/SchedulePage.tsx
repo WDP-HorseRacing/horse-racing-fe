@@ -50,8 +50,8 @@ export default function SchedulePage() {
         title="Lịch tập tuần"
         description={
           horseMode
-            ? `Lịch tính ra từ các lớp ${schedule.data?.horse?.name} đang học — không lưu riêng cho từng ngựa.`
-            : 'Mọi buổi học của các lớp theo khung giờ — bấm một buổi để mở trang buổi học.'
+            ? `Lịch tính ra từ các lớp ${schedule.data?.horse?.name} đang học, không lưu riêng cho từng ngựa.`
+            : 'Mọi buổi học của các lớp theo khung giờ, bấm một buổi để mở trang buổi học.'
         }
       />
 

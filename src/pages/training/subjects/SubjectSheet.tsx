@@ -106,7 +106,7 @@ export function SubjectSheet({
       <div className="space-y-5">
         {initial && initial.usedBySessions > 0 && (
           <Notice tone="info">
-            Môn này đã sinh {initial.usedBySessions} buổi học. Sửa ở đây chỉ áp dụng cho giáo án và lớp mở sau; các buổi đã sinh
+            Môn này đã sinh {initial.usedBySessions} buổi học. Sửa ở đây chỉ áp dụng cho giáo án và lớp mở sau. Các buổi đã sinh
             giữ nguyên nội dung đã chụp lại.
           </Notice>
         )}

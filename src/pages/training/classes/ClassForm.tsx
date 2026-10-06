@@ -140,7 +140,7 @@ function ClassFormBody({
           </Link>
         }
         title="Mở lớp huấn luyện"
-        description="Chọn giáo án, khu và khung giờ cố định — hệ thống sinh toàn bộ buổi học ngay khi mở lớp."
+        description="Chọn giáo án, khu và khung giờ cố định, hệ thống sinh toàn bộ buổi học ngay khi mở lớp."
         actions={
           <Button onClick={submit} disabled={action.pending || !programId || !zoneId || !slotId || !validDate || pastDate}>
             <CalendarCheck size={16} /> {action.pending ? 'Đang mở lớp…' : 'Mở lớp'}
@@ -208,13 +208,13 @@ function ClassFormBody({
               <Field label="Tên lớp" required error={fieldError('name')} hint={!name && suggestion ? `Để trống sẽ dùng "${suggestion}"` : undefined}>
                 <Input value={name} maxLength={60} placeholder={suggestion || 'Ví dụ: Tăng tốc A2'} onChange={(event) => setDirtyAnd(setName)(event.target.value)} />
               </Field>
-              <Field label="Khu chuồng" required error={fieldError('zoneId')} hint="Lớp chỉ nhận ngựa thuộc khu này; bạn chỉ chọn được khu mình phụ trách">
+              <Field label="Khu chuồng" required error={fieldError('zoneId')} hint="Lớp chỉ nhận ngựa thuộc khu này. Bạn chỉ chọn được khu mình phụ trách">
                 <Select value={zoneId} onChange={(event) => setDirtyAnd(setZoneId)(event.target.value)}>
                   <option value="">Chọn khu…</option>
                   {zones.map((item) => (
                     <option key={item.id} value={item.id} disabled={!item.active}>
                       {item.name}
-                      {item.disabledReason ? ` — ${item.disabledReason}` : ''}
+                      {item.disabledReason ? `, ${item.disabledReason}` : ''}
                     </option>
                   ))}
                 </Select>

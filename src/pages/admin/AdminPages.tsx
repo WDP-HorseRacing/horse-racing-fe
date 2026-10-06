@@ -233,7 +233,7 @@ export function AdminUsers() {
       <Modal
         open={!!editing}
         onClose={() => setEditing(null)}
-        title={`Sửa tài khoản — ${editing?.fullName ?? ''}`}
+        title={`Sửa tài khoản: ${editing?.fullName ?? ''}`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditing(null)}>

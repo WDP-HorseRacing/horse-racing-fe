@@ -389,7 +389,7 @@ function VisitForm(props: VisitOptions) {
                           conclusion === value ? 'ring-2 ring-emerald-700' : 'ring-1 ring-gray-200 hover:ring-gray-300',
                         )}
                       >
-                        <span className="block text-sm font-semibold text-gray-900">{value === 'NORMAL' ? 'Kết luận bình thường' : 'Có vấn đề — mở bệnh án'}</span>
+                        <span className="block text-sm font-semibold text-gray-900">{value === 'NORMAL' ? 'Kết luận bình thường' : 'Có vấn đề, mở bệnh án'}</span>
                         <span className="mt-0.5 block text-xs text-gray-500">
                           {value === 'NORMAL' ? 'Bản ghi độc lập.' : 'Buổi này là buổi đầu tiên của bệnh án mới.'}
                         </span>
@@ -738,7 +738,7 @@ function VisitForm(props: VisitOptions) {
                     ))}
                   </ul>
                 )}
-                <p className="mt-1.5 text-xs">Giá trị đúng thì bấm "Xác nhận và lưu"; bản ghi được đánh dấu bất thường.</p>
+                <p className="mt-1.5 text-xs">Giá trị đúng thì bấm "Xác nhận và lưu", bản ghi được đánh dấu bất thường.</p>
               </Notice>
             )}
             {action.error && !needsConfirm && <ErrorBox message={action.error} />}

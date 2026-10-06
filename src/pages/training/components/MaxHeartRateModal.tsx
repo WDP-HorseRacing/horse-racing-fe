@@ -60,7 +60,7 @@ export default function MaxHeartRateModal({
         <Field
           label="Nhịp tim tối đa (nhịp/phút)"
           required
-          hint={`Khoảng hợp lệ 180–260. Gợi ý mặc định của câu lạc bộ: ${horse?.suggested ?? '—'} — chỉ là gợi ý, không tự áp dụng.`}
+          hint={`Khoảng hợp lệ 180–260. Gợi ý mặc định của câu lạc bộ: ${horse?.suggested ?? '—'}, chỉ là gợi ý, không tự áp dụng.`}
           error={action.field === 'value' ? action.error : undefined}
         >
           <Input type="number" min={180} max={260} step={1} value={value} onChange={(event) => setValue(event.target.value)} />
@@ -69,7 +69,7 @@ export default function MaxHeartRateModal({
           <Textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: kết quả khám tim mạch đầu mùa; ngựa lớn tuổi, hạ ngưỡng an toàn"
+            placeholder="Ví dụ: kết quả khám tim mạch đầu mùa, ngựa lớn tuổi, hạ ngưỡng an toàn"
           />
         </Field>
         <p className="text-xs text-gray-500">

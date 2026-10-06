@@ -80,7 +80,7 @@ export function ClassHorsesTab({
         )}
         {active.some((row) => !row.train.allowed) && (
           <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-            Ngựa không được tập ở một buổi cụ thể sẽ được đánh dấu vắng riêng buổi đó (chặn y tế) khi bắt đầu buổi — lớp và các ngựa khác
+            Ngựa không được tập ở một buổi cụ thể sẽ được đánh dấu vắng riêng buổi đó (chặn y tế) khi bắt đầu buổi, lớp và các ngựa khác
             không bị ảnh hưởng.
           </p>
         )}

@@ -613,7 +613,7 @@ export default function HorseForm() {
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-gray-600">{horse?.raceAptitude ? distanceLabel[horse.raceAptitude] : 'Chưa xác định'} — do HT phụ trách khu cập nhật.</p>
+                <p className="text-sm text-gray-600">{horse?.raceAptitude ? distanceLabel[horse.raceAptitude] : 'Chưa xác định'}. Do HLV trưởng phụ trách khu cập nhật.</p>
               )}
             </Card>
           )}

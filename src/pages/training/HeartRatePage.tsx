@@ -85,7 +85,7 @@ export default function HeartRatePage() {
             <span className="ml-1 text-xs font-normal text-gray-500">nhịp/phút</span>
           </p>
         ) : (
-          <span className="text-sm text-amber-700">Chưa đặt — R1 không chạy</span>
+          <span className="text-sm text-amber-700">Chưa đặt, R1 không chạy</span>
         ),
     },
     {
@@ -138,7 +138,7 @@ export default function HeartRatePage() {
             </Button>
           )}
           {row.canEdit && row.current !== undefined && (
-            <Button size="icon" variant="ghost" title="Xóa ngưỡng — R1 sẽ tắt với ngựa này" onClick={() => setClearFor(row)}>
+            <Button size="icon" variant="ghost" title="Xóa ngưỡng, R1 sẽ tắt với ngựa này" onClick={() => setClearFor(row)}>
               <Trash2 size={15} />
             </Button>
           )}
@@ -154,7 +154,7 @@ export default function HeartRatePage() {
     <div className="space-y-6">
       <PageHeader
         title="Nhịp tim tối đa"
-        description="Ngưỡng do bác sĩ đặt cho từng ngựa — chưa đặt thì quy tắc cảnh báo R1 không chạy, không có giá trị dự phòng."
+        description="Ngưỡng do bác sĩ đặt cho từng ngựa, chưa đặt thì quy tắc cảnh báo R1 không chạy, không có giá trị dự phòng."
       />
 
       {error && <ErrorBox message={error} />}
@@ -177,7 +177,7 @@ export default function HeartRatePage() {
           </Toolbar>
 
           {!canEditAny && (
-            <p className="text-xs text-gray-500">Chỉ bác sĩ thú y đặt và sửa ngưỡng; bạn đang ở chế độ xem.</p>
+            <p className="text-xs text-gray-500">Chỉ bác sĩ thú y đặt và sửa ngưỡng. Bạn đang ở chế độ xem.</p>
           )}
 
           <DataTable

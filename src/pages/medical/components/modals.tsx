@@ -169,7 +169,7 @@ export function CreateRequestModal({
     <Modal
       open
       onClose={onClose}
-      title={horse ? `Gửi yêu cầu khám — ${horse.name}` : 'Gửi yêu cầu khám'}
+      title={horse ? `Gửi yêu cầu khám: ${horse.name}` : 'Gửi yêu cầu khám'}
       description="Báo bác sĩ khi ngựa có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay."
     >
       <RequestForm
@@ -247,7 +247,7 @@ export function DismissRequestModal({ request, onClose, onDone }: { request: Exa
     <Modal
       open
       onClose={onClose}
-      title={`Bỏ qua yêu cầu khám — ${request.horseName}`}
+      title={`Bỏ qua yêu cầu khám: ${request.horseName}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -399,7 +399,7 @@ export function PlaceLockModal({
     <Modal
       open
       onClose={onClose}
-      title={`Đặt khóa huấn luyện — ${horse.name}`}
+      title={`Đặt khóa huấn luyện: ${horse.name}`}
       description="Lệnh riêng của bác sĩ, độc lập với sức khỏe. Mỗi ngựa tối đa một khóa hiệu lực."
       footer={
         <>
@@ -463,7 +463,7 @@ export function ReleaseLockModal({
     <Modal
       open
       onClose={onClose}
-      title={`Gỡ khóa huấn luyện — ${horseName}`}
+      title={`Gỡ khóa huấn luyện: ${horseName}`}
       description={`Khóa từ ${formatDate(lock.lockStart)}: ${lock.reason}`}
       footer={
         <>

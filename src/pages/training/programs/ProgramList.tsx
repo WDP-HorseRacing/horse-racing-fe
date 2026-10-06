@@ -25,7 +25,7 @@ export default function ProgramList() {
     <div className="space-y-6">
       <PageHeader
         title="Giáo án"
-        description="Khuôn mẫu các môn học theo giai đoạn — ngày và ngựa chỉ xuất hiện khi mở lớp từ giáo án."
+        description="Khuôn mẫu các môn học theo giai đoạn, ngày và ngựa chỉ xuất hiện khi mở lớp từ giáo án."
         actions={
           data?.canManage ? (
             <Button onClick={() => navigate(links.programNew)}>

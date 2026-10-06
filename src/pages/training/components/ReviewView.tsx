@@ -68,7 +68,7 @@ export default function ReviewView({ detail, onChanged }: { detail: SessionDetai
                   <p className="truncate text-sm font-semibold text-gray-900">{row.horseName}</p>
                   <p className="truncate text-xs text-gray-500">
                     {row.status === 'ABSENT'
-                      ? `Vắng — ${row.absenceLabel ?? ''}`
+                      ? `Vắng: ${row.absenceLabel ?? ''}`
                       : row.evaluation
                         ? `Đã chấm ${row.evaluation.score}/10`
                         : 'Chưa chấm'}
@@ -193,7 +193,7 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
                 <tr>
                   <td className="text-gray-600">Nhịp tim TB / cao nhất</td>
                   <td className={row.maxHeartRate ? 'text-gray-500' : 'text-amber-700'}>
-                    {row.maxHeartRate ? `Ngưỡng ${row.maxHeartRate}` : 'Chưa đặt ngưỡng — R1 không chạy'}
+                    {row.maxHeartRate ? `Ngưỡng ${row.maxHeartRate}` : 'Chưa đặt ngưỡng, R1 không chạy'}
                   </td>
                   <td
                     className={cn(
@@ -238,7 +238,7 @@ function HorseReview({ row, detail, onChanged }: { row: SessionHorseRow; detail:
             </p>
             {alerts.map((alert) => (
               <p key={alert.id} className="text-sm text-gray-800">
-                {alert.ruleLabel} ở giây {secondText(alert.atSecond)} — {alert.text}.{' '}
+                {alert.ruleLabel} ở giây {secondText(alert.atSecond)}, {alert.text}.{' '}
                 <span className={alert.acknowledgedByName ? 'text-gray-500' : 'font-medium text-red-700'}>
                   {alert.acknowledgedByName
                     ? `${alert.acknowledgedByName} ${alert.ackAction === 'STOP_HORSE' ? 'đã dừng ngựa' : 'cho tiếp tục theo dõi'}`
@@ -338,7 +338,7 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
     if (result === undefined) return;
     toast.push(
       result.completed
-        ? 'Đã chấm đủ mọi ngựa — buổi chuyển sang Hoàn thành'
+        ? 'Đã chấm đủ mọi ngựa, buổi chuyển sang Hoàn thành'
         : `Đã lưu đánh giá ${row.horseName}${result.remaining > 0 ? ` · còn ${result.remaining} ngựa chưa chấm` : ''}`,
       'success',
     );
@@ -386,7 +386,7 @@ function ScoreForm({ row, detail, onChanged }: { row: SessionHorseRow; detail: S
           <Textarea
             value={form.notes}
             onChange={(event) => setForm({ ...form, notes: event.target.value })}
-            placeholder="Ví dụ: vào bài đều, hồi phục tốt sau lần chạy thứ hai; giữ khối lượng cho tuần tới."
+            placeholder="Ví dụ: vào bài đều, hồi phục tốt sau lần chạy thứ hai, giữ khối lượng cho tuần tới."
           />
         </Field>
 
