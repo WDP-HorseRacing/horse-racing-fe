@@ -93,7 +93,7 @@ export default function OwnershipTransferDialog({
             ))}
           </Select>
         </Field>
-        <Field label="Lý do hoặc số hợp đồng" name="reason" required error={reasonError} hint="Ví dụ: HĐ 12/2026, ký ngày 01/10/2026. Ghi vào lịch sử sở hữu.">
+        <Field label="Lý do" name="reason" required error={reasonError} hint="Ví dụ: chủ cũ bán lại cho chủ mới theo thỏa thuận giữa hai bên. Ghi vào lịch sử sở hữu.">
           <Textarea value={reason} maxLength={REASON_MAX} onChange={(event) => setReason(event.target.value)} className={cn(reasonError && invalidClass)} />
         </Field>
         <Notice tone="info">
