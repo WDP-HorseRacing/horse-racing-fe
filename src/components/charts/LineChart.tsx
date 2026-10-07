@@ -1,6 +1,9 @@
 // Biểu đồ đường vẽ bằng SVG, không thêm thư viện ngoài.
-// xAxis="days": trục ngang là thời gian thật (khoảng cách tỉ lệ đúng theo giờ phút), có vạch và nhãn theo ngày,
-// chừa lề hai đầu. Nhiều lần đo trong một ngày vẫn vẽ đủ, lần không phải cuối ngày vẽ nhỏ và nhạt.
+// Ba kiểu trục ngang:
+// - "linear": giá trị x thật, chỉ ghi nhãn hai đầu (trục giây của buổi tập).
+// - "days": thời gian thật, có vạch và nhãn theo ngày.
+// - "sequence": các lần đo cách đều nhau theo thứ tự, nhãn là ngày đo. Ít lần đo thì mỗi lần chiếm nhiều chỗ hơn,
+//   nhiều lần đo thì đường dày dần thành hình liền mạch, không có khoảng trống dài khi lâu ngày không đo.
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChartTooltip, type TipState } from './ChartTooltip';
 
@@ -31,6 +34,7 @@ const startOfDay = (time: number) => {
   date.setHours(0, 0, 0, 0);
   return date.getTime();
 };
+const sameDay = (a: number, b: number) => startOfDay(a) === startOfDay(b);
 
 /** Vạch nửa đêm mỗi `step` ngày nằm trong khoảng [min, max]. */
 function dayTicks(min: number, max: number) {
@@ -56,6 +60,7 @@ export function LineChart({
   formatTooltipX,
   threshold,
   xAxis = 'linear',
+  area = false,
 }: {
   series: Series[];
   height?: number;
@@ -66,8 +71,10 @@ export function LineChart({
   /** Nhãn thời điểm trong chú thích khi rê chuột (mặc định dùng formatX). */
   formatTooltipX?: (value: number) => string;
   threshold?: { value: number; label: string };
-  /** "days": trục thời gian có vạch theo ngày. "linear": chỉ ghi nhãn hai đầu (mặc định, dùng cho trục giây). */
-  xAxis?: 'linear' | 'days';
+  /** Kiểu trục ngang, xem chú thích đầu file. */
+  xAxis?: 'linear' | 'days' | 'sequence';
+  /** Tô nhạt vùng dưới đường. */
+  area?: boolean;
 }) {
   const [tip, setTip] = useState<(TipState & { x0: number }) | null>(null);
 
@@ -86,9 +93,19 @@ export function LineChart({
   }, [box]);
   const padding = { top: 16, right: 16, bottom: 28, left: 46 };
   const days = xAxis === 'days';
+  const seq = xAxis === 'sequence';
+  /** Trục có nhãn ngày đo (thời gian thật nằm trong series gốc). */
+  const dated = days || seq;
+
+  // Trục thứ tự: điểm thứ i nằm ở x = i. Thời điểm đo thật vẫn lấy từ series gốc để ghi nhãn.
+  const plotted = useMemo(
+    () => (seq ? series.map((item) => ({ ...item, points: item.points.map((point, index) => ({ x: index, y: point.y })) })) : series),
+    [series, seq],
+  );
+  const timeOf = (seriesIndex: number, index: number) => series[seriesIndex]?.points[index]?.x ?? 0;
 
   const bounds = useMemo(() => {
-    const all = series.flatMap((item) => item.points);
+    const all = plotted.flatMap((item) => item.points);
     if (all.length === 0) return null;
     const xs = all.map((point) => point.x);
     const ys = all.map((point) => point.y);
@@ -105,8 +122,14 @@ export function LineChart({
       minX -= pad;
       maxX += pad;
     }
+    if (seq) {
+      // Lề nửa khoảng cách giữa hai lần đo, một lần đo duy nhất thì nằm giữa.
+      const pad = maxX === minX ? 1 : 0.35;
+      minX -= pad;
+      maxX += pad;
+    }
     return { minX, maxX, minY: minY - spanY * 0.12, maxY: maxY + spanY * 0.12 };
-  }, [series, band, threshold, days]);
+  }, [plotted, band, threshold, days, seq]);
 
   if (!bounds) {
     return (
@@ -120,31 +143,50 @@ export function LineChart({
   const innerHeight = height - padding.top - padding.bottom;
   const scaleX = (value: number) => padding.left + ((value - bounds.minX) / (bounds.maxX - bounds.minX || 1)) * innerWidth;
   const scaleY = (value: number) => padding.top + innerHeight - ((value - bounds.minY) / (bounds.maxY - bounds.minY || 1)) * innerHeight;
+  const baseline = height - padding.bottom;
 
   const ticks = Array.from({ length: 4 }, (_, index) => bounds.minY + ((bounds.maxY - bounds.minY) / 3) * index);
-  const xTicks = days ? dayTicks(bounds.minX, bounds.maxX) : [];
   const yText = (value: number) => (formatY ? formatY(value) : String(Math.round(value * 100) / 100));
   const tipX = formatTooltipX ?? formatX;
-  // Hai điểm cùng ngày khi rơi vào cùng một ngày lịch.
-  const sameDay = (a: number, b: number) => startOfDay(a) === startOfDay(b);
+  /** Thời điểm thật của điểm thứ `index` trong series `seriesIndex`. */
+  const realX = (seriesIndex: number, index: number) => (seq ? timeOf(seriesIndex, index) : (plotted[seriesIndex]?.points[index]?.x ?? 0));
+
+  // Nhãn trục ngang.
+  const xTicks: { x: number; label: string }[] = (() => {
+    if (days) return dayTicks(bounds.minX, bounds.maxX).map((tick) => ({ x: tick, label: formatX ? formatX(tick) : '' }));
+    if (!seq || !plotted[0]) return [];
+    // Trục thứ tự: ghi ngày của khoảng 6 lần đo trải đều, bỏ nhãn trùng ngày liền nhau.
+    const count = plotted[0].points.length;
+    const step = Math.max(1, Math.ceil(count / 6));
+    const result: { x: number; label: string }[] = [];
+    for (let index = 0; index < count; index += 1) {
+      if (index % step !== 0 && index !== count - 1) continue;
+      const label = formatX ? formatX(timeOf(0, index)) : '';
+      if (result.length && result[result.length - 1].label === label) continue;
+      if (index === count - 1 && result.length && index - result[result.length - 1].x < step / 2) result.pop();
+      result.push({ x: index, label });
+    }
+    return result;
+  })();
 
   const showTip = (dataX: number) => {
     const rows: ReactNode[] = [];
     let anchor: { x: number; y: number; dataX: number } | null = null;
-    series.forEach((item) => {
+    plotted.forEach((item, seriesIndex) => {
       if (item.points.length === 0) return;
       const index = item.points.reduce((best, point, at) => (Math.abs(point.x - dataX) < Math.abs(item.points[best].x - dataX) ? at : best), 0);
       const nearest = item.points[index];
       if (!anchor) anchor = { x: scaleX(nearest.x), y: scaleY(nearest.y), dataX: nearest.x };
-      // Trục ngày: liệt kê mọi lần đo trong cùng ngày với điểm gần nhất.
-      const group = days
-        ? item.points.map((point, at) => ({ point, at })).filter(({ point }) => sameDay(point.x, nearest.x))
+      // Trục có ngày: liệt kê mọi lần đo trong cùng ngày với điểm gần nhất.
+      const group = dated
+        ? item.points.map((point, at) => ({ point, at })).filter(({ at }) => sameDay(realX(seriesIndex, at), realX(seriesIndex, index)))
         : [{ point: nearest, at: index }];
+      const original = series[seriesIndex].points;
       group.forEach(({ point, at }) => {
-        const hint = item.hint?.(point, at > 0 ? item.points[at - 1] : undefined);
+        const hint = item.hint?.(original[at], at > 0 ? original[at - 1] : undefined);
         rows.push(
-          <div key={`${item.key}-${point.x}-${at}`} className="flex items-baseline gap-2 tabular-nums">
-            {(days || series.length > 1) && <span className="text-gray-400">{days ? (tipX ? tipX(point.x) : '') : item.label}</span>}
+          <div key={`${item.key}-${at}`} className="flex items-baseline gap-2 tabular-nums">
+            {(dated || plotted.length > 1) && <span className="text-gray-400">{dated ? (tipX ? tipX(realX(seriesIndex, at)) : '') : item.label}</span>}
             <span className="font-semibold">{yText(point.y)}</span>
             {hint && <span className="text-gray-300">{hint}</span>}
           </div>,
@@ -159,7 +201,7 @@ export function LineChart({
       x0: found.dataX,
       content: (
         <div className="space-y-0.5">
-          {!days && tipX && <div className="text-gray-400">{tipX(found.dataX)}</div>}
+          {!dated && tipX && <div className="text-gray-400">{tipX(found.dataX)}</div>}
           {rows}
         </div>
       ),
@@ -200,12 +242,12 @@ export function LineChart({
           </g>
         ))}
 
-        {/* vạch và nhãn theo ngày */}
+        {/* vạch và nhãn trục ngang */}
         {xTicks.map((tick) => (
-          <g key={tick}>
-            <line x1={scaleX(tick)} x2={scaleX(tick)} y1={padding.top} y2={height - padding.bottom} stroke="#eef4ee" strokeWidth={1} />
-            <text x={scaleX(tick)} y={height - 8} textAnchor="middle" className="fill-gray-400 text-[10px]">
-              {formatX ? formatX(tick) : ''}
+          <g key={tick.x}>
+            {days && <line x1={scaleX(tick.x)} x2={scaleX(tick.x)} y1={padding.top} y2={baseline} stroke="#eef4ee" strokeWidth={1} />}
+            <text x={scaleX(tick.x)} y={height - 8} textAnchor="middle" className="fill-gray-400 text-[10px]">
+              {tick.label}
             </text>
           </g>
         ))}
@@ -227,25 +269,30 @@ export function LineChart({
           </g>
         )}
 
-        {tip && <line x1={scaleX(tip.x0)} x2={scaleX(tip.x0)} y1={padding.top} y2={height - padding.bottom} stroke="#b0c8b0" strokeWidth={1} />}
+        {tip && <line x1={scaleX(tip.x0)} x2={scaleX(tip.x0)} y1={padding.top} y2={baseline} stroke="#b0c8b0" strokeWidth={1} />}
 
-        {series.map((item) => {
+        {plotted.map((item, seriesIndex) => {
           if (item.points.length === 0) return null;
           const path = item.points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${scaleX(point.x)} ${scaleY(point.y)}`).join(' ');
+          const first = item.points[0];
+          const lastPoint = item.points[item.points.length - 1];
           const last = item.points.length - 1;
           return (
             <g key={item.key}>
+              {area && item.points.length > 1 && (
+                <path d={`${path} L ${scaleX(lastPoint.x)} ${baseline} L ${scaleX(first.x)} ${baseline} Z`} fill={item.color} fillOpacity={0.08} stroke="none" />
+              )}
               <path d={path} fill="none" stroke={item.color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               {item.points.map((point, index) => {
-                // Trục ngày: lần đo không phải cuối ngày vẽ nhỏ và nhạt, lần mới nhất vẽ to có viền trắng.
-                const earlierSameDay = days && index < last && sameDay(item.points[index + 1].x, point.x);
-                const latest = days && index === last;
+                // Trục có ngày: lần đo không phải cuối ngày vẽ nhỏ và nhạt, lần mới nhất vẽ to có viền trắng.
+                const earlierSameDay = dated && index < last && sameDay(realX(seriesIndex, index + 1), realX(seriesIndex, index));
+                const latest = dated && index === last;
                 return (
                   <circle
                     key={`${point.x}-${index}`}
                     cx={scaleX(point.x)}
                     cy={scaleY(point.y)}
-                    r={latest ? 4.5 : earlierSameDay ? 2 : days ? 3 : 2.5}
+                    r={latest ? 4.5 : earlierSameDay ? 2 : dated ? 3 : 2.5}
                     fill={item.color}
                     fillOpacity={earlierSameDay ? 0.45 : 1}
                     stroke={latest ? '#fff' : 'none'}
@@ -257,7 +304,7 @@ export function LineChart({
           );
         })}
 
-        {!days && (
+        {!dated && (
           <>
             <text x={padding.left} y={height - 6} className="fill-gray-400 text-[10px]">
               {formatX ? formatX(bounds.minX) : ''}
