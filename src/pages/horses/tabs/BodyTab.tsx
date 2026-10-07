@@ -324,7 +324,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
               <div className="mt-4">
                 <LineChart
                   height={type === 'WEIGHT' || type === 'BODY_CONDITION' ? 200 : 180}
-                  xAxis="days"
+                  xAxis="sequence"
+                  area
                   series={[
                     {
                       key: type,
