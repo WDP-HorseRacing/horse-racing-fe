@@ -127,7 +127,7 @@ export interface OwnershipPeriod {
   startedAt: string;
   /** null là giai đoạn hiện tại. */
   endedAt: string | null;
-  /** Lý do hoặc số hợp đồng, null với dữ liệu chuyển đổi. */
+  /** Lý do chuyển chủ, null với dữ liệu chuyển đổi. */
   reason: string | null;
   /** Người ghi nhận, null với dữ liệu chuyển đổi. */
   recordedBy: Person | null;
