@@ -9,10 +9,16 @@ import { ConfirmDialog } from '../components/ui';
  * 
  * @param isDirty Có dữ liệu chưa lưu hay không
  * @param message Tin nhắn hiển thị khi chuyển trang trong SPA
+ * @param options.includeSearch Chặn cả khi chỉ đổi query (ví dụ đổi tab ?tab= trong cùng trang)
  */
-export function useLeaveConfirm(isDirty: boolean, message = 'Hồ sơ có thay đổi chưa lưu. Bạn có chắc chắn muốn rời khỏi trang này? Những thay đổi của bạn sẽ bị mất.') {
+export function useLeaveConfirm(
+  isDirty: boolean,
+  message = 'Hồ sơ có thay đổi chưa lưu. Bạn có chắc chắn muốn rời khỏi trang này? Những thay đổi của bạn sẽ bị mất.',
+  options: { includeSearch?: boolean } = {},
+) {
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const includeSearch = options.includeSearch ?? false;
 
   // 1. Chặn người dùng đóng tab, tải lại trang (trình duyệt sẽ tự dùng thông báo mặc định)
   useEffect(() => {
@@ -31,12 +37,11 @@ export function useLeaveConfirm(isDirty: boolean, message = 'Hồ sơ có thay �
   const blocker = useBlocker(
     useCallback(
       ({ currentLocation, nextLocation }) => {
-        if (isDirtyRef.current && currentLocation.pathname !== nextLocation.pathname) {
-          return true; // Block the navigation
-        }
-        return false;
+        if (!isDirtyRef.current) return false;
+        if (currentLocation.pathname !== nextLocation.pathname) return true;
+        return includeSearch && currentLocation.search !== nextLocation.search;
       },
-      []
+      [includeSearch]
     )
   );
 
