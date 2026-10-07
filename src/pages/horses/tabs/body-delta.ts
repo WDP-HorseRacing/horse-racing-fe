@@ -3,11 +3,16 @@
 import type { MeasurementType } from '../../../api/types';
 
 export interface MeasurementDelta {
+  /** Số chênh kèm đơn vị, ví dụ "+10 kg" hoặc "Không đổi". */
+  amount: string;
+  /** Phần trăm (chỉ cân nặng), ví dụ "+2,1%". */
+  percent?: string;
+  /** Gộp cả hai, dùng cho chú thích biểu đồ. */
   text: string;
   direction: 'up' | 'down' | 'same';
 }
 
-const UNIT: Record<MeasurementType, string> = {
+export const MEASUREMENT_UNIT: Record<MeasurementType, string> = {
   WEIGHT: 'kg',
   TEMPERATURE: '°C',
   HEIGHT: 'cm',
@@ -21,8 +26,8 @@ const signed = (value: number) => `${value > 0 ? '+' : '−'}${number(Math.abs(v
 export function measurementDelta(type: MeasurementType, current: number, previous: number | undefined): MeasurementDelta | undefined {
   if (previous === undefined) return undefined;
   const diff = current - previous;
-  if (Math.abs(diff) < 0.05) return { text: 'Không đổi', direction: 'same' };
-  let text = `${signed(diff)} ${UNIT[type]}`;
-  if (type === 'WEIGHT' && previous > 0) text += ` (${signed((diff / previous) * 100)}%)`;
-  return { text, direction: diff > 0 ? 'up' : 'down' };
+  if (Math.abs(diff) < 0.05) return { amount: 'Không đổi', text: 'Không đổi', direction: 'same' };
+  const amount = `${signed(diff)} ${MEASUREMENT_UNIT[type]}`;
+  const percent = type === 'WEIGHT' && previous > 0 ? `${signed((diff / previous) * 100)}%` : undefined;
+  return { amount, percent, text: percent ? `${amount} (${percent})` : amount, direction: diff > 0 ? 'up' : 'down' };
 }
