@@ -10,20 +10,16 @@ export const HorseForm = lazyPage(() => import('../pages/horses/HorseForm'));
 export const HorseDetail = lazyPage(() => import('../pages/horses/HorseDetail'));
 export const StableMap = lazyPage(() => import('../pages/stable/StableMap'));
 
-export const SubjectList = lazyPage(() => import('../pages/training/subjects/SubjectList'));
-export const ProgramList = lazyPage(() => import('../pages/training/programs/ProgramList'));
-export const ProgramEditor = lazyPage(() => import('../pages/training/programs/ProgramEditor'));
-export const ProgramDetail = lazyPage(() => import('../pages/training/programs/ProgramDetail'));
+export const SubjectsPage = lazyPage(() => import('../pages/training/subjects/SubjectsPage'));
+export const PlanList = lazyPage(() => import('../pages/training/plans/PlanList'));
+export const PlanEditor = lazyPage(() => import('../pages/training/plans/PlanEditor'));
+export const PlanDetail = lazyPage(() => import('../pages/training/plans/PlanDetail'));
 export const ClassList = lazyPage(() => import('../pages/training/classes/ClassList'));
-export const ClassForm = lazyPage(() => import('../pages/training/classes/ClassForm'));
+export const ClassCreate = lazyPage(() => import('../pages/training/classes/ClassCreate'));
 export const ClassDetail = lazyPage(() => import('../pages/training/classes/ClassDetail'));
-export const SchedulePage = lazyPage(() => import('../pages/training/SchedulePage'));
-export const TodaySessions = lazyPage(() => import('../pages/training/TodaySessions'));
-export const SessionPage = lazyPage(() => import('../pages/training/SessionPage'));
-export const LiveList = lazyPage(() => import('../pages/training/LiveList'));
-export const ReviewList = lazyPage(() => import('../pages/training/ReviewList'));
-export const ProgressBoard = lazyPage(() => import('../pages/training/ProgressBoard'));
-export const HeartRatePage = lazyPage(() => import('../pages/training/HeartRatePage'));
+export const SessionBoard = lazyPage(() => import('../pages/training/session/SessionBoard'));
+export const ParticipantDetail = lazyPage(() => import('../pages/training/ParticipantDetail'));
+export const TrainingToday = lazyPage(() => import('../pages/training/TrainingToday'));
 
 export const MedicalBoard = lazyPage(() => import('../pages/medical/MedicalBoard'));
 export const ExamRequests = lazyPage(() => import('../pages/medical/ExamRequests'));
@@ -45,6 +41,10 @@ const ROUTES: [string, LazyPage][] = [
   ['/profile', Profile],
   ['/horses', HorseList],
   ['/stable', StableMap],
+  ['/training/subjects', SubjectsPage],
+  ['/training/plans', PlanList],
+  ['/training/classes', ClassList],
+  ['/training/today', TrainingToday],
   ['/medical/board', MedicalBoard],
   ['/medical/requests', ExamRequests],
   ['/medical/cases', CaseList],

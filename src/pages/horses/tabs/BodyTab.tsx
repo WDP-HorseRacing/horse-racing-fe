@@ -12,7 +12,7 @@ import { AppError } from '../../../lib/errors';
 import { Button, Card, ConfirmDialog, DataTable, Dot, ErrorBox, Input, Segmented, Skeleton, cn, invalidClass, useToast, type Column } from '../../../components/ui';
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
 import { measurementSpec } from '../../../lib/api-labels';
-import { TEMP_ALERT_C } from '../../../lib/rules';
+import { TEMP_ALERT_C } from '../../../lib/horse-rules';
 import { addDays, formatDateShort, formatDateTime, formatTime } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { ReasonDialog } from '../../stable/components/PlacementDialogs';

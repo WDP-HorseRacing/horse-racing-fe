@@ -24,6 +24,8 @@ import {
 import { roleLabel } from '../../lib/labels';
 import { userStatusLabel } from '../../lib/api-labels';
 import { useStore } from '../../store/store';
+import { FEATURES } from '../../config/features';
+import HandoverDialog from './HandoverDialog';
 
 const ROLES: Role[] = ['CLUB_MANAGER', 'HEAD_TRAINER', 'VETERINARIAN', 'GROOM', 'HORSE_OWNER'];
 const shortRole = (role: Role) => roleLabel[role].replace('Quản lý câu lạc bộ', 'Quản lý').replace('Huấn luyện viên trưởng', 'HLV trưởng');
@@ -52,6 +54,7 @@ export function AdminUsers() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState<Role>('GROOM');
   const [locking, setLocking] = useState<UserAccount | null>(null);
+  const [handover, setHandover] = useState<UserAccount | null>(null);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -139,6 +142,11 @@ export function AdminUsers() {
               className: 'text-right',
               render: (row) => (
                 <div className="flex justify-end gap-2">
+                  {FEATURES.training && row.role === 'HEAD_TRAINER' && (
+                    <Button size="sm" variant="inline" onClick={() => setHandover(row)}>
+                      Bàn giao
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="secondary"
@@ -293,12 +301,25 @@ export function AdminUsers() {
             {action.error && (
               <div className="mt-3">
                 <ErrorBox message={action.error} />
+                {locking?.role === 'HEAD_TRAINER' && FEATURES.training && (
+                  <Button
+                    variant="inline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => {
+                      setHandover(locking);
+                      setLocking(null);
+                    }}
+                  >
+                    Bàn giao công việc trước
+                  </Button>
+                )}
               </div>
             )}
           </>
         }
         consequences={[
-          'Không khóa được khi tài khoản còn phụ trách: Groom còn ngựa được giao, chủ còn ngựa ở câu lạc bộ, HLV trưởng còn đứng tên khu.',
+          'Không khóa được khi tài khoản còn phụ trách: Groom còn ngựa được giao, chủ còn ngựa ở câu lạc bộ, HLV trưởng còn khu, giáo án hoặc lớp đang mở (bàn giao trước).',
         ]}
         confirmLabel="Xác nhận khóa"
         pending={action.pending}
@@ -313,6 +334,17 @@ export function AdminUsers() {
           }
         }}
       />
+      {handover && (
+        <HandoverDialog
+          from={handover}
+          trainers={data ?? []}
+          onClose={() => setHandover(null)}
+          onDone={() => {
+            setHandover(null);
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }

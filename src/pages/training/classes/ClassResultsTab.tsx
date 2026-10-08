@@ -1,135 +1,106 @@
-// Tab "Kết quả": ma trận ngựa × buổi đã qua (chỉ đọc).
+// Tab Kết quả: lưới ngựa theo buổi đã diễn ra. Ô tô đậm nhạt theo điểm đánh giá của HLV,
+// buổi chạy thử hiện thời gian tốt nhất và chênh lệch với mục tiêu. Mỗi ngựa một lần gọi lịch tập của ngựa trong lớp.
 import { Link } from 'react-router-dom';
-import type { ClassResults } from '../../../services/training.service';
-import { Avatar, Card, cn, EmptyState, Tip } from '../../../components/ui';
-import { IntensityMeter } from '../../../components/ui/status';
-import { absenceLabel, intensityLabel } from '../../../lib/labels';
-import { formatDateShort, formatNumber, formatPercent } from '../../../lib/format';
+import { getTimeTrial, listHorseSessions } from '../../../api/training';
+import type { HorseTrainingSession } from '../../../api/types';
+import { EmptyState, ErrorBox, Notice, Skeleton, cn } from '../../../components/ui';
+import { useService } from '../../../hooks/useService';
+import { useStore } from '../../../store/store';
+import { formatDate } from '../../../lib/format';
+import { formatDelta, formatRaceTime } from '../../../lib/training-format';
+import { participantStatusText } from '../../../lib/training-labels';
 import { links } from '../../../lib/links';
+import { useHorseIndex } from '../hooks';
+import type { ClassBundle } from './class-bundle';
 
-/** Điểm bình thường để chữ mực; chỉ điểm thấp (≤ 5) mới tô hổ phách để HT chú ý. */
-function scoreTone(score: number) {
-  return score <= 5 ? 'bg-amber-50 text-amber-800' : 'text-gray-900';
-}
+const SCORE_FILL = (score: number) =>
+  score >= 9 ? 'bg-emerald-700 text-white' : score >= 7 ? 'bg-emerald-500 text-white' : score >= 5 ? 'bg-emerald-200 text-emerald-950' : 'bg-amber-100 text-amber-900';
 
-export function ClassResultsTab({ results, ownerFiltered }: { results?: ClassResults; ownerFiltered: boolean }) {
-  if (!results) {
-    return <EmptyState title="Bạn không xem được kết quả buổi tập" hint="Kết quả và nhận xét chỉ dành cho HT, bác sĩ, quản lý và chủ ngựa." />;
-  }
-  if (results.sessions.length === 0) {
-    return <EmptyState title="Chưa có buổi nào diễn ra" hint="Kết quả sẽ hiện sau buổi học đầu tiên của lớp." />;
-  }
-  if (results.rows.length === 0) {
-    return <EmptyState title="Chưa có ngựa nào" hint={ownerFiltered ? 'Không có ngựa của bạn trong lớp này.' : undefined} />;
-  }
+export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
+  const user = useStore((state) => state.currentUser);
+  const { item, sessions, enrollments } = bundle;
+  const { index } = useHorseIndex();
+  const held = sessions.filter((session) => session.status === 'COMPLETED' || session.status === 'IN_PROGRESS').sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt));
+  const horseIds = [...new Set(enrollments.map((enrollment) => enrollment.horseId))];
+  const groom = user?.role === 'GROOM';
+
+  const data = useService(async () => {
+    if (groom || held.length === 0) return { rows: new Map<string, HorseTrainingSession[]>(), targets: new Map<string, number | null>() };
+    const [rows, targets] = await Promise.all([
+      Promise.all(horseIds.map(async (horseId) => [horseId, (await listHorseSessions(horseId, { classId: item.id, limit: 100 })).items] as const)),
+      Promise.all(
+        held
+          .filter((session) => session.sessionType === 'TIME_TRIAL')
+          .map(async (session) => [session.id, (await getTimeTrial(session.id).catch(() => null))?.targetTimeMs ?? null] as const),
+      ),
+    ]);
+    return { rows: new Map(rows), targets: new Map(targets) };
+  }, [item.id, horseIds.join(','), held.map((session) => session.id).join(',')]);
+
+  if (groom) return <Notice tone="info">Kết quả và nhận xét của lớp dành cho huấn luyện viên trưởng, bác sĩ, quản lý và chủ ngựa.</Notice>;
+  if (held.length === 0) return <EmptyState title="Chưa có buổi nào diễn ra" hint="Kết quả hiện ở đây sau khi ngựa hoàn thành lượt tập." />;
+  if (data.loading && !data.data) return <Skeleton rows={4} />;
+  if (data.error) return <ErrorBox message={data.error} />;
 
   return (
-    <Card className="p-0 sm:p-0">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-        <p className="text-sm text-gray-600">
-          {results.sessions.length} buổi đã qua · ô là điểm đánh giá (thang 10); "Vắng" rê chuột để xem lý do
-        </p>
-        <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
-          <span className="h-3 w-3 rounded bg-amber-100" /> điểm ≤ 5
-        </span>
-      </div>
-      <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-y border-gray-200">
-              <th className="sticky left-0 z-10 min-w-[180px] bg-white px-5 py-2.5 text-left text-xs font-medium text-gray-500">Ngựa</th>
-              {results.sessions.map((session) => (
-                <th key={session.id} className="min-w-[64px] px-1.5 py-2 text-center align-bottom">
-                  <Tip content={`${session.subjectName} · ${intensityLabel[session.intensity]}`}>
-                    <Link to={links.session(session.id)} className="inline-flex flex-col items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-emerald-700">
-                      <IntensityMeter intensity={session.intensity} showLabel={false} />
-                      <span className="tabular-nums">{formatDateShort(session.date)}</span>
-                    </Link>
-                  </Tip>
-                </th>
-              ))}
-              <th className="min-w-[90px] px-3 py-2.5 text-right text-xs font-medium text-gray-500">Có mặt</th>
-              <th className="min-w-[90px] px-5 py-2.5 text-right text-xs font-medium text-gray-500">Điểm TB</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.rows.map((row) => (
-              <tr key={row.horseId} className="border-b border-gray-100 last:border-0">
-                <td className="sticky left-0 z-10 bg-white px-5 py-2.5">
-                  <Link to={links.horse(row.horseId, 'training')} className="flex items-center gap-2.5">
-                    <Avatar src={row.horseAvatar} name={row.horseName} size={30} />
-                    <span className={cn('font-medium', row.withdrawn ? 'text-gray-400' : 'text-gray-900')}>{row.horseName}</span>
-                    {row.withdrawn && <span className="text-[11px] text-gray-500">đã rút</span>}
+    <div className="overflow-x-auto" data-lenis-prevent-wheel>
+      <table className="w-full min-w-[40rem] border-separate border-spacing-1 text-sm">
+        <thead>
+          <tr>
+            <th className="sticky left-0 z-1 bg-white px-2 py-1 text-left text-xs font-semibold text-gray-500">Ngựa</th>
+            {held.map((session) => (
+              <th key={session.id} className="px-1 py-1 text-center text-xs font-medium text-gray-500">
+                <Link to={links.session(session.id)} className="hover:text-emerald-800">
+                  <span className="block font-mono">{formatDate(session.scheduledStartAt).slice(0, 5)}</span>
+                  <span className="block max-w-28 truncate">{session.name}</span>
+                </Link>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {horseIds.map((horseId) => {
+            const list = data.data?.rows.get(horseId) ?? [];
+            return (
+              <tr key={horseId}>
+                <td className="sticky left-0 z-1 bg-white px-2 py-1 font-semibold text-gray-900">
+                  <Link to={links.horse(horseId, 'training')} className="hover:text-emerald-800">
+                    {index.get(horseId)?.name ?? 'Ngựa'}
                   </Link>
                 </td>
-                {results.sessions.map((session) => {
-                  const cell = row.cells[session.id];
-                  if (!cell) {
-                    return (
-                      <td key={session.id} className="px-1.5 py-2 text-center text-gray-200">
-                        ·
-                      </td>
-                    );
-                  }
-                  if (cell.status === 'ABSENT') {
-                    return (
-                      <td key={session.id} className="px-1.5 py-2 text-center">
-                        <Tip
-                          content={
-                            <span>
-                              Vắng{cell.absenceReason ? `: ${absenceLabel[cell.absenceReason]}` : ''}
-                              {cell.absenceNote ? `. ${cell.absenceNote}` : ''}
-                            </span>
-                          }
-                        >
-                          <span className="inline-flex h-7 min-w-[44px] cursor-help items-center justify-center rounded-md bg-amber-50 px-1.5 text-[11px] font-medium text-amber-800">
-                            Vắng
-                          </span>
-                        </Tip>
-                      </td>
-                    );
-                  }
+                {held.map((session) => {
+                  const entry = list.find((row) => row.sessionId === session.id);
+                  if (!entry) return <td key={session.id} className="rounded-lg bg-gray-50 text-center text-xs text-gray-300">·</td>;
+                  const best = entry.trialResults.length ? Math.min(...entry.trialResults.map((trial) => trial.elapsedMs)) : undefined;
+                  const target = data.data?.targets.get(session.id);
+                  const score = entry.evaluation?.score;
                   return (
-                    <td key={session.id} className="px-1.5 py-2 text-center">
-                      {cell.score !== undefined ? (
-                        <span
-                          className={cn(
-                            'inline-flex h-7 w-9 items-center justify-center rounded-md text-sm font-semibold tabular-nums',
-                            scoreTone(cell.score),
-                          )}
-                        >
-                          {cell.score}
-                        </span>
-                      ) : (
-                        <Tip content={session.status === 'AWAITING_REVIEW' ? 'Có mặt, chờ HT đánh giá' : 'Có mặt, chưa có điểm'}>
-                          <span className="inline-flex h-7 w-9 cursor-help items-center justify-center rounded-md text-[11px] text-gray-400">
-                            ✓
+                    <td key={session.id} className="p-0">
+                      <Link
+                        to={links.participant(entry.participantId, horseId)}
+                        title={entry.evaluation?.comment ?? participantStatusText[entry.participantStatus]}
+                        className={cn(
+                          'flex h-14 min-w-24 flex-col items-center justify-center rounded-lg px-2 text-center transition hover:ring-2 hover:ring-emerald-400',
+                          score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : 'bg-gray-50 text-gray-500',
+                        )}
+                      >
+                        {score !== undefined ? <span className="font-mono text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}
+                        {best !== undefined && (
+                          <span className="mt-0.5 font-mono text-[11px] leading-none">
+                            {formatRaceTime(best)}
+                            {target ? ` ${formatDelta(best - target).replace(' giây', 's')}` : ''}
                           </span>
-                        </Tip>
-                      )}
+                        )}
+                      </Link>
                     </td>
                   );
                 })}
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {row.attendanceRate !== undefined ? (
-                    <span className={cn('font-semibold', row.attendanceRate < 0.8 ? 'text-amber-700' : 'text-gray-800')}>
-                      {formatPercent(row.attendanceRate)}
-                    </span>
-                  ) : (
-                    '—'
-                  )}
-                  <span className="block text-[11px] text-gray-500">
-                    {row.presentCount}/{row.presentCount + row.absentCount} buổi
-                  </span>
-                </td>
-                <td className="px-5 py-2 text-right text-base font-bold text-gray-900 tabular-nums">
-                  {row.avgScore !== undefined ? formatNumber(row.avgScore, 1) : '—'}
-                </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-3 text-xs text-gray-500">Số là điểm đánh giá của HLV (1 đến 10). Ô đậm hơn là điểm cao hơn. Bấm ô để xem chi tiết lượt tập.</p>
+    </div>
   );
 }

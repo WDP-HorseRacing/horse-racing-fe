@@ -5,6 +5,10 @@ import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
   Bell,
+  BookOpenCheck,
+  CalendarRange,
+  Flag,
+  Layers,
   CalendarClock,
   ClipboardCheck,
   HeartPulse,
@@ -40,6 +44,8 @@ import { formatRelative } from '../lib/format';
 import { now } from '../lib/clock';
 import { playAlertBeep } from '../lib/sound';
 import type { UserRole } from '../types/domain';
+import { FEATURES } from '../config/features';
+import { prefersReducedMotion } from '../lib/motion';
 
 interface NavItem {
   name: string;
@@ -52,9 +58,17 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Menu theo vai trò. Flow 2 (huấn luyện) đang tạm ẩn cho tới khi có API thật (config/features.ts).
+// Menu theo vai trò. Nhóm Huấn luyện (Flow 2) đọc cờ trong config/features.ts.
 function menuFor(role: UserRole | undefined): NavGroup[] {
+  return menuGroups(role).filter((group) => group.items.length > 0);
+}
+
+function menuGroups(role: UserRole | undefined): NavGroup[] {
   const medical = (items: NavItem[]): NavGroup => ({ group: 'Y tế', items });
+  const training = (items: NavItem[]): NavGroup => ({ group: 'Huấn luyện', items: FEATURES.training ? items : [] });
+  const classesItem: NavItem = { name: 'Lớp huấn luyện', path: links.classes, icon: Layers };
+  const plansItem: NavItem = { name: 'Giáo án', path: links.plans, icon: CalendarRange };
+  const subjectsItem: NavItem = { name: 'Môn học', path: links.subjects, icon: BookOpenCheck };
   switch (role) {
     case 'CLUB_MANAGER':
       return [
@@ -66,6 +80,7 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
           ],
         },
+        training([classesItem, plansItem, subjectsItem]),
         medical([
           { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
@@ -84,6 +99,7 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
     case 'HEAD_TRAINER':
       return [
         { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
+        training([{ name: 'Hôm nay trên sân', path: links.today, icon: Flag }, classesItem, plansItem, subjectsItem]),
         {
           group: 'Đàn ngựa',
           items: [
@@ -109,10 +125,16 @@ function menuFor(role: UserRole | undefined): NavGroup[] {
           { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
         ]),
         { group: 'Đàn ngựa', items: [{ name: 'Ngựa', path: links.horses, icon: Users }] },
+        training([classesItem]),
       ];
     case 'GROOM':
       return [
-        { items: [{ name: 'Việc hôm nay', path: links.dashboard, icon: LayoutDashboard }] },
+        {
+          items: [
+            { name: 'Việc hôm nay', path: links.dashboard, icon: LayoutDashboard },
+            ...(FEATURES.training ? [{ name: 'Dắt ngựa tập', path: links.today, icon: Flag }] : []),
+          ],
+        },
         {
           group: 'Ngựa được giao',
           items: [
@@ -373,7 +395,8 @@ function Shell() {
 
   useEffect(() => {
     const container = document.getElementById('main-scroll');
-    if (!container) return;
+    // Người dùng bật giảm chuyển động: cuộn thường, không cuộn mượt.
+    if (!container || prefersReducedMotion()) return;
     const lenis = new Lenis({
       wrapper: container,
       content: container.firstElementChild as HTMLElement,

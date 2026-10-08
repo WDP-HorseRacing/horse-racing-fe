@@ -641,12 +641,13 @@ export type NotificationCategory =
   | 'MEDICAL_CASE'
   | 'CARE_REMINDER'
   | 'HORSE_LIFECYCLE'
-  | 'OWNERSHIP';
+  | 'OWNERSHIP'
+  | 'PERFORMANCE_ALERT';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */
 export interface NotificationResource {
-  type: 'HORSE' | 'MEDICAL_CASE' | 'TRAINING_LOCK';
+  type: 'HORSE' | 'MEDICAL_CASE' | 'TRAINING_LOCK' | 'SESSION_PARTICIPANT';
   id: string;
   /** Luôn có với thông báo mới. Thông báo cũ trong Mongo có thể thiếu. */
   horseId?: string;
@@ -668,3 +669,5 @@ export interface NotificationPage {
   items: NotificationItem[];
   nextCursor: string | null;
 }
+
+export * from './training-types';

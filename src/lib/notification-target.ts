@@ -8,6 +8,8 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
   const resource = item.resource;
   if (!resource) return undefined;
   if (resource.type === 'MEDICAL_CASE') return links.case(resource.id);
+  // Cảnh báo thể lực khi tập: mở chi tiết lượt tập (id là lượt tập, horseId đi kèm để tìm buổi).
+  if (resource.type === 'SESSION_PARTICIPANT') return links.participant(resource.id, resource.horseId);
   // Thông báo cũ có thể thiếu horseId: với đối tượng là ngựa thì id chính là id ngựa.
   const horseId = resource.horseId ?? (resource.type === 'HORSE' ? resource.id : undefined);
   if (!horseId) return undefined;

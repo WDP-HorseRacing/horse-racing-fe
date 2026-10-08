@@ -21,6 +21,8 @@ import { useCrumbs } from '../../components/Breadcrumb';
 import OverviewTab from './tabs/OverviewTab';
 import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
+import TrainingTab from './tabs/TrainingTab';
+import { FEATURES } from '../../config/features';
 import LifecycleDialog from './components/LifecycleDialog';
 import OwnershipTransferDialog from './components/OwnershipTransferDialog';
 import TransferChooser from './components/TransferChooser';
@@ -95,6 +97,7 @@ export default function HorseDetail() {
     { key: 'overview', label: 'Tổng quan' },
     { key: 'pedigree', label: 'Phả hệ' },
     { key: 'body', label: 'Chỉ số cơ thể' },
+    ...(FEATURES.training && permissions.canViewTrainingTab ? [{ key: 'training', label: 'Huấn luyện' }] : []),
   ];
   const requested = params.get('tab') ?? 'overview';
   // Y tế đã thành màn riêng (Flow 3): link cũ ?tab=medical chuyển sang đó.
@@ -285,6 +288,7 @@ export default function HorseDetail() {
         {tab === 'overview' && <OverviewTab horse={horse} permissions={permissions} onChanged={reload} onTransferOwnership={() => setTransferOpen(true)} />}
         {tab === 'pedigree' && <PedigreeTab horseId={horse.id} />}
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
+        {tab === 'training' && <TrainingTab horse={horse} permissions={permissions} />}
       </div>
 
       <LifecycleDialog

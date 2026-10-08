@@ -1,244 +1,202 @@
-// Biểu mẫu thêm/sửa môn học trong panel trượt phải — kiểm tra tức thì theo checkSubject.
+// Thêm hoặc sửa một môn học (Club Manager). Kiểm tra giống BE trước khi gửi:
+// tên 1 đến 160 ký tự và không trùng, cự ly 0 đến 20.000 m, môn chạy thử cự ly lớn hơn 0, môn thường không có thời gian mục tiêu.
 import { useState } from 'react';
-import { Lock } from 'lucide-react';
-import { Button, cn, ErrorBox, Field, Input, Notice, Sheet, Textarea } from '../../../components/ui';
-import { IntensityMeter } from '../../../components/ui/status';
-import { checkDistance, checkSubject, checkWorkoutIntensity, isHeavy } from '../../../lib/rules';
-import { intensityLabel, surfaceLabel, workoutLabel } from '../../../lib/labels';
-import type { TrackSurface, TrainingIntensity, WorkoutType } from '../../../types/domain';
-import type { SubjectInput, SubjectRow } from '../../../services/training.service';
-import { volumeLabel } from '../setup-components/helpers';
+import { Flag, Footprints } from 'lucide-react';
+import { createSubject, updateSubject } from '../../../api/training';
+import type { TrainingIntensity, TrainingSessionType, TrainingSubject, TrainingSubjectInput } from '../../../api/types';
+import { Button, CharCount, ErrorBox, Field, Input, Segmented, Sheet, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../../components/ui';
+import { useAction } from '../../../hooks/useService';
+import { SURFACE_SUGGESTIONS } from '../../../lib/training-labels';
+import { fieldFromMessage } from '../../../lib/errors';
+import { Stepper } from '../components/Stepper';
+import { IntensityBars } from '../components/bits';
+import { RaceTimeInput } from '../components/RaceTimeInput';
 
-const EMPTY: SubjectInput = {
-  name: '',
-  workoutType: 'CANTER',
-  distanceM: 1600,
-  repetitions: 1,
-  intensity: 'MEDIUM',
-  surface: 'TURF',
-  description: '',
-};
+interface Draft {
+  name: string;
+  description: string;
+  sessionType: TrainingSessionType;
+  intensity: TrainingIntensity;
+  plannedDistanceM: number;
+  surface: string;
+  targetTimeMs?: number;
+  targetRaw: string;
+}
 
-const WORKOUT_HINT: Record<WorkoutType, string> = {
-  WALK: 'Nhẹ hoặc Trung bình',
-  TROT: 'Nhẹ hoặc Trung bình',
-  CANTER: 'Mọi cường độ',
-  BREEZE: 'Mọi cường độ',
-  TIME_TRIAL: 'Chỉ Nặng hoặc Tối đa, lặp 1 lần',
-};
-
-export function SubjectSheet({
-  open,
-  initial,
-  pending,
-  error,
-  errorField,
-  onSubmit,
-  onClose,
-}: {
-  open: boolean;
-  initial?: SubjectRow;
-  pending: boolean;
-  error?: string;
-  errorField?: string;
-  onSubmit: (input: SubjectInput) => void;
-  onClose: () => void;
-}) {
-  const [form, setForm] = useState<SubjectInput>(EMPTY);
-
-  const [wasOpen, setWasOpen] = useState(false);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
-      setForm(
-        initial
-          ? {
-              name: initial.name,
-              workoutType: initial.workoutType,
-              distanceM: initial.distanceM,
-              repetitions: initial.repetitions,
-              intensity: initial.intensity,
-              surface: initial.surface,
-              description: initial.description ?? '',
-            }
-          : EMPTY,
-      );
-    }
-  }
-
-  const setWorkout = (workoutType: WorkoutType) => {
-    setForm((current) => {
-      const next = { ...current, workoutType };
-      if (workoutType === 'TIME_TRIAL') {
-        next.repetitions = 1;
-        if (!isHeavy(next.intensity)) next.intensity = 'HEAVY';
-      } else if ((workoutType === 'WALK' || workoutType === 'TROT') && isHeavy(next.intensity)) {
-        next.intensity = 'LIGHT';
-      }
-      return next;
-    });
+function initial(subject?: TrainingSubject): Draft {
+  return {
+    name: subject?.name ?? '',
+    description: subject?.description ?? '',
+    sessionType: subject?.sessionType ?? 'REGULAR',
+    intensity: subject?.intensity ?? 'MODERATE',
+    plannedDistanceM: subject?.plannedDistanceM ?? 1600,
+    surface: subject?.surface ?? '',
+    targetTimeMs: subject?.targetTimeMs ?? undefined,
+    targetRaw: '',
   };
+}
 
-  const trial = form.workoutType === 'TIME_TRIAL';
-  const intensityCheck = checkWorkoutIntensity(form.workoutType, form.intensity);
-  const distanceCheck = checkDistance(Number(form.distanceM), Number(form.repetitions));
-  const overall = checkSubject({ ...form, distanceM: Number(form.distanceM), repetitions: Number(form.repetitions) });
-  const nameMissing = !form.name.trim();
-  const serverError = (field: string) => (errorField === field ? error : undefined);
+export default function SubjectSheet({
+  subject,
+  existingNames,
+  onClose,
+  onSaved,
+}: {
+  subject?: TrainingSubject;
+  existingNames: string[];
+  onClose: () => void;
+  onSaved: (subject: TrainingSubject) => void;
+}) {
+  const toast = useToast();
+  const [draft, setDraft] = useState<Draft>(() => initial(subject));
+  const [touched, setTouched] = useState(false);
+  const save = useAction();
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const trial = draft.sessionType === 'TIME_TRIAL';
+
+  const errors: Partial<Record<'name' | 'plannedDistanceM' | 'targetTimeMs' | 'surface', string>> = {};
+  const name = draft.name.trim();
+  if (!name) errors.name = 'Nhập tên môn';
+  else if (name.length > 160) errors.name = 'Tên tối đa 160 ký tự';
+  else if (existingNames.some((item) => item.trim().toLowerCase() === name.toLowerCase())) errors.name = 'Tên môn đã có trong danh mục';
+  if (!Number.isInteger(draft.plannedDistanceM) || draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) errors.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
+  else if (trial && draft.plannedDistanceM === 0) errors.plannedDistanceM = 'Môn chạy thử phải có cự ly lớn hơn 0';
+  if (trial && draft.targetRaw.trim() && !draft.targetTimeMs) errors.targetTimeMs = 'Nhập dạng phút:giây, ví dụ 1:15.40';
+  if (draft.surface.trim().length > 80) errors.surface = 'Mặt sân tối đa 80 ký tự';
+
+  // Lỗi BE (ví dụ tên trùng do người khác vừa tạo) gắn vào đúng ô.
+  const serverField = save.field ?? fieldFromSubjectMessage(save.error);
+  const fieldError = (key: keyof typeof errors) => (touched ? errors[key] : undefined) ?? (serverField === key ? save.error : undefined);
+
+  const submit = () => {
+    setTouched(true);
+    if (Object.keys(errors).length > 0) {
+      window.setTimeout(() => scrollToFirstError(), 0);
+      return;
+    }
+    const input: TrainingSubjectInput = {
+      name,
+      description: draft.description.trim() || (subject ? null : undefined),
+      sessionType: draft.sessionType,
+      intensity: draft.intensity,
+      plannedDistanceM: draft.plannedDistanceM,
+      surface: draft.surface.trim() || (subject ? null : undefined),
+      targetTimeMs: trial ? (draft.targetTimeMs ?? (subject ? null : undefined)) : subject?.targetTimeMs ? null : undefined,
+    };
+    void save.run(
+      () => (subject ? updateSubject(subject.id, input) : createSubject(input)),
+      (saved) => {
+        toast.push(subject ? `Đã lưu môn ${saved.name}` : `Đã thêm môn ${saved.name}`, 'success');
+        onSaved(saved);
+      },
+    );
+  };
 
   return (
     <Sheet
-      open={open}
+      open
       onClose={onClose}
-      title={initial ? `Sửa môn "${initial.name}"` : 'Thêm môn học'}
-      description="Môn học là nội dung dùng lại được, không gắn ngựa. Buổi học đã sinh giữ nguyên nội dung cũ khi sửa môn."
+      title={subject ? 'Sửa môn học' : 'Thêm môn học'}
+      description="Môn là một bài tập cố định. Giáo án ghép các môn theo tuần."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
+          <Button variant="ghost" onClick={onClose}>
+            Hủy
           </Button>
-          <Button onClick={() => onSubmit(form)} disabled={pending || nameMissing || !overall.allowed}>
-            {pending ? 'Đang lưu…' : initial ? 'Lưu thay đổi' : 'Thêm môn học'}
+          <Button onClick={submit} disabled={save.pending}>
+            {save.pending ? 'Đang lưu…' : subject ? 'Lưu thay đổi' : 'Thêm môn'}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        {initial && initial.usedBySessions > 0 && (
-          <Notice tone="info">
-            Môn này đã sinh {initial.usedBySessions} buổi học. Sửa ở đây chỉ áp dụng cho giáo án và lớp mở sau. Các buổi đã sinh
-            giữ nguyên nội dung đã chụp lại.
-          </Notice>
-        )}
+        {save.error && !serverField && <ErrorBox message={save.error} />}
 
-        <Field label="Tên môn học" required error={serverError('name')}>
-          <Input
-            value={form.name}
-            maxLength={80}
-            placeholder="Ví dụ: Nước rút 400 m"
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-          />
+        <Field label="Tên môn" required name="name" error={fieldError('name')} counter={<CharCount value={draft.name} max={160} />}>
+          <Input value={draft.name} maxLength={160} autoFocus placeholder="Ví dụ: Phi nước đại 1.600 m" onChange={(event) => set('name', event.target.value)} className={fieldError('name') ? invalidClass : ''} />
         </Field>
 
-        <Field label="Loại bài tập" required hint={`Cường độ cho phép: ${WORKOUT_HINT[form.workoutType]}`}>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {(Object.keys(workoutLabel) as WorkoutType[]).map((key) => (
+        <Field label="Loại buổi">
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { value: 'REGULAR', label: 'Buổi thường', hint: 'Bài tập luyện hằng ngày', icon: Footprints },
+                { value: 'TIME_TRIAL', label: 'Chạy thử', hint: 'Bấm giờ, so với mục tiêu', icon: Flag },
+              ] as const
+            ).map((option) => (
               <button
-                key={key}
+                key={option.value}
                 type="button"
-                onClick={() => setWorkout(key)}
+                onClick={() => set('sessionType', option.value)}
                 className={cn(
-                  'rounded-lg px-3 py-2.5 text-sm font-medium ring-1 transition',
-                  form.workoutType === key
-                    ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
-                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
+                  'flex items-start gap-3 rounded-xl p-3 text-left ring-1 transition',
+                  draft.sessionType === option.value ? 'bg-emerald-50/70 ring-2 ring-emerald-500/60' : 'bg-white ring-gray-200 hover:ring-gray-300',
                 )}
               >
-                {workoutLabel[key]}
+                <option.icon size={18} className={draft.sessionType === option.value ? 'text-emerald-700' : 'text-gray-400'} />
+                <span>
+                  <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
+                  <span className="block text-xs text-gray-500">{option.hint}</span>
+                </span>
               </button>
             ))}
           </div>
         </Field>
 
-        <Field label="Cường độ mặc định" required error={!intensityCheck.allowed ? intensityCheck.reason : serverError('intensity')}>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {(Object.keys(intensityLabel) as TrainingIntensity[]).map((key) => {
-              const allowed = checkWorkoutIntensity(form.workoutType, key).allowed;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={!allowed}
-                  title={allowed ? undefined : checkWorkoutIntensity(form.workoutType, key).reason}
-                  onClick={() => setForm({ ...form, intensity: key })}
-                  className={cn(
-                    'flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ring-1 transition disabled:cursor-not-allowed disabled:opacity-35',
-                    form.intensity === key
-                      ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
-                      : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
-                  )}
-                >
-                  <IntensityMeter intensity={key} />
-                </button>
-              );
-            })}
-          </div>
+        <Field label="Cường độ" hint="Ngựa đang cần theo dõi không tập được buổi cường độ nặng.">
+          <Segmented<TrainingIntensity>
+            value={draft.intensity}
+            onChange={(value) => set('intensity', value)}
+            options={(['LIGHT', 'MODERATE', 'HEAVY'] as const).map((value) => ({ value, label: <IntensityBars intensity={value} className="text-inherit" /> }))}
+          />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Cự ly mỗi lần (m)"
-            required
-            hint="200–4000 m"
-            error={!distanceCheck.allowed && /Cự ly/.test(distanceCheck.reason ?? '') ? distanceCheck.reason : serverError('distanceM')}
-          >
-            <Input
-              type="number"
-              min={200}
-              max={4000}
-              step={100}
-              value={form.distanceM}
-              onChange={(event) => setForm({ ...form, distanceM: Number(event.target.value) })}
-            />
+          <Field label="Cự ly dự kiến" required name="plannedDistanceM" error={fieldError('plannedDistanceM')}>
+            <Stepper value={draft.plannedDistanceM} onChange={(value) => set('plannedDistanceM', value)} min={0} max={20000} step={100} suffix="m" label="cự ly" />
           </Field>
-          <Field
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                Số lần lặp {trial && <Lock size={12} className="text-gray-400" />}
-              </span>
-            }
-            required
-            hint={trial ? 'Chạy thử luôn lặp đúng 1 lần' : '1–10 lần'}
-            error={!distanceCheck.allowed && /lặp/.test(distanceCheck.reason ?? '') ? distanceCheck.reason : serverError('repetitions')}
-          >
-            <Input
-              type="number"
-              min={1}
-              max={10}
-              disabled={trial}
-              value={form.repetitions}
-              onChange={(event) => setForm({ ...form, repetitions: Number(event.target.value) })}
-            />
-          </Field>
+          {trial && (
+            <Field label="Thời gian mục tiêu" name="targetTimeMs" error={fieldError('targetTimeMs')} hint="Phút:giây.phần trăm giây">
+              <RaceTimeInput
+                value={draft.targetTimeMs}
+                invalid={!!fieldError('targetTimeMs')}
+                onChange={(ms, raw) => setDraft((current) => ({ ...current, targetTimeMs: ms, targetRaw: raw }))}
+              />
+            </Field>
+          )}
         </div>
 
-        <Field label="Mặt sân" required>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(surfaceLabel) as TrackSurface[]).map((key) => (
+        <Field label="Mặt sân" name="surface" error={fieldError('surface')}>
+          <Input value={draft.surface} maxLength={80} placeholder="Ví dụ: Cỏ" onChange={(event) => set('surface', event.target.value)} />
+          <span className="mt-2 flex flex-wrap gap-1.5">
+            {SURFACE_SUGGESTIONS.map((surface) => (
               <button
-                key={key}
+                key={surface}
                 type="button"
-                onClick={() => setForm({ ...form, surface: key })}
+                onClick={() => set('surface', surface)}
                 className={cn(
-                  'rounded-lg px-4 py-2 text-sm font-medium ring-1 transition',
-                  form.surface === key
-                    ? 'bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600'
-                    : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
+                  'rounded-full px-2.5 py-1 text-xs ring-1 transition',
+                  draft.surface === surface ? 'bg-emerald-50 text-emerald-800 ring-emerald-500/50' : 'bg-white text-gray-600 ring-gray-200 hover:ring-gray-300',
                 )}
               >
-                Sân {surfaceLabel[key].toLowerCase()}
+                {surface}
               </button>
             ))}
-          </div>
-        </Field>
-
-        <Field label="Mô tả">
-          <Textarea
-            value={form.description ?? ''}
-            placeholder="Cách thực hiện, thời gian hồi sức giữa các lần…"
-            onChange={(event) => setForm({ ...form, description: event.target.value })}
-          />
-        </Field>
-
-        <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 text-sm">
-          <span className="text-gray-500">Khối lượng mỗi buổi</span>
-          <span className="font-semibold text-gray-900 tabular-nums">
-            {Number.isFinite(form.distanceM * form.repetitions) ? volumeLabel(form.distanceM * form.repetitions) : '—'}
           </span>
-        </div>
+        </Field>
 
-        {error && !['name', 'distanceM', 'repetitions', 'intensity'].includes(errorField ?? '') && <ErrorBox message={error} />}
+        <Field label="Mô tả bài tập">
+          <Textarea rows={3} value={draft.description} placeholder="Khởi động, số vòng, lưu ý cho Groom…" onChange={(event) => set('description', event.target.value)} />
+        </Field>
       </div>
     </Sheet>
   );
+}
+
+function fieldFromSubjectMessage(message: string | undefined) {
+  if (!message) return undefined;
+  if (message.includes('Tên môn')) return 'name';
+  if (message.includes('cự ly')) return 'plannedDistanceM';
+  if (message.includes('thời gian mục tiêu')) return 'targetTimeMs';
+  return fieldFromMessage(message);
 }
