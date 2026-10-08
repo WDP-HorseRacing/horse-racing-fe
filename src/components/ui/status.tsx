@@ -3,25 +3,17 @@
 import { Check, Lock, X } from 'lucide-react';
 import { Dot, Pill, Tip, cn, type DotTone, type PillTone } from './index';
 import {
-  absenceLabel,
-  attendanceLabel,
   caseStatusLabel,
-  classStatusLabel,
   examRequestStatusLabel,
   examUrgencyLabel,
   healthLabel,
-  intensityLabel,
   lifecycleEligibilityText,
   lifecycleLabel,
   placementLabel,
-  sessionStatusLabel,
   stallStatusLabel,
   zoneStatusLabel,
 } from '../../lib/labels';
 import type {
-  AbsenceReason,
-  AttendanceStatus,
-  ClassStatus,
   ExamRequestStatus,
   ExamUrgency,
   HealthStatus,
@@ -29,12 +21,11 @@ import type {
   LifecycleStatus,
   MedicalCaseStatus,
   NotificationLevel,
-  SessionStatus,
   StallStatus,
-  TrainingIntensity,
   ZoneStatus,
 } from '../../types/domain';
 import { careStatusLabel, caseStatusText, eligibilityReasonLabel, placementStatusLabel } from '../../lib/api-labels';
+import type { TrainingIntensity } from '../../api/types';
 import type {
   CareStatus as ApiCareStatus,
   CaseStatus as ApiCaseStatus,
@@ -104,85 +95,23 @@ export function StallStatusPill({ status }: { status: StallStatus }) {
   return <Pill tone={status === 'MAINTENANCE' ? 'amber' : 'gray'}>{stallStatusLabel[status]}</Pill>;
 }
 
-/* ===== Cường độ: thanh 4 vạch đơn sắc, không dùng màu riêng cho từng mức ===== */
+/* ===== Cường độ buổi tập: ba vạch đơn sắc cao dần, không dùng màu riêng cho từng mức ===== */
 
-const INTENSITY_LEVEL: Record<TrainingIntensity, number> = { LIGHT: 1, MEDIUM: 2, HEAVY: 3, MAX: 4 };
+const INTENSITY_LEVEL: Record<TrainingIntensity, number> = { LIGHT: 1, MODERATE: 2, HEAVY: 3 };
+const INTENSITY_TEXT: Record<TrainingIntensity, string> = { LIGHT: 'Nhẹ', MODERATE: 'Trung bình', HEAVY: 'Nặng' };
 
-export function IntensityMeter({ intensity, showLabel = true }: { intensity: TrainingIntensity; showLabel?: boolean }) {
+export function IntensityMeter({ intensity, showLabel = true, className = '' }: { intensity: TrainingIntensity; showLabel?: boolean; className?: string }) {
   const level = INTENSITY_LEVEL[intensity];
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-700" title={`Cường độ ${intensityLabel[intensity]}`}>
-      <span className="inline-flex items-end gap-[2px]" aria-hidden>
-        {[1, 2, 3, 4].map((bar) => (
-          <span
-            key={bar}
-            className={cn('w-[3px] rounded-[1px]', bar <= level ? 'bg-gray-800' : 'bg-gray-200')}
-            style={{ height: 4 + bar * 2 }}
-          />
+    <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-700', className)} title={`Cường độ ${INTENSITY_TEXT[intensity].toLowerCase()}`}>
+      <span className="inline-flex items-end gap-[2px]" aria-hidden data-intensity-bars>
+        {[1, 2, 3].map((bar) => (
+          <span key={bar} className={cn('w-[3px] origin-bottom rounded-[1px]', bar <= level ? 'bg-gray-800' : 'bg-gray-200')} style={{ height: 4 + bar * 3 }} />
         ))}
       </span>
-      {showLabel && intensityLabel[intensity]}
+      {showLabel && INTENSITY_TEXT[intensity]}
     </span>
   );
-}
-
-/** Giữ tên cũ — nay hiển thị dạng thanh vạch. */
-export function IntensityPill({ intensity }: { intensity: TrainingIntensity }) {
-  return <IntensityMeter intensity={intensity} />;
-}
-
-/** Chấm cường độ trong lưới lịch: bốn sắc độ của cùng một màu. */
-export const intensityDot: Record<TrainingIntensity, string> = {
-  LIGHT: 'bg-gray-300',
-  MEDIUM: 'bg-gray-500',
-  HEAVY: 'bg-gray-700',
-  MAX: 'bg-gray-900',
-};
-
-/* ===== Lớp, buổi, tham gia ===== */
-
-export function ClassPill({ status }: { status: ClassStatus }) {
-  if (status === 'ACTIVE') {
-    return (
-      <Pill tone="green">
-        <Dot tone="ok" />
-        {classStatusLabel[status]}
-      </Pill>
-    );
-  }
-  return (
-    <Pill tone={status === 'SCHEDULED' ? 'slate' : 'gray'} className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
-      {classStatusLabel[status]}
-    </Pill>
-  );
-}
-
-export function SessionPill({ status }: { status: SessionStatus }) {
-  if (status === 'IN_PROGRESS') {
-    return (
-      <Pill tone="green" pulse>
-        {sessionStatusLabel[status]}
-      </Pill>
-    );
-  }
-  if (status === 'AWAITING_REVIEW') return <Pill tone="amber">{sessionStatusLabel[status]}</Pill>;
-  return (
-    <Pill tone={status === 'SCHEDULED' ? 'slate' : 'gray'} className={status === 'CANCELLED' ? 'line-through decoration-gray-400' : ''}>
-      {sessionStatusLabel[status]}
-    </Pill>
-  );
-}
-
-export function AttendancePill({ status, reason }: { status: AttendanceStatus; reason?: AbsenceReason }) {
-  if (status === 'ABSENT') {
-    return (
-      <Pill tone="amber" title={reason ? absenceLabel[reason] : undefined}>
-        {attendanceLabel[status]}
-        {reason && <span className="font-normal">· {absenceLabel[reason]}</span>}
-      </Pill>
-    );
-  }
-  return <Pill tone={status === 'PRESENT' ? 'gray' : 'slate'}>{attendanceLabel[status]}</Pill>;
 }
 
 /* ===== Y tế ===== */

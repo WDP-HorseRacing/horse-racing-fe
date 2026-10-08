@@ -1,5 +1,4 @@
-// Bật/tắt từng phần của ứng dụng. Flow 2 (huấn luyện) chưa có API thật nên tạm ẩn:
-// menu, route, tab Huấn luyện và các khối huấn luyện trên Tổng quan đều đọc cờ này.
+// Bật/tắt từng phần của ứng dụng. Menu, route, tab Huấn luyện của ngựa và các khối huấn luyện trên Tổng quan đọc cờ này.
 export const FEATURES = {
-  training: false,
+  training: true,
 } as const;

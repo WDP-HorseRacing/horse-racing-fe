@@ -64,3 +64,6 @@ export function parentOldEnough(parentBirth: string | null | undefined, childBir
   if (!parentBirth || !childBirth) return true;
   return parentBirth <= shiftKey(childBirth, { years: -PARENT_AGE_GAP_YEARS });
 }
+
+/** Thân nhiệt từ mức này trở lên là sốt (khớp ngưỡng báo động của backend). */
+export const TEMP_ALERT_C = 38.6;

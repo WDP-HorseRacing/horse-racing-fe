@@ -1,6 +1,6 @@
 import { Suspense, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
-import { Navigate, Outlet, Route, useLocation, useParams } from 'react-router-dom';
+import { Navigate, Outlet, Route, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
 import { FEATURES } from './config/features';
@@ -21,20 +21,16 @@ import {
   HorseForm,
   HorseDetail,
   StableMap,
-  SubjectList,
-  ProgramList,
-  ProgramEditor,
-  ProgramDetail,
+  SubjectsPage,
+  PlanList,
+  PlanEditor,
+  PlanDetail,
   ClassList,
-  ClassForm,
+  ClassCreate,
   ClassDetail,
-  SchedulePage,
-  TodaySessions,
-  SessionPage,
-  LiveList,
-  ReviewList,
-  ProgressBoard,
-  HeartRatePage,
+  SessionBoard,
+  ParticipantDetail,
+  TrainingToday,
   MedicalBoard,
   ExamRequests,
   CaseList,
@@ -64,35 +60,23 @@ const ProtectedRoute = () => {
   return <Navigate to={`/login?${params.toString()}`} replace />;
 };
 
-/** Đường dẫn cũ của buổi tập (live/review) chuyển sang trang buổi học mới. */
-function SessionRedirect() {
-  const { id } = useParams();
-  return <Navigate to={`/training/sessions/${id}`} replace />;
-}
-
-/** Flow 2 (huấn luyện) — chỉ gắn route khi bật cờ; code giữ nguyên để gắn API sau. */
+/** Flow 2 (huấn luyện): chỉ gắn route khi bật cờ. */
 function trainingRoutes() {
   if (!FEATURES.training) return <Route path="training/*" element={<Navigate to="/dashboard" replace />} />;
   return (
     <>
-      <Route path="training/subjects" element={<SubjectList />} />
-      <Route path="training/programs" element={<ProgramList />} />
-      <Route path="training/programs/new" element={<ProgramEditor />} />
-      <Route path="training/programs/:id" element={<ProgramDetail />} />
-      <Route path="training/programs/:id/edit" element={<ProgramEditor />} />
+      <Route path="training/subjects" element={<SubjectsPage />} />
+      <Route path="training/plans" element={<PlanList />} />
+      <Route path="training/plans/new" element={<PlanEditor />} />
+      <Route path="training/plans/:id" element={<PlanDetail />} />
+      <Route path="training/plans/:id/edit" element={<PlanEditor />} />
       <Route path="training/classes" element={<ClassList />} />
-      <Route path="training/classes/new" element={<ClassForm />} />
+      <Route path="training/classes/new" element={<ClassCreate />} />
       <Route path="training/classes/:id" element={<ClassDetail />} />
-      <Route path="training/schedule" element={<SchedulePage />} />
-      <Route path="training/today" element={<TodaySessions />} />
-      <Route path="training/sessions/:id" element={<SessionPage />} />
-      <Route path="training/live" element={<LiveList />} />
-      <Route path="training/live/:id" element={<SessionRedirect />} />
-      <Route path="training/review" element={<ReviewList />} />
-      <Route path="training/review/:id" element={<SessionRedirect />} />
-      <Route path="training/progress" element={<ProgressBoard />} />
-      <Route path="training/heart-rate" element={<HeartRatePage />} />
-      <Route path="training/plans/*" element={<Navigate to="/training/classes" replace />} />
+      <Route path="training/sessions/:id" element={<SessionBoard />} />
+      <Route path="training/participants/:id" element={<ParticipantDetail />} />
+      <Route path="training/today" element={<TrainingToday />} />
+      <Route path="training" element={<Navigate to="/training/classes" replace />} />
     </>
   );
 }
@@ -126,7 +110,7 @@ const router = createBrowserRouter(
           <Route path="stable" element={<StableMap />} />
           <Route path="stable/zones" element={<Navigate to="/stable" replace />} />
 
-          {/* Flow 2 — huấn luyện (tạm ẩn) */}
+          {/* Flow 2 — lập và thực hiện giáo án huấn luyện */}
           {trainingRoutes()}
 
           {/* Flow 3 — y tế và xử lý chấn thương */}

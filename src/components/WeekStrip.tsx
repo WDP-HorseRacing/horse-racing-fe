@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Card, cn } from './ui';
 import { IntensityMeter } from './ui/status';
-import type { TrainingIntensity } from '../types/domain';
+import type { TrainingIntensity } from '../api/types';
 
 export interface WeekItem {
   id: string;

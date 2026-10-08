@@ -1,180 +1,334 @@
-// Tab "Buổi học": nhóm theo tuần/giai đoạn; hủy buổi (cả lớp) và mở trang buổi học.
-import { useMemo, useState } from 'react';
+// Tab Lịch buổi của lớp: gom theo tuần của lớp, tuần hiện tại mở sẵn. Buổi nháp viền nét đứt, sửa được.
+// HLV công bố từng buổi, thêm buổi, hủy buổi (cần lý do). Buổi vừa công bố được "đổ mực" từ trái sang.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, CalendarPlus, XCircle } from 'lucide-react';
-import type { ClassDetail, ClassSessionRow } from '../../../services/training.service';
-import { Button, Card, cn, EmptyState, Pill, Segmented, Tip } from '../../../components/ui';
-import { IntensityMeter, SessionPill } from '../../../components/ui/status';
-import { sessionCancelLabel, surfaceLabel } from '../../../lib/labels';
-import { formatDateShort } from '../../../lib/format';
+import { ChevronDown, Clock3, MapPin, Megaphone, Pencil, Plus, XCircle } from 'lucide-react';
+import { addSession, cancelSession, createTimeTrial, getTimeTrial, publishSession, updateSession, updateTimeTrial } from '../../../api/training';
+import type { TrainingSession } from '../../../api/types';
+import { Button, EmptyState, cn, useToast } from '../../../components/ui';
+import { useAction } from '../../../hooks/useService';
+import { formatDate } from '../../../lib/format';
+import { addMinutes, clubDateKey, clubInstant, clubTime, clubToday, diffDateKeys, isoWeekdayOf } from '../../../lib/club-time';
+import { formatMeters } from '../../../lib/training-format';
+import { weekdayShort } from '../../../lib/training-labels';
+import { gsap } from '../../../lib/gsap';
+import { prefersReducedMotion } from '../../../lib/motion';
+import { IntensityBars, SessionStatusPill, TrialBadge } from '../components/bits';
+import { ReasonDialog } from '../components/ReasonDialog';
+import { SessionEditSheet, draftFromSubject, type SessionDraft } from '../components/SessionEditSheet';
 import { links } from '../../../lib/links';
-import { weekdayLong, workoutLine } from '../setup-components/helpers';
+import type { ClassBundle } from './class-bundle';
 
-type Filter = 'all' | 'upcoming' | 'done' | 'cancelled';
+export default function ClassSessionsTab({ bundle, manage, reload, justPublished }: { bundle: ClassBundle; manage: boolean; reload: () => void; justPublished: string[] }) {
+  const toast = useToast();
+  const { item, sessions, subjects } = bundle;
+  const open = item.status === 'DRAFT' || item.status === 'ACTIVE';
+  const listRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState<{ session?: TrainingSession; initial: SessionDraft } | null>(null);
+  const [cancelling, setCancelling] = useState<TrainingSession | null>(null);
+  const [publishedNow, setPublishedNow] = useState<string[]>([]);
+  const save = useAction();
+  const publish = useAction();
+  const cancel = useAction();
+  const animated = useRef(new Set<string>());
 
-export function ClassSessionsTab({
-  detail,
-  today,
-  onAdd,
-  onCancel,
-}: {
-  detail: ClassDetail;
-  today: string;
-  onAdd: () => void;
-  onCancel: (row: ClassSessionRow) => void;
-}) {
-  const [filter, setFilter] = useState<Filter>('all');
-  const counts = useMemo(
-    () => ({
-      upcoming: detail.sessions.filter((row) => row.status === 'SCHEDULED' || row.status === 'IN_PROGRESS').length,
-      done: detail.sessions.filter((row) => row.status === 'COMPLETED' || row.status === 'AWAITING_REVIEW').length,
-      cancelled: detail.sessions.filter((row) => row.status === 'CANCELLED').length,
-    }),
-    [detail.sessions],
-  );
-
-  const groups = useMemo(() => {
-    const rows = detail.sessions.filter((row) => {
-      if (filter === 'upcoming') return row.status === 'SCHEDULED' || row.status === 'IN_PROGRESS';
-      if (filter === 'done') return row.status === 'COMPLETED' || row.status === 'AWAITING_REVIEW';
-      if (filter === 'cancelled') return row.status === 'CANCELLED';
-      return true;
-    });
-    const map = new Map<number, ClassSessionRow[]>();
-    rows.forEach((row) => {
-      const week = row.weekNo ?? 0;
-      map.set(week, [...(map.get(week) ?? []), row]);
-    });
+  const weekOf = (session: TrainingSession) => Math.floor(diffDateKeys(item.startDate, clubDateKey(session.scheduledStartAt)) / 7) + 1;
+  const weeks = useMemo(() => {
+    const map = new Map<number, TrainingSession[]>();
+    [...sessions]
+      .sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt))
+      .forEach((session) => {
+        const week = weekOf(session);
+        map.set(week, [...(map.get(week) ?? []), session]);
+      });
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
-  }, [detail.sessions, filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, item.startDate]);
+  const currentWeek = Math.floor(diffDateKeys(item.startDate, clubToday()) / 7) + 1;
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set([Math.max(1, currentWeek), currentWeek + 1]));
+
+  // Buổi vừa công bố: lớp màu xanh nhạt quét từ trái sang rồi tan, khi dòng đã đổi sang trạng thái đã công bố.
+  const targets = [...justPublished, ...publishedNow];
+  useEffect(() => {
+    if (!listRef.current || prefersReducedMotion()) return;
+    const ready = targets.filter((id) => !animated.current.has(id) && sessions.find((session) => session.id === id)?.status === 'SCHEDULED');
+    if (ready.length === 0) return;
+    ready.forEach((id) => animated.current.add(id));
+    const inks = ready.map((id) => listRef.current?.querySelector(`[data-session-row="${id}"] [data-ink]`)).filter(Boolean) as Element[];
+    gsap
+      .timeline()
+      .fromTo(inks, { opacity: 1, clipPath: 'inset(0 100% 0 0)' }, { clipPath: 'inset(0 0% 0 0)', duration: 0.55, stagger: 0.08, ease: 'power2.inOut' })
+      .to(inks, { opacity: 0, duration: 0.6, stagger: 0.05 }, '+=0.15');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, targets.join(',')]);
+
+  const subjectOf = (session: TrainingSession) => subjects.find((subject) => subject.id === session.subjectId);
+
+  const openEdit = async (session: TrainingSession) => {
+    const subject = subjectOf(session);
+    let targetTimeMs: number | undefined;
+    if (session.sessionType === 'TIME_TRIAL') {
+      try {
+        targetTimeMs = (await getTimeTrial(session.id)).targetTimeMs ?? undefined;
+      } catch {
+        targetTimeMs = subject?.targetTimeMs ?? undefined;
+      }
+    }
+    setEditing({
+      session,
+      initial: {
+        subjectId: session.subjectId ?? subject?.id ?? '',
+        name: session.name,
+        intensity: session.intensity,
+        plannedDistanceM: session.plannedDistanceM,
+        surface: session.surface ?? '',
+        location: session.location ?? '',
+        notes: session.notes ?? '',
+        targetTimeMs,
+        scheduledStartAt: session.scheduledStartAt,
+        scheduledEndAt: session.scheduledEndAt,
+      },
+    });
+  };
+
+  const openAdd = () => {
+    const today = clubToday();
+    const day = today >= item.startDate && today <= item.endDate ? today : item.startDate;
+    const subject = bundle.plan?.subjects.find((entry) => {
+      const week = Math.floor(diffDateKeys(item.startDate, day) / 7) + 1;
+      return week >= entry.startWeek && week < entry.startWeek + entry.weeks;
+    })?.subject ?? subjects[0];
+    if (!subject) {
+      toast.push('Chưa có môn học nào để thêm buổi', 'error');
+      return;
+    }
+    const start = clubInstant(day, '06:00');
+    setEditing({ initial: draftFromSubject(subject, start, addMinutes(start, 60)) });
+  };
+
+  const submitEdit = (draft: SessionDraft) => {
+    const subject = subjects.find((entry) => entry.id === draft.subjectId);
+    if (!subject || !editing) return;
+    const trial = subject.sessionType === 'TIME_TRIAL';
+    const body = {
+      name: draft.name.trim(),
+      subjectId: subject.id,
+      sessionType: subject.sessionType,
+      intensity: draft.intensity,
+      plannedDistanceM: draft.plannedDistanceM,
+      scheduledStartAt: draft.scheduledStartAt,
+      scheduledEndAt: draft.scheduledEndAt,
+      location: draft.location.trim() || undefined,
+      surface: draft.surface.trim() || undefined,
+      notes: draft.notes.trim() || undefined,
+    };
+    void save.run(
+      async () => {
+        if (editing.session) {
+          const wasTrial = editing.session.sessionType === 'TIME_TRIAL';
+          const saved = await updateSession(editing.session.id, body);
+          if (trial && wasTrial) await updateTimeTrial(saved.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs ?? null });
+          if (trial && !wasTrial) await createTimeTrial(saved.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs });
+          return saved;
+        }
+        const created = await addSession(item.id, body);
+        // Buổi chạy thử thêm lẻ chưa có cấu hình chạy thử: tạo luôn để công bố được.
+        if (trial) await createTimeTrial(created.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs });
+        return created;
+      },
+      () => {
+        toast.push(editing.session ? 'Đã lưu buổi tập' : 'Đã thêm buổi nháp', 'success');
+        setEditing(null);
+        reload();
+      },
+    );
+  };
+
+  const runPublish = (session: TrainingSession) =>
+    void publish.run(
+      () => publishSession(session.id),
+      () => {
+        toast.push(`Đã công bố buổi ${session.name}`, 'success');
+        setPublishedNow((current) => [...current, session.id]);
+        reload();
+      },
+    );
+
+  if (sessions.length === 0) {
+    return (
+      <EmptyState
+        title="Lớp chưa có buổi tập"
+        action={
+          manage &&
+          open && (
+            <Button onClick={openAdd}>
+              <Plus size={15} /> Thêm buổi
+            </Button>
+          )
+        }
+      />
+    );
+  }
+
+  // Buổi chạy thử đã có cấu hình chạy thử thì không đổi về buổi thường được (BE chặn): chỉ cho chọn môn chạy thử.
+  const editSubjects = editing?.session?.sessionType === 'TIME_TRIAL' ? subjects.filter((subject) => subject.sessionType === 'TIME_TRIAL') : subjects;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmented<Filter>
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: 'Tất cả', badge: detail.sessions.length },
-            { value: 'upcoming', label: 'Sắp tới', badge: counts.upcoming },
-            { value: 'done', label: 'Đã học', badge: counts.done },
-            { value: 'cancelled', label: 'Đã hủy', badge: counts.cancelled },
-          ]}
-        />
-        {detail.canAddSession && (
-          <Button size="sm" variant="secondary" onClick={onAdd}>
-            <CalendarPlus size={14} /> Thêm buổi
+    <div ref={listRef} className="space-y-3">
+      {(publish.error || cancel.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{publish.error ?? cancel.error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-gray-500">
+          Buổi nháp chỉ HLV thấy. Công bố buổi thì mỗi ngựa đang học có một lượt tập, Groom thấy lịch dắt ngựa.
+        </p>
+        {manage && open && (
+          <Button variant="inline" size="sm" onClick={openAdd}>
+            <Plus size={14} /> Thêm buổi
           </Button>
         )}
       </div>
 
-      {groups.length === 0 && <EmptyState title="Không có buổi nào trong mục này" />}
-
-      {groups.map(([week, rows]) => {
-        const phase = rows.find((row) => row.phaseName)?.phaseName;
-        const current = rows.some((row) => row.date === today);
+      {weeks.map(([week, list]) => {
+        const isOpen = expanded.has(week);
+        const planSubject = bundle.plan?.subjects.find((entry) => week >= entry.startWeek && week < entry.startWeek + entry.weeks)?.subject;
+        const done = list.filter((session) => session.status === 'COMPLETED').length;
+        const drafts = list.filter((session) => session.status === 'DRAFT').length;
         return (
-          <Card key={week} className="p-0 sm:p-0">
-            <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-5 py-3">
-              <span className="font-semibold text-gray-900">{week > 0 ? `Tuần ${week}` : 'Ngoài tuần'}</span>
-              {phase && <span className="text-sm text-gray-500">{phase}</span>}
-              {current && <span className="text-sm font-medium text-emerald-700">· tuần này</span>}
-              <span className="ml-auto text-xs text-gray-500 tabular-nums">{rows.length} buổi</span>
-            </div>
-            <ul className="divide-y divide-gray-100">
-              {rows.map((row) => (
-                <SessionLine key={row.id} row={row} today={today} onCancel={() => onCancel(row)} />
-              ))}
-            </ul>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-function SessionLine({ row, today, onCancel }: { row: ClassSessionRow; today: string; onCancel: () => void }) {
-  const cancelled = row.status === 'CANCELLED';
-  const started = row.status !== 'SCHEDULED' && !cancelled;
-  return (
-    <li
-      className={cn(
-        'grid items-center gap-x-4 gap-y-2 px-5 py-3 text-sm md:grid-cols-12',
-        row.date === today && 'bg-gray-50',
-        cancelled && 'opacity-70',
-      )}
-    >
-      <div className="md:col-span-2">
-        <p className={cn('font-semibold tabular-nums', row.date === today ? 'text-emerald-800' : 'text-gray-900')}>
-          {formatDateShort(row.date)}
-          {row.date === today && <span className="ml-1 text-xs font-medium">hôm nay</span>}
-        </p>
-        <p className="text-xs text-gray-500 tabular-nums">
-          {weekdayLong(row.date)} · {row.slotLabel}
-        </p>
-      </div>
-      <div className="min-w-0 md:col-span-4">
-        <p className={cn('font-medium text-gray-900', cancelled && 'line-through decoration-gray-300')}>
-          {row.subjectName}
-          {row.isExtra && (
-            <Pill tone="gray" className="ml-2">
-              Buổi thêm
-            </Pill>
-          )}
-        </p>
-        <p className="text-xs text-gray-500">
-          {workoutLine(row.distanceM, row.repetitions)} · sân {surfaceLabel[row.surface].toLowerCase()}
-          {row.note && ` · ${row.note}`}
-        </p>
-      </div>
-      <div className="md:col-span-1">
-        <IntensityMeter intensity={row.intensity} />
-      </div>
-      <div className="md:col-span-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <SessionPill status={row.status} />
-          {row.derivedLabel && <Pill tone="amber">{row.derivedLabel}</Pill>}
-        </div>
-        {cancelled ? (
-          <p className="mt-1 text-xs text-gray-500">
-            {row.cancelKind ? `${sessionCancelLabel[row.cancelKind]}: ` : ''}
-            {row.cancelReason}
-          </p>
-        ) : (
-          <p className="mt-1 text-xs text-gray-500 tabular-nums">
-            {row.horseCount} ngựa
-            {started && (
-              <>
-                {' · '}
-                <span>{row.presentCount} có mặt</span>
-                {row.absentCount > 0 && <span className="text-amber-700"> · {row.absentCount} vắng</span>}
-              </>
-            )}
-          </p>
-        )}
-      </div>
-      <div className="flex justify-end gap-1 md:col-span-2">
-        {row.canCancel && (
-          <Tip content="Hủy buổi cho cả lớp">
+          <section key={week} className="overflow-hidden rounded-2xl ring-1 ring-gray-200/80">
             <button
               type="button"
-              onClick={onCancel}
-              aria-label="Hủy buổi"
-              className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+              onClick={() =>
+                setExpanded((current) => {
+                  const next = new Set(current);
+                  if (next.has(week)) next.delete(week);
+                  else next.add(week);
+                  return next;
+                })
+              }
+              className={cn('flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition', week === currentWeek ? 'bg-emerald-50/70' : 'bg-gray-50/70 hover:bg-gray-50')}
             >
-              <XCircle size={16} />
+              <span className="font-mono text-sm font-semibold text-gray-900">Tuần {week}</span>
+              {planSubject && <span className="text-sm text-gray-600">{planSubject.name}</span>}
+              {week === currentWeek && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">Tuần này</span>}
+              <span className="ml-auto text-xs text-gray-500">
+                {list.length} buổi · {done} đã xong{drafts ? ` · ${drafts} nháp` : ''}
+              </span>
+              <ChevronDown size={16} className={cn('text-gray-400 transition-transform', isOpen && 'rotate-180')} />
             </button>
-          </Tip>
-        )}
-        {!cancelled && (
-          <Link
-            to={links.session(row.id)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-          >
-            Mở buổi <ArrowUpRight size={13} />
-          </Link>
-        )}
-      </div>
-    </li>
+            {isOpen && (
+              <ul className="divide-y divide-gray-100 bg-white">
+                {list.map((session) => {
+                  const day = clubDateKey(session.scheduledStartAt);
+                  const draft = session.status === 'DRAFT';
+                  const finished = session.status === 'COMPLETED' || session.status === 'CANCELLED';
+                  return (
+                    <li key={session.id} data-session-row={session.id} className="relative">
+                      <span data-ink aria-hidden className="pointer-events-none absolute inset-0 bg-emerald-100/80 opacity-0" />
+                      <div className={cn('relative flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3', draft && 'm-2 rounded-xl session-draft bg-gray-50/40')}>
+                        <div className="w-14 shrink-0 text-center">
+                          <p className="text-xs font-semibold text-gray-500">{weekdayShort[isoWeekdayOf(day)]}</p>
+                          <p className="font-mono text-sm font-semibold text-gray-900">{formatDate(session.scheduledStartAt).slice(0, 5)}</p>
+                        </div>
+                        <div className="min-w-0 flex-1 basis-56">
+                          <div className="flex items-center gap-2">
+                            <p className={cn('truncate font-semibold', session.status === 'CANCELLED' ? 'text-gray-400 line-through' : 'text-gray-900')}>{session.name}</p>
+                            <TrialBadge type={session.sessionType} />
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                            <span className="inline-flex items-center gap-1 font-mono">
+                              <Clock3 size={11} /> {clubTime(session.scheduledStartAt)} đến {clubTime(session.scheduledEndAt)}
+                            </span>
+                            <IntensityBars intensity={session.intensity} />
+                            <span className="font-mono">{formatMeters(session.plannedDistanceM)}</span>
+                            {session.surface && <span>{session.surface}</span>}
+                            {session.location && (
+                              <span className="inline-flex items-center gap-1">
+                                <MapPin size={11} /> {session.location}
+                              </span>
+                            )}
+                          </div>
+                          {session.cancelReason && <p className="mt-0.5 text-xs text-red-700">Lý do hủy: {session.cancelReason}</p>}
+                        </div>
+                        <SessionStatusPill status={session.status} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {manage && open && draft && (
+                            <Button variant="inline" size="sm" onClick={() => void openEdit(session)}>
+                              <Pencil size={13} /> Sửa
+                            </Button>
+                          )}
+                          {manage && item.status === 'ACTIVE' && draft && (
+                            <Button size="sm" disabled={publish.pending} onClick={() => runPublish(session)}>
+                              <Megaphone size={13} /> Công bố
+                            </Button>
+                          )}
+                          {!draft && (
+                            <Link to={links.session(session.id)}>
+                              <Button variant={session.status === 'IN_PROGRESS' ? 'primary' : 'secondary'} size="sm">
+                                {session.status === 'IN_PROGRESS' ? 'Vào sân tập' : 'Mở buổi'}
+                              </Button>
+                            </Link>
+                          )}
+                          {manage && open && !finished && (
+                            <Button variant="ghost" size="icon" title="Hủy buổi" onClick={() => setCancelling(session)}>
+                              <XCircle size={15} />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+
+      {editing && (
+        <SessionEditSheet
+          title={editing.session ? 'Sửa buổi nháp' : 'Thêm buổi'}
+          description={editing.session ? 'Chỉ sửa được buổi chưa công bố.' : 'Buổi mới ở trạng thái nháp, công bố sau.'}
+          initial={editing.initial}
+          subjects={editSubjects}
+          range={{ from: item.startDate, to: item.endDate }}
+          pending={save.pending}
+          error={save.error}
+          submitLabel={editing.session ? 'Lưu buổi' : 'Thêm buổi'}
+          onClose={() => {
+            setEditing(null);
+            save.clearError();
+          }}
+          onSubmit={submitEdit}
+        />
+      )}
+      {cancelling && (
+        <ReasonDialog
+          title="Hủy buổi tập"
+          message={
+            <>
+              Hủy buổi <b>{cancelling.name}</b> ngày {formatDate(cancelling.scheduledStartAt)}. Lượt tập còn mở của buổi bị hủy theo. Không hủy được khi có ngựa đang chạy.
+            </>
+          }
+          label="Lý do hủy buổi"
+          suggestions={['Mưa lớn, sân trơn', 'Sân tập bảo trì', 'Đổi sang ngày khác']}
+          confirmLabel="Hủy buổi"
+          pending={cancel.pending}
+          error={cancel.error}
+          onClose={() => {
+            setCancelling(null);
+            cancel.clearError();
+          }}
+          onConfirm={(reason) =>
+            void cancel.run(
+              () => cancelSession(cancelling.id, reason),
+              () => {
+                toast.push('Đã hủy buổi tập', 'success');
+                setCancelling(null);
+                reload();
+              },
+            )
+          }
+        />
+      )}
+    </div>
   );
 }

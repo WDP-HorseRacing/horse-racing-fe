@@ -2,7 +2,7 @@
 //   1. Dải chào xanh rừng: ngày, lời chào, nút tắt và 4 số liệu đếm động (chỉ tô màu khi có vấn đề).
 //   2. Các hàng bất đối xứng 7/5 rồi 5/7: khu chuồng (sơ đồ nhỏ) · "Cần xử lý"; bệnh án đang điều trị · hoạt động gần đây;
 //      lịch y tế 7 ngày tới (danh sách theo ngày, có nhóm Quá hạn) · khối riêng của vai trò.
-// Phần huấn luyện (Flow 2) tạm ẩn cho tới khi có API thật.
+// Phần huấn luyện (Flow 2) nằm ở TrainingBlocks.tsx, hiện khi bật cờ FEATURES.training.
 import type { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, Lock, MapPinned, Plus, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
@@ -23,6 +23,8 @@ import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, ad
 import { now } from '../../lib/clock';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
 import { HIDDEN_COST_TEXT, isCostHidden } from '../medical/components/case-cost';
+import { FEATURES } from '../../config/features';
+import { ActiveClassesCard, GroomTrainingCard, LiveNowCard, ManagerTrainingCards, OwnerTrainingCards, TrainerTodayCard, VetAlertsCard } from './TrainingBlocks';
 
 /* ===== Mảnh ghép dùng chung ===== */
 
@@ -315,6 +317,12 @@ function ManagerDashboard({ name }: { name: string }) {
         <AttentionList items={attention} className="h-full" />
       </Row>
 
+      {FEATURES.training && (
+        <Row>
+        <ManagerTrainingCards />
+        </Row>
+      )}
+
       <Row>
         <HerdHealthCard counts={medical.herd.counts} onSelect={(status) => navigate(`${links.medicalBoard}?health=${status}`)} className="h-full" />
         <CostTrendCard months={data.costs} className="h-full" />
@@ -422,6 +430,12 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
           <Stat value={blocked.length} label="Ngựa không tập được" icon={<AlertOctagon size={18} />} tone="danger" />
       </DashboardHero>
 
+      {FEATURES.training && (
+        <Row>
+        <TrainerTodayCard />
+        <ActiveClassesCard />
+        </Row>
+      )}
       <Row>
         <div className="space-y-5">
           <OccupancyCard barns={barns} stalls={stalls} title="Công suất khu của tôi" to={links.stable} onOpen={(barnId) => navigate(`${links.stable}?focus=${barnId}`)} />
@@ -547,6 +561,13 @@ function VetDashboard({ name }: { name: string }) {
         <AttentionList items={attention} empty="Không có yêu cầu khám hay lịch khám nào cần xử lý" className="h-full" />
       </Row>
 
+      {FEATURES.training && (
+        <Row>
+        <VetAlertsCard />
+        <LiveNowCard />
+        </Row>
+      )}
+
       <Row>
         <Panel title="Bệnh án đang điều trị" to={links.cases} className="h-full">
           <CaseRows
@@ -623,6 +644,11 @@ function GroomDashboard({ name }: { name: string }) {
           <Stat value={data.requests.length} label="Yêu cầu khám chờ bác sĩ" icon={<Stethoscope size={18} />} onClick={() => navigate(links.requests)} />
       </DashboardHero>
 
+      {FEATURES.training && (
+        <div data-reveal>
+          <GroomTrainingCard />
+        </div>
+      )}
       <Row>
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
           <HorseRows horses={[...data.horses].sort(byPriority)} empty="Bạn chưa được phân công ngựa nào." />
@@ -716,6 +742,12 @@ function OwnerDashboard({ name }: { name: string }) {
           <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">Chi phí chỉ hiện khi bác sĩ đã đóng bệnh án.</p>
         </Panel>
       </Row>
+
+      {FEATURES.training && (
+        <Row>
+        <OwnerTrainingCards />
+        </Row>
+      )}
 
       <Row>
         <Panel title="Chi phí y tế đã chốt" flush className="h-full">
