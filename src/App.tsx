@@ -31,6 +31,9 @@ import {
   SessionBoard,
   ParticipantDetail,
   TrainingToday,
+  Incidents,
+  Supplies,
+  StableCare,
   MedicalBoard,
   ExamRequests,
   CaseList,
@@ -81,6 +84,18 @@ function trainingRoutes() {
   );
 }
 
+/** Flow 4 (chăm sóc chuồng, không bắt buộc theo đề): chỉ gắn route khi bật cờ. */
+function stableCareRoutes() {
+  if (!FEATURES.stableCare) return <Route path="supplies" element={<Navigate to="/dashboard" replace />} />;
+  return (
+    <>
+      <Route path="stable/care" element={<StableCare />} />
+      <Route path="stable/incidents" element={<Incidents />} />
+      <Route path="supplies" element={<Supplies />} />
+    </>
+  );
+}
+
 import { createBrowserRouter, createRoutesFromElements, RouterProvider } from 'react-router-dom';
 
 const router = createBrowserRouter(
@@ -109,6 +124,9 @@ const router = createBrowserRouter(
           <Route path="horses/:id/edit" element={<HorseForm />} />
           <Route path="stable" element={<StableMap />} />
           <Route path="stable/zones" element={<Navigate to="/stable" replace />} />
+
+          {/* Flow 4 — chăm sóc chuồng trại và dinh dưỡng hằng ngày */}
+          {stableCareRoutes()}
 
           {/* Flow 2 — lập và thực hiện giáo án huấn luyện */}
           {trainingRoutes()}

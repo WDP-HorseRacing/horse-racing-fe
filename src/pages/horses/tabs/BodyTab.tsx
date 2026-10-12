@@ -1,15 +1,15 @@
 // F1.5 — chỉ số cơ thể: 4 biểu đồ cùng một màu, dải bình thường xám, chỉ bản ghi bất thường mới có màu.
-// Người được ghi (HLV trưởng của khu, bác sĩ, Groom được giao) nhập số đo mới ngay dưới con số của từng thẻ,
-// rồi bấm Lưu một lần cho cả lần đo (backend hỏi xác nhận khi ngoài khoảng bình thường, mã 422).
-// Số đo cũ không sửa được: ghi sai thì bác sĩ xóa kèm lý do. Bản ghi từ buổi khám chỉ xử lý được ở hồ sơ y tế.
+// Người được ghi (HLV trưởng của khu, bác sĩ, Groom được giao) sửa thẳng con số hiện tại trên từng thẻ, rồi bấm Lưu
+// một lần cho cả lần đo: mỗi số đã đổi thành một lần đo mới (backend hỏi xác nhận khi ngoài khoảng bình thường, mã 422).
+// Lần đo cũ không bị sửa, vẫn nằm trong biểu đồ và lịch sử. Ghi sai thì bác sĩ xóa kèm lý do. Bản ghi từ buổi khám chỉ xử lý được ở hồ sơ y tế.
 import { useState } from 'react';
-import { Minus, Stethoscope, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
+import { Minus, RotateCcw, Stethoscope, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
 import { useLeaveConfirm } from '../../../hooks/useLeaveConfirm';
 import { addMeasurements, deleteMeasurement, listMeasurements } from '../../../api/horses';
 import type { CreatedMeasurement, Measurement, MeasurementType } from '../../../api/types';
 import { AppError } from '../../../lib/errors';
-import { Button, Card, ConfirmDialog, DataTable, Dot, ErrorBox, Input, Segmented, Skeleton, cn, invalidClass, useToast, type Column } from '../../../components/ui';
+import { Button, Card, ConfirmDialog, DataTable, Dot, ErrorBox, Segmented, Skeleton, cn, useToast, type Column } from '../../../components/ui';
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
 import { measurementSpec } from '../../../lib/api-labels';
 import { TEMP_ALERT_C } from '../../../lib/horse-rules';
@@ -22,7 +22,6 @@ import { measurementDelta } from './body-delta';
 const TYPES: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 // Bốn biểu đồ dùng chung một màu: màu chỉ để nói "bất thường", không để phân biệt loại chỉ số.
 const LINE_COLOR = chartColors.emerald;
-const EMPTY_VALUES: Record<MeasurementType, string> = { WEIGHT: '', TEMPERATURE: '', HEIGHT: '', BODY_CONDITION: '' };
 
 interface Row extends Omit<Measurement, 'value'> {
   value: number;
@@ -81,8 +80,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
     return page.items.map((item) => ({ ...item, value: Number(item.value) }));
   }, [horseId]);
 
-  // Số đo mới đang nhập trên các thẻ, lưu một lần cho cả lần đo.
-  const [values, setValues] = useState<Record<MeasurementType, string>>(EMPTY_VALUES);
+  // Số đã sửa trên các thẻ (chưa sửa thì ô hiện số mới nhất). Lưu một lần cho cả lần đo.
+  const [edits, setEdits] = useState<Partial<Record<MeasurementType, string>>>({});
   const [measuredAt, setMeasuredAt] = useState(() => toLocalInput(now()));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string>();
@@ -92,8 +91,19 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
 
   const rows: Row[] = list.data ?? [];
 
-  const entered = TYPES.filter((type) => values[type].trim() !== '').map((type) => ({ type, value: Number(values[type].replace(',', '.')) }));
-  const invalid = entered.some((item) => draftNote(item.type, values[item.type]).tone === 'error');
+  // Các lần đo của một chỉ số, mới nhất lên trên: lần đầu là số hiện tại, lần thứ hai là "lần đo trước".
+  const byType = (type: MeasurementType) => rows.filter((row) => row.type === type).sort((a, b) => b.measuredAt.localeCompare(a.measuredAt));
+  const latest = (type: MeasurementType) => byType(type)[0];
+  const parse = (raw: string) => Number(raw.trim().replace(',', '.'));
+  /** Ô đã đổi so với số mới nhất (ô trống, hoặc gõ lại đúng số cũ thì coi như chưa đổi). */
+  const changed = (type: MeasurementType) => {
+    const raw = edits[type];
+    if (raw === undefined || raw.trim() === '') return false;
+    const record = latest(type);
+    return !record || parse(raw) !== record.value;
+  };
+  const entered = TYPES.filter(changed).map((type) => ({ type, value: parse(edits[type] ?? '') }));
+  const invalid = entered.some((item) => draftNote(item.type, edits[item.type] ?? '').tone === 'error');
   const dirty = entered.length > 0;
   // Đổi tab trong hồ sơ (?tab=) cũng làm mất số đang nhập: chặn cả khi đổi query.
   const leaveConfirm = useLeaveConfirm(dirty, 'Chỉ số vừa nhập chưa được lưu. Rời đi sẽ mất các số này.', { includeSearch: true });
@@ -106,7 +116,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   const canSave = dirty && !invalid && !dateError && !!measuredAt && !pending;
 
   const resetDraft = () => {
-    setValues(EMPTY_VALUES);
+    setEdits({});
     setMeasuredAt(toLocalInput(now()));
     setFormError(undefined);
   };
@@ -137,9 +147,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       setPending(false);
     }
   };
-
-  // Các lần đo của một chỉ số, mới nhất lên trên: lần đầu là số hiện tại, lần thứ hai là "lần đo trước".
-  const byType = (type: MeasurementType) => rows.filter((row) => row.type === type).sort((a, b) => b.measuredAt.localeCompare(a.measuredAt));
 
   const columns: Column<Row>[] = [
     {
@@ -217,7 +224,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-sm text-gray-500">
           Dải xám trên biểu đồ là khoảng bình thường. Giá trị ngoài khoảng được đánh dấu bất thường.
-          {canRecord && <span className="block">Nhập số đo mới ngay trên từng thẻ rồi bấm Lưu. Số đo cũ không sửa, ghi sai thì bác sĩ xóa.</span>}
+          {canRecord && <span className="block">Sửa con số trên từng thẻ rồi bấm Lưu: mỗi số đã sửa thành một lần đo mới, lần đo cũ vẫn giữ trong lịch sử.</span>}
         </p>
         {canRecord && (
           <div className="flex flex-wrap items-end gap-2">
@@ -231,7 +238,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
               </Button>
             )}
             <Button onClick={() => save(false)} disabled={!canSave}>
-              {pending ? 'Đang lưu…' : dirty ? `Lưu ${entered.length} chỉ số` : 'Lưu chỉ số'}
+              {pending ? 'Đang lưu…' : dirty ? `Lưu ${entered.length} chỉ số mới` : 'Lưu chỉ số'}
             </Button>
           </div>
         )}
@@ -250,7 +257,10 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
             .filter((row) => row.type === type)
             .map((row) => ({ x: new Date(row.measuredAt).getTime(), y: row.value }))
             .sort((a, b) => a.x - b.x);
-          const note = draftNote(type, values[type]);
+          const edited = changed(type);
+          const display = edits[type] ?? (record ? formatValue(type, record.value) : '');
+          const note = draftNote(type, edited ? (edits[type] ?? '') : '');
+          const tone = edited ? (note.tone === 'error' || note.tone === 'danger' ? 'danger' : note.tone === 'warn' ? 'warn' : null) : severity;
           const DeltaIcon = delta?.direction === 'up' ? TrendingUp : delta?.direction === 'down' ? TrendingDown : Minus;
           return (
             <Card key={type} className={cn('p-5', SPAN[type])} tone={severity === 'danger' ? 'danger' : severity === 'warn' ? 'warning' : 'default'}>
@@ -258,15 +268,43 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                 <div className="min-w-0">
                   <p className="text-sm text-gray-500">{info.name}</p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <p
-                      className={cn(
-                        'flex items-baseline gap-1 text-2xl font-bold tabular-nums',
-                        severity === 'danger' ? 'text-red-700' : severity === 'warn' ? 'text-amber-700' : 'text-gray-900',
-                      )}
-                    >
-                      {record ? formatValue(type, record.value) : '—'}
-                      <span className="text-sm font-medium text-gray-500">{unitText(type)}</span>
-                    </p>
+                    {canRecord ? (
+                      <label
+                        className={cn(
+                          'flex items-baseline gap-1 rounded-lg px-1.5 ring-1 transition focus-within:ring-2 focus-within:ring-emerald-500',
+                          edited ? 'bg-emerald-50/60 ring-emerald-400' : 'ring-gray-200 hover:ring-gray-300',
+                        )}
+                      >
+                        <input
+                          inputMode="decimal"
+                          aria-label={`${info.name}, sửa để ghi lần đo mới`}
+                          value={display}
+                          placeholder="—"
+                          size={Math.max(3, display.length + 1)}
+                          onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}
+                          onFocus={(event) => event.target.select()}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && canSave) void save(false);
+                            if (event.key === 'Escape') setEdits(({ [type]: _dropped, ...rest }) => rest);
+                          }}
+                          className={cn(
+                            'bg-transparent py-0.5 text-2xl font-bold tabular-nums outline-none! placeholder:text-gray-300',
+                            tone === 'danger' ? 'text-red-700' : tone === 'warn' ? 'text-amber-700' : 'text-gray-900',
+                          )}
+                        />
+                        <span className="text-sm font-medium text-gray-500">{unitText(type)}</span>
+                      </label>
+                    ) : (
+                      <p
+                        className={cn(
+                          'flex items-baseline gap-1 text-2xl font-bold tabular-nums',
+                          severity === 'danger' ? 'text-red-700' : severity === 'warn' ? 'text-amber-700' : 'text-gray-900',
+                        )}
+                      >
+                        {record ? formatValue(type, record.value) : '—'}
+                        <span className="text-sm font-medium text-gray-500">{unitText(type)}</span>
+                      </p>
+                    )}
                     {delta && (
                       // Không tô xanh đỏ: tăng hay giảm chưa chắc là tốt hay xấu.
                       <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-gray-700">
@@ -294,30 +332,31 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                 </p>
               </div>
 
-              {canRecord && (
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <div className="relative w-44">
-                    <Input
-                      inputMode="decimal"
-                      aria-label={`${info.name} mới`}
-                      value={values[type]}
-                      placeholder="Nhập số đo mới"
-                      onChange={(event) => setValues((current) => ({ ...current, [type]: event.target.value }))}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' && canSave) void save(false);
-                      }}
-                      className={cn('pr-12 tabular-nums', note.tone === 'error' && invalidClass)}
-                    />
-                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">{unitText(type)}</span>
-                  </div>
+              {canRecord && (edited || !record || note.tone !== 'hint') && (
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span
                     className={cn(
                       'text-xs',
-                      note.tone === 'error' || note.tone === 'danger' ? 'font-medium text-red-600' : note.tone === 'warn' ? 'font-medium text-amber-700' : 'text-gray-400',
+                      note.tone === 'error' || note.tone === 'danger' ? 'font-medium text-red-600' : note.tone === 'warn' ? 'font-medium text-amber-700' : edited ? 'text-emerald-800' : 'text-gray-400',
                     )}
                   >
-                    {note.text}
+                    {edited && note.tone === 'hint'
+                      ? record
+                        ? `Ghi lần đo mới, thay ${formatValue(type, record.value)} ${unitText(type)}`
+                        : 'Ghi lần đo đầu tiên'
+                      : record || edited
+                        ? note.text
+                        : 'Chưa có số đo, nhập vào ô để ghi lần đầu'}
                   </span>
+                  {edited && (
+                    <button
+                      type="button"
+                      onClick={() => setEdits(({ [type]: _dropped, ...rest }) => rest)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-900"
+                    >
+                      <RotateCcw size={12} /> Hoàn tác
+                    </button>
+                  )}
                 </div>
               )}
 

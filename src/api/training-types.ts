@@ -45,13 +45,20 @@ export interface TrainingSubjectInput {
   targetTimeMs?: number | null;
 }
 
+/** Một môn trong giai đoạn, học vào các thứ cố định mỗi tuần (ISO: 1 là thứ Hai, 7 là Chủ nhật). */
 export interface TrainingPlanSubject {
+  subject: TrainingSubject;
+  weekdays: number[];
+}
+
+/** Giai đoạn của giáo án: kéo dài `weeks` tuần, mỗi tuần lặp lại cùng các môn theo thứ. */
+export interface TrainingPlanPhase {
   /** Thứ tự, bắt đầu từ 1. */
   position: number;
-  /** Tuần bắt đầu học môn, bắt đầu từ 1. */
+  /** Tuần đầu của giai đoạn, bắt đầu từ 1. */
   startWeek: number;
   weeks: number;
-  subject: TrainingSubject;
+  subjects: TrainingPlanSubject[];
 }
 
 export interface TrainingPlan {
@@ -60,14 +67,14 @@ export interface TrainingPlan {
   description: string | null;
   headTrainerId: string;
   totalWeeks: number;
-  subjects: TrainingPlanSubject[];
+  phases: TrainingPlanPhase[];
   updatedAt: string;
 }
 
 export interface TrainingPlanInput {
   name: string;
-  description?: string;
-  subjects: { subjectId: string; weeks: number }[];
+  description?: string | null;
+  phases: { weeks: number; subjects: { subjectId: string; weekdays: number[] }[] }[];
 }
 
 /* ===== Lớp, lịch ===== */
@@ -94,9 +101,7 @@ export interface TrainingClass {
 export interface ScheduleInput {
   planId: string;
   startDate: string;
-  /** ISO: 1 là thứ Hai, 7 là Chủ nhật. */
-  weekdays: number[];
-  /** HH:mm theo giờ CLB. */
+  /** HH:mm theo giờ CLB. Thứ có buổi lấy theo giáo án. */
   startTime: string;
   durationMinutes: number;
 }
@@ -162,6 +167,10 @@ export interface Enrollment {
   status: EnrollmentStatus;
   createdAt: string;
   updatedAt: string;
+  /** Chỉ có ở danh sách ghi danh của lớp. */
+  horseName?: string;
+  /** Link có hạn, null khi ngựa chưa có ảnh. Chỉ có ở danh sách. */
+  horsePhotoUrl?: string | null;
 }
 
 /* ===== Buổi, lượt ===== */
@@ -185,17 +194,34 @@ export interface TrainingSession {
   cancelReason: string | null;
 }
 
+/** Ngựa không được tạo lượt khi công bố vì đã có buổi trùng giờ ở lớp khác. */
+export interface SkippedHorse {
+  horseId: string;
+  horseName: string;
+  conflictClassCode: string;
+  conflictStartAt: string;
+}
+
+/** Buổi vừa công bố, kèm các ngựa bị bỏ qua (luôn có, có thể rỗng). */
+export interface PublishedSession extends TrainingSession {
+  skippedHorses: SkippedHorse[];
+}
+
 export interface SessionInput {
   name: string;
+  /** BE lấy loại buổi theo môn. Gửi lệch loại buổi của môn thì 400. */
   sessionType: TrainingSessionType;
-  subjectId?: string;
+  subjectId: string;
   intensity: TrainingIntensity;
   plannedDistanceM: number;
   scheduledStartAt: string;
   scheduledEndAt: string;
-  location?: string;
-  surface?: string;
-  notes?: string;
+  /** Khi sửa: gửi `null` để xóa, không gửi thì giữ nguyên. */
+  location?: string | null;
+  surface?: string | null;
+  notes?: string | null;
+  /** Chỉ khi thêm buổi chạy thử: BE tạo luôn cấu hình chạy thử. DTO sửa buổi không nhận. */
+  targetTimeMs?: number | null;
 }
 
 export interface TimeTrial {
@@ -222,6 +248,10 @@ export interface Participant {
   ineligibilityReason: string | null;
   /** Chỉ có ở danh sách lượt: ngựa đang có lệnh khóa huấn luyện, tính lúc đọc. */
   trainingLocked?: boolean;
+  /** Ba field dưới chỉ có ở danh sách lượt. Ngựa, Groom đã xóa vẫn có tên. */
+  horseName?: string;
+  horsePhotoUrl?: string | null;
+  assignedGroomName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -234,6 +264,8 @@ export interface TrialResult {
   elapsedMs: number;
   notes: string | null;
   videoMediaId: string | null;
+  /** Link xem có hạn (15 phút), null khi không có video. */
+  videoUrl: string | null;
   recordedBy: string;
   recordedAt: string;
 }
@@ -266,6 +298,8 @@ export interface HorseTrialResult {
   attemptNo: number;
   elapsedMs: number;
   notes: string | null;
+  /** Link xem có hạn (15 phút), null khi không có video. */
+  videoUrl: string | null;
   recordedAt: string;
 }
 

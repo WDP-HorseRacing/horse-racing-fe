@@ -8,7 +8,7 @@ export function scopeDashboard(dashboard: MedicalDashboard, barnIds: ReadonlySet
   inScope.forEach((horse) => {
     counts[horse.healthStatus] += 1;
   });
-  // Bộ lọc sức khỏe áp ở FE (gọi BE không kèm healthStatus để số đếm từng tab vẫn đúng).
+  // Bộ lọc sức khỏe áp ở FE để đổi tab không phải gọi lại API. Số đếm tính trên các khu HT được xem.
   const horses = health ? inScope.filter((horse) => horse.healthStatus === health) : inScope;
   const ids = new Set(horses.map((horse) => horse.horseId));
   return {

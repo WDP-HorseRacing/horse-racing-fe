@@ -51,6 +51,8 @@ import { usePeople } from './components/people';
 import { CheckupDue, HealthShift } from './components/parts';
 import { healthText } from './components/utils';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
+import { FEATURES } from '../../config/features';
+import { IncidentReportDialog } from '../stable-care/components/IncidentReport';
 import { HIDDEN_COST_TEXT, isCostHidden, isOwnClosed } from './components/case-cost';
 
 type Dialog =
@@ -180,8 +182,9 @@ function CareNote({ note, empty }: { note: { careInstructions: string; examDate:
 function GroomView({ horse }: { horse: HorseDetail }) {
   const user = useStore((state) => state.currentUser);
   const note = useService(() => getCareInstructions(horse.id).catch(() => null), [horse.id]);
-  const [requesting, setRequesting] = useState(false);
-  const canRequest = can(user, 'examRequest.create') && !leftClub(horse.lifecycleStatus);
+  const [reporting, setReporting] = useState(false);
+  // Groom không gửi yêu cầu khám trực tiếp: báo sự cố (chỉ ngựa mình đang chăm sóc), khẩn thì tự thành yêu cầu khám khẩn.
+  const canReport = FEATURES.stableCare && can(user, 'incident.report') && horse.groom?.id === user?.id && !leftClub(horse.lifecycleStatus);
   return (
     <div className="grid items-start gap-5 lg:grid-cols-12">
       <div className="space-y-5 lg:col-span-7">
@@ -189,9 +192,9 @@ function GroomView({ horse }: { horse: HorseDetail }) {
           <SectionTitle
             icon={<NotebookPen size={16} />}
             action={
-              canRequest && (
-                <Button size="sm" variant="secondary" onClick={() => setRequesting(true)}>
-                  <Send size={14} /> Gửi yêu cầu khám
+              canReport && (
+                <Button size="sm" variant="secondary" onClick={() => setReporting(true)}>
+                  <Send size={14} /> Báo sự cố
                 </Button>
               )
             }
@@ -205,7 +208,7 @@ function GroomView({ horse }: { horse: HorseDetail }) {
       <div className="lg:col-span-5">
         <CareScheduleSection horse={{ id: horse.id, name: horse.name, groom: horse.groom }} readOnly={leftClub(horse.lifecycleStatus)} />
       </div>
-      <CreateRequestModal open={requesting} onClose={() => setRequesting(false)} horse={{ id: horse.id, name: horse.name }} />
+      <IncidentReportDialog open={reporting} onClose={() => setReporting(false)} horse={{ id: horse.id, name: horse.name }} />
     </div>
   );
 }

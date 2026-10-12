@@ -9,9 +9,13 @@ let socket: Socket | null = null;
 let handler: ((payload: NotificationItem) => void) | undefined;
 /** Các trang đang nghe sự kiện: gắn lại mỗi khi socket được tạo mới (đổi token, nối lại). */
 const listeners = new Map<string, Set<(payload: unknown) => void>>();
+/** Hàm đã gắn vào socket cho từng sự kiện, để gỡ đúng hàm đó (không gỡ hàm thông báo chung của notification.created). */
+const bound = new Map<string, (payload: unknown) => void>();
 
 function bind(target: Socket, event: string, set: Set<(payload: unknown) => void>) {
-  target.on(event, (payload: unknown) => set.forEach((listener) => listener(payload)));
+  const relay = (payload: unknown) => set.forEach((listener) => listener(payload));
+  bound.set(event, relay);
+  target.on(event, relay);
 }
 
 function connect() {
@@ -60,7 +64,9 @@ export function onRealtime<T>(event: string, listener: (payload: T) => void): ()
     current?.delete(wrapped);
     if (current && current.size === 0) {
       listeners.delete(event);
-      socket?.off(event);
+      const relay = bound.get(event);
+      bound.delete(event);
+      if (relay) socket?.off(event, relay);
     }
   };
 }

@@ -127,7 +127,7 @@ export function SectionTitle({
 /* ===== Nút ===== */
 
 /**
- * `inline` / `inlineDanger`: nút thao tác nằm trong một dòng thông tin (Đổi khu, Gỡ…). Có nền và viền nhạt
+ * `inline` / `inlineDanger`: nút thao tác nằm trong một dòng thông tin (Đổi khu, Gỡ…). Nền trắng, viền xám
  * để nhìn là biết bấm được, khác `ghost` chỉ là chữ xám (dùng cho nút Hủy của biểu mẫu).
  */
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'soft' | 'inline' | 'inlineDanger';
@@ -141,6 +141,7 @@ export function Button({
   className = '',
   size = 'md',
   title,
+  ...rest
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -150,19 +151,22 @@ export function Button({
   className?: string;
   size?: 'sm' | 'md' | 'icon';
   title?: string;
-}) {
+  /** Phần còn lại (ref, onPointerDown, aria-*, data-state…) chuyển thẳng xuống thẻ button, để Button làm được trigger của Radix (asChild). */
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'onClick' | 'type' | 'className' | 'disabled' | 'title'> & { ref?: React.Ref<HTMLButtonElement> }) {
   const variants: Record<ButtonVariant, string> = {
     primary: 'bg-emerald-700 text-white hover:bg-emerald-600',
     secondary: 'bg-white text-gray-800 ring-1 ring-gray-200 hover:bg-gray-50 hover:ring-gray-300',
     danger: 'bg-red-600 text-white hover:bg-red-500',
     ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
     soft: 'bg-gray-100 text-gray-800 hover:bg-gray-200',
-    inline: 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-100 hover:ring-emerald-300',
-    inlineDanger: 'bg-white text-red-700 ring-1 ring-inset ring-red-200 hover:bg-red-50 hover:ring-red-300',
+    // Nút phụ trung tính: nền trắng, viền xám. Chỉ nút chính có nền xanh đặc. Nút xóa giữ viền xám, chỉ chữ và icon đỏ.
+    inline: 'bg-white text-gray-800 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 hover:ring-gray-400',
+    inlineDanger: 'bg-white text-red-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 hover:ring-gray-400',
   };
   const sizes = { sm: 'h-8 px-3 text-xs', md: 'h-9 px-3.5 text-sm', icon: 'h-9 w-9 p-0' };
   return (
     <button
+      {...rest}
       type={type}
       onClick={onClick}
       disabled={disabled}
@@ -308,6 +312,19 @@ export function NotFound({ message = 'Không tìm thấy dữ liệu bạn yêu 
 
 /* ===== Biểu mẫu ===== */
 
+const INTERACTIVE = 'input, textarea, select, button, a, [role="button"], [role="checkbox"], [role="radio"], [role="option"], [contenteditable="true"]';
+
+/**
+ * Bấm vào chữ nhãn, dòng gợi ý hay khoảng trống của Field: trình duyệt mặc định "bấm hộ" phần tử bấm được đầu tiên
+ * trong thẻ label (vd nút trừ của ô số, nút đầu của nhóm lựa chọn). Chặn việc đó, chỉ đưa con trỏ vào ô nhập.
+ */
+function focusFieldControl(event: React.MouseEvent<HTMLLabelElement>) {
+  const target = event.target as HTMLElement;
+  if (target.closest(INTERACTIVE)) return;
+  event.preventDefault();
+  event.currentTarget.querySelector<HTMLElement>('input:not([type="hidden"]):not([type="file"]):not(:disabled), textarea:not(:disabled), select:not(:disabled)')?.focus();
+}
+
 export function Field({
   label,
   children,
@@ -337,7 +354,7 @@ export function Field({
     <span className="block text-xs font-light text-gray-400">{hint}</span>
   ) : null;
   return (
-    <label className={cn('block', className)} data-field={name} data-invalid={error ? 'true' : undefined}>
+    <label className={cn('block', className)} data-field={name} data-invalid={error ? 'true' : undefined} onClick={focusFieldControl}>
       {label && (
         <span className="mb-1.5 block text-sm font-medium text-gray-600">
           {label}
@@ -1027,9 +1044,17 @@ export function Tabs({
   onChange: (key: string) => void;
   className?: string;
 }) {
+  // Thanh tab cuộn ngang trên màn nhỏ: kéo tab đang mở vào giữa tầm nhìn (chỉ cuộn thanh tab, không cuộn trang).
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    const tab = list?.querySelector<HTMLElement>('[data-state="active"]');
+    if (!list || !tab || list.scrollWidth <= list.clientWidth) return;
+    list.scrollTo({ left: tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }, [active]);
   return (
     <RadixTabs.Root value={active} onValueChange={onChange} className={className}>
-      <RadixTabs.List className="no-scrollbar flex items-end gap-1 overflow-x-auto border-b border-gray-200 px-1">
+      <RadixTabs.List ref={listRef} className="no-scrollbar relative flex items-end gap-1 overflow-x-auto border-b border-gray-200 px-1">
         {tabs.map((tab) => {
           const number = tab.count ?? (tab.badge ? tab.badge : undefined);
           const isActive = tab.key === active;

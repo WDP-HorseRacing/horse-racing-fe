@@ -1,14 +1,13 @@
-// Mảnh giao diện nhỏ dùng chung cho các trang huấn luyện: thanh cường độ, nhãn trạng thái, dải tuần của giáo án.
+// Mảnh giao diện nhỏ dùng chung cho các trang huấn luyện: thanh cường độ, nhãn trạng thái, dải tuần và tuần mẫu của giáo án.
 import type { ReactNode } from 'react';
 import { Flag, Lock } from 'lucide-react';
 import { Pill, cn } from '../../../components/ui';
+import { DAY_FILL, type DaySlot, type RibbonPhase } from '../plan-helpers';
 import type {
   MetricAlertLevel,
   ParticipantStatus,
   TrainingClassStatus,
-  TrainingIntensity,
   TrainingSessionStatus,
-  TrainingPlan,
   TrainingSessionType,
 } from '../../../api/types';
 import {
@@ -16,6 +15,7 @@ import {
   classStatusText,
   participantStatusText,
   sessionStatusText,
+  weekdayShort,
 } from '../../../lib/training-labels';
 
 /** Cường độ: ba vạch đơn sắc cao dần (dùng chung với components/ui/status). */
@@ -81,73 +81,48 @@ export function AlertLevelPill({ level }: { level: MetricAlertLevel }) {
 
 /* ===== Dải tuần của giáo án ===== */
 
-export interface RibbonSegment {
-  key: string;
-  name: string;
-  weeks: number;
-  intensity: TrainingIntensity;
-  sessionType: TrainingSessionType;
-}
-
-/** Đổi danh sách môn của giáo án sang các đoạn của dải tuần. */
-export const planSegments = (plan: Pick<TrainingPlan, 'subjects'>): RibbonSegment[] =>
-  plan.subjects.map((item) => ({
-    key: `${item.position}-${item.subject.id}`,
-    name: item.subject.name,
-    weeks: item.weeks,
-    intensity: item.subject.intensity,
-    sessionType: item.subject.sessionType,
-  }));
-
-const SEGMENT_FILL: Record<TrainingIntensity, string> = {
-  LIGHT: 'bg-emerald-200 text-emerald-950',
-  MODERATE: 'bg-emerald-400 text-emerald-950',
-  HEAVY: 'bg-emerald-700 text-white',
-};
+const dayTitle = (day: DaySlot | null, index: number) => `${weekdayShort[index + 1]}: ${day ? day.name : 'nghỉ'}`;
 
 /**
- * Thanh ngang chia đoạn theo số tuần của từng môn, sắc độ xanh theo cường độ, môn chạy thử có vân sọc và cờ.
- * `size="lg"` hiện tên môn và mốc tuần (trình lập giáo án), `sm` chỉ là dải màu (thẻ giáo án, ô chọn).
+ * Thanh ngang chia đoạn theo số tuần của từng giai đoạn. Mỗi đoạn là tuần mẫu 7 ngày: ngày có môn tô sắc xanh theo cường độ,
+ * ngày chạy thử có vân sọc, ngày nghỉ để nhạt. Nhìn là biết tuần có xen kẽ nhẹ và nặng hay không.
+ * `size="lg"` ghi thêm tên giai đoạn và số tuần, `sm` chỉ là dải màu (thẻ giáo án, ô chọn).
  */
 export function WeekRibbon({
-  segments,
+  phases,
   size = 'sm',
   className = '',
   highlightWeek,
 }: {
-  segments: RibbonSegment[];
+  phases: RibbonPhase[];
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   /** Tuần hiện tại của lớp (bắt đầu từ 1): vẽ vạch "bây giờ". */
   highlightWeek?: number;
 }) {
-  const total = segments.reduce((sum, item) => sum + item.weeks, 0);
+  const total = phases.reduce((sum, item) => sum + item.weeks, 0);
   if (total === 0) {
-    return <div className={cn('rounded-lg border border-dashed border-gray-300 bg-gray-50 text-center text-xs text-gray-400', size === 'lg' ? 'py-5' : 'h-2.5', className)}>{size === 'lg' ? 'Chưa có môn nào' : null}</div>;
+    return <div className={cn('rounded-lg border border-dashed border-gray-300 bg-gray-50 text-center text-xs text-gray-400', size === 'lg' ? 'py-5' : 'h-2.5', className)}>{size === 'lg' ? 'Chưa có giai đoạn nào' : null}</div>;
   }
-  const heights = { sm: 'h-2.5', md: 'h-7', lg: 'h-14' };
-  let cursor = 0;
+  const heights = { sm: 'h-2.5', md: 'h-7', lg: 'h-12' };
+  const starts = phases.map((_, index) => phases.slice(0, index).reduce((sum, item) => sum + item.weeks, 0) + 1);
   return (
     <div className={cn('relative', className)}>
-      <div className={cn('flex w-full gap-[3px] overflow-hidden rounded-lg', heights[size])} data-ribbon>
-        {segments.map((segment) => {
-          const startWeek = cursor + 1;
-          cursor += segment.weeks;
-          const trial = segment.sessionType === 'TIME_TRIAL';
+      <div className={cn('flex w-full gap-1 overflow-hidden rounded-lg', heights[size])} data-ribbon>
+        {phases.map((phase, index) => {
+          const startWeek = starts[index];
+          const lastWeek = startWeek + phase.weeks - 1;
           return (
             <div
-              key={segment.key}
-              data-ribbon-segment={segment.key}
-              title={`${segment.name}, tuần ${startWeek}${segment.weeks > 1 ? ` đến ${cursor}` : ''}`}
-              style={{ flexGrow: segment.weeks, flexBasis: 0 }}
-              className={cn('relative flex min-w-0 items-center gap-1 overflow-hidden px-2', SEGMENT_FILL[segment.intensity], trial && 'ribbon-trial')}
+              key={phase.key}
+              data-ribbon-segment={phase.key}
+              title={`Giai đoạn ${phase.position}, tuần ${startWeek}${phase.weeks > 1 ? ` đến ${lastWeek}` : ''}. ${phase.days.map(dayTitle).join(', ')}`}
+              style={{ flexGrow: phase.weeks, flexBasis: 0 }}
+              className="grid min-w-0 grid-cols-7 gap-px overflow-hidden rounded-[5px]"
             >
-              {size !== 'sm' && (
-                <>
-                  {trial && <Flag size={12} className="shrink-0" />}
-                  <span className={cn('truncate font-semibold', size === 'lg' ? 'text-xs' : 'text-[11px]')}>{segment.name}</span>
-                </>
-              )}
+              {phase.days.map((day, index) => (
+                <span key={index} className={cn('min-w-0', day ? DAY_FILL[day.intensity] : 'bg-gray-200/70', day?.sessionType === 'TIME_TRIAL' && 'ribbon-trial')} />
+              ))}
             </div>
           );
         })}
@@ -160,14 +135,38 @@ export function WeekRibbon({
         />
       )}
       {size === 'lg' && (
-        <div className="mt-1.5 flex text-[11px] tabular-nums text-gray-400">
-          {Array.from({ length: total }, (_, index) => (
-            <span key={index} className="flex-1 text-center">
-              {total <= 16 || (index + 1) % 2 === 1 ? `T${index + 1}` : ''}
+        <div className="mt-1.5 flex gap-1 text-[11px] tabular-nums text-gray-500">
+          {phases.map((phase) => (
+            <span key={phase.key} style={{ flexGrow: phase.weeks, flexBasis: 0 }} className="min-w-0 truncate">
+              Giai đoạn {phase.position} · {phase.weeks} tuần
             </span>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Tuần mẫu của một giai đoạn: 7 ô thứ, ô có môn ghi tên môn và tô theo cường độ. */
+export function WeekPattern({ days, className = '', compact }: { days: (DaySlot | null)[]; className?: string; compact?: boolean }) {
+  return (
+    <div className={cn('grid grid-cols-7 gap-1', className)} data-week-pattern>
+      {days.map((day, index) => (
+        <div
+          key={index}
+          data-pattern-day
+          title={dayTitle(day, index)}
+          className={cn(
+            'flex min-w-0 flex-col justify-between rounded-lg px-1.5 py-1',
+            compact ? 'h-9' : 'h-14',
+            day ? DAY_FILL[day.intensity] : 'border border-dashed border-gray-200 bg-white text-gray-300',
+            day?.sessionType === 'TIME_TRIAL' && 'ribbon-trial',
+          )}
+        >
+          <span className="font-mono text-[10px] font-semibold opacity-80">{weekdayShort[index + 1]}</span>
+          {!compact && <span className="truncate text-[11px] font-semibold leading-tight">{day ? day.name : 'Nghỉ'}</span>}
+        </div>
+      ))}
     </div>
   );
 }

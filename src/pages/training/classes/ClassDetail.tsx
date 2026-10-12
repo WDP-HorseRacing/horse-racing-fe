@@ -2,9 +2,9 @@
 // (kích hoạt, ghi danh, công bố, mở sân tập), rồi các tab Lịch buổi, Ngựa, Kết quả, Thông tin (khóa tab qua ?tab=).
 import { useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CalendarCheck2, Check, CheckCircle2, Flag, Megaphone, Play, UserPlus, XCircle } from 'lucide-react';
+import { CalendarCheck2, Check, CheckCircle2, Flag, Megaphone, Play, UserPlus, XCircle } from 'lucide-react';
 import { getClass, getPlan, listEnrollments, listSessions, listSubjects, publishSessions, setClassStatus } from '../../../api/training';
-import type { TrainingPlan, TrainingSubject } from '../../../api/types';
+import type { PublishedSession, TrainingPlan, TrainingSubject } from '../../../api/types';
 import { ActionMenu, Button, ConfirmDialog, ErrorBox, Field, Modal, NotFound, Tabs, TabPanel, Tip, cn, useToast } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { useAction, useService } from '../../../hooks/useService';
@@ -12,11 +12,13 @@ import { useStore } from '../../../store/store';
 import { useCrumbs } from '../../../components/Breadcrumb';
 import { links } from '../../../lib/links';
 import { formatDate } from '../../../lib/format';
-import { addDateKey, clubDateKey, clubTime, clubToday, diffDateKeys, mondayOf } from '../../../lib/club-time';
+import { addDateKey, clubDateKey, clubTime, clubToday, diffDateKeys } from '../../../lib/club-time';
 import { distanceLabel } from '../../../lib/labels';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
-import { ClassStatusPill, WeekRibbon, planSegments } from '../components/bits';
+import { ClassStatusPill, WeekRibbon } from '../components/bits';
+import { SkippedHorsesDialog } from '../components/SkippedHorsesDialog';
+import { planPhases, sessionsWithSkips } from '../plan-helpers';
 import { ProgressFill } from '../components/motion';
 import { ReasonDialog } from '../components/ReasonDialog';
 import { useUserNames } from '../hooks';
@@ -25,6 +27,7 @@ import ClassHorsesTab from './ClassHorsesTab';
 import ClassResultsTab from './ClassResultsTab';
 import ClassInfoTab from './ClassInfoTab';
 import type { ClassBundle } from './class-bundle';
+import { BackLink } from '../../../components/BackLink';
 
 
 export default function ClassDetail() {
@@ -98,6 +101,7 @@ function ClassView({
   const [rangeOpen, setRangeOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [published, setPublished] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<PublishedSession[]>([]);
   const [pastWarning, setPastWarning] = useState<{ from?: string; to?: string } | null>(null);
 
   const today = clubToday();
@@ -155,13 +159,16 @@ function ClassView({
         if (result.length === 0) toast.push('Không có buổi nháp nào trong khoảng này', 'info');
         else toast.push(`Đã công bố ${result.length} buổi. Lượt tập đã tạo cho từng ngựa đang học.`, 'success');
         setPublished(result.map((session) => session.id));
+        setSkipped(sessionsWithSkips(result));
         reload();
         onTab('sessions');
       },
     );
 
-  const weekFrom = mondayOf(today) < item.startDate ? item.startDate : mondayOf(today);
-  const weekTo = addDateKey(mondayOf(today), 6);
+  // "Tuần này" theo tuần của lớp (tính từ ngày bắt đầu), khớp nhãn "Tuần này" ở tab Lịch buổi. Trước ngày bắt đầu thì là tuần 1.
+  const classWeek = Math.max(0, Math.floor(diffDateKeys(item.startDate, today) / 7));
+  const weekFrom = addDateKey(item.startDate, classWeek * 7);
+  const weekTo = addDateKey(weekFrom, 6) > item.endDate ? item.endDate : addDateKey(weekFrom, 6);
 
   const steps = [
     { key: 'activate', label: 'Kích hoạt lớp', done: item.status !== 'DRAFT' },
@@ -173,9 +180,7 @@ function ClassView({
 
   return (
     <div ref={scope} className="space-y-5">
-      <Link to={links.classes} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-        <ArrowLeft size={15} /> Lớp huấn luyện
-      </Link>
+      <BackLink fallback={links.classes} />
 
       <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -251,7 +256,7 @@ function ClassView({
               <span>{formatDate(item.endDate)}</span>
             </div>
             <ProgressFill ratio={totalDays ? elapsed / totalDays : 0} tone={item.status === 'ACTIVE' ? 'green' : 'gray'} className="mt-2" />
-            {plan && <WeekRibbon segments={planSegments(plan)} size="sm" className="mt-3" highlightWeek={Math.floor(Math.max(0, elapsed - 1) / 7) + 1} />}
+            {plan && <WeekRibbon phases={planPhases(plan)} size="sm" className="mt-3" highlightWeek={Math.floor(Math.max(0, elapsed - 1) / 7) + 1} />}
           </div>
           <div data-class-fact className="rounded-2xl bg-white/80 p-4 ring-1 ring-emerald-900/10 sm:col-span-2">
             <p className="text-xs text-gray-500">Buổi đã xong</p>
@@ -435,6 +440,7 @@ function ClassView({
           }}
         />
       )}
+      {skipped.length > 0 && <SkippedHorsesDialog sessions={skipped} onClose={() => setSkipped([])} />}
       {rangeOpen && <PublishRangeDialog min={item.startDate} max={item.endDate} pending={publish.pending} error={publish.error} onClose={() => setRangeOpen(false)} onPublish={(range) => { setRangeOpen(false); requestPublish(range); }} defaultFrom={weekFrom} />}
     </div>
   );

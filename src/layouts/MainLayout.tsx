@@ -11,14 +11,17 @@ import {
   Layers,
   CalendarClock,
   ClipboardCheck,
+  ClipboardList,
   HeartPulse,
   LayoutDashboard,
   LogOut,
   MapPinned,
   Menu,
   PanelLeftClose,
+  Package,
   PanelLeftOpen,
   ReceiptText,
+  Siren,
   Stethoscope,
   Syringe,
   UserCog,
@@ -34,6 +37,7 @@ import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { PageSkeleton } from '../components/skeletons';
 import { preloadRoute } from '../routes/pages';
 import { Breadcrumbs } from '../components/Breadcrumb';
+import { SensorSimIndicator } from '../components/SensorSimIndicator';
 import { notificationTone } from '../components/ui/status';
 import { roleLabel, roleShortLabel } from '../lib/labels';
 import { DEFAULT_FAVICON, faviconHref, roleCssVars, roleTheme } from '../lib/role-theme';
@@ -58,7 +62,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Menu theo vai trò. Nhóm Huấn luyện (Flow 2) đọc cờ trong config/features.ts.
+// Menu theo vai trò. Nhóm Huấn luyện (Flow 2) và Chăm sóc chuồng (Flow 4) đọc cờ trong config/features.ts.
 function menuFor(role: UserRole | undefined): NavGroup[] {
   return menuGroups(role).filter((group) => group.items.length > 0);
 }
@@ -69,6 +73,10 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
   const classesItem: NavItem = { name: 'Lớp huấn luyện', path: links.classes, icon: Layers };
   const plansItem: NavItem = { name: 'Giáo án', path: links.plans, icon: CalendarRange };
   const subjectsItem: NavItem = { name: 'Môn học', path: links.subjects, icon: BookOpenCheck };
+  const stableCare = (items: NavItem[]): NavGroup => ({ group: 'Chăm sóc chuồng', items: FEATURES.stableCare ? items : [] });
+  const careItem: NavItem = { name: 'Chăm sóc khu', path: links.stableCare(), icon: ClipboardList };
+  const incidentsItem: NavItem = { name: 'Sự cố', path: links.incidents(), icon: Siren };
+  const suppliesItem: NavItem = { name: 'Vật tư', path: links.supplies(), icon: Package };
   switch (role) {
     case 'CLUB_MANAGER':
       return [
@@ -81,6 +89,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           ],
         },
         training([classesItem, plansItem, subjectsItem]),
+        stableCare([careItem, incidentsItem, suppliesItem]),
         medical([
           { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
@@ -107,6 +116,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
           ],
         },
+        stableCare([careItem, incidentsItem, suppliesItem]),
         medical([
           { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
@@ -126,6 +136,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
         ]),
         { group: 'Đàn ngựa', items: [{ name: 'Ngựa', path: links.horses, icon: Users }] },
         training([classesItem]),
+        stableCare([suppliesItem]),
       ];
     case 'GROOM':
       return [
@@ -140,9 +151,11 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           items: [
             { name: 'Ngựa', path: links.horses, icon: Users },
             { name: 'Sơ đồ chuồng', path: links.stable, icon: MapPinned },
-            { name: 'Yêu cầu khám', path: links.requests, icon: Stethoscope },
+            // Groom báo bất thường qua Sự cố (Flow 4). Tắt Flow 4 thì giữ mục Yêu cầu khám để xem lại yêu cầu cũ.
+            FEATURES.stableCare ? incidentsItem : { name: 'Yêu cầu khám', path: links.requests, icon: Stethoscope },
           ],
         },
+        stableCare([suppliesItem]),
       ];
     case 'HORSE_OWNER':
       return [
@@ -584,6 +597,7 @@ function Shell() {
           </div>
         </div>
       </main>
+      {FEATURES.sensorSimulator && <SensorSimIndicator />}
     </div>
   );
 }

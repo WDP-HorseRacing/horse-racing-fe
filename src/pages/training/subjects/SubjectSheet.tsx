@@ -61,7 +61,7 @@ export default function SubjectSheet({
   else if (existingNames.some((item) => item.trim().toLowerCase() === name.toLowerCase())) errors.name = 'Tên môn đã có trong danh mục';
   if (!Number.isInteger(draft.plannedDistanceM) || draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) errors.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
   else if (trial && draft.plannedDistanceM === 0) errors.plannedDistanceM = 'Môn chạy thử phải có cự ly lớn hơn 0';
-  if (trial && draft.targetRaw.trim() && !draft.targetTimeMs) errors.targetTimeMs = 'Nhập dạng phút:giây, ví dụ 1:15.40';
+  if (trial && draft.targetRaw.trim() && !draft.targetTimeMs) errors.targetTimeMs = 'Phút từ 0 đến 59, giây từ 0 đến 59,99';
   if (draft.surface.trim().length > 80) errors.surface = 'Mặt sân tối đa 80 ký tự';
 
   // Lỗi BE (ví dụ tên trùng do người khác vừa tạo) gắn vào đúng ô.
@@ -121,7 +121,7 @@ export default function SubjectSheet({
             {(
               [
                 { value: 'REGULAR', label: 'Buổi thường', hint: 'Bài tập luyện hằng ngày', icon: Footprints },
-                { value: 'TIME_TRIAL', label: 'Chạy thử', hint: 'Bấm giờ, so với mục tiêu', icon: Flag },
+                { value: 'TIME_TRIAL', label: 'Chạy thử', hint: 'Ghi thời gian, so với mục tiêu', icon: Flag },
               ] as const
             ).map((option) => (
               <button
@@ -156,7 +156,7 @@ export default function SubjectSheet({
             <Stepper value={draft.plannedDistanceM} onChange={(value) => set('plannedDistanceM', value)} min={0} max={20000} step={100} suffix="m" label="cự ly" />
           </Field>
           {trial && (
-            <Field label="Thời gian mục tiêu" name="targetTimeMs" error={fieldError('targetTimeMs')} hint="Phút:giây.phần trăm giây">
+            <Field label="Thời gian mục tiêu" name="targetTimeMs" error={fieldError('targetTimeMs')} hint="Ví dụ 1 phút 15,4 giây">
               <RaceTimeInput
                 value={draft.targetTimeMs}
                 invalid={!!fieldError('targetTimeMs')}

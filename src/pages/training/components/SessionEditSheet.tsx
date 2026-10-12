@@ -180,7 +180,7 @@ export function SessionEditSheet({
             <Stepper value={draft.plannedDistanceM} onChange={(value) => setDraft((current) => ({ ...current, plannedDistanceM: value }))} min={0} max={20000} step={100} suffix="m" label="cự ly" />
           </Field>
           {trial && (
-            <Field label="Thời gian mục tiêu" hint="Phút:giây.phần trăm giây">
+            <Field label="Thời gian mục tiêu" hint="Ví dụ 1 phút 15,4 giây">
               <RaceTimeInput value={draft.targetTimeMs} onChange={(ms) => setDraft((current) => ({ ...current, targetTimeMs: ms }))} />
             </Field>
           )}

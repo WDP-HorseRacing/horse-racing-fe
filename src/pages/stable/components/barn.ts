@@ -3,8 +3,8 @@ import { healthLabel } from '../../../lib/labels';
 import { isReadOnlyHorse } from '../../../lib/horse-rules';
 
 /**
- * Số ô tối đa của một khu. Sơ đồ mỗi khu là lưới 3×3 nên giao diện chặn tạo quá 9 ô.
- * Backend chưa có luật này; khi có thì đổi hằng số (hoặc lấy từ API) ở đây.
+ * Số ô tối đa của một khu trên giao diện. Đây là giới hạn của sơ đồ lưới 3×3, không phải luật nghiệp vụ:
+ * backend chỉ giới hạn theo sức chứa khai báo của khu. Nhóm chọn giữ 9 ô cho sơ đồ gọn (10/10/2026).
  */
 export const MAX_STALLS_PER_BARN = 9;
 

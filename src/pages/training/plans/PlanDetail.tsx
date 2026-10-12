@@ -1,7 +1,7 @@
-// F2.2 — Chi tiết một giáo án: dải tuần lớn, các môn theo thứ tự kèm tuần học, và các lớp đang dùng giáo án.
+// F2.2 — Chi tiết một giáo án: dải tuần lớn, các giai đoạn kèm tuần mẫu và các môn theo thứ, và các lớp đang dùng giáo án.
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { getPlan, listClasses } from '../../../api/training';
 import type { TrainingClass } from '../../../api/types';
 import { Button, EmptyState, NotFound, PageHeader, Skeleton } from '../../../components/ui';
@@ -13,8 +13,11 @@ import { formatDate } from '../../../lib/format';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
-import { ClassStatusPill, Figure, IntensityBars, TrialBadge, WeekRibbon, planSegments } from '../components/bits';
+import { ClassStatusPill, Figure, IntensityBars, TrialBadge, WeekPattern, WeekRibbon } from '../components/bits';
+import { planPhases, planSessionCount, weekPattern } from '../plan-helpers';
+import { weekdayShort } from '../../../lib/training-labels';
 import { useUserNames } from '../hooks';
+import { BackLink } from '../../../components/BackLink';
 
 export default function PlanDetail() {
   const { id = '' } = useParams();
@@ -46,9 +49,7 @@ export default function PlanDetail() {
     <div ref={scope} className="space-y-5">
       <PageHeader
         back={
-          <Link to={links.plans} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-            <ArrowLeft size={15} /> Giáo án
-          </Link>
+          <BackLink fallback={links.plans} />
         }
         eyebrow={!mine ? users.get(plan.headTrainerId)?.fullName : undefined}
         title={plan.name}
@@ -74,40 +75,49 @@ export default function PlanDetail() {
       <section className="turf-soft rounded-3xl p-6 shadow-grass-tint ring-1 ring-emerald-900/10">
         <div className="mb-5 flex flex-wrap items-end gap-x-8 gap-y-3">
           <Figure label="Tổng số tuần" value={<span className="text-3xl">{plan.totalWeeks}</span>} />
-          <Figure label="Số môn" value={<span className="text-3xl">{plan.subjects.length}</span>} />
+          <Figure label="Giai đoạn" value={<span className="text-3xl">{plan.phases.length}</span>} />
+          <Figure label="Số buổi" value={<span className="text-3xl">{planSessionCount(plan)}</span>} />
           <Figure label="Lớp dùng giáo án" value={<span className="text-3xl">{classes.length}</span>} />
           <p className="ml-auto text-xs text-gray-500">Cập nhật {formatDate(plan.updatedAt)}</p>
         </div>
-        <WeekRibbon segments={planSegments(plan)} size="lg" />
+        <WeekRibbon phases={planPhases(plan)} size="lg" />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-12">
         <section className="lg:col-span-7">
-          <h3 className="mb-3 font-semibold text-gray-900">Các môn theo thứ tự</h3>
-          <ol className="relative space-y-2.5 border-l-2 border-dashed border-emerald-200 pl-5">
-            {plan.subjects.map((item) => (
-              <li key={item.position} data-plan-step className="relative rounded-2xl bg-white p-4 ring-1 ring-gray-200/80">
+          <h3 className="mb-3 font-semibold text-gray-900">Các giai đoạn</h3>
+          <ol className="relative space-y-3 border-l-2 border-dashed border-emerald-200 pl-5">
+            {plan.phases.map((phase) => (
+              <li key={phase.position} data-plan-step className="relative rounded-2xl bg-white p-4 shadow-grass-tint ring-1 ring-gray-200/80">
                 <span className="absolute -left-[27px] top-5 h-3 w-3 rounded-full bg-emerald-600 ring-4 ring-[#f5f6f4]" aria-hidden />
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-mono text-xs tabular-nums text-gray-500">
-                      Tuần {item.startWeek}
-                      {item.weeks > 1 && ` đến ${item.startWeek + item.weeks - 1}`}
-                      {` · ${item.weeks} tuần`}
-                    </p>
-                    <div className="mt-0.5 flex items-center gap-2">
-                      <p className="truncate font-semibold text-gray-900">{item.subject.name}</p>
-                      <TrialBadge type={item.subject.sessionType} />
-                    </div>
-                    {item.subject.description && <p className="mt-1 line-clamp-2 text-sm text-gray-500">{item.subject.description}</p>}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                    <IntensityBars intensity={item.subject.intensity} />
-                    <span className="font-mono tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
-                    {item.subject.surface && <span>{item.subject.surface}</span>}
-                    {item.subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
-                  </div>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-semibold text-gray-900">Giai đoạn {phase.position}</p>
+                  <p className="font-mono text-xs tabular-nums text-gray-500">
+                    Tuần {phase.startWeek}
+                    {phase.weeks > 1 && ` đến ${phase.startWeek + phase.weeks - 1}`}
+                    {` · ${phase.weeks} tuần`}
+                  </p>
                 </div>
+                <WeekPattern days={weekPattern(phase.subjects)} />
+                <ul className="mt-3 divide-y divide-gray-100">
+                  {phase.subjects.map((item) => (
+                    <li key={item.subject.id} className="flex flex-wrap items-start justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-gray-900">{item.subject.name}</p>
+                          <TrialBadge type={item.subject.sessionType} />
+                        </div>
+                        <p className="mt-0.5 font-mono text-xs text-emerald-800">{item.weekdays.map((day) => weekdayShort[day]).join(', ')}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                        <IntensityBars intensity={item.subject.intensity} />
+                        <span className="font-mono tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
+                        {item.subject.surface && <span>{item.subject.surface}</span>}
+                        {item.subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </li>
             ))}
           </ol>

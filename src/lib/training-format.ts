@@ -11,21 +11,29 @@ export function formatRaceTime(ms: number | null | undefined): string {
   return minutes ? `${minutes}:${tail}` : tail;
 }
 
-/**
- * Đọc thời gian chạy người dùng gõ: "1:15.4", "1:15,40", "75.4", "75". Trả ms hoặc undefined.
- * Phần sau dấu chấm là phần trăm giây (1 hoặc 2 chữ số).
- */
-export function parseRaceTime(raw: string): number | undefined {
-  const text = raw.trim().replace(',', '.');
-  if (!text) return undefined;
-  const match = /^(?:(\d{1,2}):)?(\d{1,3})(?:\.(\d{1,3}))?$/.exec(text);
-  if (!match) return undefined;
-  const minutes = Number(match[1] ?? 0);
-  const seconds = Number(match[2]);
-  if (match[1] !== undefined && seconds > 59) return undefined;
-  const fraction = match[3] ? Number(`0.${match[3]}`) : 0;
-  const ms = Math.round((minutes * 60 + seconds + fraction) * 1000);
+/** Ô phút hợp lệ: trống hoặc 0 đến 59. */
+export function minutePartValid(minutes: string): boolean {
+  return minutes === '' || (/^\d{1,2}$/.test(minutes) && Number(minutes) <= 59);
+}
+
+/** Ô giây hợp lệ: trống hoặc 0 đến 59,99 (dấu chấm hay phẩy đều được, tối đa 2 chữ số lẻ). */
+export function secondPartValid(seconds: string): boolean {
+  return seconds === '' || (/^\d{1,2}(?:[.,]\d{0,2})?$/.test(seconds) && Number(seconds.replace(',', '.')) < 60);
+}
+
+/** Ghép ô phút và ô giây thành mili giây: ("1", "14,8") → 74800. Trống cả hai hoặc sai thì trả undefined. */
+export function msFromParts(minutes: string, seconds: string): number | undefined {
+  if ((!minutes && !seconds) || !minutePartValid(minutes) || !secondPartValid(seconds)) return undefined;
+  const ms = Math.round((Number(minutes || 0) * 60 + Number((seconds || '0').replace(',', '.'))) * 1000);
   return ms > 0 ? ms : undefined;
+}
+
+/** Tách mili giây ra hai ô để sửa: 74800 → { minutes: "1", seconds: "14.8" }. */
+export function partsFromMs(ms: number | null | undefined): { minutes: string; seconds: string } {
+  if (!ms || !Number.isFinite(ms)) return { minutes: '', seconds: '' };
+  const totalHundredths = Math.round(ms / 10);
+  const seconds = ((totalHundredths % 6000) / 100).toFixed(2).replace(/\.?0+$/, '');
+  return { minutes: String(Math.floor(totalHundredths / 6000)), seconds };
 }
 
 /** Chênh lệch so với mục tiêu: "+1.20 giây" hoặc "−0.35 giây". */

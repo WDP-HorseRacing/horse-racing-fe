@@ -1,9 +1,9 @@
 // F3.4 — Hàng đợi yêu cầu khám (GET /exam-requests, phân trang ở backend).
-// VET: khám (gắn yêu cầu vào buổi khám), đổi mức khẩn, bỏ qua. CM, HT, Groom: gửi yêu cầu và theo dõi.
-// Groom chỉ thấy yêu cầu của ngựa được phân công (backend lọc).
+// VET: khám (gắn yêu cầu vào buổi khám), đổi mức khẩn, bỏ qua. CM, HT: gửi yêu cầu và theo dõi.
+// Groom chuyển sang trang Sự cố tại chuồng (Flow 4): yêu cầu của Groom đi qua sự cố.
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, ChevronLeft, ChevronRight, Plus, Send, Stethoscope, XCircle } from 'lucide-react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { CheckCircle2, ChevronLeft, ChevronRight, Plus, Stethoscope, XCircle } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listExamRequests } from '../../api/medical';
 import type { ExamRequest, ExamRequestStatus } from '../../api/types';
@@ -12,18 +12,12 @@ import { can } from '../../auth/permissions';
 import {
   ActionMenu,
   Button,
-  Card,
   DataTable,
-  EmptyState,
   ErrorBox,
   FilterSelect,
   FilterTabs,
   PageHeader,
-  SectionTitle,
   Skeleton,
-  TabPanel,
-  Tabs,
-  cn,
   type TabItem,
 } from '../../components/ui';
 import { RequestPill, UrgentPill } from '../../components/ui/status';
@@ -31,9 +25,11 @@ import { requestSourceLabel } from '../../lib/api-labels';
 import { formatDateTime, formatRelative } from '../../lib/format';
 import { links } from '../../lib/links';
 import { now } from '../../lib/clock';
-import { CreateRequestModal, DismissRequestModal, RequestForm, UrgencyModal } from './components/modals';
+import { CreateRequestModal, DismissRequestModal, UrgencyModal } from './components/modals';
 import { usePeople, type People } from './components/people';
-import { HorseChip, RequestMeta, RequestText } from './components/parts';
+import { HorseChip, RequestText } from './components/parts';
+import { IncidentPhotoButton } from '../stable-care/components/IncidentPhotoButton';
+import { FEATURES } from '../../config/features';
 
 const LIMIT = 20;
 
@@ -133,80 +129,9 @@ function useQueue() {
 
 export default function ExamRequests() {
   const user = useStore((state) => state.currentUser);
-  if (user?.role === 'GROOM') return <GroomView />;
+  // Groom không gửi yêu cầu khám trực tiếp nữa (BE trả 403): báo sự cố, sự cố khẩn tự tạo yêu cầu khám.
+  if (user?.role === 'GROOM' && FEATURES.stableCare) return <Navigate to={links.incidents()} replace />;
   return <StaffView />;
-}
-
-/* ===== Groom: gửi yêu cầu + yêu cầu của ngựa mình chăm sóc ===== */
-
-function GroomView() {
-  const queue = useQueue();
-  const people = usePeople();
-  const rows = queue.list.data?.items ?? [];
-  return (
-    <div className="space-y-6">
-      <PageHeader title="Yêu cầu khám" description="Báo bác sĩ khi ngựa bạn chăm sóc có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay." />
-      <div className="grid gap-5 lg:grid-cols-12">
-        <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
-          <SectionTitle icon={<Send size={16} />}>Yêu cầu mới</SectionTitle>
-          <RequestForm onDone={queue.list.reload} />
-        </Card>
-        <div className="space-y-3 lg:col-span-7">
-          <SectionTitle className="mb-0">Yêu cầu của ngựa tôi chăm sóc</SectionTitle>
-          <Tabs active={queue.status} onChange={(key) => queue.setStatus(key as ExamRequestStatus)} tabs={statusTabs(queue.status, queue.list.data?.meta.total)} />
-          <TabPanel className="space-y-3 bg-gray-50/60 p-4">
-            {queue.list.loading && !queue.list.data ? (
-              <Skeleton rows={3} />
-            ) : queue.list.error ? (
-              <ErrorBox message={queue.list.error} />
-            ) : rows.length === 0 ? (
-              <EmptyState
-                title={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Chưa có yêu cầu nào'}
-                hint="Chỉ hiện yêu cầu của ngựa bạn đang được phân công chăm sóc."
-              />
-            ) : (
-              <>
-                {rows.map((row) => (
-                  <article
-                    key={row.id}
-                    className={cn(
-                      'rounded-2xl bg-white p-4 ring-1 ring-gray-200/80',
-                      row.status === 'PENDING' && row.urgent ? 'shadow-[inset_3px_0_0_0_#ef4444]' : 'shadow-card',
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <HorseChip horse={{ id: row.horseId, name: row.horseName }} size={36} to={links.horse(row.horseId)} />
-                      <div className="flex items-center gap-2">
-                        {row.urgent && <UrgentPill urgent />}
-                        <RequestPill status={row.status} />
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <RequestText text={row.description} />
-                    </div>
-                    <div className="mt-2">
-                      <RequestMeta request={row} people={people} showUrgent={false} />
-                    </div>
-                    {row.status !== 'PENDING' && (
-                      <div className="mt-3 border-t border-gray-100 pt-3">
-                        <Outcome row={row} people={people} />
-                      </div>
-                    )}
-                  </article>
-                ))}
-                <Pager
-                  page={queue.page}
-                  totalPages={queue.list.data?.meta.totalPages ?? 1}
-                  total={queue.list.data?.meta.total ?? 0}
-                  onChange={queue.setPage}
-                />
-              </>
-            )}
-          </TabPanel>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ===== VET / HT / CM ===== */
@@ -284,6 +209,7 @@ function StaffView() {
                     <div className="space-y-1">
                       {row.urgent && <UrgentPill urgent />}
                       <p className="text-xs text-gray-600">{requestSourceLabel[row.source]}</p>
+                      <IncidentPhotoButton request={row} />
                     </div>
                   ),
                 },

@@ -5,7 +5,7 @@ import { listAllHorses } from '../../api/horses';
 import { listGroomWorkload } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
 import { listMetrics, toMetricPoint } from '../../api/performance';
-import { listClasses, listParticipants, listSessions } from '../../api/training';
+import { listClasses, listHorseClasses, listParticipants, listSessions } from '../../api/training';
 import { onRealtime } from '../../api/realtime';
 import { onTokensChange } from '../../api/tokens';
 import type {
@@ -17,6 +17,7 @@ import type {
   Participant,
   TrainingClass,
   TrainingSession,
+  TrainingSessionStatus,
   UserAccount,
 } from '../../api/types';
 import { useService } from '../../hooks/useService';
@@ -115,6 +116,79 @@ export async function loadSessionsBetween(from: string, to: string): Promise<{ t
     ),
   );
   return perClass.flat();
+}
+
+/* ===== Trùng giờ giữa các lớp ===== */
+
+interface TimeSlot {
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+}
+
+const OPEN_SESSION: ReadonlySet<TrainingSessionStatus> = new Set(['DRAFT', 'SCHEDULED', 'IN_PROGRESS']);
+
+/** Buổi chưa kết thúc (nháp, đã công bố, đang diễn ra và giờ kết thúc còn ở phía trước). */
+const isOpenSlot = (status: TrainingSessionStatus, slot: TimeSlot, nowMs: number) => OPEN_SESSION.has(status) && new Date(slot.scheduledEndAt).getTime() > nowMs;
+
+/** Các buổi trong `others` giao giờ với ít nhất một buổi trong `mine` (khoảng [bắt đầu, kết thúc), chạm mép không tính). */
+export function overlappingSessions<T extends TimeSlot>(mine: TimeSlot[], others: T[]): T[] {
+  const ranges = mine.map((slot) => [new Date(slot.scheduledStartAt).getTime(), new Date(slot.scheduledEndAt).getTime()] as const);
+  return others.filter((other) => {
+    const start = new Date(other.scheduledStartAt).getTime();
+    const end = new Date(other.scheduledEndAt).getTime();
+    return ranges.some(([from, to]) => from < end && start < to);
+  });
+}
+
+export interface ScheduleClash {
+  classId: string;
+  code: string;
+  /** Số buổi của lớp kia trùng giờ với lớp đang ghi danh. */
+  count: number;
+}
+
+/**
+ * Lớp khác mà ngựa đang học có buổi trùng giờ với các buổi chưa diễn ra của lớp `classId`.
+ * BE chặn lúc ghi danh nhưng chỉ so với buổi đã công bố, còn lúc công bố thì bỏ qua ngựa trùng. FE kiểm trước cả buổi nháp
+ * để HLV biết ngay khi ghi danh, thay vì ngựa bị lặng lẽ bỏ qua lúc công bố.
+ * `sessionsOf` dùng chung cho nhiều ngựa để mỗi lớp chỉ tải lịch một lần.
+ */
+export async function findScheduleClashes(
+  horseId: string,
+  classId: string,
+  classSessions: TrainingSession[],
+  sessionsOf: (horseId: string, classId: string) => Promise<TimeSlot[]>,
+): Promise<ScheduleClash[]> {
+  const nowMs = Date.now();
+  const mine = classSessions.filter((session) => isOpenSlot(session.status, session, nowMs));
+  if (!mine.length) return [];
+  const others = (await listHorseClasses(horseId).catch(() => [])).filter(
+    (row) => row.classId !== classId && row.enrollmentStatus === 'ACTIVE' && (row.classStatus === 'ACTIVE' || row.classStatus === 'DRAFT'),
+  );
+  const clashes = await Promise.all(
+    others.map(async (row) => ({ classId: row.classId, code: row.code, count: overlappingSessions(mine, await sessionsOf(horseId, row.classId)).length })),
+  );
+  return clashes.filter((clash) => clash.count > 0);
+}
+
+/**
+ * Tải lịch các buổi chưa kết thúc (kể cả nháp) của một lớp, nhớ theo lớp.
+ * Ngựa chỉ ghi danh được vào lớp của HLV phụ trách khu của nó, nên các lớp cần so đều do HLV đang ghi danh dạy và đọc được.
+ */
+export function classSlotLoader() {
+  const memo = new Map<string, Promise<TimeSlot[]>>();
+  return (_horseId: string, classId: string) => {
+    if (!memo.has(classId)) {
+      const nowMs = Date.now();
+      memo.set(
+        classId,
+        listSessions(classId)
+          .then((rows) => rows.filter((session) => isOpenSlot(session.status, session, nowMs)))
+          .catch(() => []),
+      );
+    }
+    return memo.get(classId)!;
+  };
 }
 
 /* ===== Nhịp tim, tốc độ realtime ===== */

@@ -2,7 +2,7 @@
 // của bệnh án (F3.8), đóng bệnh án và điều chỉnh chi phí (F3.9).
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bandage, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
+import { Bandage, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
 import { getCase, getInjuries, listHorseExamRequests, listHorseLocks } from '../../api/medical';
@@ -20,6 +20,7 @@ import { usePeople, type People } from './components/people';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
 import { HIDDEN_COST_TEXT, isCostHidden } from './components/case-cost';
+import { BackLink } from '../../components/BackLink';
 
 type Dialog =
   | { kind: 'cost' }
@@ -109,9 +110,7 @@ export default function CaseDetail() {
 
   return (
     <div className="space-y-6">
-      <Link to={links.cases} className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-emerald-700">
-        <ArrowLeft size={15} /> Bệnh án
-      </Link>
+      <BackLink fallback={links.cases} />
 
       {/* Dải header */}
       <Card>

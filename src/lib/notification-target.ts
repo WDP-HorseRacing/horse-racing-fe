@@ -23,6 +23,12 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
     case 'HEALTH_STATUS':
     case 'CARE_REMINDER':
       return links.horseMedical(horseId);
+    // Flow 4: sự cố mới hoặc mở quá 4 giờ (HLV khu, Quản lý CLB). BE chỉ gửi ngựa, lọc trang Sự cố theo ngựa.
+    case 'INCIDENT':
+      return links.incidents(horseId);
+    // HLV gắn việc có hiệu lực hôm nay: Groom mở màn Việc hôm nay.
+    case 'DAILY_CHECKLIST':
+      return role === 'GROOM' ? links.dashboard : links.horse(horseId, 'care');
     default:
       return links.horse(horseId);
   }

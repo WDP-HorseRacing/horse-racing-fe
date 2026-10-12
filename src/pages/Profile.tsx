@@ -204,9 +204,16 @@ export default function Profile() {
         <Card className="lg:col-span-5">
           <SectionTitle icon={<KeyRound size={16} />}>Bảo mật</SectionTitle>
           <div className="space-y-3">
-            {action.error && <ErrorBox message={action.error} />}
-            <Field label="Mật khẩu hiện tại">
-              <PasswordInput value={current} onChange={(event) => setCurrent(event.target.value)} autoComplete="current-password" />
+            {action.error && action.field !== 'currentPassword' && <ErrorBox message={action.error} />}
+            <Field label="Mật khẩu hiện tại" error={action.fieldErrors.currentPassword}>
+              <PasswordInput
+                value={current}
+                onChange={(event) => {
+                  setCurrent(event.target.value);
+                  if (action.field === 'currentPassword') action.clearError();
+                }}
+                autoComplete="current-password"
+              />
             </Field>
             <Field label="Mật khẩu mới" error={tooShort ? 'Tối thiểu 8 ký tự' : undefined}>
               <PasswordInput value={next} onChange={(event) => setNext(event.target.value)} autoComplete="new-password" />

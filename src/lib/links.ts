@@ -35,6 +35,10 @@ export const links = {
   horse: (id: string, tab?: string) => `/horses/${id}${tab ? `?tab=${tab}` : ''}`,
   horseEdit: (id: string) => `/horses/${id}/edit`,
   stable: '/stable',
+  /** Flow 4 */
+  stableCare: (barnId?: string) => withQuery('/stable/care', { barn: barnId }),
+  incidents: (horseId?: string) => withQuery('/stable/incidents', { horse: horseId }),
+  supplies: (tab?: 'requests') => withQuery('/supplies', { tab }),
 
   subjects: '/training/subjects',
   plans: '/training/plans',
