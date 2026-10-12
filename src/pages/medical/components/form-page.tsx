@@ -2,18 +2,14 @@
 // cột trái là các khối nhập liệu, cột phải dính theo khi cuộn gồm bối cảnh và nút lưu.
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { Avatar, cn } from '../../../components/ui';
 import { HealthPill, LockPill } from '../../../components/ui/status';
 import type { HealthStatus } from '../../../api/types';
+import { BackLink as SharedBackLink } from '../../../components/BackLink';
 
-/** Link quay lại phía trên tiêu đề trang. */
+/** Link quay lại phía trên tiêu đề trang: về trang trước trong app, không có lịch sử thì về `to`. */
 export function BackLink({ to, children }: { to: string; children: ReactNode }) {
-  return (
-    <Link to={to} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-      <ArrowLeft size={15} /> {children}
-    </Link>
-  );
+  return <SharedBackLink fallback={to}>{children}</SharedBackLink>;
 }
 
 /** Một khối nhập liệu: tiêu đề + nội dung. */

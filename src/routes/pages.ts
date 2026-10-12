@@ -21,6 +21,10 @@ export const SessionBoard = lazyPage(() => import('../pages/training/session/Ses
 export const ParticipantDetail = lazyPage(() => import('../pages/training/ParticipantDetail'));
 export const TrainingToday = lazyPage(() => import('../pages/training/TrainingToday'));
 
+export const Incidents = lazyPage(() => import('../pages/stable-care/Incidents'));
+export const Supplies = lazyPage(() => import('../pages/stable-care/Supplies'));
+export const StableCare = lazyPage(() => import('../pages/stable-care/StableCare'));
+
 export const MedicalBoard = lazyPage(() => import('../pages/medical/MedicalBoard'));
 export const ExamRequests = lazyPage(() => import('../pages/medical/ExamRequests'));
 export const CaseList = lazyPage(() => import('../pages/medical/CaseList'));
@@ -41,6 +45,9 @@ const ROUTES: [string, LazyPage][] = [
   ['/profile', Profile],
   ['/horses', HorseList],
   ['/stable', StableMap],
+  ['/stable/incidents', Incidents],
+  ['/stable/care', StableCare],
+  ['/supplies', Supplies],
   ['/training/subjects', SubjectsPage],
   ['/training/plans', PlanList],
   ['/training/classes', ClassList],

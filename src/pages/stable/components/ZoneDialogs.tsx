@@ -190,7 +190,9 @@ export function HeadTrainerDialog({
             };
           })}
         />
-        <Notice tone="info">Đổi sang HT khác luôn được, kể cả khi khu còn ngựa: ngựa chuyển sang phạm vi của HT mới ngay. Muốn bỏ trống HT, dùng mục "Gỡ HT phụ trách" trong menu khu.</Notice>
+        <Notice tone="info">
+          Ngựa của khu chuyển sang phạm vi của HLV mới ngay. Nếu HLV hiện tại còn lớp đang chạy có ngựa của khu này thì chưa đổi được: cho ngựa rời lớp hoặc hoàn thành lớp trước, hoặc dùng Bàn giao ở trang Nhân sự khi HLV nghỉ. Muốn bỏ trống HLV, dùng mục "Gỡ HT phụ trách" trong menu khu.
+        </Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>

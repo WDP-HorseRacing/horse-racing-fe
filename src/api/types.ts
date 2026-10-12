@@ -642,7 +642,11 @@ export type NotificationCategory =
   | 'CARE_REMINDER'
   | 'HORSE_LIFECYCLE'
   | 'OWNERSHIP'
-  | 'PERFORMANCE_ALERT';
+  | 'PERFORMANCE_ALERT'
+  /** Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo. resource là ngựa. */
+  | 'DAILY_CHECKLIST'
+  /** Flow 4: sự cố mới (HLV khu) và sự cố mở quá 4 giờ (HLV khu, Quản lý CLB). resource là ngựa. */
+  | 'INCIDENT';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */
@@ -671,3 +675,4 @@ export interface NotificationPage {
 }
 
 export * from './training-types';
+export * from './stable-types';

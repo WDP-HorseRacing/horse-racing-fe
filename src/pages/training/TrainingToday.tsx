@@ -1,11 +1,12 @@
 // F2.3 — Lịch tập trong ngày.
-// Groom ("Dắt ngựa tập"): các buổi trong ngày kèm ngựa mình dắt và nút bước kế tiếp, làm ngay ở đây không cần mở sân tập.
+// Groom ("Dắt ngựa tập"): các buổi trong ngày kèm ngựa mình dắt. Groom chỉ dắt ngựa ra sân: điểm danh, báo sẵn sàng, báo vắng ngay ở đây.
+// Bắt đầu, hoàn thành và ghi thời gian chạy thử là việc của HLV trưởng trên sân tập.
 // HLV ("Hôm nay trên sân"): mọi buổi hôm nay của các lớp mình, số ngựa theo trạng thái, nút vào sân tập.
 // Dòng thời gian trong ngày có vạch "bây giờ" chạy theo giờ thật.
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Clock3, Flag, MapPin, UserX } from 'lucide-react';
-import { checkInParticipant, getTimeTrial, readyParticipant, startParticipant, markParticipantAbsent } from '../../api/training';
+import { ChevronLeft, ChevronRight, Clock3, MapPin, UserX } from 'lucide-react';
+import { checkInParticipant, readyParticipant, markParticipantAbsent } from '../../api/training';
 import type { Participant } from '../../api/types';
 import { Avatar, Button, EmptyState, ErrorBox, NotFound, PageHeader, Skeleton, cn, useToast } from '../../components/ui';
 import { useAction, useService } from '../../hooks/useService';
@@ -19,7 +20,6 @@ import { prefersReducedMotion } from '../../lib/motion';
 import { IntensityBars, ParticipantPill, SessionStatusPill, TrialBadge } from './components/bits';
 import { ReasonDialog } from './components/ReasonDialog';
 import { Elapsed } from './components/LiveMonitor';
-import { CompleteDialog, TrialDialog } from './session/dialogs';
 import { loadDayBoard, useHorseIndex, type DayBoardItem } from './hooks';
 
 export default function TrainingToday() {
@@ -32,7 +32,7 @@ export default function TrainingToday() {
   const board = useService(() => loadDayBoard(day), [day], { silent: true });
   const { index: horses } = useHorseIndex();
   const scope = useRef<HTMLDivElement>(null);
-  const [dialog, setDialog] = useState<{ kind: 'absent' | 'complete' | 'trial'; participant: Participant; target?: number | null } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: 'absent'; participant: Participant } | null>(null);
   const action = useAction();
   const { reload } = board;
 
@@ -64,31 +64,16 @@ export default function TrainingToday() {
       reload();
     }).then((result) => result === undefined && reload());
 
+  const horseName = (participant: Participant) => participant.horseName || horses.get(participant.horseId)?.name || 'Ngựa';
+  const operational = (item: DayBoardItem) => item.session.status === 'SCHEDULED' || item.session.status === 'IN_PROGRESS';
   const nextStep = (item: DayBoardItem, participant: Participant) => {
-    const name = horses.get(participant.horseId)?.name ?? 'Ngựa';
-    const operational = item.session.status === 'SCHEDULED' || item.session.status === 'IN_PROGRESS';
-    if (!operational) return null;
-    switch (participant.status) {
-      case 'PLANNED':
-        return { label: 'Điểm danh', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)) };
-      case 'PRESENT':
-        return { label: 'Báo sẵn sàng', onClick: () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)) };
-      case 'READY':
-        return { label: 'Bắt đầu', onClick: () => run(`${name} bắt đầu chạy`, () => startParticipant(participant.id)) };
-      case 'ONGOING':
-        return {
-          label: 'Hoàn thành',
-          onClick: async () => {
-            if (item.session.sessionType === 'TIME_TRIAL') {
-              const target = (await getTimeTrial(item.session.id).catch(() => null))?.targetTimeMs ?? null;
-              setDialog({ kind: 'trial', participant, target });
-            } else setDialog({ kind: 'complete', participant });
-          },
-        };
-      default:
-        return null;
-    }
+    if (!groom || !operational(item)) return null;
+    const name = horseName(participant);
+    if (participant.status === 'PLANNED') return { label: 'Điểm danh', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)) };
+    if (participant.status === 'PRESENT') return { label: 'Báo sẵn sàng', onClick: () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)) };
+    return null;
   };
+  const canMarkAbsent = (item: DayBoardItem, participant: Participant) => groom && operational(item) && ['PLANNED', 'PRESENT', 'READY'].includes(participant.status);
 
   const days = Array.from({ length: 7 }, (_, offset) => addDateKey(day, offset - 3));
 
@@ -96,7 +81,7 @@ export default function TrainingToday() {
     <div ref={scope} className="space-y-5">
       <PageHeader
         title={groom ? 'Dắt ngựa tập' : 'Hôm nay trên sân'}
-        description={groom ? 'Các buổi tập có ngựa bạn được giao dắt. Điểm danh, báo sẵn sàng, bắt đầu và hoàn thành ngay ở đây.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
+        description={groom ? 'Các buổi tập có ngựa bạn được giao dắt. Dắt ngựa ra sân rồi điểm danh, khởi động xong thì báo sẵn sàng. HLV trưởng bấm bắt đầu.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
       />
 
       <div className="flex items-center gap-2">
@@ -202,28 +187,28 @@ export default function TrainingToday() {
                 ) : (
                   <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                     {item.participants.map((participant) => {
-                      const horse = horses.get(participant.horseId);
                       const step = nextStep(item, participant);
+                      const name = horseName(participant);
                       return (
                         <li key={participant.id} className="flex items-center gap-3 rounded-xl bg-gray-50/80 p-2.5 ring-1 ring-gray-100">
-                          <Avatar src={horse?.photoUrl ?? undefined} name={horse?.name ?? 'Ngựa'} size={36} />
+                          <Avatar src={participant.horsePhotoUrl ?? horses.get(participant.horseId)?.photoUrl ?? undefined} name={name} size={36} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-semibold text-gray-900">{horse?.name ?? 'Ngựa'}</p>
+                            <p className="truncate font-semibold text-gray-900">{name}</p>
                             <div className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
                               <ParticipantPill status={participant.status} />
                               {participant.status === 'ONGOING' && <Elapsed since={participant.startedAt} />}
                               {participant.status === 'INELIGIBLE' && <span>{ineligibleReasonText(participant.ineligibilityReason)}</span>}
                               {participant.status === 'ABSENT' && <span>{participant.absenceReason}</span>}
+                              {participant.status === 'READY' && <span>Chờ HLV trưởng bắt đầu</span>}
                             </div>
                           </div>
-                          {participant.status === 'PLANNED' && step && (
+                          {canMarkAbsent(item, participant) && (
                             <Button variant="ghost" size="icon" title="Báo vắng" onClick={() => setDialog({ kind: 'absent', participant })}>
                               <UserX size={15} />
                             </Button>
                           )}
                           {step && (
-                            <Button size="sm" disabled={action.pending} variant={participant.status === 'ONGOING' ? 'secondary' : 'primary'} onClick={() => void step.onClick()}>
-                              {participant.status === 'ONGOING' && item.session.sessionType === 'TIME_TRIAL' && <Flag size={13} />}
+                            <Button size="sm" disabled={action.pending} onClick={() => void step.onClick()}>
                               {step.label}
                             </Button>
                           )}
@@ -245,7 +230,7 @@ export default function TrainingToday() {
 
       {dialog?.kind === 'absent' && (
         <ReasonDialog
-          title={`Báo vắng ${horses.get(dialog.participant.horseId)?.name ?? 'ngựa'}`}
+          title={`Báo vắng ${horseName(dialog.participant)}`}
           label="Lý do vắng"
           suggestions={['Ngựa bỏ ăn', 'Móng trước bị xước nhẹ', 'Ngựa có dấu hiệu mệt']}
           confirmLabel="Báo vắng"
@@ -262,22 +247,6 @@ export default function TrainingToday() {
               },
             )
           }
-        />
-      )}
-      {dialog?.kind === 'complete' && (
-        <CompleteDialog participant={dialog.participant} horseName={horses.get(dialog.participant.horseId)?.name ?? 'Ngựa'} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reload(); }} />
-      )}
-      {dialog?.kind === 'trial' && (
-        <TrialDialog
-          participant={dialog.participant}
-          horseName={horses.get(dialog.participant.horseId)?.name ?? 'Ngựa'}
-          targetTimeMs={dialog.target}
-          completeAfter
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            setDialog(null);
-            reload();
-          }}
         />
       )}
     </div>

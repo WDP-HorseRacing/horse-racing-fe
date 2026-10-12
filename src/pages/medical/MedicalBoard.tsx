@@ -32,6 +32,7 @@ import { todayKey } from './components/utils';
 import { ZoneBoard, ZoneLegend } from '../stable/components/ZoneBoard';
 import { buildCells, type StallOccupant } from '../stable/components/barn';
 import { healthSegments } from '../dashboard/charts';
+import { IncidentPhotoButton } from '../stable-care/components/IncidentPhotoButton';
 
 type HerdHorse = MedicalDashboard['herd']['horses'][number];
 const HEALTH_KEYS: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
@@ -125,6 +126,7 @@ function QueueRow({
         <div className="mt-0.5 truncate text-xs text-gray-500">{item.request ? <RequestMeta request={item.request} people={people} showUrgent={false} /> : item.meta}</div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {item.request && <IncidentPhotoButton request={item.request} size="icon" />}
         {item.to && (
           <Link to={item.to} className="hidden text-xs font-medium text-gray-500 hover:text-emerald-700 sm:inline">
             Bệnh án
@@ -181,7 +183,7 @@ export default function MedicalBoard() {
       }),
     [user?.id, user?.role],
   );
-  // Gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE, để biểu đồ sức khỏe luôn đủ số của từng trạng thái.
+  // Gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE: đổi tab sức khỏe không phải gọi lại API. (BE nay cũng đếm 4 ô theo khu, không theo bộ lọc sức khỏe.)
   const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined }), [barnId]);
   const people = usePeople();
   const exam = (visit: VisitParams = {}) => navigate(links.visitNew({ ...visit, back: links.medicalBoard }));

@@ -15,7 +15,7 @@ import { enrollmentStatusText } from '../../../lib/training-labels';
 import { links } from '../../../lib/links';
 import { errorMessage } from '../../../lib/errors';
 import { ReasonDialog } from '../components/ReasonDialog';
-import { useHorseIndex, invalidateTrainingCache } from '../hooks';
+import { classSlotLoader, findScheduleClashes, useHorseIndex, invalidateTrainingCache, type ScheduleClash } from '../hooks';
 import type { ClassBundle } from './class-bundle';
 
 export default function ClassHorsesTab({
@@ -86,12 +86,13 @@ export default function ClassHorsesTab({
         <ul className="grid gap-2 sm:grid-cols-2">
           {sorted.map((enrollment) => {
             const horse = index.get(enrollment.horseId);
+            const name = enrollment.horseName || horse?.name || 'Ngựa';
             return (
               <li key={enrollment.id} className={cn('flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-gray-200/80', enrollment.status !== 'ACTIVE' && 'opacity-70')}>
-                <Avatar src={horse?.photoUrl ?? undefined} name={horse?.name ?? 'Ngựa'} size={44} />
+                <Avatar src={enrollment.horsePhotoUrl ?? horse?.photoUrl ?? undefined} name={name} size={44} />
                 <div className="min-w-0 flex-1">
                   <Link to={links.horse(enrollment.horseId, 'training')} className="block truncate font-semibold text-gray-900 hover:text-emerald-800">
-                    {horse?.name ?? 'Ngựa'}
+                    {name}
                   </Link>
                   <div className="flex flex-wrap items-center gap-x-3 text-xs text-gray-500">
                     {horse && <HealthPill status={horse.healthStatus} className="text-xs" />}
@@ -119,7 +120,7 @@ export default function ClassHorsesTab({
           title="Cho ngựa rời lớp"
           message={
             <>
-              <b>{index.get(leaving.horseId)?.name ?? 'Ngựa'}</b> rời lớp từ bây giờ. Lượt tập ở các buổi sau đó bị hủy.
+              <b>{leaving.horseName || index.get(leaving.horseId)?.name || 'Ngựa'}</b> rời lớp từ bây giờ. Lượt tập ở các buổi sau đó bị hủy.
             </>
           }
           label="Lý do rời lớp"
@@ -166,12 +167,23 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
 
   const enrolled = new Set(enrollments.filter((enrollment) => enrollment.status === 'ACTIVE').map((enrollment) => enrollment.horseId));
   const mine = horses.filter((horse) => !horse.isDeleted && horse.location.barn?.id && scope?.myBarnIds.has(horse.location.barn.id));
+  // Điều kiện tập và lịch trùng giờ với lớp khác của từng ngựa, tải song song.
   const eligibility = useService(
     async () => {
-      const entries = await Promise.all(mine.map(async (horse) => [horse.id, await getEligibility(horse.id).catch(() => undefined)] as const));
+      const sessionsOf = classSlotLoader();
+      const entries = await Promise.all(
+        mine.map(async (horse) => {
+          const [status, clashes] = await Promise.all([
+            getEligibility(horse.id).catch(() => undefined),
+            enrolled.has(horse.id) ? Promise.resolve([] as ScheduleClash[]) : findScheduleClashes(horse.id, item.id, sessions, sessionsOf),
+          ]);
+          return [horse.id, { status, clashes }] as const;
+        }),
+      );
       return new Map(entries);
     },
-    [mine.map((horse) => horse.id).join(',')],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mine.map((horse) => horse.id).join(','), sessions.map((session) => `${session.id}:${session.status}:${session.scheduledStartAt}`).join(',')],
     { silent: true },
   );
   const now = new Date().toISOString();
@@ -180,7 +192,8 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
 
   const candidates: Candidate[] = mine
     .map((horse) => {
-      const status = eligibility.data?.get(horse.id);
+      const status = eligibility.data?.get(horse.id)?.status;
+      const clashes = eligibility.data?.get(horse.id)?.clashes ?? [];
       const locked = !!status?.trainingReasons.includes('ACTIVE_TRAINING_LOCK');
       let blocked: string | undefined;
       let warning: string | undefined;
@@ -188,6 +201,7 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
       else if (horse.lifecycleStatus === 'RETIRED') blocked = 'Đã giải nghệ';
       else if (horse.lifecycleStatus === 'TRANSFERRED') blocked = 'Đã chuyển nhượng';
       else if (horse.lifecycleStatus === 'DECEASED') blocked = 'Ngựa đã mất';
+      else if (clashes.length) blocked = `Trùng giờ với ${clashes.map((clash) => `lớp ${clash.code} (${clash.count} buổi)`).join(', ')}`;
       else if (locked) warning = 'Đang khóa huấn luyện: các lượt tập sẽ bị hủy do khóa';
       else if (horse.healthStatus === 'INJURED' || horse.healthStatus === 'QUARANTINED') warning = 'Không đủ điều kiện tập: lượt tập thành Không đủ điều kiện';
       else if (horse.healthStatus === 'UNDER_OBSERVATION') warning = heavyAhead ? `Đang cần theo dõi: không tập được ${heavyAhead} buổi nặng sắp tới` : 'Đang cần theo dõi: không tập được buổi nặng';

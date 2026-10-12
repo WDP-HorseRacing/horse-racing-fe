@@ -62,7 +62,8 @@ export const CAPABILITIES: Capability[] = [
   { key: 'checkup.appointment', code: 'F3.2', group: 'Y tế', feature: 'Đặt và dời ngày hẹn khám định kỳ', roles: { VETERINARIAN: A } },
   { key: 'exam.record', code: 'F3.3', group: 'Y tế', feature: 'Ghi buổi khám (định kỳ, theo yêu cầu, tái khám)', roles: { VETERINARIAN: A } },
   { key: 'examRequest.view', code: 'F3.4', group: 'Y tế', feature: 'Xem hàng đợi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G } },
-  { key: 'examRequest.create', code: 'F3.4', group: 'Y tế', feature: 'Gửi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
+  // Groom không gửi yêu cầu khám trực tiếp nữa: báo sự cố (F4.4), sự cố khẩn tự tạo yêu cầu khám.
+  { key: 'examRequest.create', code: 'F3.4', group: 'Y tế', feature: 'Gửi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A } },
   { key: 'examRequest.dismiss', code: 'F3.4', group: 'Y tế', feature: 'Đổi mức khẩn, bỏ qua yêu cầu khám', roles: { VETERINARIAN: A } },
   { key: 'case.open', code: 'F3.5', group: 'Y tế', feature: 'Mở bệnh án', roles: { VETERINARIAN: A } },
   { key: 'exam.void', code: 'F3.6', group: 'Y tế', feature: 'Hủy buổi khám ghi sai và ghi buổi thay thế', roles: { VETERINARIAN: A } },
@@ -77,6 +78,23 @@ export const CAPABILITIES: Capability[] = [
   { key: 'care.view', code: 'F3.11', group: 'Y tế', feature: 'Xem lịch tiêm phòng, tẩy giun, kiểm tra móng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
   { key: 'care.manage', code: 'F3.11', group: 'Y tế', feature: 'Tạo, dời, hủy lịch chăm sóc', roles: { VETERINARIAN: A } },
   { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc được giao', roles: { VETERINARIAN: A, GROOM: G } },
+
+  // ===== Flow 4 — chăm sóc chuồng trại và dinh dưỡng (theo bảng phân quyền III.8 của BE) =====
+  { key: 'checklist.view', code: 'F4.1', group: 'Chăm sóc chuồng', feature: 'Xem checklist chăm sóc hằng ngày', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, GROOM: G } },
+  { key: 'checklist.tick', code: 'F4.1', group: 'Chăm sóc chuồng', feature: 'Đánh dấu xong việc chăm sóc trong ngày', roles: { GROOM: G } },
+  { key: 'feeding.view', code: 'F4.2', group: 'Chăm sóc chuồng', feature: 'Xem khẩu phần ăn theo bữa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
+  { key: 'feeding.manage', code: 'F4.2', group: 'Chăm sóc chuồng', feature: 'Lập, sửa và áp dụng khẩu phần ăn', roles: { HEAD_TRAINER: Z } },
+  { key: 'taskType.manage', code: 'F4.3', group: 'Chăm sóc chuồng', feature: 'Quản lý loại việc chăm sóc', roles: { CLUB_MANAGER: A } },
+  { key: 'careTask.manage', code: 'F4.3', group: 'Chăm sóc chuồng', feature: 'Gắn, gỡ việc chăm sóc riêng cho ngựa', roles: { HEAD_TRAINER: Z } },
+  { key: 'incident.report', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Báo sự cố tại chuồng kèm ảnh', roles: { GROOM: G } },
+  { key: 'incident.view', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Xem sự cố tại chuồng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: S } },
+  { key: 'incident.handle', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Chuyển bác sĩ, đóng sự cố', roles: { HEAD_TRAINER: Z } },
+  { key: 'supply.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem vật tư, vật tư sắp hết, sổ nhập xuất', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
+  { key: 'supply.manage', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Thêm, sửa, xóa vật tư', roles: { CLUB_MANAGER: A } },
+  { key: 'supply.count', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Kiểm kê vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, GROOM: A } },
+  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, GROOM: S } },
+  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, GROOM: S } },
+  { key: 'supplyRequest.review', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Duyệt, từ chối, đánh dấu đã cấp đề xuất', roles: { CLUB_MANAGER: A } },
 
   // ===== Quản trị =====
   { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự: tạo tài khoản, đổi vai trò, khóa tài khoản', roles: { CLUB_MANAGER: A } },

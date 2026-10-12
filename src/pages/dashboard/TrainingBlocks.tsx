@@ -130,8 +130,6 @@ export function ActiveClassesCard() {
 
 export function GroomTrainingCard() {
   const data = useService(() => loadDayBoard(clubToday()), [], { silent: true });
-  const horses = useService(() => listAllHorses(), [], { silent: true });
-  const names = new Map((horses.data ?? []).map((horse) => [horse.id, horse.name]));
   const rows = (data.data ?? []).flatMap((item) => item.participants.map((participant) => ({ item, participant })));
   return (
     <Card className="flex flex-col">
@@ -151,7 +149,7 @@ export function GroomTrainingCard() {
               <Link to={links.today} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
                 <span className="w-12 font-mono text-sm font-semibold">{clubTime(item.session.scheduledStartAt)}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold text-gray-900">{names.get(participant.horseId) ?? 'Ngựa'}</span>
+                  <span className="block truncate text-sm font-semibold text-gray-900">{participant.horseName || 'Ngựa'}</span>
                   <span className="block truncate text-xs text-gray-500">{item.session.name}</span>
                 </span>
                 <ParticipantPill status={participant.status} />

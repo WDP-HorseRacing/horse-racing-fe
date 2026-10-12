@@ -11,6 +11,7 @@ import { Button, EmptyState, ErrorBox, Segmented, Skeleton, cn } from '../../../
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
 import { useService } from '../../../hooks/useService';
 import { useStore } from '../../../store/store';
+import { useMyScope } from '../../../hooks/useMyScope';
 import { links } from '../../../lib/links';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { addDateKey, clubTime, clubToday } from '../../../lib/club-time';
@@ -21,12 +22,16 @@ import { prefersReducedMotion } from '../../../lib/motion';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../../training/components/bits';
 import { ProgressFill } from '../../training/components/motion';
 import ThresholdSheet from '../components/ThresholdSheet';
+import { TrialVideoButton } from '../../training/components/TrialVideo';
 
 export default function TrainingTab({ horse, permissions }: { horse: HorseDetail; permissions: HorsePermissions }) {
   const user = useStore((state) => state.currentUser);
   const role = user?.role;
   const scope = useRef<HTMLDivElement>(null);
-  const staffView = role === 'CLUB_MANAGER' || role === 'HEAD_TRAINER' || role === 'VETERINARIAN';
+  const { scope: zone } = useMyScope();
+  const inMyZone = !!horse.location.barn?.id && !!zone?.myBarnIds.has(horse.location.barn.id);
+  // HLV trưởng xem biểu đồ thể lực mọi ngựa (đề tài), nhưng ngưỡng và lịch sử cảnh báo chỉ của ngựa khu mình (BE trả 403 khu khác).
+  const staffView = role === 'CLUB_MANAGER' || role === 'VETERINARIAN' || (role === 'HEAD_TRAINER' && inMyZone);
   const canSetThreshold = role === 'HEAD_TRAINER' && permissions.canAssignStallAndGroom && !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE';
 
   const overview = useService(async () => {
@@ -267,7 +272,7 @@ function TrendCard({ horseId, className = '' }: { horseId: string; className?: s
       )}
       {rows.length > 0 && (
         <p className="mt-2 text-xs text-gray-500">
-          {rows.length} buổi có số đo · tổng {rows.reduce((sum, row) => sum + row.alertCount, 0)} điểm vượt ngưỡng. Cùng cường độ, nhịp tim trung bình giảm dần là thể lực đang lên.
+          {rows.length} buổi có số đo · tổng {rows.reduce((sum, row) => sum + row.alertCount, 0)} giây vượt ngưỡng. Cùng cường độ, nhịp tim trung bình giảm dần là thể lực đang lên.
         </p>
       )}
     </section>
@@ -282,8 +287,8 @@ function ThresholdCard({ horseId, horseName, canSet, className = '' }: { horseId
   const current = data.data;
   return (
     <section data-training-block className={cn('rounded-2xl bg-white p-5 ring-1 ring-gray-200/80', className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-900">
           <SlidersHorizontal size={16} className="text-emerald-700" /> Ngưỡng cảnh báo
         </h3>
         {canSet && (
@@ -429,6 +434,21 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                   {item.absenceReason && <p className="mt-1 text-xs text-amber-800">Vắng: {item.absenceReason}</p>}
                   {item.cancelReason && <p className="mt-1 text-xs text-gray-500">{item.cancelReason}</p>}
                 </Link>
+                {item.trialResults.some((trial) => trial.videoUrl) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {item.trialResults
+                      .filter((trial) => trial.videoUrl)
+                      .map((trial) => (
+                        <TrialVideoButton
+                          key={trial.attemptNo}
+                          url={trial.videoUrl}
+                          title={`${item.name}, lần chạy ${trial.attemptNo} (${formatRaceTime(trial.elapsedMs)})`}
+                          label={item.trialResults.length > 1 ? `Video lần ${trial.attemptNo}` : 'Xem video chạy thử'}
+                          onExpired={data.reload}
+                        />
+                      ))}
+                  </div>
+                )}
               </li>
             );
           })}

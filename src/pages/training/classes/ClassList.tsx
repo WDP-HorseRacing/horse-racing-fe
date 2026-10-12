@@ -2,7 +2,7 @@
 // Groom lớp có lượt mình dắt. Lớp đang chạy là thẻ lớn có thời gian của lớp, tiến độ buổi, buổi kế tiếp.
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Layers, Plus, Users } from 'lucide-react';
+import { ArrowRight, CalendarClock, Layers, Plus, Users } from 'lucide-react';
 import { listClasses, listEnrollments, listPlans, listSessions } from '../../../api/training';
 import type { Enrollment, TrainingClass, TrainingClassStatus, TrainingPlan, TrainingSession } from '../../../api/types';
 import { Button, ChipFilter, EmptyState, ErrorBox, NotFound, PageHeader, Skeleton, cn } from '../../../components/ui';
@@ -179,16 +179,22 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
   const next = live ?? sessions.filter((session) => session.status === 'SCHEDULED' && session.scheduledEndAt >= now).sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt))[0];
   const inRange = today >= item.startDate && today <= item.endDate;
   return (
-    <article data-class-card className={cn('flex min-w-0 flex-col rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 transition hover:ring-emerald-200', item.status === 'ACTIVE' ? 'shadow-grass-tint' : 'border border-dashed border-gray-300 ring-0', className)}>
+    // Cả thẻ bấm được để vào trang lớp (link phủ toàn thẻ). Dải buổi kế tiếp nằm lớp trên nên vẫn mở thẳng sân tập.
+    <article data-class-card className={cn('group relative flex min-w-0 flex-col rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 transition hover:ring-emerald-300', item.status === 'ACTIVE' ? 'shadow-grass-tint' : 'border border-dashed border-gray-300 ring-0', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-xs text-gray-500">{item.code}</p>
-          <Link to={links.class(item.id)} className="block truncate text-lg font-bold tracking-tight text-gray-900 hover:text-emerald-800">
+          <Link to={links.class(item.id)} className="block truncate text-lg font-bold tracking-tight text-gray-900 after:absolute after:inset-0 after:rounded-2xl after:content-[''] group-hover:text-emerald-800">
             {item.name}
           </Link>
           <p className="mt-0.5 truncate text-sm text-gray-500">{[plan?.name, trainer].filter(Boolean).join(' · ') || 'Theo giáo án của HLV trưởng'}</p>
         </div>
-        <ClassStatusPill status={item.status} />
+        <div className="flex shrink-0 items-center gap-2">
+          <ClassStatusPill status={item.status} />
+          <span className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition group-hover:bg-emerald-50 group-hover:text-emerald-700" aria-hidden>
+            <ArrowRight size={15} />
+          </span>
+        </div>
       </div>
 
       <div className="mt-5">
@@ -226,7 +232,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
       </div>
 
       {next ? (
-        <Link to={links.session(next.id)} className="mt-4 flex items-center gap-3 rounded-xl bg-emerald-50/60 px-3 py-2.5 ring-1 ring-emerald-100 transition hover:ring-emerald-300">
+        <Link to={links.session(next.id)} className="relative z-10 mt-4 flex items-center gap-3 rounded-xl bg-emerald-50/60 px-3 py-2.5 ring-1 ring-emerald-100 transition hover:ring-emerald-300">
           <CalendarClock size={16} className="shrink-0 text-emerald-700" />
           <div className="min-w-0 flex-1">
             <p className="text-xs text-emerald-800">{next.status === 'IN_PROGRESS' ? 'Đang diễn ra' : 'Buổi kế tiếp'}</p>

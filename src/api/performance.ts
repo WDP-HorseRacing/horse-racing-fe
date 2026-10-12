@@ -1,6 +1,6 @@
 // Flow 2 — nhịp tim, tốc độ của lượt tập, ngưỡng của ngựa, lịch sử cảnh báo, khối lượng tập.
 // Tốc độ BE trả dạng chuỗi 3 chữ số thập phân: đổi sang number ngay ở đây.
-import { http } from './http';
+import { http, request } from './http';
 import type {
   HorseAlert,
   HorseThresholds,
@@ -19,11 +19,11 @@ const numOrNull = (value: unknown) => (value === null || value === undefined ? n
 
 export const toMetricPoint = (point: MetricPoint): MetricPoint => ({ ...point, heartRateBpm: num(point.heartRateBpm), speedMps: num(point.speedMps) });
 
-/** Điểm đo của một lượt, cũ trước. Chủ ngựa không gọi được (403). */
+/** Điểm đo của một lượt (7.200 điểm mới nhất), cũ trước. Chỉ Quản lý CLB, bác sĩ, HLV trưởng gọi được, Groom và chủ ngựa nhận 403. */
 export const listMetrics = async (participantId: string) =>
   (await http.get<MetricPoint[]>(`/session-participants/${participantId}/metrics`)).map(toMetricPoint);
 
-/** Tổng kết lượt tập, kể cả chủ ngựa xem được. */
+/** Tổng kết lượt tập: Quản lý CLB, bác sĩ, HLV trưởng, chủ ngựa. Groom nhận 403. */
 export const getParticipantSummary = async (participantId: string): Promise<ParticipantSummary> => {
   const row = await http.get<ParticipantSummary>(`/session-participants/${participantId}/performance-summary`);
   return { ...row, avgSpeedMps: numOrNull(row.avgSpeedMps), maxSpeedMps: numOrNull(row.maxSpeedMps) };
@@ -54,3 +54,21 @@ export const setThresholds = (horseId: string, input: ThresholdInput) => http.pu
 
 /** Mặc định CLB khi ngựa chưa có ngưỡng riêng (khớp BE). */
 export const CLUB_DEFAULT_LIMITS = { heartRateWarningBpm: 220, heartRateCriticalBpm: 240, maxSpeedMps: 18 };
+
+/** Một điểm đo cảm biến gửi lên (tốc độ m/s). */
+export interface MetricInput {
+  sourceId: string;
+  recordedAt: string;
+  heartRateBpm: number;
+  speedMps: number;
+}
+
+/**
+ * Gửi một lô điểm đo cho lượt đang chạy (tối đa 500 điểm). Route này không cần đăng nhập, đúng như thiết bị thật.
+ * BE bỏ qua điểm trùng cảm biến và thời điểm đo, nên gửi lại một lô không sinh dữ liệu đôi. Lượt không còn Đang chạy trả 409.
+ */
+export const ingestMetrics = (participantId: string, metrics: MetricInput[]) =>
+  request<{ accepted: number; skippedDuplicates: number; highestAlertLevel: MetricAlertLevel }>('POST', `/session-participants/${participantId}/metrics/batch`, {
+    body: { metrics },
+    auth: false,
+  });

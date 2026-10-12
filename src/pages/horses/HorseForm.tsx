@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Info, Lock, MapPinned, RefreshCw } from 'lucide-react';
+import { ArrowRight, Info, Lock, MapPinned, RefreshCw } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { createHorse, getHorse, getPermissions, getPhotoUrl, listAllHorses, listHorses, updateHorse } from '../../api/horses';
@@ -47,6 +47,7 @@ import { PedigreeMini } from './components/PedigreeMini';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { TurfPlaceholder } from '../../components/TurfPlaceholder';
 import { barnBlocker } from '../stable/components/barn';
+import { BackLink } from '../../components/BackLink';
 
 interface FormState {
   name: string;
@@ -278,6 +279,8 @@ export default function HorseForm() {
   const savedSire = horse?.sireId;
   const savedDam = horse?.damId;
   const savedChip = horse?.microchipId;
+  const savedBreed = horse?.breed;
+  const savedColor = horse?.color;
   const sires = parents.data?.sires ?? [];
   const dams = parents.data?.dams ?? [];
   const sire = sires.find((item) => item.id === form.sireId);
@@ -289,18 +292,20 @@ export default function HorseForm() {
   const errors = useMemo(() => {
     const result: Partial<Record<FieldKey, string>> = {};
     if (aptitudeOnly) return result;
-    const onlyLetters = /^[\p{L}\s]+$/u;
+    // Như backend: tên ngựa chỉ cần có (số, dấu nháy vẫn được). Giống, màu lông là các từ chữ cái nối bằng một khoảng trắng,
+    // gạch nối hoặc dấu nháy (Anglo-Arabian, Akhal-Teke). Chỉ kiểm khi tạo mới hoặc khi trường đó thật sự đổi,
+    // để hồ sơ cũ vẫn sửa được các trường khác.
+    const words = /^\p{L}+(?:[ '-]\p{L}+)*$/u;
+    const changed = (value: string, saved: string | null | undefined) => !editing || (value || null) !== (saved || null);
     if (!form.name.trim()) result.name = 'Nhập tên ngựa';
-    else if (!onlyLetters.test(form.name)) result.name = 'Chỉ được dùng chữ cái và khoảng trắng';
 
     if (!form.gender) result.gender = 'Chọn giới tính';
 
-    if (form.breed.trim() && !onlyLetters.test(form.breed)) result.breed = 'Chỉ được dùng chữ cái và khoảng trắng';
-    if (form.color.trim() && !onlyLetters.test(form.color)) result.color = 'Chỉ được dùng chữ cái và khoảng trắng';
+    const breed = form.breed.trim();
+    if (breed && changed(breed, savedBreed) && !words.test(breed)) result.breed = 'Giống chỉ gồm chữ cái, khoảng trắng hoặc gạch nối';
+    const color = form.color.trim();
+    if (color && changed(color, savedColor) && !words.test(color)) result.color = 'Màu lông chỉ gồm chữ cái, khoảng trắng hoặc gạch nối';
 
-    // Như backend: chỉ kiểm khoảng 1–40 tuổi và cha mẹ khi tạo mới hoặc khi trường đó thật sự đổi,
-    // để hồ sơ cũ vẫn sửa được các trường khác.
-    const changed = (value: string, saved: string | null | undefined) => !editing || (value || null) !== (saved || null);
     const birthChanged = changed(form.dateOfBirth, savedBirth);
     if (form.dateOfBirth) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth)) result.dateOfBirth = 'Ngày không hợp lệ';
@@ -325,7 +330,7 @@ export default function HorseForm() {
     if (damError) result.damId = damError;
     if (barn && barnBlocker(barn)) result.barnId = `${barn.name}: ${barnBlocker(barn)!.toLowerCase()}`;
     return result;
-  }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam, savedChip]);
+  }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam, savedChip, savedBreed, savedColor]);
 
   /** Lỗi hiển thị: ô đã chạm hoặc đã bấm lưu. Lỗi backend luôn hiện, ưu tiên lỗi theo từng ô. */
   const err = (key: FieldKey) =>
@@ -443,7 +448,7 @@ export default function HorseForm() {
           setForceClean(true);
         });
         toast.push(`Đã tạo hồ sơ ${created.name}`, 'success');
-        navigate(links.horse(created.id));
+        navigate(links.horse(created.id), { replace: true });
       }
       return;
     }
@@ -474,7 +479,7 @@ export default function HorseForm() {
         setForceClean(true);
       });
       toast.push('Đã lưu hồ sơ', 'success');
-      navigate(links.horse(horse.id));
+      navigate(links.horse(horse.id), { replace: true });
     }
   };
 
@@ -512,9 +517,7 @@ export default function HorseForm() {
     <div className="space-y-5" ref={formRef}>
       <PageHeader
         back={
-          <button type="button" onClick={() => navigate(backTo)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-            <ArrowLeft size={15} /> {editing ? 'Về hồ sơ' : 'Danh sách ngựa'}
-          </button>
+          <BackLink fallback={backTo} />
         }
         title={editing ? `Sửa hồ sơ ${horse?.name ?? ''}` : 'Thêm ngựa mới'}
         description={aptitudeOnly ? 'Cập nhật sở trường cự ly cho ngựa thuộc khu bạn phụ trách.' : 'Ô có dấu * là bắt buộc, các ô khác bổ sung sau được.'}
@@ -582,7 +585,8 @@ export default function HorseForm() {
                   <Field label="Số chip" name="microchipId" error={err('microchipId')} className="sm:col-span-3">
                     <Input
                       value={form.microchipId}
-                      maxLength={80}
+                      maxLength={15}
+                      inputMode="numeric"
                       className={cn('font-mono', err('microchipId') && invalidClass)}
                       onChange={(event) => set('microchipId', event.target.value)}
                       onBlur={checkChip}

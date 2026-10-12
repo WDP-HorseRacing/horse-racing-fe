@@ -1,15 +1,16 @@
 // F2.4, F2.5 — Chi tiết một lượt tập. Mở từ thông báo khẩn (id lượt + horseId), từ Sân tập, từ lịch sử của ngựa.
 // BE chưa có API đọc một lượt: thông tin buổi tìm trong lịch tập của ngựa. Điểm đo, tổng kết, chạy thử, đánh giá đều nhận id lượt.
 // Chủ ngựa không xem được điểm đo từng giây (BE chặn), chỉ thấy 5 chỉ số tổng kết, kết quả chạy thử và nhận xét (đặc tả F2.4 xem rút gọn).
-import { useRef } from 'react';
+// Groom không xem nhịp tim và tổng kết (BE trả 403): trang chỉ báo và dẫn về lịch dắt ngựa.
+import { useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Flag, HeartPulse, MessageSquareQuote, Radio, Timer } from 'lucide-react';
+import { Film, Flag, HeartPulse, MessageSquareQuote, Radio, Timer, Trash2 } from 'lucide-react';
 import { getHorse } from '../../api/horses';
 import { CLUB_DEFAULT_LIMITS, getParticipantSummary, getThresholds, listMetrics } from '../../api/performance';
-import { getEvaluation, getTimeTrial, listHorseSessions, listTrialResults } from '../../api/training';
-import type { HorseTrainingSession } from '../../api/types';
-import { EmptyState, NotFound, Notice, Skeleton, cn } from '../../components/ui';
-import { useService } from '../../hooks/useService';
+import { getClass, getEvaluation, getTimeTrial, listHorseSessions, listTrialResults, updateTrialVideo } from '../../api/training';
+import type { HorseTrainingSession, TrialResult } from '../../api/types';
+import { Button, ConfirmDialog, EmptyState, NotFound, Notice, Skeleton, cn, useToast } from '../../components/ui';
+import { useAction, useService } from '../../hooks/useService';
 import { useStore } from '../../store/store';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { links } from '../../lib/links';
@@ -21,8 +22,11 @@ import { gsap, useGSAP } from '../../lib/gsap';
 import { prefersReducedMotion } from '../../lib/motion';
 import { ParticipantPill, TrialBadge } from './components/bits';
 import { MetricChart } from './components/MetricChart';
+import { TrialVideoAttachDialog, TrialVideoButton } from './components/TrialVideo';
+import { trialVideoEditable } from './plan-helpers';
 import { ScoreHorseshoe } from './components/motion';
 import { useLiveMetrics } from './hooks';
+import { BackLink } from '../../components/BackLink';
 
 /** Tìm lượt trong lịch tập của ngựa (tối đa 5 trang, mới nhất trước). */
 async function findSessionRow(horseId: string, participantId: string): Promise<HorseTrainingSession | undefined> {
@@ -44,18 +48,29 @@ export default function ParticipantDetail() {
   const owner = role === 'HORSE_OWNER';
   const canThresholds = role === 'HEAD_TRAINER' || role === 'CLUB_MANAGER' || role === 'VETERINARIAN';
 
+  const groom = role === 'GROOM';
+  const toast = useToast();
+  const [attaching, setAttaching] = useState<TrialResult | null>(null);
+  const [removing, setRemoving] = useState<TrialResult | null>(null);
+  const removeVideo = useAction();
   const data = useService(async () => {
+    if (groom) return null;
     const [horse, row, summary, metrics, trials, evaluation, thresholds] = await Promise.all([
       horseId ? getHorse(horseId).catch(() => undefined) : Promise.resolve(undefined),
-      horseId && role !== 'GROOM' ? findSessionRow(horseId, id).catch(() => undefined) : Promise.resolve(undefined),
+      horseId ? findSessionRow(horseId, id).catch(() => undefined) : Promise.resolve(undefined),
       getParticipantSummary(id),
       owner ? Promise.resolve(null) : listMetrics(id).catch(() => null),
       listTrialResults(id).catch(() => []),
       getEvaluation(id).catch(() => null),
       canThresholds && horseId ? getThresholds(horseId).catch(() => null) : Promise.resolve(null),
     ]);
-    const target = row?.sessionType === 'TIME_TRIAL' ? ((await getTimeTrial(row.sessionId).catch(() => null))?.targetTimeMs ?? null) : null;
-    return { horse, row, summary, metrics, trials, evaluation, thresholds, target };
+    const trial = row?.sessionType === 'TIME_TRIAL';
+    const [target, trainerId] = await Promise.all([
+      trial ? getTimeTrial(row.sessionId).then((item) => item.targetTimeMs, () => null) : Promise.resolve(null),
+      // Chỉ HLV trưởng của lớp gắn video sau buổi: cần biết lớp do ai phụ trách.
+      trial && role === 'HEAD_TRAINER' ? getClass(row.classId).then((item) => item.headTrainerId, () => null) : Promise.resolve(null),
+    ]);
+    return { horse, row, summary, metrics, trials, evaluation, thresholds, target, trainerId };
   }, [id, horseId]);
 
   const ongoing = data.data?.row?.participantStatus === 'ONGOING';
@@ -75,9 +90,25 @@ export default function ParticipantDetail() {
     { scope, dependencies: [!!data.data] },
   );
 
+  if (groom) {
+    return (
+      <EmptyState
+        title="Chi tiết lượt tập dành cho HLV trưởng"
+        hint="Nhịp tim, tốc độ và kết quả buổi tập do HLV trưởng theo dõi. Groom xem lịch dắt ngựa ở trang Dắt ngựa tập."
+        action={
+          <Link to={links.today}>
+            <Button variant="secondary">Mở lịch dắt ngựa</Button>
+          </Link>
+        }
+      />
+    );
+  }
   if (data.loading && !data.data) return <Skeleton rows={6} />;
   if (data.error || !data.data) return <NotFound message={data.error} />;
-  const { horse, row, summary, trials, evaluation, thresholds, target } = data.data;
+  const { horse, row, summary, trials, evaluation, thresholds, target, trainerId } = data.data;
+  const classTrainer = !!user && !!trainerId && trainerId === user.id;
+  const videoOpen = !!row && trialVideoEditable(row);
+  const canEditVideo = classTrainer && videoOpen;
   const limits = thresholds?.activeLimits ?? CLUB_DEFAULT_LIMITS;
   const duration = summary.firstRecordedAt && summary.lastRecordedAt ? (new Date(summary.lastRecordedAt).getTime() - new Date(summary.firstRecordedAt).getTime()) / 1000 : undefined;
   const best = trials.length ? Math.min(...trials.map((item) => item.elapsedMs)) : undefined;
@@ -88,16 +119,12 @@ export default function ParticipantDetail() {
     { label: 'Nhịp tim cao nhất', value: summary.maxHeartRateBpm ?? '—', unit: 'bpm', tone: summary.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateCriticalBpm ? 'red' : summary.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateWarningBpm ? 'amber' : undefined },
     { label: 'Tốc độ trung bình', value: formatSpeed(summary.avgSpeedMps) },
     { label: 'Tốc độ cao nhất', value: formatSpeed(summary.maxSpeedMps), tone: summary.maxSpeedMps && summary.maxSpeedMps > limits.maxSpeedMps ? 'amber' : undefined },
-    { label: 'Số lần cảnh báo', value: alerts, hint: summary.criticalCount ? `${summary.criticalCount} nguy hiểm` : undefined, tone: summary.criticalCount ? 'red' : summary.warningCount ? 'amber' : undefined },
+    { label: 'Số giây vượt ngưỡng', value: alerts, hint: summary.criticalCount ? `${summary.criticalCount} giây nguy hiểm` : undefined, tone: summary.criticalCount ? 'red' : summary.warningCount ? 'amber' : undefined },
   ];
 
   return (
     <div ref={scope} className="space-y-5">
-      {horse && (
-        <Link to={links.horse(horse.id, 'training')} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-          <ArrowLeft size={15} /> {horse.name}
-        </Link>
-      )}
+      <BackLink fallback={horse ? links.horse(horse.id, 'training') : owner ? links.horses : links.classes} />
 
       <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -199,14 +226,67 @@ export default function ParticipantDetail() {
                       </div>
                       {target && <p className={cn('text-right font-mono text-xs', trial.elapsedMs <= target ? 'text-emerald-700' : 'text-amber-700')}>{formatDelta(trial.elapsedMs - target)} so với mục tiêu {formatRaceTime(target)}</p>}
                       {trial.notes && <p className="mt-0.5 text-xs text-gray-600">{trial.notes}</p>}
+                      {(trial.videoUrl || canEditVideo) && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <TrialVideoButton url={trial.videoUrl} title={`${horse?.name ?? 'Ngựa'} lần chạy ${trial.attemptNo}`} onExpired={data.reload} />
+                          {canEditVideo && (
+                            <Button variant="inline" size="sm" onClick={() => setAttaching(trial)}>
+                              <Film size={13} /> {trial.videoMediaId ? 'Đổi video' : 'Gắn video'}
+                            </Button>
+                          )}
+                          {canEditVideo && trial.videoMediaId && (
+                            <Button variant="ghost" size="sm" onClick={() => setRemoving(trial)}>
+                              <Trash2 size={13} /> Gỡ
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
+              )}
+              {classTrainer && !videoOpen && trials.length > 0 && (
+                <p className="mt-2 text-xs text-gray-500">{row?.sessionStatus === 'CANCELLED' ? 'Buổi đã hủy, không gắn video được.' : 'Đã quá hạn gắn video (7 ngày sau buổi).'}</p>
               )}
             </div>
           )}
         </aside>
       </div>
+
+      {attaching && (
+        <TrialVideoAttachDialog
+          participantId={id}
+          attemptNo={attaching.attemptNo}
+          replacing={!!attaching.videoMediaId}
+          onClose={() => setAttaching(null)}
+          onDone={() => {
+            toast.push('Đã lưu video lần chạy', 'success');
+            setAttaching(null);
+            data.reload();
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={!!removing}
+        title={`Gỡ video lần chạy ${removing?.attemptNo ?? ''}`}
+        message="Chủ ngựa sẽ không xem được video này nữa. Thời gian chạy và ghi chú giữ nguyên."
+        confirmLabel="Gỡ video"
+        pending={removeVideo.pending}
+        onClose={() => setRemoving(null)}
+        onConfirm={() =>
+          removing &&
+          void removeVideo.run(
+            () => updateTrialVideo(id, removing.attemptNo, null),
+            () => {
+              toast.push('Đã gỡ video', 'success');
+              setRemoving(null);
+              data.reload();
+            },
+          )
+        }
+      >
+        {removeVideo.error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{removeVideo.error}</p>}
+      </ConfirmDialog>
     </div>
   );
 }

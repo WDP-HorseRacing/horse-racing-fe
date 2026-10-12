@@ -13,6 +13,9 @@ import { links } from '../../lib/links';
 import { primeZoneScope } from '../../hooks/useMyScope';
 import { now } from '../../lib/clock';
 import { isReadOnlyHorse } from '../../lib/horse-rules';
+import { getGroomToday, listIncidents } from '../../api/stable-care';
+import { countSupplyRequests, listLowStock } from '../../api/supplies';
+import { FEATURES } from '../../config/features';
 
 export const inClub = (horse: HorseListItem) => !isReadOnlyHorse(horse);
 /** Ngựa đang hoạt động, sức khỏe đủ điều kiện mà không được đua ⇒ đang bị khóa huấn luyện. */
@@ -153,7 +156,7 @@ export const todayKey = () => toDateKey(now());
 export async function loadManager() {
   // Chi phí 6 tháng: BE chưa gom theo tháng nên gọi cost-report cho từng tháng (song song).
   const months = lastMonths(6);
-  const [horses, barns, stalls, medical, checkups, costs] = await Promise.all([
+  const [horses, barns, stalls, medical, checkups, costs, stable] = await Promise.all([
     listAllHorses(),
     listBarns(),
     listStalls(),
@@ -166,6 +169,7 @@ export async function loadManager() {
           .catch(() => ({ key: month.key, label: month.label, total: 0, count: 0 })),
       ),
     ),
+    loadStableSummary(true),
   ]);
   const club = horses.filter(inClub);
   const care = dashboardCare(medical);
@@ -176,6 +180,7 @@ export async function loadManager() {
     medical,
     checkups,
     costs,
+    stable,
     week: medicalWeek(medical, care),
     overdue: medicalOverdue(medical, care),
   };
@@ -184,7 +189,7 @@ export async function loadManager() {
 /* ===== Huấn luyện viên trưởng ===== */
 
 export async function loadTrainer(userId: string) {
-  const [horses, barns, stalls, medical] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard()]);
+  const [horses, barns, stalls, medical, stable] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard(), loadStableSummary(false)]);
   const mine = horses.filter(inClub);
   const ids = new Set(mine.map((horse) => horse.id));
   const care = dashboardCare(medical);
@@ -194,6 +199,7 @@ export async function loadTrainer(userId: string) {
     barns: barns.filter((barn) => barn.headTrainerId === userId),
     stalls,
     medical,
+    stable,
     ids,
     week: medicalWeek(medical, care, ids),
     overdue: medicalOverdue(medical, care, ids),
@@ -216,15 +222,31 @@ export async function loadVet() {
   return { medical, barns, stalls, checkups, requests, week: medicalWeek(medical, care), overdue: medicalOverdue(medical, care) };
 }
 
+/* ===== Chăm sóc chuồng (Flow 4) cho HLV và Quản lý CLB ===== */
+
+/** Sự cố đang mở (HLV: BE lọc theo khu mình), vật tư sắp hết, đề xuất chờ duyệt (chỉ Quản lý CLB). Lỗi thì coi như rỗng. */
+async function loadStableSummary(manager: boolean) {
+  if (!FEATURES.stableCare) return { incidents: [], lowStock: [], pendingSupply: 0 };
+  const [incidents, lowStock, pendingSupply] = await Promise.all([
+    listIncidents({ status: 'OPEN' }).catch(() => []),
+    listLowStock().catch(() => []),
+    manager ? countSupplyRequests('PENDING').catch(() => 0) : Promise.resolve(0),
+  ]);
+  return { incidents, lowStock, pendingSupply };
+}
+
 /* ===== Nhân viên chăm sóc ===== */
 
 export async function loadGroom() {
   const horses = (await listAllHorses({ myHorses: true })).filter(inClub);
-  const [care, notes, requests] = await Promise.all([
+  const [care, notes, requests, today, incidents] = await Promise.all([
     // Groom chỉ nhận lịch được giao cho chính mình.
     Promise.all(horses.map((horse) => listCareSchedules(horse.id).then((items) => items.map((schedule) => ({ schedule, horseName: horse.name }))).catch(() => []))),
     Promise.all(horses.map((horse) => getCareInstructions(horse.id).then((result) => ({ horse, current: result.current })).catch(() => ({ horse, current: null })))),
     listExamRequests({ status: 'PENDING', limit: 100 }).catch(() => undefined),
+    // Flow 4: việc hôm nay (checklist, khẩu phần, lượt dắt tập) và sự cố mình báo còn mở. Lỗi thì màn vẫn hiện phần cũ.
+    FEATURES.stableCare ? getGroomToday().catch(() => null) : Promise.resolve(null),
+    FEATURES.stableCare ? listIncidents({ status: 'OPEN' }).catch(() => []) : Promise.resolve([]),
   ]);
   const schedules = care.flat().filter((item) => item.schedule.status === 'SCHEDULED');
   return {
@@ -232,6 +254,8 @@ export async function loadGroom() {
     schedules: schedules.sort((a, b) => a.schedule.dueAt.localeCompare(b.schedule.dueAt)),
     notes: notes.filter((item) => item.current),
     requests: requests?.items ?? [],
+    today,
+    incidents,
     week: medicalWeek(undefined, schedules),
     overdue: medicalOverdue(undefined, schedules),
   };

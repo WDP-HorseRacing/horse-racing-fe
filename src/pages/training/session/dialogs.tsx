@@ -1,6 +1,6 @@
-// Hộp thoại của Sân tập: ghi thời gian chạy thử (bấm giờ hoặc gõ tay), hoàn thành lượt, đánh giá sau buổi, đổi Groom dắt.
-import { useEffect, useRef, useState } from 'react';
-import { Flag, Pause, Play } from 'lucide-react';
+// Hộp thoại của Sân tập: ghi thời gian chạy thử (kèm video), hoàn thành lượt, đánh giá sau buổi, đổi Groom dắt.
+import { useState } from 'react';
+import { Flag } from 'lucide-react';
 import { assignParticipantGroom, completeParticipant, createEvaluation, listTrialResults, recordTrialResult } from '../../../api/training';
 import { getParticipantSummary } from '../../../api/performance';
 import type { GroomWorkload, Participant, TrialResult } from '../../../api/types';
@@ -9,52 +9,7 @@ import { useAction, useService } from '../../../hooks/useService';
 import { formatDelta, formatRaceTime, formatSpeed } from '../../../lib/training-format';
 import { RaceTimeInput } from '../components/RaceTimeInput';
 import { ScoreHorseshoe } from '../components/motion';
-
-/* ===== Bấm giờ ===== */
-
-function Stopwatch({ onStop }: { onStop: (ms: number) => void }) {
-  const [running, setRunning] = useState(false);
-  const started = useRef(0);
-  const display = useRef<HTMLSpanElement>(null);
-  const frame = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
-  const loop = () => {
-    if (display.current) display.current.textContent = formatRaceTime(performance.now() - started.current);
-    frame.current = requestAnimationFrame(loop);
-  };
-  return (
-    <div className="flex items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3 text-white">
-      <span ref={display} className="min-w-28 font-mono text-3xl font-bold tabular-nums">
-        0.00
-      </span>
-      {running ? (
-        <button
-          type="button"
-          onClick={() => {
-            cancelAnimationFrame(frame.current);
-            setRunning(false);
-            onStop(Math.round(performance.now() - started.current));
-          }}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold hover:bg-red-400"
-        >
-          <Pause size={15} /> Dừng
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => {
-            started.current = performance.now();
-            setRunning(true);
-            frame.current = requestAnimationFrame(loop);
-          }}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold hover:bg-emerald-400"
-        >
-          <Play size={15} /> Bấm giờ
-        </button>
-      )}
-    </div>
-  );
-}
+import { TrialVideoButton, TrialVideoPicker, type VideoUploadState } from '../components/TrialVideo';
 
 /* ===== Ghi thời gian chạy thử (và có thể hoàn thành lượt ngay) ===== */
 
@@ -81,6 +36,7 @@ export function TrialDialog({
   const results = useService(() => listTrialResults(participant.id), [participant.id], { silent: true });
   const [elapsed, setElapsed] = useState<number>();
   const [notes, setNotes] = useState('');
+  const [video, setVideo] = useState<VideoUploadState>({ uploading: false });
   const [touched, setTouched] = useState(false);
   const save = useAction();
   const list: TrialResult[] = results.data ?? [];
@@ -93,7 +49,7 @@ export function TrialDialog({
     if (!skipRecord && !elapsed) return;
     void save.run(
       async () => {
-        if (!skipRecord && elapsed) await recordTrialResult(participant.id, { attemptNo: nextAttempt, elapsedMs: elapsed, notes: notes.trim() || undefined });
+        if (!skipRecord && elapsed) await recordTrialResult(participant.id, { attemptNo: nextAttempt, elapsedMs: elapsed, notes: notes.trim() || undefined, videoMediaId: video.mediaId });
         if (completeAfter) await completeParticipant(participant.id);
       },
       () => {
@@ -120,18 +76,17 @@ export function TrialDialog({
               Hoàn thành, không ghi thêm
             </Button>
           )}
-          <Button disabled={save.pending} onClick={() => submit(false)}>
-            <Flag size={15} /> {save.pending ? 'Đang lưu…' : completeAfter ? `Ghi lần ${nextAttempt} và hoàn thành` : `Ghi lần chạy ${nextAttempt}`}
+          <Button disabled={save.pending || video.uploading} onClick={() => submit(false)}>
+            <Flag size={15} /> {video.uploading ? 'Chờ tải video xong…' : save.pending ? 'Đang lưu…' : completeAfter ? `Ghi lần ${nextAttempt} và hoàn thành` : `Ghi lần chạy ${nextAttempt}`}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         {save.error && <ErrorBox message={save.error} />}
-        <Stopwatch onStop={(ms) => setElapsed(ms)} />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={`Thời gian lần ${nextAttempt}`} required error={touched && !elapsed ? 'Bấm giờ hoặc gõ thời gian, ví dụ 1:16.20' : undefined} hint="Phút:giây.phần trăm giây">
-            <RaceTimeInput key={elapsed} value={elapsed} onChange={(ms) => setElapsed(ms)} autoFocus />
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
+          <Field label={`Thời gian lần ${nextAttempt}`} required error={touched && !elapsed ? 'Nhập phút và giây, ví dụ 1 phút 14,8 giây' : undefined} hint="Giây lẻ tới phần trăm, ví dụ 14,8">
+            <RaceTimeInput value={elapsed} invalid={touched && !elapsed} onChange={(ms) => setElapsed(ms)} autoFocus />
           </Field>
           <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
             <p className="text-xs text-gray-500">So với mục tiêu</p>
@@ -146,6 +101,7 @@ export function TrialDialog({
         <Field label="Ghi chú lần chạy">
           <Textarea rows={2} value={notes} placeholder="Xuất phát chậm, đổi nhịp ở khúc cua…" onChange={(event) => setNotes(event.target.value)} />
         </Field>
+        <TrialVideoPicker onChange={setVideo} disabled={save.pending} />
         {results.loading && !results.data ? (
           <Skeleton rows={1} />
         ) : (
@@ -157,7 +113,10 @@ export function TrialDialog({
                   <li key={item.id} className={cn('flex items-center justify-between rounded-lg px-3 py-1.5 text-sm ring-1', item.elapsedMs === best ? 'bg-emerald-50 ring-emerald-200' : 'bg-white ring-gray-100')}>
                     <span className="text-gray-500">Lần {item.attemptNo}</span>
                     <span className="font-mono font-semibold">{formatRaceTime(item.elapsedMs)}</span>
-                    <span className="font-mono text-xs text-gray-500">{targetTimeMs ? formatDelta(item.elapsedMs - targetTimeMs) : ''}</span>
+                    <span className="flex items-center gap-1 font-mono text-xs text-gray-500">
+                      {targetTimeMs ? formatDelta(item.elapsedMs - targetTimeMs) : ''}
+                      <TrialVideoButton url={item.videoUrl} title={`${horseName} lần chạy ${item.attemptNo}`} onExpired={results.reload} size="icon" />
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -216,7 +175,7 @@ export function CompleteDialog({ participant, horseName, onClose, onDone }: { pa
             <p className="font-mono font-semibold">{data.maxHeartRateBpm}</p>
           </div>
           <div className={cn('rounded-xl p-2.5 ring-1', data.criticalCount ? 'bg-red-50 ring-red-100' : 'bg-gray-50 ring-gray-100')}>
-            <p className="text-xs text-gray-500">Cảnh báo</p>
+            <p className="text-xs text-gray-500">Giây vượt ngưỡng</p>
             <p className="font-mono font-semibold">{data.warningCount + data.criticalCount}</p>
           </div>
         </div>
@@ -306,7 +265,7 @@ export function EvaluationSheet({
               { label: 'Nhịp tim cao nhất', value: summary?.maxHeartRateBpm ?? '—' },
               { label: 'Tốc độ TB', value: formatSpeed(summary?.avgSpeedMps) },
               { label: 'Tốc độ cao nhất', value: formatSpeed(summary?.maxSpeedMps) },
-              { label: 'Số lần cảnh báo', value: summary ? summary.warningCount + summary.criticalCount : '—', tone: summary?.criticalCount ? 'red' : undefined },
+              { label: 'Số giây vượt ngưỡng', value: summary ? summary.warningCount + summary.criticalCount : '—', tone: summary?.criticalCount ? 'red' : undefined },
               { label: 'Chạy thử tốt nhất', value: trials.length ? formatRaceTime(Math.min(...trials.map((trial) => trial.elapsedMs))) : '—' },
             ].map((item) => (
               <div key={item.label} className={cn('rounded-xl p-2.5 ring-1', item.tone === 'red' ? 'bg-red-50 ring-red-100' : 'bg-gray-50 ring-gray-100')}>

@@ -3,7 +3,7 @@
 // Hồ sơ và cờ quyền tải song song; ảnh tải riêng để không chặn trang. Nút nào hiện là do cờ quyền quyết định.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
+import { ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
 import { uploadHorsePhoto } from '../../api/media';
@@ -22,6 +22,8 @@ import OverviewTab from './tabs/OverviewTab';
 import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
 import TrainingTab from './tabs/TrainingTab';
+import CareTab from './tabs/CareTab';
+import { useMyScope } from '../../hooks/useMyScope';
 import { FEATURES } from '../../config/features';
 import LifecycleDialog from './components/LifecycleDialog';
 import OwnershipTransferDialog from './components/OwnershipTransferDialog';
@@ -30,6 +32,7 @@ import { HorseMedia } from './components/HorseMedia';
 import { destructiveActions, lifecycleActionLabel, lifecycleActionsFor, type LifecycleAction } from './components/lifecycle';
 import { horseAgeText } from '../../lib/horse-rules';
 import { AssignZoneDialog } from '../stable/components/PlacementDialogs';
+import { BackLink } from '../../components/BackLink';
 
 /** Một ô thông tin trong lưới bento của hero. `waiting` = đang chờ xử lý (chữ và viền hổ phách). */
 function Fact({ label, value, waiting, mono, to, className = '' }: { label: string; value?: ReactNode; waiting?: string; mono?: boolean; to?: string; className?: string }) {
@@ -87,17 +90,23 @@ export default function HorseDetail() {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
   useCrumbs(data ? [{ label: data.horse.name }] : null);
+  const { scope: zone } = useMyScope();
 
   if (loading && !data) return <HorseDetailSkeleton />;
   if (error || !data) return <NotFound message={error && !error.startsWith('Không tìm thấy') ? error : undefined} />;
   const { horse, permissions } = data;
 
   const isHorseGroom = !!horse.groom && horse.groom.id === user?.id;
+  // Tab Chăm sóc (Flow 4): BE không có cờ quyền riêng. HLV chỉ xem ngựa khu mình, Groom chỉ ngựa mình phụ trách, chủ ngựa không có.
+  const barnId = horse.location.barn?.id;
+  const trainerOfZone = user?.role === 'HEAD_TRAINER' && !!barnId && !!zone?.myBarnIds.has(barnId);
+  const canViewCare = user?.role === 'CLUB_MANAGER' || user?.role === 'VETERINARIAN' || trainerOfZone || isHorseGroom;
   const tabs = [
     { key: 'overview', label: 'Tổng quan' },
     { key: 'pedigree', label: 'Phả hệ' },
     { key: 'body', label: 'Chỉ số cơ thể' },
     ...(FEATURES.training && permissions.canViewTrainingTab ? [{ key: 'training', label: 'Huấn luyện' }] : []),
+    ...(FEATURES.stableCare && canViewCare ? [{ key: 'care', label: 'Chăm sóc' }] : []),
   ];
   const requested = params.get('tab') ?? 'overview';
   // Y tế đã thành màn riêng (Flow 3): link cũ ?tab=medical chuyển sang đó.
@@ -139,9 +148,7 @@ export default function HorseDetail() {
 
   return (
     <Reveal className="space-y-5">
-      <Link to={links.horses} className="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900">
-        <ArrowLeft size={15} /> Danh sách ngựa
-      </Link>
+      <BackLink fallback={links.horses} />
 
       {/* Hero hồ sơ: ảnh lớn bên trái, thông tin bên phải */}
       <section data-reveal className="grid gap-5 rounded-3xl bg-white p-3 shadow-[0_28px_60px_-40px_rgba(6,78,59,0.5)] ring-1 ring-gray-200/80 sm:p-4 lg:grid-cols-12">
@@ -289,6 +296,7 @@ export default function HorseDetail() {
         {tab === 'pedigree' && <PedigreeTab horseId={horse.id} />}
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
         {tab === 'training' && <TrainingTab horse={horse} permissions={permissions} />}
+        {tab === 'care' && <CareTab horse={horse} trainerOfZone={trainerOfZone} />}
       </div>
 
       <LifecycleDialog

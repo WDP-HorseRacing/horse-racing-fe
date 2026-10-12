@@ -13,7 +13,8 @@ import { links } from '../../../lib/links';
 import { formatDate } from '../../../lib/format';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
-import { WeekRibbon, planSegments } from '../components/bits';
+import { WeekRibbon } from '../components/bits';
+import { planPhases, planSessionCount, planSubjects } from '../plan-helpers';
 import { useUserNames } from '../hooks';
 
 export default function PlanList() {
@@ -131,7 +132,9 @@ function PlanCard({
   large?: boolean;
   className?: string;
 }) {
-  const trials = plan.subjects.filter((item) => item.subject.sessionType === 'TIME_TRIAL').length;
+  const subjects = planSubjects(plan);
+  const trials = subjects.filter((subject) => subject.sessionType === 'TIME_TRIAL').length;
+  const sessions = planSessionCount(plan);
   return (
     <article
       data-plan-card
@@ -155,17 +158,17 @@ function PlanCard({
         </div>
       </div>
 
-      <WeekRibbon segments={planSegments(plan)} size={large ? 'lg' : 'md'} className={large ? 'mt-6' : 'mt-4'} />
+      <WeekRibbon phases={planPhases(plan)} size={large ? 'lg' : 'md'} className={large ? 'mt-6' : 'mt-4'} />
 
       {large && (
         <ol className="mt-5 grid gap-1.5 sm:grid-cols-2">
-          {plan.subjects.map((item) => (
-            <li key={item.position} className="flex min-w-0 items-center gap-2 text-sm">
+          {plan.phases.map((phase) => (
+            <li key={phase.position} className="flex min-w-0 items-center gap-2 text-sm">
               <span className="w-16 shrink-0 font-mono text-xs tabular-nums text-gray-500">
-                T{item.startWeek}
-                {item.weeks > 1 && `-${item.startWeek + item.weeks - 1}`}
+                T{phase.startWeek}
+                {phase.weeks > 1 && `-${phase.startWeek + phase.weeks - 1}`}
               </span>
-              <span className="truncate text-gray-800">{item.subject.name}</span>
+              <span className="truncate text-gray-800">{phase.subjects.map((item) => item.subject.name).join(', ')}</span>
             </li>
           ))}
         </ol>
@@ -174,8 +177,9 @@ function PlanCard({
       <div className={cn('mt-auto flex flex-wrap items-center justify-between gap-3 pt-5', large && 'border-t border-emerald-900/10 pt-4')}>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
           <span className="inline-flex items-center gap-1.5">
-            <CalendarRange size={14} className="text-gray-400" /> {plan.subjects.length} môn
+            <CalendarRange size={14} className="text-gray-400" /> {plan.phases.length} giai đoạn, {subjects.length} môn
           </span>
+          <span>{sessions} buổi</span>
           {trials > 0 && <span>{trials} môn chạy thử</span>}
           <span className="inline-flex items-center gap-1.5">
             <Layers size={14} className="text-gray-400" /> {classCount ? `${classCount} lớp dùng` : 'Chưa có lớp'}

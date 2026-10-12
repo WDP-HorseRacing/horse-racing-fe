@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, Clock3, MapPin, Megaphone, Pencil, Plus, XCircle } from 'lucide-react';
 import { addSession, cancelSession, createTimeTrial, getTimeTrial, publishSession, updateSession, updateTimeTrial } from '../../../api/training';
-import type { TrainingSession } from '../../../api/types';
+import type { PublishedSession, TrainingSession } from '../../../api/types';
 import { Button, EmptyState, cn, useToast } from '../../../components/ui';
 import { useAction } from '../../../hooks/useService';
 import { formatDate } from '../../../lib/format';
@@ -14,6 +14,8 @@ import { weekdayShort } from '../../../lib/training-labels';
 import { gsap } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
 import { IntensityBars, SessionStatusPill, TrialBadge } from '../components/bits';
+import { SkippedHorsesDialog } from '../components/SkippedHorsesDialog';
+import { planPhaseAt, planSubjectAt, sessionsWithSkips } from '../plan-helpers';
 import { ReasonDialog } from '../components/ReasonDialog';
 import { SessionEditSheet, draftFromSubject, type SessionDraft } from '../components/SessionEditSheet';
 import { links } from '../../../lib/links';
@@ -27,6 +29,7 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
   const [editing, setEditing] = useState<{ session?: TrainingSession; initial: SessionDraft } | null>(null);
   const [cancelling, setCancelling] = useState<TrainingSession | null>(null);
   const [publishedNow, setPublishedNow] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<PublishedSession[]>([]);
   const save = useAction();
   const publish = useAction();
   const cancel = useAction();
@@ -94,10 +97,9 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
   const openAdd = () => {
     const today = clubToday();
     const day = today >= item.startDate && today <= item.endDate ? today : item.startDate;
-    const subject = bundle.plan?.subjects.find((entry) => {
-      const week = Math.floor(diffDateKeys(item.startDate, day) / 7) + 1;
-      return week >= entry.startWeek && week < entry.startWeek + entry.weeks;
-    })?.subject ?? subjects[0];
+    const week = Math.floor(diffDateKeys(item.startDate, day) / 7) + 1;
+    // Môn theo giáo án của ngày đó, không có thì môn đầu tiên của giai đoạn, rồi tới môn đầu danh mục.
+    const subject = (bundle.plan && (planSubjectAt(bundle.plan, week, isoWeekdayOf(day)) ?? planPhaseAt(bundle.plan, week)?.subjects[0]?.subject)) ?? subjects[0];
     if (!subject) {
       toast.push('Chưa có môn học nào để thêm buổi', 'error');
       return;
@@ -118,9 +120,10 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
       plannedDistanceM: draft.plannedDistanceM,
       scheduledStartAt: draft.scheduledStartAt,
       scheduledEndAt: draft.scheduledEndAt,
-      location: draft.location.trim() || undefined,
-      surface: draft.surface.trim() || undefined,
-      notes: draft.notes.trim() || undefined,
+      // Sửa buổi: ô xóa trắng gửi null để BE xóa giá trị cũ. Thêm buổi: bỏ trống thì không gửi.
+      location: draft.location.trim() || (editing.session ? null : undefined),
+      surface: draft.surface.trim() || (editing.session ? null : undefined),
+      notes: draft.notes.trim() || (editing.session ? null : undefined),
     };
     void save.run(
       async () => {
@@ -131,10 +134,8 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
           if (trial && !wasTrial) await createTimeTrial(saved.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs });
           return saved;
         }
-        const created = await addSession(item.id, body);
-        // Buổi chạy thử thêm lẻ chưa có cấu hình chạy thử: tạo luôn để công bố được.
-        if (trial) await createTimeTrial(created.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs });
-        return created;
+        // Buổi chạy thử: BE tạo cấu hình chạy thử trong cùng request, không gọi thêm createTimeTrial (sẽ nhận 409).
+        return addSession(item.id, trial ? { ...body, targetTimeMs: draft.targetTimeMs ?? null } : body);
       },
       () => {
         toast.push(editing.session ? 'Đã lưu buổi tập' : 'Đã thêm buổi nháp', 'success');
@@ -147,9 +148,10 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
   const runPublish = (session: TrainingSession) =>
     void publish.run(
       () => publishSession(session.id),
-      () => {
+      (published) => {
         toast.push(`Đã công bố buổi ${session.name}`, 'success');
         setPublishedNow((current) => [...current, session.id]);
+        setSkipped(sessionsWithSkips([published]));
         reload();
       },
     );
@@ -189,7 +191,7 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
 
       {weeks.map(([week, list]) => {
         const isOpen = expanded.has(week);
-        const planSubject = bundle.plan?.subjects.find((entry) => week >= entry.startWeek && week < entry.startWeek + entry.weeks)?.subject;
+        const phase = bundle.plan ? planPhaseAt(bundle.plan, week) : undefined;
         const done = list.filter((session) => session.status === 'COMPLETED').length;
         const drafts = list.filter((session) => session.status === 'DRAFT').length;
         return (
@@ -207,7 +209,7 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
               className={cn('flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition', week === currentWeek ? 'bg-emerald-50/70' : 'bg-gray-50/70 hover:bg-gray-50')}
             >
               <span className="font-mono text-sm font-semibold text-gray-900">Tuần {week}</span>
-              {planSubject && <span className="text-sm text-gray-600">{planSubject.name}</span>}
+              {phase && <span className="text-sm text-gray-600">Giai đoạn {phase.position}</span>}
               {week === currentWeek && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 text-[11px] font-semibold text-white">Tuần này</span>}
               <span className="ml-auto text-xs text-gray-500">
                 {list.length} buổi · {done} đã xong{drafts ? ` · ${drafts} nháp` : ''}
@@ -300,6 +302,7 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
           onSubmit={submitEdit}
         />
       )}
+      {skipped.length > 0 && <SkippedHorsesDialog sessions={skipped} onClose={() => setSkipped([])} />}
       {cancelling && (
         <ReasonDialog
           title="Hủy buổi tập"

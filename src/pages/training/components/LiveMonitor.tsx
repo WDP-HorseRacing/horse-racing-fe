@@ -2,10 +2,11 @@
 // thước vùng ngưỡng có kim. Vượt ngưỡng thì thẻ đổi màu, cảnh báo nguy hiểm thì rung và phập phồng tới khi bấm Đã xem.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Gauge, Timer } from 'lucide-react';
+import { Gauge, Radio, Square, Timer, Zap } from 'lucide-react';
 import type { MetricAlertLevel, ThresholdLimits } from '../../../api/types';
-import { Avatar, Button, cn, useToast } from '../../../components/ui';
+import { Avatar, Button, cn } from '../../../components/ui';
 import { formatClock, toKmh } from '../../../lib/training-format';
+import { spikeSim, startSim, stopSim, useSensorSims } from '../../../lib/sensor-sim';
 import { alertLevelText } from '../../../lib/training-labels';
 import { links } from '../../../lib/links';
 import type { LiveSeries } from '../hooks';
@@ -80,6 +81,7 @@ export function LiveMonitorCard({
   acknowledged,
   onAcknowledge,
   actions,
+  simulator,
 }: {
   participantId: string;
   horseId: string;
@@ -92,8 +94,9 @@ export function LiveMonitorCard({
   acknowledged: boolean;
   onAcknowledge: () => void;
   actions?: ReactNode;
+  /** Hiện nút bật cảm biến giả lập (chưa có thiết bị đo thật). */
+  simulator?: boolean;
 }) {
-  const toast = useToast();
   const ref = useRef<HTMLDivElement>(null);
   const level = live?.level ?? 'NORMAL';
   const latest = live?.latest;
@@ -104,7 +107,6 @@ export function LiveMonitorCard({
     return () => window.clearInterval(timer);
   }, []);
   const stale = !live?.receivedAt || now - live.receivedAt > 8000;
-  const command = `pnpm sim --participant ${participantId} --spike-at 30`;
 
   return (
     <div ref={ref} data-monitor={participantId} className={cn('rounded-2xl p-4 ring-1 transition-colors duration-300', LEVEL_SKIN[level])}>
@@ -159,19 +161,43 @@ export function LiveMonitorCard({
           </Button>
         </Link>
         {actions}
-        {import.meta.env.DEV && (
-          <Button
-            variant="ghost"
-            size="sm"
-            title={command}
-            onClick={() => {
-              void navigator.clipboard?.writeText(command).then(() => toast.push('Đã sao chép lệnh giả lập cảm biến, chạy trong thư mục backend', 'info'));
-            }}
-          >
-            <Copy size={13} /> Lệnh giả lập
-          </Button>
-        )}
       </div>
+
+      {simulator && <SimulatorControls participantId={participantId} horseName={horseName} criticalBpm={limits.heartRateCriticalBpm} />}
+    </div>
+  );
+}
+
+/** Bật, tắt cảm biến giả lập của một lượt và cho nhịp tim vọt lên để xem cảnh báo khẩn. */
+function SimulatorControls({ participantId, horseName, criticalBpm }: { participantId: string; horseName: string; criticalBpm: number }) {
+  const sim = useSensorSims()[participantId];
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-emerald-300/80 bg-emerald-50/40 px-3 py-2">
+      <p className="w-full text-xs">
+        {!sim ? (
+          <span className="text-gray-600">Chưa gắn thiết bị đo thật. Bật cảm biến giả lập để gửi nhịp tim mỗi giây.</span>
+        ) : sim.offline ? (
+          <span className="font-medium text-amber-800">Mất kết nối máy chủ, đang giữ {sim.pending} điểm để gửi bù</span>
+        ) : (
+          <span className="text-gray-600">
+            Cảm biến giả lập đã gửi <b className="font-mono text-gray-900">{sim.sent}</b> điểm
+          </span>
+        )}
+      </p>
+      {!sim ? (
+        <Button size="sm" variant="inline" onClick={() => startSim(participantId, horseName)}>
+          <Radio size={13} /> Bật cảm biến giả lập
+        </Button>
+      ) : (
+        <>
+          <Button size="sm" variant="inlineDanger" disabled={sim.spiking} onClick={() => spikeSim(participantId, criticalBpm)} title="Nhịp tim vượt ngưỡng nguy hiểm trong 5 giây">
+            <Zap size={13} /> {sim.spiking ? 'Đang vọt nhịp tim' : 'Vọt nhịp tim'}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => stopSim(participantId)}>
+            <Square size={11} /> Dừng
+          </Button>
+        </>
+      )}
     </div>
   );
 }
