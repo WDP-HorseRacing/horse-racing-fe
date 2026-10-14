@@ -43,7 +43,10 @@ export default function OwnerDialog({
       open={open}
       onClose={onClose}
       title={`Gán chủ sở hữu cho ${horse.name}`}
-      description="Mỗi ngựa có một chủ sở hữu. Việc gán chủ được ghi vào nhật ký thao tác và lịch sử sở hữu."
+      description="Mỗi ngựa có một chủ sở hữu."
+      dirty={ownerId !== ''}
+      onSave={() => void submit()}
+      saveLabel="Gán chủ"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -56,7 +59,7 @@ export default function OwnerDialog({
       }
     >
       <div className="space-y-4">
-        <Field label="Chủ sở hữu" required hint="Chỉ hiện tài khoản Chủ ngựa đang hoạt động.">
+        <Field label="Chủ sở hữu" required hint="Chủ ngựa đang hoạt động.">
           <Select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
             <option value="">{owners.loading && !owners.data ? 'Đang tải…' : 'Chọn chủ sở hữu'}</option>
             {(owners.data ?? []).map((owner) => (

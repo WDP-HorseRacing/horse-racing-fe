@@ -20,7 +20,7 @@ export class RouteErrorBoundary extends Component<{ children: ReactNode }, State
     const chunk = /dynamically imported module|Loading chunk|Failed to fetch/i.test(error.message);
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-3xl bg-white px-6 py-12 text-center ring-1 ring-gray-200/80">
-        <p className="text-lg font-semibold text-gray-900">{chunk ? 'Có phiên bản mới của trang' : 'Trang gặp lỗi khi hiển thị'}</p>
+        <p className="text-lg font-semibold text-gray-900">{chunk ? 'Trang vừa được cập nhật' : 'Trang gặp lỗi khi hiển thị'}</p>
         <p className="text-sm text-gray-500">{chunk ? 'Tải lại trang để dùng bản mới nhất.' : 'Thử lại. Nếu vẫn lỗi, tải lại trang hoặc báo nhóm phát triển.'}</p>
         <button
           type="button"

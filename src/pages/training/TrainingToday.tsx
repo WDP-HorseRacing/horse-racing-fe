@@ -3,6 +3,7 @@
 // Bắt đầu, hoàn thành và ghi thời gian chạy thử là việc của HLV trưởng trên sân tập.
 // HLV ("Hôm nay trên sân"): mọi buổi hôm nay của các lớp mình, số ngựa theo trạng thái, nút vào sân tập.
 // Dòng thời gian trong ngày có vạch "bây giờ" chạy theo giờ thật.
+// Điểm danh, báo vắng, báo sẵn sàng chỉ bấm được trong khung giờ của BE (lib/training-window.ts), ngoài khung hiện giờ mở.
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Clock3, MapPin, UserX } from 'lucide-react';
@@ -13,6 +14,8 @@ import { useAction, useService } from '../../hooks/useService';
 import { useStore } from '../../store/store';
 import { links } from '../../lib/links';
 import { addDateKey, clubTime, clubToday, isoWeekdayOf } from '../../lib/club-time';
+import { now } from '../../lib/clock';
+import { actionWindow, lockedText, type WindowKind } from '../../lib/training-window';
 import { formatMeters } from '../../lib/training-format';
 import { PARTICIPANT_FLOW, PARTICIPANT_OUT, ineligibleReasonText, participantStatusText, weekdayLong, weekdayShort } from '../../lib/training-labels';
 import { gsap, useGSAP } from '../../lib/gsap';
@@ -35,6 +38,12 @@ export default function TrainingToday() {
   const [dialog, setDialog] = useState<{ kind: 'absent'; participant: Participant } | null>(null);
   const action = useAction();
   const { reload } = board;
+  // Đồng hồ cho khung giờ: nút tự mở đúng giờ kể cả khi dữ liệu không đổi.
+  const [clock, setClock] = useState(() => now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Lượt có thể do HLV hoặc Groom khác đổi: tải lại mỗi 15 giây.
   useEffect(() => {
@@ -66,14 +75,20 @@ export default function TrainingToday() {
 
   const horseName = (participant: Participant) => participant.horseName || horses.get(participant.horseId)?.name || 'Ngựa';
   const operational = (item: DayBoardItem) => item.session.status === 'SCHEDULED' || item.session.status === 'IN_PROGRESS';
+  // Ngoài khung giờ thì trả câu giờ mở (`locked`), không có nút bấm.
+  const gated = (item: DayBoardItem, kind: WindowKind, label: string, onClick: () => void) => {
+    const locked = lockedText(label, actionWindow(item.session, kind, clock), clock);
+    return locked ? { label: locked, locked: true as const } : { label, onClick, locked: false as const };
+  };
   const nextStep = (item: DayBoardItem, participant: Participant) => {
     if (!groom || !operational(item)) return null;
     const name = horseName(participant);
-    if (participant.status === 'PLANNED') return { label: 'Điểm danh', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)) };
-    if (participant.status === 'PRESENT') return { label: 'Báo sẵn sàng', onClick: () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)) };
+    if (participant.status === 'PLANNED') return gated(item, 'checkIn', 'Điểm danh', () => run(`${name} có mặt`, () => checkInParticipant(participant.id)));
+    if (participant.status === 'PRESENT') return gated(item, 'start', 'Báo sẵn sàng', () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)));
     return null;
   };
-  const canMarkAbsent = (item: DayBoardItem, participant: Participant) => groom && operational(item) && ['PLANNED', 'PRESENT', 'READY'].includes(participant.status);
+  const canMarkAbsent = (item: DayBoardItem, participant: Participant) =>
+    groom && operational(item) && ['PLANNED', 'PRESENT', 'READY'].includes(participant.status) && actionWindow(item.session, 'checkIn', clock).state === 'open';
 
   const days = Array.from({ length: 7 }, (_, offset) => addDateKey(day, offset - 3));
 
@@ -81,7 +96,7 @@ export default function TrainingToday() {
     <div ref={scope} className="space-y-5">
       <PageHeader
         title={groom ? 'Dắt ngựa tập' : 'Hôm nay trên sân'}
-        description={groom ? 'Các buổi tập có ngựa bạn được giao dắt. Dắt ngựa ra sân rồi điểm danh, khởi động xong thì báo sẵn sàng. HLV trưởng bấm bắt đầu.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
+        description={groom ? 'Dắt ngựa ra sân rồi điểm danh. Khởi động xong thì báo sẵn sàng.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
       />
 
       <div className="flex items-center gap-2">
@@ -199,6 +214,7 @@ export default function TrainingToday() {
                               {participant.status === 'ONGOING' && <Elapsed since={participant.startedAt} />}
                               {participant.status === 'INELIGIBLE' && <span>{ineligibleReasonText(participant.ineligibilityReason)}</span>}
                               {participant.status === 'ABSENT' && <span>{participant.absenceReason}</span>}
+                              {participant.status === 'SKIPPED' && <span>Hết giờ, chưa bắt đầu</span>}
                               {participant.status === 'READY' && <span>Chờ HLV trưởng bắt đầu</span>}
                             </div>
                           </div>
@@ -207,10 +223,16 @@ export default function TrainingToday() {
                               <UserX size={15} />
                             </Button>
                           )}
-                          {step && (
-                            <Button size="sm" disabled={action.pending} onClick={() => void step.onClick()}>
-                              {step.label}
-                            </Button>
+                          {step?.locked ? (
+                            <span className="inline-flex max-w-40 items-center gap-1 rounded-lg bg-white px-2 py-1 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200">
+                              <Clock3 size={12} className="shrink-0" /> {step.label}
+                            </span>
+                          ) : (
+                            step && (
+                              <Button size="sm" disabled={action.pending} onClick={() => void step.onClick()}>
+                                {step.label}
+                              </Button>
+                            )
                           )}
                         </li>
                       );

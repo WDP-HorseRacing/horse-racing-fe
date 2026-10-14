@@ -72,10 +72,17 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
   return (
     <div className="grid gap-5 lg:grid-cols-12">
       <div className="space-y-4 lg:col-span-8">
-        {save.error && <ErrorBox message={save.error} />}
+        {save.error && !save.fieldErrors.code && <ErrorBox message={save.error} />}
         <div className="grid gap-4 sm:grid-cols-5">
-          <Field label="Mã lớp" required className="sm:col-span-2">
-            <Input value={code} className={`font-mono uppercase ${!code.trim() ? invalidClass : ''}`} onChange={(event) => setCode(event.target.value.toUpperCase())} />
+          <Field label="Mã lớp" required className="sm:col-span-2" error={save.fieldErrors.code}>
+            <Input
+              value={code}
+              className={`font-mono uppercase ${!code.trim() || save.fieldErrors.code ? invalidClass : ''}`}
+              onChange={(event) => {
+                setCode(event.target.value.toUpperCase());
+                if (save.fieldErrors.code) save.clearError();
+              }}
+            />
           </Field>
           <Field label="Tên lớp" required className="sm:col-span-3">
             <Input value={name} onChange={(event) => setName(event.target.value)} className={!name.trim() ? invalidClass : ''} />
@@ -99,7 +106,7 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
             </Select>
           </Field>
         </div>
-        {outside > 0 && <Notice tone="warning">Ngày bắt đầu mới làm {outside} buổi nằm ngoài thời gian của lớp. Hệ thống sẽ không cho lưu.</Notice>}
+        {outside > 0 && <Notice tone="warning">Ngày bắt đầu mới làm {outside} buổi nằm ngoài thời gian của lớp. Sửa lại ngày trước khi lưu.</Notice>}
         <Field label="Mô tả" counter={<CharCount value={description} max={500} />}>
           <Textarea rows={3} maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} />
         </Field>

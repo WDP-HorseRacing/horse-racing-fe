@@ -67,7 +67,7 @@ function stableAttention(stable: { incidents: Incident[]; lowStock: SupplyItem[]
     cta: trainer ? 'Xử lý' : 'Xem',
   }));
   if (stable.pendingSupply > 0) {
-    items.push({ key: 'supply-pending', level: 'warn', title: `${stable.pendingSupply} đề xuất vật tư chờ duyệt`, detail: 'Duyệt rồi đánh dấu đã cấp để cộng vào kho', to: links.supplies('requests'), cta: 'Duyệt' });
+    items.push({ key: 'supply-pending', level: 'warn', title: `${stable.pendingSupply} đề xuất vật tư chờ duyệt`, to: links.supplies('requests'), cta: 'Duyệt' });
   }
   if (stable.lowStock.length > 0) {
     items.push({
@@ -276,7 +276,7 @@ function ManagerDashboard({ name }: { name: string }) {
       key: `barn-${horse.id}`,
       level: 'warn' as const,
       title: `${horse.name} chờ xếp khu`,
-      detail: 'Ngựa chưa thuộc khu nào, chỉ Quản lý xử lý',
+      detail: 'Chưa có khu',
       to: links.stable,
       cta: 'Xếp khu',
     })),
@@ -303,17 +303,17 @@ function ManagerDashboard({ name }: { name: string }) {
       .map((barn) => ({
         key: `nohT-${barn.id}`,
         level: 'info' as const,
-        title: `${barn.name} chưa có HT phụ trách đang hoạt động`,
-        detail: 'Khu chưa có HT thì không nhận ngựa',
+        title: `${barn.name} chưa có HLV phụ trách đang hoạt động`,
+        detail: 'Khu chưa có HLV thì không nhận ngựa',
         to: `${links.stable}?zone=${barn.id}`,
-        cta: 'Gán HT',
+        cta: 'Gán HLV',
       })),
     ...(pendingStall.length > 0
       ? [
           {
             key: 'pending-stall',
             level: 'info' as const,
-            title: `${pendingStall.length} ngựa chờ HT xếp ô`,
+            title: `${pendingStall.length} ngựa chờ HLV xếp ô`,
             detail: pendingStall.map((horse) => horse.name).join(', '),
             to: links.stable,
             cta: 'Sơ đồ chuồng',
@@ -637,8 +637,12 @@ function GroomDashboard({ name }: { name: string }) {
   const [reporting, setReporting] = useState<{ horse?: { id: string; name: string } } | null>(null);
   // Checklist vừa tick trên màn (BE trả cả checklist), chỉ áp cho đúng lần tải đó.
   const [local, setLocal] = useState<{ source?: unknown; map: Record<string, DailyChecklist> }>({ map: {} });
-  // HLV gắn việc có hiệu lực hôm nay: Groom được báo, tải lại để checklist có dòng mới.
-  useEffect(() => onRealtime<NotificationItem>('notification.created', (item) => item.category === 'DAILY_CHECKLIST' && reload()), [reload]);
+  // HLV gắn việc có hiệu lực hôm nay, hoặc Groom vừa được giao ngựa: tải lại để có checklist mới.
+  // Gắn việc mà làm tạo checklist hôm nay thì BE không gửi DAILY_CHECKLIST, nên cũng nghe GROOM_ASSIGNMENT.
+  useEffect(
+    () => onRealtime<NotificationItem>('notification.created', (item) => (item.category === 'DAILY_CHECKLIST' || item.category === 'GROOM_ASSIGNMENT') && reload()),
+    [reload],
+  );
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được dữ liệu'} />;
 
@@ -734,7 +738,7 @@ function GroomDashboard({ name }: { name: string }) {
               onReport={(horse) => setReporting({ horse })}
             />
           ) : (
-            <ErrorBox message="Không tải được việc hôm nay. Tải lại trang để thử lại." />
+            <ErrorBox message="Không tải được việc hôm nay." />
           )}
         </section>
 
@@ -789,7 +793,7 @@ function GroomDashboard({ name }: { name: string }) {
       )}
       <Row>
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
-          <HorseRows horses={[...data.horses].sort(byPriority)} empty="Bạn chưa được phân công ngựa nào." />
+          <HorseRows horses={[...data.horses].sort(byPriority)} empty="Bạn chưa được giao ngựa nào." />
         </Panel>
         <AttentionList items={attention} empty="Hôm nay không có việc chăm sóc nào đến hạn" className="h-full" />
       </Row>
@@ -840,7 +844,13 @@ function OwnerDashboard({ name }: { name: string }) {
           <Stat value={data.active.length} label="Ngựa đang ở câu lạc bộ" hint={data.horses.length > data.active.length ? `${data.horses.length - data.active.length} đã rời câu lạc bộ` : undefined} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
           <Stat value={data.openCases.length} label="Đang điều trị" icon={<Stethoscope size={18} />} tone="warning" onClick={() => navigate(links.cases)} />
           <Stat value={weekCount} label="Việc chăm sóc 7 ngày tới" icon={<CalendarClock size={18} />} />
-          <Stat value={formatMoney(data.medicalCost)} label="Chi phí y tế đã chốt" icon={<Wallet size={18} />} onClick={() => navigate(links.cases)} />
+          <Stat
+            value={data.costs ? formatMoney(data.costs.total) : formatMoney(data.medicalCost)}
+            label={data.costs ? 'Chi phí 30 ngày qua' : 'Chi phí y tế đã chốt'}
+            hint={data.costs ? 'Phí nuôi và y tế' : undefined}
+            icon={<Wallet size={18} />}
+            onClick={() => navigate(links.myCosts)}
+          />
       </DashboardHero>
 
       <Row>
@@ -873,7 +883,7 @@ function OwnerDashboard({ name }: { name: string }) {
       )}
 
       <Row>
-        <Panel title="Chi phí y tế đã chốt" flush className="h-full">
+        <Panel title="Chi phí y tế đã chốt" to={links.myCosts} toLabel="Chi phí theo kỳ" flush className="h-full">
           <div className="px-5 py-4">
             <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(data.medicalCost)}</p>
             <p className="mt-1 text-xs text-gray-500">Tổng chi phí các bệnh án đã đóng trong thời gian bạn sở hữu.</p>

@@ -16,7 +16,7 @@ import { links } from '../../../lib/links';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { addDateKey, clubTime, clubToday } from '../../../lib/club-time';
 import { formatMeters, formatMinutes, formatRaceTime } from '../../../lib/training-format';
-import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText } from '../../../lib/training-labels';
+import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText, participantStatusText } from '../../../lib/training-labels';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../../training/components/bits';
@@ -35,10 +35,9 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
   const canSetThreshold = role === 'HEAD_TRAINER' && permissions.canAssignStallAndGroom && !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE';
 
   const overview = useService(async () => {
-    const [classes, upcoming] = await Promise.all([listHorseClasses(horse.id), listHorseSessions(horse.id, { when: 'upcoming', limit: 8 })]);
-    // BE xếp "sắp tới" theo giờ buổi: ngựa bắt đầu sớm thì lượt đã chạy vẫn nằm đây. Chỉ giữ lượt còn chờ.
-    const waiting = upcoming.items.filter((item) => item.participantStatus === 'PLANNED' || item.participantStatus === 'PRESENT' || item.participantStatus === 'READY');
-    return { classes, upcoming: waiting.slice(0, 5) };
+    // BE: "sắp tới" là lượt còn mở (kể cả đang tập) và lượt Không đủ điều kiện của buổi chưa tới giờ, sớm nhất trước.
+    const [classes, upcoming] = await Promise.all([listHorseClasses(horse.id), listHorseSessions(horse.id, { when: 'upcoming', limit: 5 })]);
+    return { classes, upcoming: upcoming.items };
   }, [horse.id]);
 
   useGSAP(
@@ -87,12 +86,14 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
                 <div className="flex items-center gap-3 rounded-xl bg-emerald-700 px-4 py-3 text-white">
                   <CalendarClock size={18} className="shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs text-emerald-100">Buổi tập kế tiếp</p>
+                    <p className="text-xs text-emerald-100">{next.participantStatus === 'ONGOING' ? 'Đang tập' : 'Buổi tập kế tiếp'}</p>
                     <p className="truncate font-semibold">{next.name}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-mono text-sm font-semibold">{formatDate(next.scheduledStartAt).slice(0, 5)} {clubTime(next.scheduledStartAt)}</p>
-                    <p className="text-xs text-emerald-100">{countdown(next.scheduledStartAt)}</p>
+                    <p className="text-xs text-emerald-100">
+                      {next.participantStatus === 'PLANNED' || next.participantStatus === 'ONGOING' ? countdown(next.scheduledStartAt) : participantStatusText[next.participantStatus]}
+                    </p>
                   </div>
                 </div>
               )}
@@ -106,6 +107,7 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
                       <span className="min-w-0 flex-1 truncate text-gray-800">{item.name}</span>
                       <TrialBadge type={item.sessionType} />
                       {item.surface && <span className="text-xs text-gray-500">{item.surface}</span>}
+                      {item.participantStatus !== 'PLANNED' && <ParticipantPill status={item.participantStatus} />}
                     </li>
                   ))}
                 </ul>
@@ -137,7 +139,7 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
 
 function countdown(iso: string) {
   const minutes = Math.round((new Date(iso).getTime() - Date.now()) / 60000);
-  if (minutes < 0) return 'đã tới giờ';
+  if (minutes < 0) return 'đã vào giờ';
   if (minutes < 60) return `còn ${minutes} phút`;
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `còn ${hours} giờ`;
@@ -365,16 +367,11 @@ function ThresholdCard({ horseId, horseName, canSet, className = '' }: { horseId
 
 function HistoryCard({ horseId, className = '' }: { horseId: string; className?: string }) {
   const [page, setPage] = useState(1);
-  // BE tính "lịch sử" theo giờ buổi: ngựa chạy sớm hơn giờ buổi thì lượt chưa vào lịch sử. Lấy mọi lượt rồi bỏ lượt còn chờ.
-  const data = useService(
-    async () => (await listHorseSessions(horseId, { limit: 100 })).items.filter((item) => !['PLANNED', 'PRESENT', 'READY'].includes(item.participantStatus)),
-    [horseId],
-    { silent: true },
-  );
   const PAGE = 6;
-  const all = data.data ?? [];
-  const items = all.slice((page - 1) * PAGE, page * PAGE);
-  const meta = { totalPages: Math.max(1, Math.ceil(all.length / PAGE)) };
+  // BE: "lịch sử" là lượt đã kết thúc (kể cả ngựa chạy xong trước giờ trên lịch), mới nhất trước, phân trang ở BE.
+  const data = useService(() => listHorseSessions(horseId, { when: 'history', page, limit: PAGE }), [horseId, page], { silent: true });
+  const items = data.data?.items ?? [];
+  const meta = { totalPages: data.data?.meta.totalPages ?? 1 };
   return (
     <section data-training-block className={cn('rounded-2xl bg-white p-5 ring-1 ring-gray-200/80', className)}>
       <div className="mb-3 flex items-center justify-between gap-2">

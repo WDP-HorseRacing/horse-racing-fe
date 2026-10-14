@@ -57,14 +57,17 @@ export default function OwnershipTransferDialog({
       open={open}
       onClose={onClose}
       title={`Chuyển chủ trong câu lạc bộ: ${horse.name}`}
-      description="Quản lý ghi nhận sau khi hai chủ ngựa đã thỏa thuận. Ngựa giữ nguyên khu, ô, Groom và lớp đang học."
+      description="Ngựa giữ nguyên khu, ô, Groom và lớp đang học."
+      dirty={newOwnerId !== '' || reason.trim() !== ''}
+      onSave={() => void submit()}
+      saveLabel="Chuyển chủ"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
           <Button onClick={submit} disabled={!canSubmit}>
-            {action.pending ? 'Đang lưu…' : 'Xác nhận chuyển chủ'}
+            {action.pending ? 'Đang lưu…' : 'Chuyển chủ'}
           </Button>
         </>
       }
@@ -75,7 +78,7 @@ export default function OwnershipTransferDialog({
           <p className="mt-0.5 font-semibold text-gray-900">{horse.owner?.fullName ?? 'Chưa có chủ'}</p>
           {horse.ownerSince && <p className="text-xs text-gray-500">Sở hữu từ {formatDate(horse.ownerSince)}</p>}
         </div>
-        <Field label="Chủ mới" name="newOwnerId" required error={ownerError} hint="Chỉ hiện tài khoản Chủ ngựa đang hoạt động, trừ chủ hiện tại.">
+        <Field label="Chủ mới" name="newOwnerId" required error={ownerError} hint="Chủ ngựa đang hoạt động, trừ chủ hiện tại.">
           <Select
             value={newOwnerId}
             disabled={owners.loading && !owners.data}
@@ -93,7 +96,7 @@ export default function OwnershipTransferDialog({
             ))}
           </Select>
         </Field>
-        <Field label="Lý do" name="reason" required error={reasonError} hint="Ví dụ: chủ cũ bán lại cho chủ mới theo thỏa thuận giữa hai bên. Ghi vào lịch sử sở hữu.">
+        <Field label="Lý do" name="reason" required error={reasonError} hint="Ví dụ: chủ cũ bán lại cho chủ mới.">
           <Textarea value={reason} maxLength={REASON_MAX} onChange={(event) => setReason(event.target.value)} className={cn(reasonError && invalidClass)} />
         </Field>
         <Notice tone="info">

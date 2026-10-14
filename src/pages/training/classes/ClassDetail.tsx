@@ -133,7 +133,7 @@ function ClassView({
     void status.run(
       () => setClassStatus(item.id, next, reason),
       () => {
-        toast.push(next === 'ACTIVE' ? 'Đã kích hoạt lớp. Giờ ghi danh ngựa và công bố buổi.' : next === 'COMPLETED' ? 'Lớp đã hoàn thành' : 'Đã hủy lớp', 'success');
+        toast.push(next === 'ACTIVE' ? 'Đã kích hoạt lớp' : next === 'COMPLETED' ? 'Lớp đã hoàn thành' : 'Đã hủy lớp', 'success');
         setConfirm(null);
         setCancelOpen(false);
         reload();
@@ -157,7 +157,7 @@ function ClassView({
       (result) => {
         setRangeOpen(false);
         if (result.length === 0) toast.push('Không có buổi nháp nào trong khoảng này', 'info');
-        else toast.push(`Đã công bố ${result.length} buổi. Lượt tập đã tạo cho từng ngựa đang học.`, 'success');
+        else toast.push(`Đã công bố ${result.length} buổi`, 'success');
         setPublished(result.map((session) => session.id));
         setSkipped(sessionsWithSkips(result));
         reload();
@@ -172,8 +172,8 @@ function ClassView({
 
   const steps = [
     { key: 'activate', label: 'Kích hoạt lớp', done: item.status !== 'DRAFT' },
-    { key: 'enroll', label: 'Ghi danh ngựa thuộc khu của bạn', done: activeHorses > 0 },
-    { key: 'publish', label: 'Công bố buổi để tạo lượt tập cho ngựa', done: sessions.some((session) => session.status !== 'DRAFT' && session.status !== 'CANCELLED') },
+    { key: 'enroll', label: 'Ghi danh ngựa', done: activeHorses > 0 },
+    { key: 'publish', label: 'Công bố buổi', done: sessions.some((session) => session.status !== 'DRAFT' && session.status !== 'CANCELLED') },
     { key: 'run', label: 'Mở sân tập buổi đầu tiên', done: started },
   ];
   const currentStep = steps.find((step) => !step.done)?.key;
@@ -292,7 +292,6 @@ function ClassView({
         <section className="grid gap-4 rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <h3 className="font-semibold text-gray-900">Việc tiếp theo</h3>
-            <p className="mt-1 text-sm text-gray-500">Đi theo thứ tự này để ngựa có lượt tập ở các buổi sắp tới.</p>
           </div>
           <ul className="grid gap-2 sm:grid-cols-2 lg:col-span-8">
             {steps.map((step) => (
@@ -364,7 +363,7 @@ function ClassView({
         pending={status.pending}
         message={
           <>
-            Lớp <b>{item.code}</b> chuyển sang đang chạy. Sau đó bạn ghi danh ngựa thuộc khu của mình và công bố buổi để tạo lượt tập cho từng ngựa.
+            Bắt đầu lớp <b>{item.code}</b>. Sau đó ghi danh ngựa và công bố buổi.
             {status.error && <div className="mt-3"><ErrorBox message={status.error} /></div>}
           </>
         }
@@ -474,7 +473,7 @@ function PublishRangeDialog({
       open
       onClose={onClose}
       title="Công bố buổi theo khoảng ngày"
-      description="Công bố mọi buổi nháp có ngày (lịch câu lạc bộ) trong khoảng. Một buổi lỗi thì không buổi nào được công bố."
+      description="Công bố mọi buổi nháp trong khoảng ngày này."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

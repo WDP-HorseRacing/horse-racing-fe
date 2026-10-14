@@ -1,4 +1,4 @@
-// F4.3 — Quản lý CLB quản lý loại việc chăm sóc: thêm, đổi tên, bật tắt "Áp mọi ngựa", ngưng hoặc dùng lại.
+// F4.3 — Quản lý CLB quản lý loại việc chăm sóc: thêm, đổi tên, bật tắt "Cho mọi ngựa", ngưng hoặc dùng lại.
 // Không xóa được loại việc. Mọi thay đổi chỉ áp cho checklist sinh sau, checklist đã sinh giữ nguyên.
 import { useState } from 'react';
 import { Check, Pencil, Plus, X } from 'lucide-react';
@@ -59,7 +59,7 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Sheet open onClose={onClose} title="Loại việc chăm sóc" description="Đổi chỉ áp cho checklist sinh sau, checklist đã có giữ nguyên. Không xóa được, ngưng dùng thay cho xóa.">
+    <Sheet open onClose={onClose} title="Loại việc chăm sóc" description="Checklist đã có hôm nay giữ nguyên. Không dùng nữa thì bấm Ngưng dùng." dirty={name.trim() !== '' || !!editing} onSave={editing ? undefined : add} saveLabel="Thêm">
       <section className="rounded-2xl bg-emerald-50/60 p-4 ring-1 ring-emerald-100">
         <p className="mb-2 text-sm font-semibold text-gray-900">Thêm loại việc</p>
         <div className="flex flex-wrap items-start gap-2">
@@ -68,13 +68,13 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
             {touched && nameError && <p className="mt-1 text-xs font-medium text-red-600">{nameError}</p>}
           </div>
           <ToggleChip checked={all} onChange={setAll}>
-            Áp mọi ngựa
+            Cho mọi ngựa
           </ToggleChip>
           <Button onClick={add} disabled={action.pending}>
             <Plus size={15} /> Thêm
           </Button>
         </div>
-        <p className="mt-2 text-xs text-gray-500">{all ? 'Có trong checklist của mọi ngựa mỗi ngày.' : 'Chỉ có khi HLV khu gắn riêng cho một ngựa theo khoảng ngày.'}</p>
+        <p className="mt-2 text-xs text-gray-500">{all ? 'Ngựa nào cũng có việc này mỗi ngày.' : 'HLV khu tự thêm cho từng ngựa.'}</p>
       </section>
 
       {action.error && (
@@ -107,7 +107,7 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
                       }}
                       className="h-9 min-w-0 flex-1"
                     />
-                    <Button variant="ghost" size="icon" title="Lưu tên" onClick={() => rename(type)} disabled={action.pending}>
+                    <Button variant="ghost" size="icon" title="Lưu" onClick={() => rename(type)} disabled={action.pending}>
                       <Check size={15} />
                     </Button>
                     <Button variant="ghost" size="icon" title="Hủy" onClick={() => setEditing(null)}>
@@ -127,9 +127,9 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <ToggleChip
                   checked={type.appliesToAll}
-                  onChange={(next) => change(type, { appliesToAll: next }, next ? `${type.name}: áp mọi ngựa từ checklist sinh sau` : `${type.name}: chỉ khi HLV gắn riêng`)}
+                  onChange={(next) => change(type, { appliesToAll: next }, `Đã lưu ${type.name}`)}
                 >
-                  Áp mọi ngựa
+                  Cho mọi ngựa
                 </ToggleChip>
                 <Button
                   variant={type.active ? 'inlineDanger' : 'inline'}

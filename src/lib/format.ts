@@ -79,6 +79,29 @@ export function formatMoney(amount?: number | null): string {
   return `${amount.toLocaleString('vi-VN')} đ`;
 }
 
+/** "12500000" / "12.500.000" → 12500000. Rỗng hoặc sai → NaN. */
+export function parseMoney(value: string): number {
+  const digits = value.replace(/[.\s,đ]/g, '');
+  if (!digits || !/^\d+$/.test(digits)) return Number.NaN;
+  return Number(digits);
+}
+
+/** Kiểm ô tiền (đồng, số nguyên). Trả câu lỗi, hoặc undefined khi hợp lệ hay bỏ trống mà không bắt buộc. */
+export function moneyError(raw: string, { label, required = true, max = 1_000_000_000 }: { label: string; required?: boolean; max?: number }): string | undefined {
+  if (!raw.trim()) return required ? `Nhập ${label.toLowerCase()}` : undefined;
+  const value = parseMoney(raw);
+  if (Number.isNaN(value)) return `${label} phải là số`;
+  if (value > max) return `${label} tối đa ${formatMoney(max)}`;
+  return undefined;
+}
+
+/** Hiện số tiền đang gõ có dấu chấm ngăn cách hàng nghìn. */
+export function formatMoneyInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 13);
+  if (!digits) return '';
+  return Number(digits).toLocaleString('vi-VN');
+}
+
 export function formatDistance(meters: number): string {
   return `${meters.toLocaleString('vi-VN')} m`;
 }

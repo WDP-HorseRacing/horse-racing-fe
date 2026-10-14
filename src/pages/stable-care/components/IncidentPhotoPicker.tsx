@@ -86,7 +86,7 @@ export function IncidentPhotoPicker({ onChange, disabled, resetKey }: { onChange
   return (
     <div>
       <p className="mb-1.5 text-sm font-medium text-gray-600">
-        Ảnh thực tế <span className="font-normal text-gray-400">(một ảnh, nên có)</span>
+        Ảnh <span className="font-normal text-gray-400">(nên có)</span>
       </p>
       <input ref={input} type="file" accept={ACCEPT} className="hidden" onChange={(event) => event.target.files?.[0] && void start(event.target.files[0])} />
       {!file ? (
@@ -105,7 +105,7 @@ export function IncidentPhotoPicker({ onChange, disabled, resetKey }: { onChange
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-gray-800">Chụp hoặc chọn ảnh</span>
-            <span className="block text-xs text-gray-500">JPEG, PNG hoặc WebP, tối đa 10 MB. Bác sĩ và HLV khu xem được ảnh này.</span>
+            <span className="block text-xs text-gray-500">JPEG, PNG, WebP, tối đa 10 MB</span>
           </span>
         </button>
       ) : (

@@ -222,14 +222,17 @@ export function TrialVideoAttachDialog({
       open
       onClose={onClose}
       title={replacing ? `Đổi video lần chạy ${attemptNo}` : `Gắn video lần chạy ${attemptNo}`}
-      description={replacing ? 'Video mới thay cho video cũ. Thời gian chạy và ghi chú giữ nguyên.' : 'Thời gian chạy và ghi chú giữ nguyên.'}
+      description={replacing ? 'Video mới sẽ thay video cũ.' : undefined}
+      dirty={!!video.mediaId || video.uploading}
+      onSave={submit}
+      saveLabel="Lưu"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={submit} disabled={!video.mediaId || video.uploading || save.pending}>
-            {save.pending ? 'Đang lưu' : 'Lưu video'}
+            {save.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }

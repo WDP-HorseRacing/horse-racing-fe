@@ -8,6 +8,7 @@ import { startRealtime } from '../api/realtime';
 import { getUnreadNotificationCount, listNotifications, markAllNotificationsRead, markNotificationRead } from '../api/notifications';
 import { clearTokens, getTokens, onOtherTabTokensChange } from '../api/tokens';
 import type { CurrentUser, NotificationItem } from '../api/types';
+import { isApiError } from '../lib/errors';
 
 /** Số thông báo mỗi lần tải. */
 const NOTIFICATION_PAGE = 20;
@@ -22,6 +23,8 @@ interface AppState {
   booting: boolean;
   /** Phiên vừa kết thúc ngoài ý muốn — màn đăng nhập hiện lời nhắn tương ứng. */
   sessionEnded: SessionEnd | null;
+  /** Mở trang lúc máy chủ tắt hoặc lỗi: giữ phiên đã lưu, màn khởi động cho thử lại. */
+  bootError: string | null;
   /** Thông báo mới nhất lên trên: trang đầu tải lúc vào phiên, socket thêm thông báo mới. */
   notifications: NotificationItem[];
   /** Số chưa đọc do máy chủ đếm (gồm cả thông báo chưa tải về). */
@@ -131,6 +134,7 @@ export const useStore = create<AppState>((set, get) => {
     isAuthenticated: false,
     booting: !!getTokens(),
     sessionEnded: null,
+    bootError: null,
     ...EMPTY_NOTIFICATIONS,
 
     loadMoreNotifications: async () => {
@@ -145,14 +149,20 @@ export const useStore = create<AppState>((set, get) => {
 
     bootstrap: async () => {
       if (!getTokens()) {
-        set({ booting: false });
+        set({ booting: false, bootError: null });
         return;
       }
+      set({ booting: true, bootError: null });
       try {
         const user = toUser(await getMe());
         set({ currentUser: user, isAuthenticated: true, booting: false, sessionEnded: null, ...EMPTY_NOTIFICATIONS });
         startNotifications();
-      } catch {
+      } catch (caught) {
+        // Máy chủ tắt hoặc lỗi 5xx: giữ token để thử lại. Hết phiên, tài khoản bị khóa (401, 403) thì bỏ phiên.
+        if (isApiError(caught) && (caught.status === 0 || caught.status >= 500) && getTokens()) {
+          set({ booting: false, bootError: caught.message });
+          return;
+        }
         clearSession();
         set({ booting: false });
       }

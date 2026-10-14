@@ -108,7 +108,7 @@ export default function CareNew() {
 
   return (
     <div className="space-y-5" ref={formRef}>
-      <PageHeader back={<BackLink to={cancelTo}>Quay lại</BackLink>} title="Tạo lịch chăm sóc" description="Hệ thống nhắc bác sĩ và người thực hiện lúc 7 giờ sáng ngày đến hạn." />
+      <PageHeader back={<BackLink to={cancelTo}>Quay lại</BackLink>} title="Tạo lịch chăm sóc" description="Nhắc lúc 7 giờ sáng ngày đến hạn." />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:col-span-8">

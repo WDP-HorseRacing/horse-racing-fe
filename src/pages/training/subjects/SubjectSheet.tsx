@@ -49,6 +49,7 @@ export default function SubjectSheet({
 }) {
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(() => initial(subject));
+  const [opened] = useState(() => JSON.stringify(draft));
   const [touched, setTouched] = useState(false);
   const save = useAction();
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
@@ -97,14 +98,16 @@ export default function SubjectSheet({
       open
       onClose={onClose}
       title={subject ? 'Sửa môn học' : 'Thêm môn học'}
-      description="Môn là một bài tập cố định. Giáo án ghép các môn theo tuần."
+      dirty={JSON.stringify(draft) !== opened}
+      onSave={submit}
+      saveLabel={subject ? 'Lưu' : 'Thêm'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={submit} disabled={save.pending}>
-            {save.pending ? 'Đang lưu…' : subject ? 'Lưu thay đổi' : 'Thêm môn'}
+            {save.pending ? 'Đang lưu…' : subject ? 'Lưu' : 'Thêm'}
           </Button>
         </>
       }

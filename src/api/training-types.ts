@@ -1,5 +1,4 @@
 // Kiểu dữ liệu Flow 2 (huấn luyện) đúng như backend trả về, xuất lại qua api/types.ts.
-// Vài số BE trả dạng chuỗi (cự ly chạy thử, thời gian, tốc độ): lớp API đã đổi sang number.
 import type { RaceAptitude } from './types';
 
 export type TrainingIntensity = 'LIGHT' | 'MODERATE' | 'HEAVY';

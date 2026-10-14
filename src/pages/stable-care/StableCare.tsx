@@ -1,11 +1,13 @@
 // F4 — Chăm sóc theo khu (HLV, Quản lý CLB): bảng ngựa của một khu với Groom phụ trách, checklist hôm nay,
 // tình trạng khẩu phần và số sự cố đang mở. Bấm một dòng để sang tab Chăm sóc của ngựa (lập khẩu phần, gắn việc riêng).
 // BE chưa có API theo khu: mỗi ngựa gọi checklist hôm nay và khẩu phần (khu tối đa 9 ô). Quản lý CLB mở được sheet Loại việc.
+// Checklist do BE tạo sẵn lúc 00:05 cho ngựa có Groom. Ngựa chưa có checklist thì tra Groom đang giao để phân biệt
+// "chưa có Groom" với "hôm nay không có việc".
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ListChecks, Package, Settings2, Siren, Utensils } from 'lucide-react';
 import { listAllHorses } from '../../api/horses';
-import { listBarns } from '../../api/stable';
+import { listBarns, listGroomHistory } from '../../api/stable';
 import { listChecklists, listFeedingPlans, listIncidents } from '../../api/stable-care';
 import { listLowStock } from '../../api/supplies';
 import type { DailyChecklist, FeedingPlan, HorseListItem } from '../../api/types';
@@ -25,6 +27,8 @@ import { TaskTypesSheet } from './components/TaskTypesSheet';
 interface Row {
   horse: HorseListItem;
   checklist: DailyChecklist | null;
+  /** Groom đang giao: lấy từ checklist, không có checklist thì từ lịch sử giao Groom. */
+  groomName: string | null;
   plans: FeedingPlan[];
   incidents: number;
 }
@@ -39,7 +43,11 @@ async function loadBarn(barnId: string) {
       .sort((a, b) => (a.location.stall?.code ?? '~').localeCompare(b.location.stall?.code ?? '~') || a.name.localeCompare(b.name, 'vi'))
       .map(async (horse) => {
         const [checklists, plans] = await Promise.all([listChecklists(horse.id, today, today).catch(() => []), listFeedingPlans(horse.id).catch(() => [])]);
-        return { horse, checklist: checklists[0] ?? null, plans, incidents: incidents.filter((item) => item.horseId === horse.id).length };
+        const checklist = checklists[0] ?? null;
+        const groomName = checklist
+          ? checklist.groom.fullName
+          : ((await listGroomHistory(horse.id).catch(() => [])).find((assignment) => !assignment.endAt)?.groom?.fullName ?? null);
+        return { horse, checklist, groomName, plans, incidents: incidents.filter((item) => item.horseId === horse.id).length };
       }),
   );
   return { rows, incidents: incidents.length };
@@ -75,7 +83,7 @@ export default function StableCare() {
     <div className="space-y-6">
       <PageHeader
         title={barn ? `Chăm sóc ${barn.name}` : 'Chăm sóc khu'}
-        description="Checklist hôm nay của Groom, khẩu phần và sự cố của từng ngựa trong khu. Bấm một ngựa để lập khẩu phần hoặc gắn việc riêng."
+        description="Bấm vào ngựa để xem việc, khẩu phần và sự cố."
         actions={
           manager && (
             <Button variant="secondary" onClick={() => setTypesOpen(true)}>
@@ -132,7 +140,7 @@ export default function StableCare() {
                           <span className="min-w-0">
                             <span className="block truncate font-semibold text-gray-900">{row.horse.name}</span>
                             <span className="flex flex-wrap items-center gap-x-2 text-xs text-gray-500">
-                              {row.horse.location.stall?.code ?? 'Chưa xếp ô'} · {row.checklist ? `Groom ${row.checklist.groom.fullName}` : 'Chưa có Groom'}
+                              {row.horse.location.stall?.code ?? 'Chưa xếp ô'} · {row.groomName ? `Groom ${row.groomName}` : 'Chưa có Groom'}
                               <HealthPill status={row.horse.healthStatus} />
                             </span>
                           </span>
@@ -147,7 +155,7 @@ export default function StableCare() {
                               <ChecklistPill status={row.checklist.status} />
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-400">Không có checklist</span>
+                            <span className="text-xs text-gray-400">{row.groomName ? 'Hôm nay không có việc' : 'Không có checklist'}</span>
                           )}
                         </span>
                         <span className="md:col-span-2">

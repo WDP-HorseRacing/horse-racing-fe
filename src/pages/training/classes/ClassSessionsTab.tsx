@@ -180,7 +180,7 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
       {(publish.error || cancel.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{publish.error ?? cancel.error}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-gray-500">
-          Buổi nháp chỉ HLV thấy. Công bố buổi thì mỗi ngựa đang học có một lượt tập, Groom thấy lịch dắt ngựa.
+          Buổi nháp chỉ bạn thấy. Công bố để Groom thấy lịch.
         </p>
         {manage && open && (
           <Button variant="inline" size="sm" onClick={openAdd}>
@@ -288,13 +288,13 @@ export default function ClassSessionsTab({ bundle, manage, reload, justPublished
       {editing && (
         <SessionEditSheet
           title={editing.session ? 'Sửa buổi nháp' : 'Thêm buổi'}
-          description={editing.session ? 'Chỉ sửa được buổi chưa công bố.' : 'Buổi mới ở trạng thái nháp, công bố sau.'}
+          description={editing.session ? undefined : 'Buổi mới là buổi nháp, công bố sau.'}
           initial={editing.initial}
           subjects={editSubjects}
           range={{ from: item.startDate, to: item.endDate }}
           pending={save.pending}
           error={save.error}
-          submitLabel={editing.session ? 'Lưu buổi' : 'Thêm buổi'}
+          submitLabel={editing.session ? 'Lưu' : 'Thêm buổi'}
           onClose={() => {
             setEditing(null);
             save.clearError();

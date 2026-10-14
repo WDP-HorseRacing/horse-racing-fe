@@ -23,6 +23,8 @@ import PedigreeTab from './tabs/PedigreeTab';
 import BodyTab from './tabs/BodyTab';
 import TrainingTab from './tabs/TrainingTab';
 import CareTab from './tabs/CareTab';
+import ReportTab from './tabs/ReportTab';
+import { can } from '../../auth/permissions';
 import { useMyScope } from '../../hooks/useMyScope';
 import { FEATURES } from '../../config/features';
 import LifecycleDialog from './components/LifecycleDialog';
@@ -107,6 +109,8 @@ export default function HorseDetail() {
     { key: 'body', label: 'Chỉ số cơ thể' },
     ...(FEATURES.training && permissions.canViewTrainingTab ? [{ key: 'training', label: 'Huấn luyện' }] : []),
     ...(FEATURES.stableCare && canViewCare ? [{ key: 'care', label: 'Chăm sóc' }] : []),
+    // Báo cáo theo kỳ: BE cho Quản lý CLB, HLV, bác sĩ, chủ ngựa (Groom thì 403).
+    ...(can(user, 'report.horse') ? [{ key: 'report', label: 'Báo cáo' }] : []),
   ];
   const requested = params.get('tab') ?? 'overview';
   // Y tế đã thành màn riêng (Flow 3): link cũ ?tab=medical chuyển sang đó.
@@ -272,7 +276,7 @@ export default function HorseDetail() {
 
       {horse.isDeleted && (
         <Notice tone="danger">
-          Hồ sơ đã bị xóa và chỉ còn Quản lý câu lạc bộ xem được. Hồ sơ chỉ đọc.{permissions.canRestore ? ' Dùng menu Vòng đời để khôi phục.' : ''}
+          Hồ sơ đã xóa, chỉ Quản lý CLB xem được.{permissions.canRestore ? ' Khôi phục ở menu Vòng đời.' : ''}
         </Notice>
       )}
       {!horse.isDeleted && horse.lifecycleStatus === 'TRANSFERRED' && (
@@ -297,6 +301,7 @@ export default function HorseDetail() {
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
         {tab === 'training' && <TrainingTab horse={horse} permissions={permissions} />}
         {tab === 'care' && <CareTab horse={horse} trainerOfZone={trainerOfZone} />}
+        {tab === 'report' && <ReportTab horse={horse} owner={user?.role === 'HORSE_OWNER'} />}
       </div>
 
       <LifecycleDialog

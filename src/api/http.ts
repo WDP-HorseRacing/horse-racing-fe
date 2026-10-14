@@ -1,6 +1,6 @@
 // Gọi REST API của backend: gắn token, tự làm mới token một lần khi hết hạn,
 // đổi lỗi của BE ({ code, message, details, errors }) thành ApiError có câu tiếng Việt.
-import { ApiError, humanizeMessage } from '../lib/errors';
+import { ApiError, fieldMessage, humanizeMessage } from '../lib/errors';
 import { clearTokens, getTokens, setTokens } from './tokens';
 import type { Page } from './types';
 
@@ -33,24 +33,30 @@ function buildUrl(path: string, query?: Query) {
   return url.toString();
 }
 
-let refreshing: Promise<boolean> | null = null;
+/** `expired`: refresh token hết hạn hoặc đã thu hồi. `error`: máy chủ xác thực trục trặc, phiên vẫn còn. */
+type RefreshResult = 'ok' | 'expired' | 'error';
 
-async function refreshTokens(): Promise<boolean> {
+let refreshing: Promise<RefreshResult> | null = null;
+
+async function refreshTokens(): Promise<RefreshResult> {
   const tokens = getTokens();
-  if (!tokens?.refreshToken) return false;
+  if (!tokens?.refreshToken) return 'expired';
   if (!refreshing) {
-    refreshing = (async () => {
+    refreshing = (async (): Promise<RefreshResult> => {
       try {
         const response = await fetch(`${API_URL}/auth/refresh`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ refreshToken: tokens.refreshToken }),
         });
-        if (!response.ok) return false;
-        setTokens(await response.json());
-        return true;
+        if (response.ok) {
+          setTokens(await response.json());
+          return 'ok';
+        }
+        // BE trả 401 khi refresh token hết hạn hoặc bị thu hồi (400 khi thiếu token). 5xx là Keycloak lỗi: giữ phiên.
+        return response.status === 400 || response.status === 401 ? 'expired' : 'error';
       } catch {
-        return false;
+        return 'error';
       }
     })().finally(() => {
       refreshing = null;
@@ -90,7 +96,10 @@ async function send(method: string, path: string, options: RequestOptions, retri
   }
 
   if (response.status === 401 && options.auth !== false && !retried) {
-    if (await refreshTokens()) return send(method, path, options, true);
+    const refreshed = await refreshTokens();
+    if (refreshed === 'ok') return send(method, path, options, true);
+    // Không làm mới được vì máy chủ xác thực lỗi: báo lỗi, không đá người dùng ra màn đăng nhập.
+    if (refreshed === 'error') throw new ApiError(503, 'Không kết nối được máy chủ xác thực, vui lòng thử lại sau');
     clearTokens();
     onUnauthorized?.();
   }
@@ -121,13 +130,14 @@ export async function request<T>(method: string, path: string, options: RequestO
     };
     let message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
     const details = body.details ?? null;
-    if (message === 'Validation failed') {
-      message = details?.length ? `Dữ liệu chưa hợp lệ: ${details.join('. ')}` : 'Dữ liệu chưa hợp lệ';
+    // Lỗi validate: câu tổng của BE chỉ là "Dữ liệu không hợp lệ", chi tiết nằm trong `details`.
+    if (response.status === 400 && details?.length && (message === 'Dữ liệu không hợp lệ' || message === 'Validation failed')) {
+      message = `Dữ liệu chưa hợp lệ: ${details.join('. ')}`;
     }
-    // Lỗi 400 có thể kèm `errors` theo từng ô: màn hình gắn câu lỗi ngay dưới ô đó.
+    // Lỗi 400 và lỗi trùng 409 có thể kèm `errors` theo từng ô: màn hình gắn câu lỗi ngay dưới ô đó.
     const fieldErrors: Record<string, string> = {};
     for (const item of body.errors ?? []) {
-      if (item.field && item.message && !fieldErrors[item.field]) fieldErrors[item.field] = humanizeMessage(item.message);
+      if (item.field && item.message && !fieldErrors[item.field]) fieldErrors[item.field] = humanizeMessage(fieldMessage(item.field, item.message));
     }
     // 422 chỉ dùng cho số đo ngoài khoảng bình thường chưa xác nhận: màn hình hỏi lại người dùng.
     const field = response.status === 422 ? 'confirmAbnormal' : Object.keys(fieldErrors)[0];

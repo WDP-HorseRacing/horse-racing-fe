@@ -49,14 +49,13 @@ export function FeedingSection({ horse, canEdit, className }: { horse: { id: str
               <MealPlan plan={active} />
               {active.note && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{active.note}</p>}
               <p className="mt-2 text-xs text-gray-500">
-                Áp dụng từ {formatDate(active.approvedAt)}
-                {active.approver ? ` bởi HLV ${active.approver.fullName}` : ''}
+                {active.approver ? `HLV ${active.approver.fullName} áp dụng` : 'Áp dụng'} từ {formatDate(active.approvedAt)}
               </p>
             </div>
           ) : (
             <EmptyState
               title="Chưa có khẩu phần đang áp dụng"
-              hint={canEdit ? 'Lập khẩu phần theo bữa rồi áp dụng, Groom thấy ngay trên màn Việc hôm nay.' : 'HLV khu lập và áp dụng khẩu phần cho ngựa.'}
+              hint={canEdit ? 'Áp dụng xong Groom sẽ thấy ngay.' : 'HLV khu lập và áp dụng khẩu phần cho ngựa.'}
               className="py-6"
             />
           )}
@@ -72,7 +71,7 @@ export function FeedingSection({ horse, canEdit, className }: { horse: { id: str
                 </p>
                 {canEdit && (
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" title="Xóa bản nháp" onClick={() => setRemoving(draft)}>
+                    <Button variant="ghost" size="icon" title="Xóa nháp" onClick={() => setRemoving(draft)}>
                       <Trash2 size={15} />
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => setEditing({ draft })}>
@@ -117,7 +116,7 @@ export function FeedingSection({ horse, canEdit, className }: { horse: { id: str
         open={!!applying}
         danger={false}
         title={`Áp dụng khẩu phần cho ${horse.name}`}
-        message={active ? 'Khẩu phần đang áp dụng sẽ chuyển vào lịch sử. Groom thấy bản mới ngay.' : 'Groom thấy khẩu phần này ngay trên màn Việc hôm nay.'}
+        message={active ? 'Khẩu phần cũ sẽ chuyển vào lịch sử.' : 'Groom sẽ thấy ngay.'}
         confirmLabel="Áp dụng"
         pending={apply.pending}
         onClose={() => {
@@ -140,8 +139,8 @@ export function FeedingSection({ horse, canEdit, className }: { horse: { id: str
       </ConfirmDialog>
       <ConfirmDialog
         open={!!removing}
-        title="Xóa bản nháp"
-        message="Bản nháp bị xóa hẳn. Khẩu phần đang áp dụng không đổi."
+        title="Xóa nháp"
+        message="Khẩu phần đang dùng không bị ảnh hưởng."
         confirmLabel="Xóa"
         pending={remove.pending}
         onClose={() => {
@@ -153,7 +152,7 @@ export function FeedingSection({ horse, canEdit, className }: { horse: { id: str
           void remove.run(
             () => deleteFeedingPlan(removing.id),
             () => {
-              toast.push('Đã xóa bản nháp', 'success');
+              toast.push('Đã xóa nháp', 'success');
               setRemoving(null);
               plans.reload();
             },

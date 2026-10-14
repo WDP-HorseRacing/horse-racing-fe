@@ -100,7 +100,7 @@ export default function ClassList() {
       ) : rows.length === 0 ? (
         <EmptyState
           title="Chưa có lớp nào"
-          hint={canManage ? 'Mở lớp từ một giáo án của bạn: chọn ngày bắt đầu, các thứ trong tuần, hệ thống sinh lịch buổi tập.' : undefined}
+          hint={canManage ? 'Mở lớp từ một giáo án của bạn.' : undefined}
           action={
             canManage && (
               <Link to={links.classNew()}>

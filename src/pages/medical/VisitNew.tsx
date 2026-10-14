@@ -316,7 +316,7 @@ function VisitForm(props: VisitOptions) {
       <PageHeader
         back={<BackLink to={cancelTo}>Quay lại</BackLink>}
         title={title}
-        description="Buổi khám đã lưu không sửa, không xóa. Ghi sai thì hủy buổi đó rồi ghi lại buổi thay thế."
+        description="Buổi khám đã lưu thì không sửa được. Ghi sai thì hủy rồi ghi lại."
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
@@ -391,7 +391,7 @@ function VisitForm(props: VisitOptions) {
                       >
                         <span className="block text-sm font-semibold text-gray-900">{value === 'NORMAL' ? 'Kết luận bình thường' : 'Có vấn đề, mở bệnh án'}</span>
                         <span className="mt-0.5 block text-xs text-gray-500">
-                          {value === 'NORMAL' ? 'Bản ghi độc lập.' : 'Buổi này là buổi đầu tiên của bệnh án mới.'}
+                          {value === 'NORMAL' ? 'Không mở bệnh án.' : 'Mở bệnh án mới từ buổi này.'}
                         </span>
                       </button>
                     ))}
@@ -738,7 +738,7 @@ function VisitForm(props: VisitOptions) {
                     ))}
                   </ul>
                 )}
-                <p className="mt-1.5 text-xs">Giá trị đúng thì bấm "Xác nhận và lưu", bản ghi được đánh dấu bất thường.</p>
+                <p className="mt-1.5 text-xs">Số đúng thì bấm Vẫn lưu.</p>
               </Notice>
             )}
             {action.error && !needsConfirm && <ErrorBox message={action.error} />}
@@ -747,7 +747,7 @@ function VisitForm(props: VisitOptions) {
               {needsConfirm ? (
                 <>
                   <Button className="h-11 w-full" onClick={() => submit(true)} disabled={action.pending}>
-                    {action.pending ? 'Đang lưu…' : 'Xác nhận và lưu'}
+                    {action.pending ? 'Đang lưu…' : 'Vẫn lưu'}
                   </Button>
                   <Button variant="ghost" className="w-full" onClick={action.clearError}>
                     Sửa lại số đo
@@ -775,7 +775,7 @@ function VisitForm(props: VisitOptions) {
           onDone={() => finish(saved)}
           intro={
             <Notice tone="success">
-              {saved.caseId && !followUp ? 'Đã lưu buổi khám và mở bệnh án.' : 'Đã lưu buổi khám.'} Có cần khóa huấn luyện ngựa trong thời gian điều trị không?
+              {saved.caseId && !followUp ? 'Đã lưu, đã mở bệnh án.' : 'Đã lưu.'} Có cần khóa tập ngựa trong lúc điều trị không?
             </Notice>
           }
         />

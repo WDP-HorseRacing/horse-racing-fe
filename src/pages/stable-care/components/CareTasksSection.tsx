@@ -60,11 +60,10 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="font-semibold text-gray-900">Việc riêng của ngựa</h3>
-          <p className="text-xs text-gray-500">Cộng thêm vào checklist mỗi ngày trong khoảng đã chọn</p>
         </div>
         {canManage && (
           <Button variant="inline" size="sm" onClick={() => setAttaching(true)}>
-            <CalendarPlus size={14} /> Gắn việc
+            <CalendarPlus size={14} /> Thêm việc
           </Button>
         )}
       </div>
@@ -74,7 +73,7 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
         <ErrorBox message={tasks.error} />
       ) : (
         <>
-          {live.length === 0 ? <p className="text-sm text-gray-500">Không có việc riêng nào đang hoặc sắp áp dụng.</p> : <ul className="space-y-2">{live.map(row)}</ul>}
+          {live.length === 0 ? <p className="text-sm text-gray-500">Chưa có việc riêng.</p> : <ul className="space-y-2">{live.map(row)}</ul>}
           {ended.length > 0 && (
             <div className="mt-3">
               <button type="button" onClick={() => setShowEnded((open) => !open)} className="flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900">
@@ -91,7 +90,7 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
           horse={horse}
           onClose={() => setAttaching(false)}
           onDone={(task) => {
-            toast.push(task.fromDate === today ? `Đã gắn ${task.taskType.name}, checklist hôm nay có thêm việc và Groom đã được báo` : `Đã gắn ${task.taskType.name} từ ${formatDateShort(task.fromDate)}`, 'success');
+            toast.push(task.fromDate === today ? `Đã thêm ${task.taskType.name}` : `Đã thêm ${task.taskType.name} từ ${formatDateShort(task.fromDate)}`, 'success');
             tasks.reload();
             onChanged?.();
           }}
@@ -100,8 +99,8 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
       <ConfirmDialog
         open={!!removing}
         title={`Gỡ ${removing?.taskType.name ?? 'việc'}`}
-        message={removing && removing.fromDate > today ? 'Việc chưa bắt đầu nên bị xóa hẳn.' : 'Việc đang chạy sẽ kết thúc ở hôm nay. Checklist hôm nay giữ nguyên.'}
-        confirmLabel="Gỡ việc"
+        message={removing && removing.fromDate > today ? 'Việc này sẽ bị xóa.' : 'Việc dừng từ ngày mai.'}
+        confirmLabel="Gỡ"
         pending={remove.pending}
         onClose={() => {
           remove.clearError();
@@ -140,8 +139,8 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
 
   const errors = {
     type: !chosenType ? 'Chọn loại việc' : undefined,
-    from: !fromDate ? 'Chọn ngày bắt đầu' : fromDate < today ? 'Ngày bắt đầu không được ở quá khứ' : undefined,
-    to: !toDate ? 'Chọn ngày kết thúc' : toDate < fromDate ? 'Ngày kết thúc phải từ ngày bắt đầu trở đi' : diffDateKeys(fromDate, toDate) + 1 > MAX_DAYS ? `Việc riêng kéo dài tối đa ${MAX_DAYS} ngày` : undefined,
+    from: !fromDate ? 'Chọn ngày bắt đầu' : fromDate < today ? 'Không chọn ngày đã qua' : undefined,
+    to: !toDate ? 'Chọn ngày kết thúc' : toDate < fromDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : diffDateKeys(fromDate, toDate) + 1 > MAX_DAYS ? `Tối đa ${MAX_DAYS} ngày` : undefined,
     note: textError(note, { label: 'Ghi chú', max: 200, required: false }),
   };
 
@@ -161,15 +160,18 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
     <Modal
       open
       onClose={onClose}
-      title={`Gắn việc riêng: ${horse.name}`}
-      description="Việc được cộng vào checklist của Groom mỗi ngày trong khoảng này."
+      title={`Thêm việc riêng cho ${horse.name}`}
+      description="Groom sẽ thấy việc này mỗi ngày trong khoảng đã chọn."
+      dirty={!!typeId || fromDate !== today || toDate !== addDateKey(today, 6) || note !== ''}
+      onSave={submit}
+      saveLabel="Thêm"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={submit} disabled={action.pending || types.loading}>
-            {action.pending ? 'Đang gắn…' : 'Gắn việc'}
+            {action.pending ? 'Đang lưu…' : 'Thêm'}
           </Button>
         </>
       }
@@ -179,7 +181,7 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
       ) : types.error ? (
         <ErrorBox message={types.error} />
       ) : types.data?.length === 0 ? (
-        <ErrorBox message="Chưa có loại việc nào để gắn riêng. Quản lý CLB thêm loại việc không áp mọi ngựa ở trang Chăm sóc khu." />
+        <ErrorBox message="Chưa có loại việc nào. Nhờ Quản lý CLB thêm ở trang Chăm sóc khu." />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Loại việc" required error={touched ? errors.type : undefined} className="sm:col-span-2">

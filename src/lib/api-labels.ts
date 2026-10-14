@@ -17,6 +17,7 @@ import type {
   VisitConclusion,
   VisitKind,
 } from '../api/types';
+import { featureLabel } from './audit-labels';
 
 export const placementStatusLabel: Record<PlacementStatus, string> = {
   PENDING_BARN: 'Chờ xếp khu',
@@ -123,7 +124,6 @@ export const stallTypeLabel: Record<StallType, string> = {
   STANDARD: 'Tiêu chuẩn',
   ISOLATION: 'Cách ly',
   RECOVERY: 'Hồi phục',
-  FOALING: 'Sinh sản',
 };
 
 export const userStatusLabel: Record<UserStatus, string> = {
@@ -132,20 +132,20 @@ export const userStatusLabel: Record<UserStatus, string> = {
   INACTIVE: 'Ngừng hoạt động',
 };
 
-/** Chức năng gây ra một lần đổi sức khỏe (lịch sử sức khỏe). */
+/** Chức năng gây ra một lần đổi sức khỏe (lịch sử sức khỏe). BE trả tên chức năng như nhật ký thao tác. */
 export function healthChangeSource(feature: string | null): string {
   switch (feature) {
-    case 'F1.2':
+    case 'HORSE_CREATE':
       return 'Tạo hồ sơ';
-    case 'F1.8':
+    case 'HORSE_LIFECYCLE':
       return 'Đổi vòng đời';
-    case 'F3.3':
+    case 'MED_VISIT':
       return 'Buổi khám';
-    case 'F3.6':
+    case 'MED_CASE_VISIT':
       return 'Tái khám';
-    case 'F3.7':
+    case 'MED_HEALTH':
       return 'Bác sĩ đổi trực tiếp';
     default:
-      return feature ? `Chức năng ${feature}` : 'Hệ thống';
+      return feature ? featureLabel(feature) : 'Hệ thống';
   }
 }

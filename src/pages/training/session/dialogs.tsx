@@ -64,8 +64,11 @@ export function TrialDialog({
       open
       onClose={onClose}
       title={completeAfter ? `Hoàn thành lượt chạy thử của ${horseName}` : `Ghi thời gian chạy thử của ${horseName}`}
-      description={completeAfter ? 'Ghi thời gian trước khi hoàn thành. Buổi tự đóng khi lượt cuối xong, sau đó không ghi thêm được.' : undefined}
+      description={completeAfter ? 'Hoàn thành rồi thì không ghi thêm được.' : undefined}
       width="max-w-xl"
+      dirty={!!elapsed || notes.trim() !== '' || !!video.mediaId || video.uploading}
+      onSave={() => submit(false)}
+      saveLabel="Lưu"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -73,11 +76,11 @@ export function TrialDialog({
           </Button>
           {canSkipRecord && (
             <Button variant="secondary" disabled={save.pending} onClick={() => submit(true)}>
-              Hoàn thành, không ghi thêm
+              Hoàn thành
             </Button>
           )}
           <Button disabled={save.pending || video.uploading} onClick={() => submit(false)}>
-            <Flag size={15} /> {video.uploading ? 'Chờ tải video xong…' : save.pending ? 'Đang lưu…' : completeAfter ? `Ghi lần ${nextAttempt} và hoàn thành` : `Ghi lần chạy ${nextAttempt}`}
+            <Flag size={15} /> {video.uploading ? 'Đang tải video…' : save.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
@@ -85,7 +88,7 @@ export function TrialDialog({
       <div className="space-y-4">
         {save.error && <ErrorBox message={save.error} />}
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_11rem]">
-          <Field label={`Thời gian lần ${nextAttempt}`} required error={touched && !elapsed ? 'Nhập phút và giây, ví dụ 1 phút 14,8 giây' : undefined} hint="Giây lẻ tới phần trăm, ví dụ 14,8">
+          <Field label={`Thời gian lần ${nextAttempt}`} required error={touched && !elapsed ? 'Nhập phút và giây, ví dụ 1 phút 14,8 giây' : undefined} hint="Ví dụ 14,8 giây">
             <RaceTimeInput value={elapsed} invalid={touched && !elapsed} onChange={(ms) => setElapsed(ms)} autoFocus />
           </Field>
           <div className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
@@ -139,7 +142,7 @@ export function CompleteDialog({ participant, horseName, onClose, onDone }: { pa
     <Modal
       open
       onClose={onClose}
-      title={`Hoàn thành lượt của ${horseName}`}
+      title={`Hoàn thành: ${horseName}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -157,13 +160,13 @@ export function CompleteDialog({ participant, horseName, onClose, onDone }: { pa
               )
             }
           >
-            {save.pending ? 'Đang lưu…' : 'Hoàn thành lượt'}
+            {save.pending ? 'Đang lưu…' : 'Hoàn thành'}
           </Button>
         </>
       }
     >
       {save.error && <ErrorBox message={save.error} />}
-      <p className="text-sm text-gray-600">Kết thúc bài tập của {horseName}. Cảm biến ngừng nhận số đo cho lượt này.</p>
+      <p className="text-sm text-gray-600">Cảm biến sẽ ngừng ghi số đo.</p>
       {data && data.count > 0 && (
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-xl bg-gray-50 p-2.5 ring-1 ring-gray-100">
@@ -221,13 +224,16 @@ export function EvaluationSheet({
       onClose={onClose}
       title={`Đánh giá ${horseName}`}
       description={sessionName}
+      dirty={comment.trim() !== '' || score !== 7}
+      onSave={() => setConfirming(true)}
+      saveLabel="Lưu"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={() => setConfirming(true)} disabled={save.pending}>
-            Lưu đánh giá
+            Lưu
           </Button>
         </>
       }
@@ -279,18 +285,18 @@ export function EvaluationSheet({
         <Field label="Nhận xét chuyên môn" hint="Chủ ngựa đọc được nhận xét này trong nhật ký buổi tập.">
           <Textarea rows={5} value={comment} placeholder="Xuất phát, nhịp chạy, sức bền cuối bài, điều cần chỉnh ở buổi sau…" onChange={(event) => setComment(event.target.value)} />
         </Field>
-        <Notice tone="warning">Đánh giá lưu một lần, chưa sửa được sau khi lưu.</Notice>
+        <Notice tone="warning">Lưu rồi thì không sửa được.</Notice>
       </div>
 
       {confirming && (
         <Modal
           open
           onClose={() => setConfirming(false)}
-          title="Lưu đánh giá"
+          title={`Lưu ${score} điểm cho ${horseName}?`}
           footer={
             <>
               <Button variant="secondary" onClick={() => setConfirming(false)}>
-                Xem lại
+                Quay lại
               </Button>
               <Button
                 disabled={save.pending}
@@ -305,13 +311,13 @@ export function EvaluationSheet({
                   )
                 }
               >
-                {save.pending ? 'Đang lưu…' : 'Lưu, không sửa nữa'}
+                {save.pending ? 'Đang lưu…' : 'Lưu'}
               </Button>
             </>
           }
         >
           <p className="text-sm text-gray-600">
-            Lưu điểm <b>{score}</b> cho {horseName}. Sau khi lưu không sửa được điểm và nhận xét.
+            Lưu rồi thì không sửa được điểm và nhận xét.
           </p>
         </Modal>
       )}
@@ -329,7 +335,7 @@ export function GroomDialog({ participant, horseName, grooms, onClose, onDone }:
     <Modal
       open
       onClose={onClose}
-      title={`Groom dắt ${horseName} buổi này`}
+      title={`Đổi Groom dắt ${horseName}`}
       description="Chỉ đổi cho buổi này, không đổi Groom phụ trách ngựa."
       footer={
         <>

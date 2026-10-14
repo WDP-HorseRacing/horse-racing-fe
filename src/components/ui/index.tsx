@@ -300,7 +300,7 @@ export function Notice({
   );
 }
 
-export function NotFound({ message = 'Không tìm thấy dữ liệu bạn yêu cầu, hoặc dữ liệu nằm ngoài phạm vi của bạn.' }) {
+export function NotFound({ message = 'Không tìm thấy, hoặc bạn không có quyền xem.' }) {
   return (
     <div className="py-24 text-center">
       <p className="text-5xl font-bold tracking-tight text-gray-200">404</p>
@@ -609,6 +609,60 @@ export function Segmented<T extends string>({
 
 /* ===== Hộp thoại (Radix Dialog) ===== */
 
+/**
+ * Hỏi trước khi đóng hộp đang nhập dở. Chỉ áp cho bấm ra ngoài hộp và phím Esc (dễ lỡ tay).
+ * Bấm Hủy hoặc X là người dùng chủ ý đóng nên đóng luôn.
+ */
+interface CloseGuard {
+  /** Form đã nhập mà chưa lưu. */
+  dirty?: boolean;
+  /** Nút lưu trong hộp hỏi, thường là hàm của nút chính. Không truyền thì hộp hỏi có Bỏ và Nhập tiếp. */
+  onSave?: () => void;
+  /** Tên nút lưu trong hộp hỏi, nên trùng nút chính của form (vd "Thêm"). */
+  saveLabel?: string;
+}
+
+function useCloseGuard({ dirty, onSave, saveLabel }: CloseGuard, onClose: () => void) {
+  const [asking, setAsking] = useState(false);
+  const guard = (event: Event) => {
+    if (!dirty) return;
+    event.preventDefault();
+    setAsking(true);
+  };
+  const prompt = (
+    <Modal
+      open={asking}
+      onClose={() => setAsking(false)}
+      title="Chưa lưu"
+      width="max-w-sm"
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setAsking(false);
+              onClose();
+            }}
+          >
+            Bỏ
+          </Button>
+          <Button
+            onClick={() => {
+              setAsking(false);
+              onSave?.();
+            }}
+          >
+            {onSave ? (saveLabel ?? 'Lưu') : 'Nhập tiếp'}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-gray-600">Thông tin vừa nhập chưa được lưu.</p>
+    </Modal>
+  );
+  return { guard, prompt };
+}
+
 export function Modal({
   open,
   onClose,
@@ -617,6 +671,9 @@ export function Modal({
   footer,
   width = 'max-w-lg',
   description,
+  dirty,
+  onSave,
+  saveLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -625,13 +682,16 @@ export function Modal({
   footer?: ReactNode;
   width?: string;
   description?: ReactNode;
-}) {
+} & CloseGuard) {
+  const { guard, prompt } = useCloseGuard({ dirty, onSave, saveLabel }, onClose);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-emerald-950/25 backdrop-blur-[2px]" />
         <Dialog.Content
           aria-describedby={undefined}
+          onInteractOutside={guard}
+          onEscapeKeyDown={guard}
           className={cn(
             'anim-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl bg-white shadow-float focus:outline-none',
             width,
@@ -650,6 +710,7 @@ export function Modal({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
           {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          {prompt}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -665,6 +726,9 @@ export function Sheet({
   children,
   footer,
   width = 'max-w-xl',
+  dirty,
+  onSave,
+  saveLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -673,13 +737,16 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
   width?: string;
-}) {
+} & CloseGuard) {
+  const { guard, prompt } = useCloseGuard({ dirty, onSave, saveLabel }, onClose);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="anim-overlay fixed inset-0 z-50 bg-emerald-950/20 backdrop-blur-[2px]" />
         <Dialog.Content
           aria-describedby={undefined}
+          onInteractOutside={guard}
+          onEscapeKeyDown={guard}
           className={cn(
             'anim-sheet fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-float focus:outline-none sm:inset-y-3 sm:right-3 sm:rounded-2xl',
             width,
@@ -698,6 +765,7 @@ export function Sheet({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
           {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          {prompt}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

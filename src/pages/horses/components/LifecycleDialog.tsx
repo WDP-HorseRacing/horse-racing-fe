@@ -40,6 +40,7 @@ function lifecycleConsequences(data: LifecyclePreview): string[] {
   if (data.trainingLockReleased) lines.push(`Tự gỡ lệnh khóa huấn luyện với ghi chú "Gỡ do ${cause}"`);
   if (data.examRequestsDismissed) lines.push(`Bỏ qua ${data.examRequestsDismissed} yêu cầu khám đang chờ (lý do "Do ${cause}")`);
   if (data.careSchedulesCancelled) lines.push(`Hủy ${data.careSchedulesCancelled} lịch chăm sóc và lịch hẹn khám đã lên`);
+  if (data.incidentsClosed) lines.push(`Tự đóng ${data.incidentsClosed} sự cố tại chuồng đang mở (kết quả "Ngựa đã ${data.to === 'DECEASED' ? 'mất' : 'chuyển nhượng'}")`);
   if (data.healthResetTo) lines.push(`Sức khỏe đặt về "${healthLabel[data.healthResetTo]}"`);
   if (data.pendingBarnAfter) lines.push('Ngựa vào danh sách Chờ xếp khu');
   if (data.ownerCleared) lines.push(`Bỏ trống chủ sở hữu ${data.ownerCleared} (tài khoản không còn là chủ ngựa đang hoạt động)`);
@@ -55,7 +56,7 @@ async function loadPreview(horseId: string, action: LifecycleAction): Promise<Pr
     const blockers = [
       ...(data.transferred ? ['Ngựa đã chuyển nhượng, hãy đổi vòng đời thay vì xóa'] : []),
       ...(data.deceased ? ['Ngựa đã mất, hồ sơ cần được giữ lại'] : []),
-      ...(data.businessData.length ? [`Đã có dữ liệu nghiệp vụ: ${data.businessData.join(', ')}`] : []),
+      ...(data.businessData.length ? [`Đã có dữ liệu: ${data.businessData.join(', ')}`] : []),
       ...(data.isParent ? ['Ngựa đang là cha hoặc mẹ trong phả hệ của ngựa khác'] : []),
     ];
     return {
@@ -149,6 +150,9 @@ export default function LifecycleDialog({
       width="max-w-2xl"
       title={action ? `${lifecycleActionLabel[action]}: ${horse.name}` : ''}
       description={action ? lifecycleActionHint[action] : undefined}
+      dirty={reason.trim() !== '' || dateOfDeath !== ''}
+      onSave={() => void submit()}
+      saveLabel={action ? lifecycleActionConfirm[action] : 'Lưu'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -189,7 +193,7 @@ export default function LifecycleDialog({
 
           {data.allowed && action === 'DELETE' && (
             <Notice tone="success" icon={<CircleCheck size={16} />}>
-              Hồ sơ chưa phát sinh dữ liệu nghiệp vụ nào, có thể xóa.
+              Hồ sơ chưa có dữ liệu nên xóa được.
             </Notice>
           )}
 
@@ -198,7 +202,7 @@ export default function LifecycleDialog({
           {data.allowed && data.consequences.length > 0 && (
             <div className="overflow-hidden rounded-xl bg-white shadow-[inset_3px_0_0_0_#f59e0b] ring-1 ring-gray-200">
               <div className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-gray-900">
-                <ListChecks size={15} className="text-gray-400" /> Hệ quả sẽ được thực hiện trong một lần
+                <ListChecks size={15} className="text-gray-400" /> Những gì sẽ thay đổi
               </div>
               <table className="w-full text-sm">
                 <tbody>
@@ -236,7 +240,7 @@ export default function LifecycleDialog({
               name="reason"
               required
               error={reasonError}
-              hint={deceased ? 'Ví dụ: đau bụng cấp không qua khỏi. Được lưu trên hồ sơ và ghi vào nhật ký thao tác.' : 'Lý do được lưu trên hồ sơ và ghi vào nhật ký thao tác.'}
+              hint={deceased ? 'Ví dụ: đau bụng cấp không qua khỏi.' : undefined}
             >
               <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus={!deceased} />
             </Field>

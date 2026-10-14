@@ -197,7 +197,7 @@ export interface ZoneBoardProps {
   mine?: boolean;
   /** Khu cách ly (mọi ô là ô cách ly). */
   isolation?: boolean;
-  /** Người xem chỉ xem được khu này (HT xem khu cách ly của HT khác). */
+  /** Người xem chỉ xem được khu này (HT xem khu không do mình phụ trách, nếu BE trả). */
   readOnly?: boolean;
   /** Menu ⋯ của khu (CM). */
   zoneMenu?: MenuAction[];
@@ -307,7 +307,7 @@ export function ZoneBoard({
             </div>
             <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-gray-500">
               <UserRound size={12} className="shrink-0 text-gray-400" />
-              {barn.headTrainerFullName ? `HT ${barn.headTrainerFullName}` : 'Chưa có HT phụ trách'}
+              {barn.headTrainerFullName ? `HLV ${barn.headTrainerFullName}` : 'Chưa có HLV phụ trách'}
               {barn.headTrainerId && !barn.hasActiveHeadTrainer ? ' (không còn hoạt động)' : ''}
             </p>
           </div>

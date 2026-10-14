@@ -70,6 +70,7 @@ export function AssignZoneDialog({
       onClose={onClose}
       width="max-w-2xl"
       title={isChange ? `Đổi khu cho ${horse?.name ?? ''}` : `Xếp khu cho ${horse?.name ?? ''}`}
+      dirty={barnId !== '' || reason.trim() !== ''}
       description={isChange ? `Đang ở ${horse?.barnName}${horse?.stallCode ? `, ô ${horse.stallCode}` : ''}` : 'Ngựa đang chờ xếp khu'}
       footer={
         <>
@@ -109,7 +110,7 @@ export function AssignZoneDialog({
                       Còn nhận {barn.availableStallCount}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-500">HT: {barn.headTrainerFullName ?? 'chưa có'}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">HLV: {barn.headTrainerFullName ?? 'chưa có'}</p>
                   {current && <p className="mt-1 text-xs font-medium text-gray-500">Khu hiện tại</p>}
                   {!current && blocker && <p className="mt-1 text-xs text-gray-500">{blocker}</p>}
                 </button>
@@ -140,8 +141,8 @@ export function AssignZoneDialog({
                 {isChange && (
                   <li className={data.classesWithdrawn ? 'font-medium text-amber-700' : ''}>
                     {data.classesWithdrawn
-                      ? `Rút khỏi ${data.classesWithdrawn} lớp không do HT khu mới phụ trách`
-                      : 'Không phải rút khỏi lớp nào (khu mới cùng HT hoặc ngựa chưa học lớp)'}
+                      ? `Rút khỏi ${data.classesWithdrawn} lớp không do HLV khu mới phụ trách`
+                      : 'Không phải rút khỏi lớp nào (khu mới cùng HLV hoặc ngựa chưa học lớp)'}
                   </li>
                 )}
                 <li>{data.groomKept ? `Giữ nguyên Groom ${data.groomKept}` : 'Chưa có Groom, HLV trưởng phân công khi xếp ô'}</li>
@@ -226,6 +227,7 @@ export function AssignStallDialog({
       onClose={onClose}
       width="max-w-2xl"
       title={moving ? `Chuyển ô cho ${horse?.name ?? ''}` : `Xếp ô cho ${horse?.name ?? ''}`}
+      dirty={stallId !== ''}
       description={`${horse?.barnName ?? ''}${moving ? ` · đang ở ô ${horse?.stallCode}` : ' · đang chờ xếp ô'}`}
       footer={
         <>
@@ -340,6 +342,7 @@ export function GroomDialog({
       onClose={onClose}
       width="max-w-2xl"
       title={horse?.groomId ? `Đổi Groom cho ${horse?.name}` : `Giao Groom cho ${horse?.name ?? ''}`}
+      dirty={groomId !== '' && groomId !== (horse?.groomId ?? '')}
       description={horse?.groomName ? `Đang phụ trách: ${horse.groomName}` : 'Ngựa chưa có Groom phụ trách'}
       footer={
         <>
@@ -471,6 +474,7 @@ export function ReasonDialog({
       open={open}
       onClose={close}
       title={title}
+      dirty={reason.trim() !== ''}
       footer={
         <>
           <Button variant="secondary" onClick={close}>

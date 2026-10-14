@@ -201,7 +201,7 @@ export default function OverviewTab({
                 {horse.latestMeasurements.map((item) => (
                   <span key={item.type} className={cn(item.isAbnormal && 'text-amber-800')} title={`Đo lúc ${formatDateTime(item.measuredAt)}`}>
                     <span className="font-normal text-gray-500">{measurementSpec[item.type].name}</span>{' '}
-                    <span className="tabular-nums">{Number(item.value).toLocaleString('vi-VN')}</span>
+                    <span className="tabular-nums">{item.value.toLocaleString('vi-VN')}</span>
                     {measurementSpec[item.type].unit === '/9' ? '/9' : ` ${measurementSpec[item.type].unit}`}
                   </span>
                 ))}

@@ -81,7 +81,7 @@ export default function ClassHorsesTab({
       {loading && enrollments.length > 0 ? (
         <Skeleton rows={3} />
       ) : sorted.length === 0 ? (
-        <EmptyState title="Chưa có ngựa nào trong lớp" hint={manage ? 'Ghi danh ngựa thuộc khu của bạn. Ngựa ghi danh sau khi buổi đã công bố vẫn có lượt ở các buổi sắp tới.' : undefined} />
+        <EmptyState title="Chưa có ngựa nào trong lớp" hint={manage ? 'Ghi danh ngựa khu bạn để ngựa có lượt ở các buổi sắp tới.' : undefined} />
       ) : (
         <ul className="grid gap-2 sm:grid-cols-2">
           {sorted.map((enrollment) => {
@@ -235,11 +235,14 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
       open
       onClose={onClose}
       title="Ghi danh ngựa"
-      description={`Chỉ ngựa thuộc khu của bạn. Còn ${Math.max(0, seats)} chỗ trong lớp.`}
+      description={`Còn ${Math.max(0, seats)} chỗ trong lớp.`}
+      dirty={selected.length > 0}
+      onSave={() => void submit()}
+      saveLabel="Ghi danh"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Đóng
+            Hủy
           </Button>
           <Button disabled={selected.length === 0 || pending} onClick={() => void submit()}>
             <UserPlus size={15} /> {pending ? 'Đang ghi danh…' : `Ghi danh ${selected.length || ''} ngựa`}

@@ -1,12 +1,14 @@
-// F4.5 — Vật tư: kho chung của câu lạc bộ (không chia theo khu).
-// Quản lý CLB: thêm, sửa, xóa vật tư, kiểm kê, duyệt hoặc từ chối đề xuất rồi đánh dấu đã cấp (cộng vào tồn).
-// HLV, Groom: theo dõi tồn, kiểm kê, đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: chỉ xem kho.
-// Hệ thống không tự trừ tồn theo khẩu phần: kiểm kê là cách cập nhật số còn lại.
-import { useMemo, useState } from 'react';
+// F4.5 — Vật tư: kho chung của câu lạc bộ (không chia theo khu), quản lý theo lô.
+// Quản lý CLB: thêm, sửa, xóa vật tư, nhập hàng kèm đơn giá, duyệt hoặc từ chối đề xuất rồi cấp hàng (kèm đơn giá).
+// HLV, Groom: theo dõi tồn, xuất dùng, đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng.
+// Hệ thống không tự trừ tồn theo khẩu phần hay đơn thuốc: ai lấy hàng thì bấm Xuất dùng, lô nhập trước trừ trước.
+// Tiền (đơn giá, thành tiền, giá trị tồn) chỉ Quản lý CLB thấy.
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ClipboardCheck, PackagePlus, Plus } from 'lucide-react';
-import { deleteSupplyItem, listSupplyItems, listSupplyRequests, setSupplyRequestStatus } from '../../api/supplies';
-import type { SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
+import { ArrowDownToLine, PackageMinus, PackagePlus, Plus } from 'lucide-react';
+import { onRealtime } from '../../api/realtime';
+import { deleteSupplyItem, listSupplyItems, listSupplyRequests, reviewSupplyRequest } from '../../api/supplies';
+import type { NotificationItem, SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
 import {
@@ -34,11 +36,12 @@ import { SUPPLY_CATEGORIES, formatAmount, formatQuantity, supplyCategoryText, su
 import { useStore } from '../../store/store';
 import { stockTone } from './care-helpers';
 import { SupplyItemSheet } from './components/SupplyItemSheet';
-import { RejectRequestDialog, StockCountDialog, SupplyItemDialog, SupplyRequestDialog } from './components/supply-dialogs';
+import { FulfillRequestDialog, ReceiveDialog, RejectRequestDialog, SupplyItemDialog, SupplyRequestDialog, UsageDialog } from './components/supply-dialogs';
 
 type Dialog =
   | { kind: 'item'; item?: SupplyItem }
-  | { kind: 'count'; item: SupplyItem }
+  | { kind: 'receive'; item: SupplyItem }
+  | { kind: 'use'; item: SupplyItem }
   | { kind: 'request'; item?: SupplyItem; request?: SupplyRequest }
   | { kind: 'delete'; item: SupplyItem }
   | { kind: 'reject'; request: SupplyRequest }
@@ -60,7 +63,9 @@ export default function Supplies() {
   const remove = useAction();
 
   const canManage = can(user, 'supply.manage');
-  const canCount = can(user, 'supply.count');
+  const canReceive = can(user, 'supply.receive');
+  const canUse = can(user, 'supply.use');
+  const showPrice = can(user, 'supply.price');
   const canRequest = can(user, 'supplyRequest.create');
   const canViewRequests = can(user, 'supplyRequest.view');
   const tab = canViewRequests && params.get('tab') === 'requests' ? 'requests' : 'stock';
@@ -74,6 +79,18 @@ export default function Supplies() {
   const low = all.filter((item) => item.lowStock);
   const opened = openId ? all.find((item) => item.id === openId) : undefined;
   useCrumbs([{ label: 'Vật tư' }]);
+
+  // Thông báo vật tư (đề xuất mới, đã duyệt, đã cấp, sắp hết): tải lại kho và đề xuất.
+  const reloadItems = items.reload;
+  useEffect(
+    () =>
+      onRealtime<NotificationItem>('notification.created', (item) => {
+        if (item.category !== 'SUPPLY') return;
+        reloadItems();
+        setRequestsVersion((version) => version + 1);
+      }),
+    [reloadItems],
+  );
 
   if (!can(user, 'supply.view')) return <NotFound message="Trang này dành cho nhân viên câu lạc bộ." />;
 
@@ -91,16 +108,16 @@ export default function Supplies() {
         title="Vật tư"
         description={
           canManage
-            ? 'Kho chung của câu lạc bộ: thức ăn, thực phẩm bổ sung, thuốc, dụng cụ. Duyệt đề xuất rồi đánh dấu đã cấp để cộng vào kho.'
+            ? 'Thức ăn, thuốc và dụng cụ dùng chung của CLB.'
             : canRequest
-              ? 'Theo dõi tồn kho chung. Thấy sắp hết thì đề xuất bổ sung, đếm thực tế thì cập nhật bằng Kiểm kê.'
-              : 'Tồn kho chung của câu lạc bộ.'
+              ? 'Lấy hàng ra dùng thì bấm Xuất dùng. Sắp hết thì đề xuất thêm.'
+              : 'Lấy hàng ra dùng thì bấm Xuất dùng.'
         }
         actions={
           <>
             {canRequest && (
               <Button variant={canManage ? 'secondary' : 'primary'} onClick={() => setDialog({ kind: 'request' })}>
-                <PackagePlus size={16} /> Đề xuất bổ sung
+                <PackagePlus size={16} /> Đề xuất thêm
               </Button>
             )}
             {canManage && (
@@ -166,7 +183,7 @@ export default function Supplies() {
                         {item.lowStock && <Pill tone="red">Sắp hết</Pill>}
                       </span>
                       <span className="block text-xs text-gray-500">
-                        {supplyCategoryText[item.category]} · {item.lastCountedAt ? `kiểm kê ${formatRelative(item.lastCountedAt, now())} bởi ${item.lastCounter?.fullName ?? 'nhân viên'}` : 'chưa kiểm kê'}
+                        {supplyCategoryText[item.category]} · báo sắp hết ở {formatAmount(item.reorderThreshold, item.unit)}
                       </span>
                     </button>
                     <div className="w-36 shrink-0">
@@ -176,13 +193,18 @@ export default function Supplies() {
                       <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {canCount && (
-                        <Button variant="ghost" size="icon" title="Kiểm kê" onClick={() => setDialog({ kind: 'count', item })}>
-                          <ClipboardCheck size={16} />
+                      {canUse && (
+                        <Button variant="ghost" size="icon" title={item.quantityOnHand > 0 ? 'Xuất dùng' : 'Hết hàng'} disabled={item.quantityOnHand <= 0} onClick={() => setDialog({ kind: 'use', item })}>
+                          <PackageMinus size={16} />
+                        </Button>
+                      )}
+                      {canReceive && (
+                        <Button variant="ghost" size="icon" title="Nhập hàng" onClick={() => setDialog({ kind: 'receive', item })}>
+                          <ArrowDownToLine size={16} />
                         </Button>
                       )}
                       {canRequest && (
-                        <Button variant="ghost" size="icon" title="Đề xuất bổ sung" onClick={() => setDialog({ kind: 'request', item })}>
+                        <Button variant="ghost" size="icon" title="Đề xuất thêm" onClick={() => setDialog({ kind: 'request', item })}>
                           <PackagePlus size={16} />
                         </Button>
                       )}
@@ -190,7 +212,7 @@ export default function Supplies() {
                         <ActionMenu
                           items={[
                             { label: 'Sửa', onSelect: () => setDialog({ kind: 'item', item }) },
-                            { label: 'Xóa vật tư', danger: true, onSelect: () => setDialog({ kind: 'delete', item }) },
+                            { label: 'Xóa', danger: true, onSelect: () => setDialog({ kind: 'delete', item }) },
                           ]}
                         />
                       )}
@@ -207,7 +229,7 @@ export default function Supplies() {
                 Sắp hết <span className={cn('font-mono text-lg', low.length ? 'text-red-700' : 'text-gray-400')}>{low.length}</span>
               </h2>
               {low.length === 0 ? (
-                <p className="mt-1 text-sm text-gray-500">Mọi vật tư đều còn trên ngưỡng báo thiếu.</p>
+                <p className="mt-1 text-sm text-gray-500">Chưa có vật tư nào sắp hết.</p>
               ) : (
                 <ul className="mt-2 space-y-1.5">
                   {low.map((item) => (
@@ -218,7 +240,7 @@ export default function Supplies() {
                       <span className="shrink-0 font-mono text-xs text-red-700">{formatAmount(item.quantityOnHand, item.unit)}</span>
                       {canRequest && (
                         <Button variant="inline" size="sm" onClick={() => setDialog({ kind: 'request', item })}>
-                          Đề xuất
+                          Đề xuất thêm
                         </Button>
                       )}
                     </li>
@@ -251,14 +273,17 @@ export default function Supplies() {
         <SupplyItemSheet
           item={opened}
           onClose={() => setOpenId(null)}
-          onCount={canCount ? () => setDialog({ kind: 'count', item: opened }) : undefined}
+          showPrice={showPrice}
+          onReceive={canReceive ? () => setDialog({ kind: 'receive', item: opened }) : undefined}
+          onUse={canUse && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
           onRequest={canRequest ? () => setDialog({ kind: 'request', item: opened }) : undefined}
           onEdit={canManage ? () => setDialog({ kind: 'item', item: opened }) : undefined}
         />
       )}
 
       {dialog?.kind === 'item' && <SupplyItemDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
-      {dialog?.kind === 'count' && <StockCountDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
+      {dialog?.kind === 'receive' && <ReceiveDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
+      {dialog?.kind === 'use' && <UsageDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
       {dialog?.kind === 'request' && (
         <SupplyRequestDialog
           items={all}
@@ -275,8 +300,8 @@ export default function Supplies() {
       <ConfirmDialog
         open={dialog?.kind === 'delete'}
         title={dialog?.kind === 'delete' ? `Xóa ${dialog.item.name}` : 'Xóa vật tư'}
-        message="Vật tư không hiện trong kho nữa, không đưa vào khẩu phần mới được. Đề xuất và khẩu phần cũ vẫn giữ tên."
-        confirmLabel="Xóa vật tư"
+        message="Vật tư sẽ ẩn khỏi kho. Khẩu phần và đề xuất cũ không bị ảnh hưởng."
+        confirmLabel="Xóa"
         pending={remove.pending}
         onClose={() => {
           remove.clearError();
@@ -297,15 +322,16 @@ export default function Supplies() {
       >
         {remove.error && <ErrorBox message={remove.error} />}
       </ConfirmDialog>
-      <FulfillConfirm
-        request={dialog?.kind === 'fulfill' ? dialog.request : null}
-        onClose={() => setDialog(null)}
-        onDone={() => {
-          setDialog(null);
-          reloadRequests();
-          afterItemChange();
-        }}
-      />
+      {dialog?.kind === 'fulfill' && (
+        <FulfillRequestDialog
+          request={dialog.request}
+          onClose={() => setDialog(null)}
+          onDone={() => {
+            reloadRequests();
+            afterItemChange();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -360,11 +386,10 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
                 {request.reviewer && <span className="text-xs text-red-700/80"> · {request.reviewer.fullName}</span>}
               </p>
             )}
-            {request.status === 'APPROVED' && request.reviewer && <p className="mt-2 text-xs text-gray-500">Duyệt bởi {request.reviewer.fullName}, chờ cấp</p>}
+            {request.status === 'APPROVED' && request.reviewer && <p className="mt-2 text-xs text-gray-500">{request.reviewer.fullName} đã duyệt, chờ cấp</p>}
             {request.status === 'FULFILLED' && (
               <p className="mt-2 text-xs text-gray-500">
-                Đã cấp {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
-                {request.fulfiller ? ` bởi ${request.fulfiller.fullName}` : ''}, đã cộng vào kho
+                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
               </p>
             )}
             {(manager || request.status === 'PENDING') && request.status !== 'REJECTED' && request.status !== 'FULFILLED' && (
@@ -379,7 +404,7 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
                       disabled={approve.pending}
                       onClick={() =>
                         void approve.run(
-                          () => setSupplyRequestStatus(request.id, 'APPROVED'),
+                          () => reviewSupplyRequest(request.id, 'APPROVED'),
                           () => {
                             toast.push(`Đã duyệt đề xuất ${request.item.name}`, 'success');
                             setApproved((key) => key + 1);
@@ -393,7 +418,7 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
                 )}
                 {manager && request.status === 'APPROVED' && (
                   <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
-                    Đã cấp, cộng vào kho
+                    Cấp hàng
                   </Button>
                 )}
                 {!manager && request.status === 'PENDING' && (
@@ -407,36 +432,5 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
         ))
       )}
     </TabPanel>
-  );
-}
-
-function FulfillConfirm({ request, onClose, onDone }: { request: SupplyRequest | null; onClose: () => void; onDone: () => void }) {
-  const toast = useToast();
-  const action = useAction();
-  return (
-    <ConfirmDialog
-      open={!!request}
-      danger={false}
-      title={request ? `Cấp ${request.item.name}` : 'Cấp vật tư'}
-      message={request ? `Cộng ${formatAmount(request.quantity, request.item.unit)} vào kho (đang còn ${formatAmount(request.item.quantityOnHand, request.item.unit)}). Sổ nhập xuất ghi một dòng cấp theo đề xuất.` : ''}
-      confirmLabel="Đã cấp"
-      pending={action.pending}
-      onClose={() => {
-        action.clearError();
-        onClose();
-      }}
-      onConfirm={() =>
-        request &&
-        void action.run(
-          () => setSupplyRequestStatus(request.id, 'FULFILLED'),
-          () => {
-            toast.push(`Đã cấp ${formatAmount(request.quantity, request.item.unit)} ${request.item.name} vào kho`, 'success');
-            onDone();
-          },
-        )
-      }
-    >
-      {action.error && <ErrorBox message={action.error} />}
-    </ConfirmDialog>
   );
 }

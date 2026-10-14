@@ -210,7 +210,7 @@ export function ZoneFocus({
                 {readOnly && <span className="tint-gray rounded-md px-2 py-0.5 text-xs font-medium">Chỉ xem</span>}
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-600">
-                <UserRound size={14} /> {barn.headTrainerFullName ? `HT ${barn.headTrainerFullName}` : 'Chưa có HT phụ trách'}
+                <UserRound size={14} /> {barn.headTrainerFullName ? `HLV ${barn.headTrainerFullName}` : 'Chưa có HLV phụ trách'}
                 {barn.description ? <span className="text-gray-400">· {barn.description}</span> : null}
               </p>
             </div>

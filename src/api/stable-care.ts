@@ -1,6 +1,5 @@
 // Flow 4: khẩu phần, loại việc, việc riêng của ngựa, checklist hằng ngày, màn Hôm nay của Groom, sự cố tại chuồng.
-// Số lượng khẩu phần BE trả dạng chuỗi: đổi sang number ngay ở đây. Ngày thuần luôn gửi 'YYYY-MM-DD'.
-import { clubToday } from '../lib/club-time';
+// Ngày thuần luôn gửi 'YYYY-MM-DD'.
 import { fetchAll, http } from './http';
 import type {
   ChecklistTaskType,
@@ -18,18 +17,6 @@ import type {
 
 export const MEAL_ORDER: FeedingMeal[] = ['EARLY_MORNING', 'NOON', 'AFTERNOON', 'EVENING'];
 
-const toPlan = (row: FeedingPlan): FeedingPlan => ({
-  ...row,
-  meals: row.meals.map((meal) => ({ ...meal, items: meal.items.map((item) => ({ ...item, quantity: Number(item.quantity) })) })),
-});
-
-/**
- * BE chỉ chuyển checklist ngày cũ sang "Không hoàn thành" lúc 00:05 và không chạy bù khi khởi động.
- * Ngày đã qua mà còn mở thì coi như không hoàn thành (BE cũng không cho sửa nữa).
- */
-const toChecklist = (row: DailyChecklist): DailyChecklist =>
-  row.checklistDate < clubToday() && (row.status === 'PENDING' || row.status === 'IN_PROGRESS') ? { ...row, status: 'INCOMPLETE' } : row;
-
 /** Trải các bữa ra thành dòng để sửa, sao chép hoặc gửi lại (PUT thay toàn bộ dòng). */
 export const planLines = (plan: FeedingPlan): FeedingPlanItemInput[] =>
   plan.meals.flatMap((meal) => meal.items.map((item) => ({ meal: meal.meal, supplyItemId: item.supplyItemId, quantity: item.quantity, ...(item.note ? { note: item.note } : {}) })));
@@ -37,20 +24,19 @@ export const planLines = (plan: FeedingPlan): FeedingPlanItemInput[] =>
 /* ===== Khẩu phần (HLV khu lập và áp dụng. Quản lý CLB, bác sĩ xem. Groom chỉ thấy bản đang áp dụng) ===== */
 
 /** Mới nhất trước. Groom luôn nhận bản đang áp dụng, BE bỏ qua `status`. */
-export const listFeedingPlans = async (horseId: string, status?: FeedingPlanStatus) =>
-  (await http.get<FeedingPlan[]>(`/horses/${horseId}/feeding-plans`, status ? { status } : undefined)).map(toPlan);
-export const getFeedingPlan = async (id: string) => toPlan(await http.get<FeedingPlan>(`/feeding-plans/${id}`));
+export const listFeedingPlans = (horseId: string, status?: FeedingPlanStatus) =>
+  http.get<FeedingPlan[]>(`/horses/${horseId}/feeding-plans`, status ? { status } : undefined);
+export const getFeedingPlan = (id: string) => http.get<FeedingPlan>(`/feeding-plans/${id}`);
 /** Lập bản nháp cho một ngựa. */
 export const createFeedingPlan = async (horseId: string, items: FeedingPlanItemInput[], note?: string) => {
   const [plan] = await http.post<FeedingPlan[]>('/feeding-plans', note ? { horseIds: [horseId], items, note } : { horseIds: [horseId], items });
-  return toPlan(plan);
+  return plan;
 };
 /** Thay toàn bộ dòng của bản nháp. `note: null` để xóa ghi chú. */
-export const replaceFeedingPlan = async (id: string, items: FeedingPlanItemInput[], note: string | null) =>
-  toPlan(await http.put<FeedingPlan>(`/feeding-plans/${id}`, { items, note }));
+export const replaceFeedingPlan = (id: string, items: FeedingPlanItemInput[], note: string | null) => http.put<FeedingPlan>(`/feeding-plans/${id}`, { items, note });
 export const deleteFeedingPlan = (id: string) => http.del<void>(`/feeding-plans/${id}`);
 /** Áp dụng bản nháp (route BE tên `approve`). Bản đang áp dụng cũ chuyển vào lịch sử. */
-export const applyFeedingPlan = async (id: string) => toPlan(await http.post<FeedingPlan>(`/feeding-plans/${id}/approve`));
+export const applyFeedingPlan = (id: string) => http.post<FeedingPlan>(`/feeding-plans/${id}/approve`);
 
 /* ===== Loại việc (Quản lý CLB sửa, mọi nhân viên xem) ===== */
 
@@ -72,25 +58,18 @@ export const removeCareTask = (id: string) => http.del<void>(`/horse-care-tasks/
 
 /* ===== Checklist hằng ngày ===== */
 
-/** Tối đa 31 ngày. Khoảng có hôm nay thì BE sinh checklist hôm nay nếu chưa có. Ngày không có checklist thì không có dòng. */
-export const listChecklists = async (horseId: string, from: string, to: string) =>
-  (await http.get<DailyChecklist[]>(`/horses/${horseId}/checklists`, { from, to })).map(toChecklist);
+/**
+ * Tối đa 31 ngày. Xem không tạo checklist: BE tạo sẵn lúc 00:05 (và khi khởi động) cho mọi ngựa đang có Groom,
+ * tạo thêm khi giao Groom trong ngày hoặc khi gắn việc từ hôm nay. Ngựa không có việc thì không có dòng.
+ * Ngày đã qua mà chưa xong thì BE chuyển "Không hoàn thành".
+ */
+export const listChecklists = (horseId: string, from: string, to: string) => http.get<DailyChecklist[]>(`/horses/${horseId}/checklists`, { from, to });
 /** Groom được giao tick hoặc gỡ tick, chỉ trong ngày. `note: null` để xóa ghi chú, bỏ trống để giữ. Trả về cả checklist. */
-export const tickChecklistItem = async (itemId: string, done: boolean, note?: string | null) =>
-  toChecklist(await http.patch<DailyChecklist>(`/checklist-items/${itemId}`, note === undefined ? { done } : { done, note }));
+export const tickChecklistItem = (itemId: string, done: boolean, note?: string | null) =>
+  http.patch<DailyChecklist>(`/checklist-items/${itemId}`, note === undefined ? { done } : { done, note });
 
-/** Màn Hôm nay của Groom: mọi ngựa đang phụ trách, BE sinh checklist hôm nay nếu chưa có. */
-export const getGroomToday = async () => {
-  const today = await http.get<GroomToday>('/grooms/me/today');
-  return {
-    ...today,
-    horses: today.horses.map((horse) => ({
-      ...horse,
-      checklist: horse.checklist && toChecklist(horse.checklist),
-      feedingPlan: horse.feedingPlan && toPlan(horse.feedingPlan),
-    })),
-  };
-};
+/** Màn Hôm nay của Groom: mọi ngựa đang phụ trách. checklist là null khi hôm nay ngựa không có việc. Chỉ có lượt tập còn phải dắt. */
+export const getGroomToday = () => http.get<GroomToday>('/grooms/me/today');
 
 /* ===== Sự cố tại chuồng ===== */
 

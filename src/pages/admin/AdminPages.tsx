@@ -191,6 +191,7 @@ export function AdminUsers() {
         open={creating}
         onClose={() => setCreating(false)}
         title="Tạo tài khoản"
+        dirty={JSON.stringify(form) !== JSON.stringify(emptyForm)}
         description="Tài khoản dùng email để đăng nhập. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu."
         footer={
           <>
@@ -216,12 +217,20 @@ export function AdminUsers() {
         }
       >
         <div className="space-y-4">
-          {action.error && <ErrorBox message={action.error} />}
+          {action.error && !action.fieldErrors.email && <ErrorBox message={action.error} />}
           <Field label="Họ và tên" required>
             <Input value={form.fullName} maxLength={160} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
           </Field>
-          <Field label="Email" required>
-            <Input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="ten@horseracing.vn" />
+          <Field label="Email" required error={action.fieldErrors.email}>
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(event) => {
+                setForm({ ...form, email: event.target.value });
+                if (action.fieldErrors.email) action.clearError();
+              }}
+              placeholder="ten@horseracing.vn"
+            />
           </Field>
           <Field label="Vai trò" required>
             <Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })}>
@@ -242,6 +251,7 @@ export function AdminUsers() {
         open={!!editing}
         onClose={() => setEditing(null)}
         title={`Sửa tài khoản: ${editing?.fullName ?? ''}`}
+        dirty={!!editing && (editName !== editing.fullName || editRole !== editing.role)}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditing(null)}>

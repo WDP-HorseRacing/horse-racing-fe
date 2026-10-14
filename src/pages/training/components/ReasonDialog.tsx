@@ -33,11 +33,18 @@ export function ReasonDialog({
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
   const missing = !reason.trim();
+  const confirm = () => {
+    setTouched(true);
+    if (!missing) onConfirm(reason.trim());
+  };
   return (
     <Modal
       open
       onClose={onClose}
       title={title}
+      dirty={!missing}
+      onSave={confirm}
+      saveLabel={confirmLabel}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

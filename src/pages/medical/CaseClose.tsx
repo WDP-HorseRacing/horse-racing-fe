@@ -113,7 +113,7 @@ export default function CaseClose() {
         <div className="space-y-5 lg:col-span-8">
           {preview.healthWarning && (
             <Notice tone="warning">
-              Lưu ý: Ngựa vẫn đang trong trạng thái <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Nếu ngựa đã hoàn toàn hồi phục, xin hãy nhớ cập nhật lại trạng thái sức khỏe cho phù hợp.
+              Ngựa vẫn đang <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Ngựa khỏi rồi thì nhớ đổi lại sức khỏe.
             </Notice>
           )}
 
