@@ -4,7 +4,9 @@ import type { NotificationItem } from '../api/types';
 import type { UserRole } from '../types/domain';
 import { links } from './links';
 
-export function notificationTarget(item: Pick<NotificationItem, 'category' | 'resource'>, role?: UserRole): string | undefined {
+export function notificationTarget(item: Pick<NotificationItem, 'category' | 'resource' | 'priority'>, role?: UserRole): string | undefined {
+  // Vật tư: BE không gửi đối tượng. Sắp hết (HIGH) mở kho, còn lại là tin về đề xuất nên mở tab Đề xuất.
+  if (item.category === 'SUPPLY') return item.priority === 'HIGH' ? links.supplies() : links.supplies('requests');
   const resource = item.resource;
   if (!resource) return undefined;
   if (resource.type === 'MEDICAL_CASE') return links.case(resource.id);

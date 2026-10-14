@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { listAllHorses } from '../../api/horses';
 import { listGroomWorkload } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
-import { listMetrics, toMetricPoint } from '../../api/performance';
+import { listMetrics } from '../../api/performance';
 import { listClasses, listHorseClasses, listParticipants, listSessions } from '../../api/training';
 import { onRealtime } from '../../api/realtime';
 import { onTokensChange } from '../../api/tokens';
@@ -282,7 +282,7 @@ export function useLiveMetrics({ sessionId, participantIds, socket, enabled = tr
     if (!enabled || !socket || !sessionId) return;
     return onRealtime<MetricsSocketPayload>('performance.metrics', (payload) => {
       if (payload.sessionId !== sessionId) return;
-      apply(payload.sessionParticipantId, payload.points.map(toMetricPoint));
+      apply(payload.sessionParticipantId, payload.points);
     });
   }, [sessionId, socket, enabled]);
 

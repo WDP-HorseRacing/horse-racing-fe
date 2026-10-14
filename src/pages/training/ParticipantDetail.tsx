@@ -93,8 +93,8 @@ export default function ParticipantDetail() {
   if (groom) {
     return (
       <EmptyState
-        title="Chi tiết lượt tập dành cho HLV trưởng"
-        hint="Nhịp tim, tốc độ và kết quả buổi tập do HLV trưởng theo dõi. Groom xem lịch dắt ngựa ở trang Dắt ngựa tập."
+        title="Trang này dành cho HLV trưởng"
+        hint="Groom xem lịch ở trang Dắt ngựa tập."
         action={
           <Link to={links.today}>
             <Button variant="secondary">Mở lịch dắt ngựa</Button>

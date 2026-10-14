@@ -47,18 +47,6 @@ export const HEALTH_SEVERITY: HealthStatus[] = ['QUARANTINED', 'INJURED', 'UNDER
 
 export const isSevere = (status: HealthStatus) => status === 'INJURED' || status === 'QUARANTINED';
 
-/** "12500000" / "12.500.000" → 12500000; rỗng hoặc sai → NaN. */
-export function parseMoney(value: string): number {
-  const digits = value.replace(/[.\s,đ]/g, '');
-  if (!digits || !/^\d+$/.test(digits)) return Number.NaN;
-  return Number(digits);
-}
-
-/** Hiện số tiền đang gõ có dấu chấm ngăn cách hàng nghìn. */
-export function formatMoneyInput(value: string): string {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return '';
-  return Number(digits).toLocaleString('vi-VN');
-}
+export { formatMoneyInput, parseMoney } from '../../../lib/format';
 
 export const MAX_COST = 10_000_000_000;

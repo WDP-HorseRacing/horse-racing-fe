@@ -1,5 +1,5 @@
 // Kiểu dữ liệu Flow 4 (chăm sóc chuồng, dinh dưỡng, vật tư) đúng như backend trả về, xuất lại qua api/types.ts.
-// Số lượng BE trả dạng chuỗi 2 chữ số lẻ ("12.50"): lớp API đã đổi sang number. Body gửi lên phải là số.
+// Số lượng gửi và nhận đều là số JSON.
 // Ngày thuần (checklist, việc riêng) là 'YYYY-MM-DD' theo lịch CLB.
 import type { CareType, ExamRequestStatus } from './types';
 import type { ParticipantStatus } from './training-types';
@@ -23,8 +23,6 @@ export interface SupplyItem {
   reorderThreshold: number;
   /** Tồn nhỏ hơn hoặc bằng ngưỡng báo thiếu. */
   lowStock: boolean;
-  lastCountedAt: string | null;
-  lastCounter: UserBrief | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -35,11 +33,14 @@ export interface SupplyItemInput {
   category: SupplyCategory;
   unit: string;
   reorderThreshold: number;
-  /** Chỉ khi thêm. Sửa vật tư không đổi được tồn, phải kiểm kê. */
+  /** Chỉ khi thêm. Sửa vật tư không đổi được tồn, phải nhập hàng hoặc xuất dùng. */
   quantityOnHand?: number;
+  /** Đơn giá (đồng, số nguyên) của tồn ban đầu. Bỏ trống là 0. */
+  openingUnitPrice?: number;
 }
 
-export type SupplyMovementType = 'COUNT_ADJUST' | 'RESTOCK';
+/** OPENING: tồn ban đầu. RESTOCK: nhập hàng hoặc cấp theo đề xuất. USAGE: xuất dùng. COUNT_ADJUST: kiểm kê, chỉ còn ở dữ liệu cũ. */
+export type SupplyMovementType = 'OPENING' | 'RESTOCK' | 'USAGE' | 'COUNT_ADJUST';
 
 export interface SupplyMovement {
   id: string;
@@ -48,8 +49,23 @@ export interface SupplyMovement {
   balanceAfter: number;
   type: SupplyMovementType;
   requestId: string | null;
+  /** Lô của dòng. Ba trường lô là null với dòng ghi trước khi có lô. */
+  lotId: string | null;
+  /** Đơn giá của lô (đồng). */
+  unitPrice: number | null;
+  /** Tiền của dòng = chênh lệch × đơn giá, âm là xuất. */
+  amount: number | null;
   note: string | null;
   creator: UserBrief;
+  createdAt: string;
+}
+
+/** Một lần nhập (tồn ban đầu, nhập hàng, cấp theo đề xuất). Xuất dùng trừ lô cũ trước. */
+export interface SupplyLot {
+  id: string;
+  quantity: number;
+  remaining: number;
+  unitPrice: number;
   createdAt: string;
 }
 
@@ -225,6 +241,8 @@ export interface Incident {
   reporter: UserBrief;
   resolution: string | null;
   resolver: UserBrief | null;
+  /** Hệ thống tự đóng khi ngựa chuyển nhượng hoặc đã mất. Lúc đó `resolver` là null. */
+  resolvedBySystem: boolean;
   resolvedAt: string | null;
   examRequest: IncidentExamRequest | null;
   createdAt: string;

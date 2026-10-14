@@ -1,5 +1,5 @@
 // F3.10 — Danh sách bệnh án.
-// Nhân viên (CM, HT, VET): bệnh án đang mở toàn CLB (từ bảng điều khiển y tế); bệnh án đã đóng xem trong hồ sơ y tế của từng ngựa.
+// Nhân viên: bệnh án đang mở (từ bảng điều khiển y tế, BE đã giới hạn HT theo khu mình); bệnh án đã đóng xem trong hồ sơ y tế của từng ngựa.
 // Chủ ngựa: mọi bệnh án của ngựa mình sở hữu; chi phí chỉ có khi bệnh án đã đóng.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,8 +7,6 @@ import { FolderPlus, Info } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getMedicalDashboard, listHorseCases } from '../../api/medical';
 import { listAllHorses } from '../../api/horses';
-import { useMyScope } from '../../hooks/useMyScope';
-import { scopeDashboard } from './components/scope';
 import type { CaseStatus, MedicalCase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
@@ -30,23 +28,17 @@ function StaffCases() {
   const user = useStore((state) => state.currentUser);
   const canOpen = can(user, 'case.open');
   const board = useService(() => getMedicalDashboard(), []);
-  // HT chỉ thấy bệnh án của ngựa trong khu mình phụ trách và khu cách ly.
-  const { scope, loading: scopeLoading } = useMyScope();
+  // HT chỉ thấy bệnh án của ngựa trong khu mình phụ trách: BE lọc ở bảng điều khiển y tế.
   const trainer = user?.role === 'HEAD_TRAINER';
   const [search, setSearch] = useState('');
-  const all = useMemo(() => {
-    if (!board.data) return [];
-    if (!trainer) return board.data.openCases;
-    return scope?.visibleBarnIds ? scopeDashboard(board.data, scope.visibleBarnIds).openCases : [];
-  }, [board.data, trainer, scope]);
+  const all = useMemo(() => board.data?.openCases ?? [], [board.data]);
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return all.filter((row) => !term || `${row.horseName} ${row.initialDiagnosis}`.toLowerCase().includes(term));
   }, [all, search]);
   const today = todayKey();
 
-  if ((board.loading || (trainer && scopeLoading)) && !board.data) return <Skeleton rows={6} />;
-  if (trainer && scopeLoading) return <Skeleton rows={6} />;
+  if (board.loading && !board.data) return <Skeleton rows={6} />;
   if (board.error) return <ErrorBox message={board.error} />;
 
   return (
@@ -55,7 +47,7 @@ function StaffCases() {
         title="Bệnh án đang điều trị"
         description={
           trainer
-            ? 'Bệnh án đang mở của ngựa trong khu bạn phụ trách và khu cách ly. Hẹn tái khám sớm nhất lên trên.'
+            ? 'Bệnh án đang mở của ngựa trong khu bạn phụ trách. Hẹn tái khám sớm nhất lên trên.'
             : 'Mỗi ngựa tối đa một bệnh án đang mở. Hẹn tái khám sớm nhất lên trên.'
         }
         actions={

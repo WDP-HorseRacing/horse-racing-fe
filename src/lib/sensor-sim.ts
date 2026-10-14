@@ -18,8 +18,10 @@ export interface SensorSim {
   horseName: string;
   /** Lúc bật (ms), là giây 0 của bài khởi động. */
   startedAt: number;
-  /** Số điểm đã gửi tới BE. */
+  /** Số điểm BE đã nhận. */
   sent: number;
+  /** Số điểm BE bỏ vì vô lý (thường do đồng hồ máy chạy nhanh hơn máy chủ). */
+  rejected: number;
   /** Số điểm đang chờ gửi. */
   pending: number;
   /** Nhịp tim của điểm vừa sinh. */
@@ -78,9 +80,14 @@ async function flush(runner: Runner) {
   runner.sending = true;
   const batch = runner.queue.slice(0, BATCH);
   try {
-    await ingestMetrics(runner.state.participantId, batch);
+    const result = await ingestMetrics(runner.state.participantId, batch);
     runner.queue.splice(0, batch.length);
-    patch(runner, { sent: runner.state.sent + batch.length, pending: runner.queue.length, offline: false });
+    patch(runner, {
+      sent: runner.state.sent + result.accepted,
+      rejected: runner.state.rejected + (result.skippedInvalid ?? 0),
+      pending: runner.queue.length,
+      offline: false,
+    });
   } catch (error) {
     if (isApiError(error, 404) || isApiError(error, 409)) {
       // Lượt đã xong, bị hủy hoặc không còn: thiết bị thật cũng ngừng gửi.
@@ -130,7 +137,7 @@ function syncTimer() {
 export function startSim(participantId: string, horseName: string) {
   if (runners.has(participantId)) return;
   runners.set(participantId, {
-    state: { participantId, horseName, startedAt: Date.now(), sent: 0, pending: 0, spiking: false, offline: false },
+    state: { participantId, horseName, startedAt: Date.now(), sent: 0, rejected: 0, pending: 0, spiking: false, offline: false },
     sourceId: `fe-sim-${participantId.slice(0, 8)}`,
     queue: [],
     nextSecond: 0,

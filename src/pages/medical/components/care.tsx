@@ -78,6 +78,8 @@ export function CareFormModal({
   const [assignedTo, setAssignedTo] = useState(schedule?.assignedTo ?? '');
   const [notes, setNotes] = useState(schedule?.notes ?? '');
   const [reason, setReason] = useState('');
+  const [opened] = useState(() => JSON.stringify([type, dueAt, assignedTo, notes]));
+  const dirty = JSON.stringify([type, dueAt, assignedTo, notes]) !== opened || reason.trim() !== '';
 
   const dueIso = localToIso(dueAt);
   const dueChanged = !!schedule && !!dueIso && new Date(dueIso).getTime() !== new Date(schedule.dueAt).getTime();
@@ -122,13 +124,14 @@ export function CareFormModal({
       onClose={onClose}
       title={schedule ? `Sửa lịch ${careTypeLabel[schedule.type].toLowerCase()}` : 'Tạo lịch chăm sóc'}
       description={horse.name}
+      dirty={dirty}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={submit} disabled={action.pending || !dueIso || !!dayError || (dueChanged && !reason.trim())}>
-            {action.pending ? 'Đang lưu…' : schedule ? 'Lưu thay đổi' : 'Tạo lịch'}
+            {action.pending ? 'Đang lưu…' : schedule ? 'Lưu' : 'Tạo lịch'}
           </Button>
         </>
       }
@@ -154,7 +157,7 @@ export function CareFormModal({
             </div>
           </Field>
         )}
-        <Field label="Ngày đến hạn" required error={dayError} hint="Hệ thống nhắc bác sĩ và người được giao lúc 7 giờ sáng ngày đến hạn.">
+        <Field label="Ngày đến hạn" required error={dayError} hint="Nhắc lúc 7 giờ sáng ngày đến hạn.">
           <DateTimePicker value={dueAt} min={`${todayKey()}T00:00`} onChange={setDueAt} />
         </Field>
         {dueChanged && (
@@ -162,7 +165,7 @@ export function CareFormModal({
             <Input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Chờ lô vắc-xin mới" />
           </Field>
         )}
-        <Field label="Người thực hiện" hint={groom ? 'Groom chỉ nhận nhắc và hoàn tất được khi còn phụ trách ngựa.' : 'Ngựa chưa có Groom phụ trách.'}>
+        <Field label="Người thực hiện" hint={groom ? undefined : 'Ngựa chưa có Groom.'}>
           {detail.loading && !detail.data ? (
             <Skeleton rows={1} />
           ) : (
@@ -221,6 +224,7 @@ export function CompleteCareModal({
       onClose={onClose}
       title={`Hoàn tất ${careTypeLabel[schedule.type].toLowerCase()}`}
       description={`${horseName} · đến hạn ${formatDateTime(schedule.dueAt)}`}
+      dirty={next !== ''}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -235,7 +239,7 @@ export function CompleteCareModal({
       <div className="space-y-4">
         {schedule.notes && <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-700">{schedule.notes}</p>}
         {manage ? (
-          <Field label="Hẹn lần tới" hint="Không bắt buộc. Nhập thì hệ thống tạo lịch mới cùng loại, giữ người được giao nếu còn hợp lệ.">
+          <Field label="Hẹn lần tới" hint="Không bắt buộc. Có ngày thì tạo luôn lịch lần sau.">
             <DateTimePicker value={next} min={`${todayKey()}T00:00`} onChange={setNext} />
           </Field>
         ) : (
@@ -277,6 +281,7 @@ export function CancelCareModal({
       onClose={onClose}
       title={`Hủy lịch ${careTypeLabel[schedule.type].toLowerCase()}`}
       description={`${horseName} · đến hạn ${formatDateTime(schedule.dueAt)}`}
+      dirty={reason.trim() !== ''}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

@@ -115,7 +115,7 @@ export function IncidentCard({
           </p>
           <p className="mt-0.5 whitespace-pre-line text-gray-700">{incident.resolution}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {incident.resolver?.fullName ?? 'HLV khu'}
+            {incident.resolvedBySystem ? 'Tự đóng' : (incident.resolver?.fullName ?? 'HLV khu')}
             {incident.resolvedAt && ` · ${formatDateTime(incident.resolvedAt)}`}
           </p>
         </div>
@@ -128,7 +128,7 @@ export function IncidentCard({
               <Stethoscope size={14} /> Chuyển bác sĩ
             </Button>
           )}
-          <Tip content={waitingVet ? 'Chờ bác sĩ khám xong hoặc bỏ qua yêu cầu khám' : undefined}>
+          <Tip content={waitingVet ? 'Đang chờ bác sĩ khám' : undefined}>
             <span>
               <Button size="sm" onClick={() => setResolving(true)} disabled={waitingVet}>
                 <CheckCircle2 size={14} /> Đóng sự cố
@@ -155,7 +155,7 @@ function ReferDialog({ incident, onClose, onDone }: { incident: Incident; onClos
     void action.run(
       () => referIncident(incident.id, urgent),
       () => {
-        toast.push(urgent ? 'Đã chuyển bác sĩ, mọi bác sĩ nhận thông báo khẩn' : 'Đã chuyển bác sĩ, yêu cầu khám vào hàng đợi', 'success');
+        toast.push('Đã chuyển bác sĩ', 'success');
         onClose();
         onDone();
       },
@@ -165,7 +165,7 @@ function ReferDialog({ incident, onClose, onDone }: { incident: Incident; onClos
       open
       onClose={onClose}
       title={`Chuyển bác sĩ: ${incident.horseName}`}
-      description="Hệ thống tạo yêu cầu khám kèm mô tả của Groom. Mỗi sự cố chuyển một lần."
+      description="Bác sĩ sẽ nhận mô tả của Groom. Chỉ chuyển được một lần."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -194,7 +194,7 @@ function ReferDialog({ incident, onClose, onDone }: { incident: Incident; onClos
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-gray-500">{urgent ? 'Mọi bác sĩ nhận thông báo khẩn ngay.' : 'Yêu cầu vào hàng đợi, bác sĩ xử lý theo thứ tự.'}</p>
+      <p className="mt-2 text-xs text-gray-500">{urgent ? 'Báo ngay cho mọi bác sĩ.' : 'Bác sĩ khám theo thứ tự.'}</p>
       {action.error && (
         <div className="mt-3">
           <ErrorBox message={action.error} />
@@ -229,7 +229,10 @@ function ResolveDialog({ incident, onClose, onDone }: { incident: Incident; onCl
       open
       onClose={onClose}
       title={`Đóng sự cố: ${incident.horseName}`}
-      description="Ghi lại đã xử lý thế nào. Groom báo sự cố thấy kết quả này."
+      description="Groom sẽ thấy kết quả này."
+      dirty={resolution.trim() !== ''}
+      onSave={submit}
+      saveLabel="Đóng sự cố"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

@@ -788,7 +788,7 @@ export default function HorseForm() {
                   {barn && !barnBlocker(barn) ? (
                     <span>
                       Vào <span className="font-semibold">{barn.name}</span>
-                      {barn.headTrainerFullName ? `, HT ${barn.headTrainerFullName} xếp ô sau.` : ', chờ xếp ô.'}
+                      {barn.headTrainerFullName ? `, HLV ${barn.headTrainerFullName} sẽ xếp ô.` : ', chờ xếp ô.'}
                     </span>
                   ) : (
                     <span>Vào danh sách Chờ xếp khu.</span>
@@ -820,7 +820,7 @@ export default function HorseForm() {
 
               <div className="space-y-2 border-t border-gray-100 pt-4">
                 <Button className="h-11 w-full text-[0.95rem]" onClick={submit} disabled={action.pending || noChanges}>
-                  {action.pending ? (photoFile ? 'Đang tải ảnh và lưu…' : 'Đang lưu…') : editing ? 'Lưu thay đổi' : 'Tạo hồ sơ'}
+                  {action.pending ? (photoFile ? 'Đang tải ảnh và lưu…' : 'Đang lưu…') : editing ? 'Lưu' : 'Tạo hồ sơ'}
                 </Button>
                 <Button variant="ghost" className="w-full" onClick={() => navigate(backTo)} disabled={action.pending}>
                   Hủy

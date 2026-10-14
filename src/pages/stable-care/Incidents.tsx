@@ -82,7 +82,7 @@ export default function Incidents() {
   if (groom) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Sự cố tại chuồng" description="Báo ngay khi ngựa bạn chăm sóc có dấu hiệu bất thường. HLV khu xử lý hoặc chuyển bác sĩ." />
+        <PageHeader title="Sự cố tại chuồng" description="Thấy ngựa có dấu hiệu lạ thì báo ngay." />
         <div className="grid gap-5 lg:grid-cols-12">
           <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
             <SectionTitle icon={<Send size={16} />}>Báo sự cố</SectionTitle>
@@ -104,14 +104,13 @@ export default function Incidents() {
         title="Sự cố tại chuồng"
         description={
           trainer
-            ? 'Groom báo sự cố của ngựa thuộc khu bạn. Tự xử lý rồi đóng, hoặc chuyển bác sĩ khi cần khám.'
-            : 'Sự cố Groom báo ở mọi khu. HLV khu xử lý, sự cố mở quá 4 giờ chưa chuyển bác sĩ thì hệ thống nhắc.'
+            ? 'Xử lý xong thì đóng. Cần khám thì chuyển bác sĩ.'
+            : 'Sự cố của mọi khu.'
         }
       />
       {status === 'OPEN' && staleCount > 0 && (
         <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900 ring-1 ring-amber-200">
-          {staleCount} sự cố đã mở quá 4 giờ mà chưa chuyển bác sĩ.
-          {trainer ? ' Xử lý rồi đóng, hoặc chuyển bác sĩ.' : ''}
+          {staleCount} sự cố quá 4 giờ chưa xử lý.
         </p>
       )}
       <div>
@@ -127,7 +126,7 @@ export default function Incidents() {
               ))}
             </FilterSelect>
             <Link to={links.stableCare(barnId || undefined)} className="ml-auto text-sm font-medium text-emerald-800 hover:underline">
-              Mở chăm sóc khu
+              Chăm sóc khu
             </Link>
           </div>
         )}

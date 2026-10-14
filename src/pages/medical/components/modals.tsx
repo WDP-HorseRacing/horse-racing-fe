@@ -1,7 +1,7 @@
 // Các hộp thoại ngắn của Flow 3: gửi / đổi mức / bỏ qua yêu cầu khám, đổi sức khỏe,
 // đặt / gỡ khóa huấn luyện, hủy buổi khám, điều chỉnh chi phí, hẹn khám định kỳ. Đóng bệnh án là trang riêng (CaseClose).
 // Lỗi hiển thị nguyên văn câu của backend.
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Lock, RotateCcw, Unlock } from 'lucide-react';
 import { useAction } from '../../../hooks/useService';
 import {
@@ -42,10 +42,13 @@ export function RequestForm({
   horse,
   onDone,
   onCancel,
+  onDirtyChange,
 }: {
   horse?: { id: string; name: string };
   onDone?: (request: ExamRequest) => void;
   onCancel?: () => void;
+  /** Báo cho hộp chứa biết đã nhập dở, để hỏi trước khi đóng. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const toast = useToast();
   const action = useAction();
@@ -56,6 +59,8 @@ export function RequestForm({
   const [description, setDescription] = useState('');
   const picked = horse ?? (horseId ? options.byId.get(horseId) : undefined);
   const text = description.trim();
+  const dirty = text !== '' || urgent || (!horse && horseId !== '');
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
   const submit = () =>
     action.run(
@@ -164,17 +169,20 @@ export function CreateRequestModal({
   horse?: { id: string; name: string };
   onDone?: () => void;
 }) {
+  const [dirty, setDirty] = useState(false);
   if (!open) return null;
   return (
     <Modal
       open
       onClose={onClose}
       title={horse ? `Gửi yêu cầu khám: ${horse.name}` : 'Gửi yêu cầu khám'}
-      description="Báo bác sĩ khi ngựa có dấu hiệu bất thường. Chọn Khẩn nếu cần bác sĩ tới ngay."
+      description="Cần bác sĩ tới ngay thì chọn Khẩn."
+      dirty={dirty}
     >
       <RequestForm
         horse={horse}
         onCancel={onClose}
+        onDirtyChange={setDirty}
         onDone={() => {
           onDone?.();
           onClose();
@@ -204,6 +212,7 @@ export function UrgencyModal({ request, onClose, onDone }: { request: ExamReques
       open
       onClose={onClose}
       title={next ? 'Nâng lên Khẩn' : 'Hạ xuống Bình thường'}
+      dirty={reason.trim() !== ''}
       description={`Yêu cầu khám của ${request.horseName}`}
       footer={
         <>
@@ -248,6 +257,7 @@ export function DismissRequestModal({ request, onClose, onDone }: { request: Exa
       open
       onClose={onClose}
       title={`Bỏ qua yêu cầu khám: ${request.horseName}`}
+      dirty={reason.trim() !== ''}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -329,7 +339,8 @@ function HealthChangeBody({
       onClose={onClose}
       width="max-w-xl"
       title="Đổi trạng thái sức khỏe"
-      description="Đổi trực tiếp, không cần buổi khám. Lý do được ghi vào lịch sử sức khỏe."
+      dirty={!!to || reason.trim() !== ''}
+      description="Đổi ngay, không cần ghi buổi khám."
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -358,10 +369,10 @@ function HealthChangeBody({
         </Field>
         {changed && (to === 'INJURED' || to === 'QUARANTINED') && (
           <Notice tone="info">
-            Ngựa mất quyền tập và đua. HT khu, quản lý và chủ ngựa nhận thông báo. Ngựa không bị rút khỏi lớp, không tự chuyển ô.
+            Ngựa mất quyền tập và đua. HLV khu, Quản lý CLB và chủ ngựa nhận thông báo. Ngựa không bị rút khỏi lớp, không tự chuyển ô.
           </Notice>
         )}
-        {changed && to === 'UNDER_OBSERVATION' && <p className="text-xs text-gray-500">Ngựa vẫn được tập nhưng không được đua. HT khu nhận thông báo.</p>}
+        {changed && to === 'UNDER_OBSERVATION' && <p className="text-xs text-gray-500">Ngựa vẫn được tập nhưng không được đua. HLV khu nhận thông báo.</p>}
         {changed && to === 'ELIGIBLE' && <p className="text-xs text-gray-500">Đổi sang Đủ điều kiện không tự gỡ khóa huấn luyện (nếu có).</p>}
         {action.error && <ErrorBox message={action.error} />}
       </div>
@@ -400,7 +411,8 @@ export function PlaceLockModal({
       open
       onClose={onClose}
       title={`Đặt khóa huấn luyện: ${horse.name}`}
-      description="Lệnh riêng của bác sĩ, độc lập với sức khỏe. Mỗi ngựa tối đa một khóa hiệu lực."
+      description="Ngựa bị khóa thì không được tập. Mỗi ngựa tối đa một khóa."
+      dirty={reason.trim() !== '' || date !== ''}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -423,11 +435,11 @@ export function PlaceLockModal({
             placeholder="Ví dụ: Viêm gân, cấm vận động mạnh"
           />
         </Field>
-        <Field label="Ngày dự kiến gỡ" hint="Không bắt buộc. Tới ngày này hệ thống không tự gỡ khóa.">
+        <Field label="Ngày dự kiến gỡ" hint="Không bắt buộc. Chỉ để nhắc, khóa không tự gỡ.">
           <DatePicker value={date} min={todayKey()} onChange={setDate} />
         </Field>
         <p className="text-xs text-gray-500">
-          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HT khu và quản lý nhận thông báo. Lượt tập đã xếp không bị hủy.
+          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HLV khu và Quản lý CLB nhận thông báo. Lượt tập đã xếp không bị hủy.
         </p>
         {action.error && <ErrorBox message={action.error} />}
       </div>
@@ -464,6 +476,7 @@ export function ReleaseLockModal({
       open
       onClose={onClose}
       title={`Gỡ khóa huấn luyện: ${horseName}`}
+      dirty={conclusion.trim() !== ''}
       description={`Khóa từ ${formatDate(lock.lockStart)}: ${lock.reason}`}
       footer={
         <>
@@ -487,7 +500,7 @@ export function ReleaseLockModal({
             placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ"
           />
         </Field>
-        <p className="text-xs text-gray-500">Gỡ khóa không đổi sức khỏe. HT khu và quản lý nhận thông báo.</p>
+        <p className="text-xs text-gray-500">Gỡ khóa không đổi sức khỏe. HLV khu và Quản lý CLB nhận thông báo.</p>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
@@ -554,7 +567,7 @@ export function VoidVisitModal({
             </Button>
             {onReRecord && (
               <Button onClick={() => onReRecord(voided)}>
-                <RotateCcw size={15} /> Ghi lại buổi thay thế
+                <RotateCcw size={15} /> Ghi lại
               </Button>
             )}
           </>
@@ -574,6 +587,7 @@ export function VoidVisitModal({
       open
       onClose={onClose}
       title="Hủy buổi khám"
+      dirty={reason.trim() !== ''}
       description={`${horseName} · ${visitKindLabel[record.kind]} ${formatDateTime(record.examDate)}`}
       footer={
         <>
@@ -587,7 +601,7 @@ export function VoidVisitModal({
       }
     >
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">Buổi khám đã lưu không sửa, không xóa. Ghi sai thì hủy buổi đó rồi ghi lại buổi thay thế.</p>
+        <p className="text-sm text-gray-600">Buổi khám đã lưu thì không sửa được. Ghi sai thì hủy rồi ghi lại.</p>
         {blocked ? (
           <Notice tone="warning">{blocked}</Notice>
         ) : (
@@ -647,6 +661,7 @@ export function AdjustCostModal({
       open
       onClose={onClose}
       title="Điều chỉnh chi phí"
+      dirty={reason.trim() !== '' || cost !== formatMoneyInput(String(medicalCase.totalCost ?? ''))}
       description={`${horseName} · chi phí hiện tại ${formatMoney(medicalCase.totalCost)}`}
       footer={
         <>
@@ -654,7 +669,7 @@ export function AdjustCostModal({
             Hủy
           </Button>
           <Button onClick={submit} disabled={action.pending || !costOk || !reason.trim()}>
-            {action.pending ? 'Đang lưu…' : 'Lưu chi phí'}
+            {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
@@ -723,6 +738,7 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
       open
       onClose={onClose}
       title={rescheduling ? 'Dời ngày hẹn khám' : 'Đặt ngày hẹn khám'}
+      dirty={reason.trim() !== ''}
       description={`${item.horseName} · hạn khám ${formatDate(item.dueDate)}`}
       footer={
         <>

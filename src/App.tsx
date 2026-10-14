@@ -46,16 +46,23 @@ import {
   CaseClose,
   CareNew,
   AdminUsers,
+  AuditLog,
+  DailyFees,
+  Reports,
+  OwnerCosts,
 } from './routes/pages';
 
 const ProtectedRoute = () => {
   const isAuthenticated = useStore((state) => state.isAuthenticated);
   const booting = useStore((state) => state.booting);
   const sessionEnded = useStore((state) => state.sessionEnded);
+  const bootError = useStore((state) => state.bootError);
+  const bootstrap = useStore((state) => state.bootstrap);
   const location = useLocation();
   if (booting) {
     return <BootScreen />;
   }
+  if (bootError) return <BootScreen error={bootError} onRetry={() => void bootstrap()} />;
   if (isAuthenticated) return <Outlet />;
   // Chưa đăng nhập hoặc vừa hết phiên: về đăng nhập, nhớ trang đang xem để quay lại sau khi đăng nhập.
   const params = new URLSearchParams({ next: `${location.pathname}${location.search}` });
@@ -148,6 +155,11 @@ const router = createBrowserRouter(
 
           {/* Quản trị */}
           <Route path="admin/users" element={<AdminUsers />} />
+          <Route path="admin/audit" element={<AuditLog />} />
+          <Route path="admin/fees" element={<DailyFees />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="reports/owners/:ownerId" element={<OwnerCosts />} />
+          <Route path="reports/my-costs" element={<OwnerCosts />} />
           <Route path="admin/zones" element={<Navigate to="/stable" replace />} />
           <Route path="admin/*" element={<Navigate to="/dashboard" replace />} />
 

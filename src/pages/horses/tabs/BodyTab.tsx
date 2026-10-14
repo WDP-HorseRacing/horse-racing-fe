@@ -75,10 +75,7 @@ function draftNote(type: MeasurementType, raw: string): { tone: 'error' | 'warn'
 export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: string; canRecord: boolean; canDelete: boolean }) {
   const toast = useToast();
   const [filter, setFilter] = useState<MeasurementType | 'ALL'>('ALL');
-  const list = useService(async () => {
-    const page = await listMeasurements(horseId, { limit: 500 });
-    return page.items.map((item) => ({ ...item, value: Number(item.value) }));
-  }, [horseId]);
+  const list = useService(async () => (await listMeasurements(horseId, { limit: 500 })).items, [horseId]);
 
   // Số đã sửa trên các thẻ (chưa sửa thì ô hiện số mới nhất). Lưu một lần cho cả lần đo.
   const [edits, setEdits] = useState<Partial<Record<MeasurementType, string>>>({});
@@ -134,7 +131,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       resetDraft();
       const alert = alertToast(created);
       if (alert) toast.push(alert, 'error');
-      else toast.push(created.some((item) => item.isAbnormal) ? 'Đã lưu và đánh dấu bất thường' : 'Đã ghi chỉ số', 'success');
+      else toast.push(created.some((item) => item.isAbnormal) ? 'Đã lưu. Có chỉ số bất thường' : 'Đã lưu', 'success');
       list.reload();
     } catch (caught) {
       if (caught instanceof AppError && caught.field === 'confirmAbnormal') {
@@ -199,7 +196,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                 <Button
                   size="icon"
                   variant="ghost"
-                  title="Xóa bản ghi ghi sai"
+                  title="Xóa số đo sai"
                   onClick={() => {
                     setDeleteError(undefined);
                     setDeleting(row);
@@ -223,8 +220,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-sm text-gray-500">
-          Dải xám trên biểu đồ là khoảng bình thường. Giá trị ngoài khoảng được đánh dấu bất thường.
-          {canRecord && <span className="block">Sửa con số trên từng thẻ rồi bấm Lưu: mỗi số đã sửa thành một lần đo mới, lần đo cũ vẫn giữ trong lịch sử.</span>}
+          Dải xám là khoảng bình thường.
+          {canRecord && <span className="block">Nhập số mới trên thẻ rồi bấm Lưu, số cũ vẫn giữ trong lịch sử.</span>}
         </p>
         {canRecord && (
           <div className="flex flex-wrap items-end gap-2">
@@ -234,11 +231,11 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
             </label>
             {dirty && (
               <Button variant="secondary" onClick={resetDraft} disabled={pending}>
-                Bỏ nhập
+                Hủy
               </Button>
             )}
             <Button onClick={() => save(false)} disabled={!canSave}>
-              {pending ? 'Đang lưu…' : dirty ? `Lưu ${entered.length} chỉ số mới` : 'Lưu chỉ số'}
+              {pending ? 'Đang lưu…' : 'Lưu'}
             </Button>
           </div>
         )}
@@ -342,11 +339,11 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                   >
                     {edited && note.tone === 'hint'
                       ? record
-                        ? `Ghi lần đo mới, thay ${formatValue(type, record.value)} ${unitText(type)}`
-                        : 'Ghi lần đo đầu tiên'
+                        ? `Số cũ ${formatValue(type, record.value)} ${unitText(type)}`
+                        : 'Lần đo đầu'
                       : record || edited
                         ? note.text
-                        : 'Chưa có số đo, nhập vào ô để ghi lần đầu'}
+                        : 'Chưa có số đo'}
                   </span>
                   {edited && (
                     <button
@@ -398,8 +395,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <ConfirmDialog
         open={!!confirmMessage}
         title="Giá trị ngoài khoảng bình thường"
-        message={confirmMessage?.replace('Gửi lại với confirmAbnormal = true để xác nhận lưu', 'Kiểm tra lại, nếu đúng thì xác nhận lưu và đánh dấu bất thường.')}
-        confirmLabel="Vẫn lưu và đánh dấu bất thường"
+        message={confirmMessage?.replace('Gửi lại với confirmAbnormal = true để xác nhận lưu', 'Số đúng thì bấm Vẫn lưu.')}
+        confirmLabel="Vẫn lưu"
         danger={false}
         pending={pending}
         onConfirm={() => save(true)}
@@ -408,16 +405,16 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
 
       <ReasonDialog
         open={!!deleting}
-        title="Xóa bản ghi chỉ số"
+        title="Xóa số đo"
         message={
           deleting && (
             <p>
               Xóa bản ghi {measurementSpec[deleting.type].name.toLowerCase()} {formatValue(deleting.type, deleting.value)} {unitText(deleting.type)} lúc{' '}
-              {formatDateTime(deleting.measuredAt)}. Bản ghi bị ẩn khỏi lịch sử và mốc cảnh báo sụt cân. Lý do được lưu vào nhật ký.
+              {formatDateTime(deleting.measuredAt)}. Số đo này sẽ ẩn khỏi lịch sử.
             </p>
           )
         }
-        confirmLabel="Xóa bản ghi"
+        confirmLabel="Xóa"
         error={deleteError}
         onClose={() => setDeleting(null)}
         onSubmit={async (reason) => {

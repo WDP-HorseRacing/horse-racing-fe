@@ -1,5 +1,4 @@
 // Flow 2 — nhịp tim, tốc độ của lượt tập, ngưỡng của ngựa, lịch sử cảnh báo, khối lượng tập.
-// Tốc độ BE trả dạng chuỗi 3 chữ số thập phân: đổi sang number ngay ở đây.
 import { http, request } from './http';
 import type {
   HorseAlert,
@@ -14,36 +13,19 @@ import type {
   ThresholdProfile,
 } from './types';
 
-const num = (value: unknown) => Number(value ?? 0);
-const numOrNull = (value: unknown) => (value === null || value === undefined ? null : Number(value));
-
-export const toMetricPoint = (point: MetricPoint): MetricPoint => ({ ...point, heartRateBpm: num(point.heartRateBpm), speedMps: num(point.speedMps) });
-
 /** Điểm đo của một lượt (7.200 điểm mới nhất), cũ trước. Chỉ Quản lý CLB, bác sĩ, HLV trưởng gọi được, Groom và chủ ngựa nhận 403. */
-export const listMetrics = async (participantId: string) =>
-  (await http.get<MetricPoint[]>(`/session-participants/${participantId}/metrics`)).map(toMetricPoint);
+export const listMetrics = (participantId: string) => http.get<MetricPoint[]>(`/session-participants/${participantId}/metrics`);
 
 /** Tổng kết lượt tập: Quản lý CLB, bác sĩ, HLV trưởng, chủ ngựa. Groom nhận 403. */
-export const getParticipantSummary = async (participantId: string): Promise<ParticipantSummary> => {
-  const row = await http.get<ParticipantSummary>(`/session-participants/${participantId}/performance-summary`);
-  return { ...row, avgSpeedMps: numOrNull(row.avgSpeedMps), maxSpeedMps: numOrNull(row.maxSpeedMps) };
-};
+export const getParticipantSummary = (participantId: string) => http.get<ParticipantSummary>(`/session-participants/${participantId}/performance-summary`);
 
 /** Tổng kết từng buổi của ngựa (tối đa 100 buổi), để vẽ xu hướng thể lực. */
-export const listSessionSummaries = async (horseId: string) =>
-  (await http.get<SessionPerformanceSummary[]>(`/horses/${horseId}/performance/sessions`)).map((row) => ({
-    ...row,
-    avgSpeedMps: num(row.avgSpeedMps),
-    maxSpeedMps: num(row.maxSpeedMps),
-  }));
+export const listSessionSummaries = (horseId: string) => http.get<SessionPerformanceSummary[]>(`/horses/${horseId}/performance/sessions`);
 
-export const listHorseAlerts = async (
+export const listHorseAlerts = (
   horseId: string,
   query: { level?: Exclude<MetricAlertLevel, 'NORMAL'>; from?: string; to?: string; page?: number; limit?: number } = {},
-) => {
-  const page = await http.get<Page<HorseAlert>>(`/horses/${horseId}/alerts`, query);
-  return { ...page, items: page.items.map((item) => ({ ...item, speedMps: num(item.speedMps) })) };
-};
+) => http.get<Page<HorseAlert>>(`/horses/${horseId}/alerts`, query);
 
 export const getWorkload = (horseId: string, range: { from?: string; to?: string } = {}) =>
   http.get<HorseWorkload>(`/horses/${horseId}/workload`, range);
@@ -66,9 +48,11 @@ export interface MetricInput {
 /**
  * Gửi một lô điểm đo cho lượt đang chạy (tối đa 500 điểm). Route này không cần đăng nhập, đúng như thiết bị thật.
  * BE bỏ qua điểm trùng cảm biến và thời điểm đo, nên gửi lại một lô không sinh dữ liệu đôi. Lượt không còn Đang chạy trả 409.
+ * BE cũng bỏ điểm vô lý (`skippedInvalid`): tốc độ trên 25 m/s, hoặc thời điểm đo trước lúc bắt đầu lượt quá 5 giây
+ * hay sau giờ máy chủ quá 5 giây (đồng hồ máy gửi chạy nhanh).
  */
 export const ingestMetrics = (participantId: string, metrics: MetricInput[]) =>
-  request<{ accepted: number; skippedDuplicates: number; highestAlertLevel: MetricAlertLevel }>('POST', `/session-participants/${participantId}/metrics/batch`, {
+  request<{ accepted: number; skippedDuplicates: number; skippedInvalid: number; highestAlertLevel: MetricAlertLevel }>('POST', `/session-participants/${participantId}/metrics/batch`, {
     body: { metrics },
     auth: false,
   });

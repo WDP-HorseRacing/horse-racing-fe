@@ -1,6 +1,6 @@
 // F4.1 — Khối checklist trong tab Chăm sóc: checklist hôm nay và dải 14 ngày gần nhất (bấm một ngày để xem).
 // Groom phụ trách tick hôm nay. Quản lý CLB, HLV khu chỉ xem ai tick, lúc nào. Bác sĩ không xem được (BE chặn).
-// BE chỉ sinh checklist khi có người mở trong ngày: ngày không ai mở thì không có checklist.
+// BE tạo sẵn checklist mỗi ngày cho ngựa có Groom. Ngày ngựa không có việc thì không có checklist.
 import { useState } from 'react';
 import { ListChecks } from 'lucide-react';
 import { listChecklists } from '../../../api/stable-care';
@@ -92,8 +92,7 @@ export function ChecklistSection({ horse, canTick, hasGroom, version = 0, classN
             </>
           ) : (
             <EmptyState
-              title={selected === today ? (hasGroom ? 'Hôm nay chưa có việc nào' : 'Ngựa chưa có Groom phụ trách nên chưa có checklist') : 'Không có checklist ngày này'}
-              hint={selected === today ? undefined : 'Checklist chỉ sinh khi có người mở trong ngày.'}
+              title={selected === today ? (hasGroom ? 'Hôm nay chưa có việc nào' : 'Ngựa chưa có Groom') : 'Ngày này không có checklist'}
               className="py-6"
             />
           )}

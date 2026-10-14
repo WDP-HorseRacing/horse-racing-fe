@@ -53,7 +53,7 @@ export default function PeriodicExams() {
     <div className="space-y-6">
       <PageHeader
         title="Khám định kỳ"
-        description="Hạn khám của từng ngựa, quá hạn lên đầu. Buổi khám định kỳ kết luận bình thường là bản ghi độc lập, không có chi phí."
+        description="Hạn khám của từng ngựa, quá hạn lên đầu."
         actions={
           isVet && (
             <Button onClick={() => exam()}>

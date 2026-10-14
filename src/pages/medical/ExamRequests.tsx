@@ -1,12 +1,15 @@
 // F3.4 — Hàng đợi yêu cầu khám (GET /exam-requests, phân trang ở backend).
 // VET: khám (gắn yêu cầu vào buổi khám), đổi mức khẩn, bỏ qua. CM, HT: gửi yêu cầu và theo dõi.
+// HT chỉ thấy yêu cầu của ngựa khu mình (luật phạm vi đã chốt). BE chưa lọc nên FE tải hết rồi lọc, phân trang ở FE.
 // Groom chuyển sang trang Sự cố tại chuồng (Flow 4): yêu cầu của Groom đi qua sự cố.
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { CheckCircle2, ChevronLeft, ChevronRight, Plus, Stethoscope, XCircle } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { listExamRequests } from '../../api/medical';
-import type { ExamRequest, ExamRequestStatus } from '../../api/types';
+import { listAllHorses } from '../../api/horses';
+import { fetchAll } from '../../api/http';
+import type { ExamRequest, ExamRequestStatus, Page } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import {
@@ -102,14 +105,30 @@ function Pager({ page, totalPages, total, onChange }: { page: number; totalPages
   );
 }
 
-function useQueue() {
+/** HT: mọi yêu cầu theo bộ lọc, chỉ giữ ngựa khu mình. Bỏ khi BE lọc /exam-requests theo khu (gop-y-be đợt 4). */
+async function loadZoneRequests(status: ExamRequestStatus, urgent: boolean | undefined): Promise<ExamRequest[]> {
+  const [items, horses] = await Promise.all([fetchAll<ExamRequest>('/exam-requests', { status, urgent }), listAllHorses({ myBarns: true })]);
+  const mine = new Set(horses.map((horse) => horse.id));
+  return items.filter((item) => mine.has(item.horseId));
+}
+
+function useQueue(trainer: boolean) {
   const [status, setStatusState] = useState<ExamRequestStatus>('PENDING');
   const [urgent, setUrgentState] = useState('');
   const [page, setPage] = useState(1);
-  const list = useService(
-    () => listExamRequests({ status, urgent: urgent === '' ? undefined : urgent === 'true', page, limit: LIMIT }),
-    [status, urgent, page],
+  const urgentFilter = urgent === '' ? undefined : urgent === 'true';
+  const remote = useService(
+    () => (trainer ? Promise.resolve(undefined) : listExamRequests({ status, urgent: urgentFilter, page, limit: LIMIT })),
+    [trainer, status, urgent, page],
   );
+  const zone = useService(() => (trainer ? loadZoneRequests(status, urgentFilter) : Promise.resolve(undefined)), [trainer, status, urgent]);
+  const zoneData = zone.data;
+  const zonePage = useMemo<Page<ExamRequest> | undefined>(() => {
+    if (!zoneData) return undefined;
+    const totalPages = Math.max(1, Math.ceil(zoneData.length / LIMIT));
+    return { items: zoneData.slice((page - 1) * LIMIT, page * LIMIT), meta: { page, limit: LIMIT, total: zoneData.length, totalPages } };
+  }, [zoneData, page]);
+  const list = trainer ? { data: zonePage, loading: zone.loading, error: zone.error, reload: zone.reload } : remote;
   return {
     list,
     status,
@@ -138,7 +157,7 @@ export default function ExamRequests() {
 
 function StaffView() {
   const user = useStore((state) => state.currentUser);
-  const queue = useQueue();
+  const queue = useQueue(user?.role === 'HEAD_TRAINER');
   const people = usePeople();
   const [creating, setCreating] = useState(false);
   const navigate = useNavigate();
@@ -156,9 +175,9 @@ function StaffView() {
         title="Yêu cầu khám"
         description={
           isVet
-            ? 'Khẩn lên trước, rồi yêu cầu cũ nhất. Khám để gắn yêu cầu vào buổi khám, hoặc bỏ qua kèm lý do.'
+            ? 'Khẩn xếp trước, rồi tới yêu cầu cũ nhất.'
             : user?.role === 'HEAD_TRAINER'
-              ? 'Theo dõi yêu cầu khám toàn câu lạc bộ. Gửi yêu cầu cho ngựa thuộc khu bạn phụ trách.'
+              ? 'Theo dõi và gửi yêu cầu khám cho ngựa thuộc khu bạn phụ trách.'
               : 'Theo dõi yêu cầu khám toàn câu lạc bộ và gửi yêu cầu cho bất kỳ ngựa nào.'
         }
         actions={

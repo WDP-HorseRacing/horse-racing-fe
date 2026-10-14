@@ -78,5 +78,12 @@ export const links = {
 
   adminUsers: '/admin/users',
   adminAudit: '/admin/audit',
+  adminFees: '/admin/fees',
   adminSystem: '/admin/system',
+
+  reports: (tab?: 'finance') => withQuery('/reports', { tab }),
+  /** Chi phí của một chủ ngựa (Quản lý CLB). */
+  ownerCosts: (ownerId: string) => `/reports/owners/${ownerId}`,
+  /** Chi phí của chính chủ ngựa đang đăng nhập. */
+  myCosts: '/reports/my-costs',
 };

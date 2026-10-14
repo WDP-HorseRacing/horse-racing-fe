@@ -13,9 +13,9 @@ export function SkippedHorsesDialog({ sessions, onClose }: { sessions: Published
       open
       onClose={onClose}
       title="Một số ngựa không có lượt tập"
-      description={`${total} lượt không được tạo vì ngựa đã có buổi tập trùng giờ ở lớp khác. Các ngựa còn lại vẫn có lượt bình thường.`}
+      description={`${total} ngựa trùng giờ với lớp khác nên không có lượt. Các ngựa khác vẫn có lượt.`}
       width="max-w-lg"
-      footer={<Button onClick={onClose}>Đã hiểu</Button>}
+      footer={<Button onClick={onClose}>Đóng</Button>}
     >
       <ul className="space-y-3">
         {sessions.map((session) => (

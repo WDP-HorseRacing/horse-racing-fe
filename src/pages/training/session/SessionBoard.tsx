@@ -3,6 +3,7 @@
 // (Chờ điểm danh, Có mặt, Sẵn sàng, Đang chạy, Hoàn thành), số trên tab là số ngựa. Lớp đông vẫn gọn vì mỗi tab là một lưới thẻ.
 // Tab Đang chạy là thẻ giám sát nhịp tim: HLV của lớp nhận qua socket, quản lý và bác sĩ gọi lại mỗi 3 giây. Groom chỉ dắt ngựa, không xem nhịp tim.
 // Có điểm nguy hiểm thì băng đỏ trượt xuống, thẻ rung, bíp một lần mỗi lượt. Tab đang mở hết ngựa sau một thao tác thì tự sang tab kế tiếp.
+// Nút điểm danh, sẵn sàng, bắt đầu, báo vắng chỉ bấm được trong khung giờ của BE (lib/training-window.ts), ngoài khung hiện giờ mở.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertOctagon, CheckCircle2, Clock3, Flag, Lock, MapPin, MoreHorizontal, Radio, UserCog, UserX, XCircle } from 'lucide-react';
@@ -29,6 +30,8 @@ import { useCrumbs } from '../../../components/Breadcrumb';
 import { links } from '../../../lib/links';
 import { formatDate, formatTime } from '../../../lib/format';
 import { clubTime } from '../../../lib/club-time';
+import { now } from '../../../lib/clock';
+import { actionWindow, lockedText, openingText, windowOpensAt, type WindowKind } from '../../../lib/training-window';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
 import { PARTICIPANT_FLOW, PARTICIPANT_OUT, ineligibleReasonText, isParticipantOpen, participantStatusText } from '../../../lib/training-labels';
 import { playAlertBeep } from '../../../lib/sound';
@@ -54,8 +57,25 @@ type Dialog =
   | { kind: 'evaluate'; participant: Participant }
   | { kind: 'cancelSession' };
 
+/** Nút chính của thẻ ngựa. `locked`: ngoài khung giờ, chỉ hiện câu giờ mở, không bấm được. */
+type PrimaryAction = { label: string; onClick?: () => void; locked?: boolean };
+
 /** Lượt còn báo vắng được: chưa điểm danh, đã có mặt, đã sẵn sàng. */
 const ABSENT_FROM: ParticipantStatus[] = ['PLANNED', 'PRESENT', 'READY'];
+
+/** Tab đang trống: nói rõ chưa có ngựa và ngựa tới bước này bằng cách nào. */
+const EMPTY_TAB: Record<ParticipantStatus, { title: string; hint?: string }> = {
+  PLANNED: { title: 'Không còn ngựa chờ điểm danh' },
+  PRESENT: { title: 'Chưa có ngựa có mặt', hint: 'Điểm danh ở tab Chờ điểm danh.' },
+  READY: { title: 'Chưa có ngựa sẵn sàng', hint: 'Khởi động xong thì báo sẵn sàng ở tab Có mặt.' },
+  ONGOING: { title: 'Chưa có ngựa đang chạy', hint: 'HLV trưởng bấm Bắt đầu ở tab Sẵn sàng.' },
+  COMPLETED: { title: 'Chưa có ngựa hoàn thành' },
+  ABSENT: { title: 'Không có ngựa' },
+  SKIPPED: { title: 'Không có ngựa' },
+  INELIGIBLE: { title: 'Không có ngựa' },
+  CANCELLED_BY_LOCK: { title: 'Không có ngựa' },
+  CANCELLED: { title: 'Không có ngựa' },
+};
 
 const COLUMN_HINT: Partial<Record<ParticipantStatus, string>> = {
   PLANNED: 'Groom dắt ngựa ra sân rồi điểm danh',
@@ -99,6 +119,11 @@ export default function SessionBoard() {
     }, 10_000);
     return () => window.clearInterval(timer);
   }, [reload]);
+  const [clock, setClock] = useState(() => now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const ongoing = participants.filter((participant) => participant.status === 'ONGOING');
   // Nhịp tim là chuyên môn của HLV trưởng: Groom và chủ ngựa không xem (BE trả 403).
@@ -177,11 +202,12 @@ export default function SessionBoard() {
   }
   const activeTab = chosenTab ?? defaultTab;
   // Tab đang mở vừa hết ngựa (ngựa chuyển sang trạng thái sau): chuyển sang tab mặc định đang có ngựa.
+  // Chỉ xét khi vẫn là tab đó. Người dùng tự bấm sang một tab đang trống thì ở lại tab đó.
   const activeCount = countOf(activeTab);
-  const [lastCount, setLastCount] = useState(activeCount);
-  if (activeCount !== lastCount) {
-    setLastCount(activeCount);
-    if (activeCount === 0 && lastCount > 0) setChosenTab(defaultTab);
+  const [watched, setWatched] = useState({ tab: activeTab, count: activeCount });
+  if (watched.tab !== activeTab || watched.count !== activeCount) {
+    setWatched({ tab: activeTab, count: activeCount });
+    if (watched.tab === activeTab && activeCount === 0 && watched.count > 0) setChosenTab(defaultTab);
   }
   const pickTab = (status: ParticipantStatus) => {
     setChosenTab(status);
@@ -257,20 +283,25 @@ export default function SessionBoard() {
       toast.push(label, 'success');
       reload();
     }).then((result) => {
-      // 409 ở điểm danh, bắt đầu vẫn đổi trạng thái lượt ở BE: tải lại để thẻ nhảy đúng cột.
+      // Thao tác lỗi (vd 409 ngoài khung giờ khi đồng hồ máy lệch, lượt vừa bị người khác đổi): tải lại cho đúng trạng thái.
       if (result === undefined) reload();
     });
 
-  const primaryAction = (participant: Participant) => {
+  // Ngoài khung giờ thì nút thành ô khóa ghi giờ mở (hoặc hết giờ). Hoàn thành không bị giới hạn.
+  const gated = (kind: WindowKind, label: string, onClick: () => void): PrimaryAction => {
+    const locked = lockedText(label, actionWindow(session, kind, clock), clock);
+    return locked ? { label: locked, locked: true } : { label, onClick };
+  };
+  const primaryAction = (participant: Participant): PrimaryAction | null => {
     if (!operational || !canAttend(participant)) return null;
     const name = horseName(participant);
     switch (participant.status) {
       case 'PLANNED':
-        return { label: 'Điểm danh', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)) };
+        return gated('checkIn', 'Điểm danh', () => run(`${name} có mặt`, () => checkInParticipant(participant.id)));
       case 'PRESENT':
-        return { label: 'Báo sẵn sàng', onClick: () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)) };
+        return gated('start', 'Báo sẵn sàng', () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)));
       case 'READY':
-        return manage ? { label: 'Bắt đầu', onClick: () => run(`${name} bắt đầu chạy`, () => startParticipant(participant.id)) } : null;
+        return manage ? gated('start', 'Bắt đầu', () => run(`${name} bắt đầu chạy`, () => startParticipant(participant.id))) : null;
       case 'ONGOING':
         if (!manage) return null;
         return {
@@ -292,7 +323,9 @@ export default function SessionBoard() {
         ? ineligibleReasonText(participant.ineligibilityReason)
         : participant.status === 'CANCELLED_BY_LOCK'
           ? 'Đang bị khóa huấn luyện'
-          : participant.cancelReason;
+          : participant.status === 'SKIPPED'
+            ? 'Hết giờ, chưa bắt đầu'
+            : participant.cancelReason;
   const groomLabel = (participant: Participant) =>
     !participant.assignedGroomId
       ? 'Chưa giao Groom'
@@ -300,7 +333,7 @@ export default function SessionBoard() {
         ? 'Bạn dắt'
         : `Groom ${participant.assignedGroomName ?? grooms.get(participant.assignedGroomId)?.fullName ?? ''}`.trim();
   const menuOf = (participant: Participant) => [
-    ...(ABSENT_FROM.includes(participant.status) && operational && canAttend(participant)
+    ...(ABSENT_FROM.includes(participant.status) && operational && canAttend(participant) && actionWindow(session, 'checkIn', clock).state === 'open'
       ? [{ label: 'Báo vắng', icon: <UserX size={14} />, onSelect: () => setDialog({ kind: 'absent', participant }) }]
       : []),
     ...(manage && isParticipantOpen(participant.status) ? [{ label: 'Đổi Groom dắt', icon: <UserCog size={14} />, onSelect: () => setDialog({ kind: 'groom', participant }) }] : []),
@@ -368,6 +401,11 @@ export default function SessionBoard() {
               )}
               {target && <span className="font-mono text-amber-800">Mục tiêu {formatRaceTime(target)}</span>}
             </div>
+            {session.status === 'SCHEDULED' && actionWindow(session, 'checkIn', clock).state === 'early' && (
+              <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-600">
+                <Clock3 size={13} /> Điểm danh mở lúc {openingText(windowOpensAt(session, 'checkIn'), clock)}, bắt đầu từ {openingText(windowOpensAt(session, 'start'), clock)}
+              </p>
+            )}
             {session.notes && <p className="mt-2 max-w-2xl text-sm text-gray-600">{session.notes}</p>}
             {session.cancelReason && <p className="mt-2 text-sm text-red-700">Lý do hủy: {session.cancelReason}</p>}
           </div>
@@ -423,7 +461,7 @@ export default function SessionBoard() {
       </section>
 
       {(action.error || sessionAction.error) && <ErrorBox message={(action.error ?? sessionAction.error)!} />}
-      {session.status === 'DRAFT' && <EmptyState title="Buổi còn nháp" hint="Công bố buổi thì mỗi ngựa đang học trong lớp có một lượt tập ở đây." />}
+      {session.status === 'DRAFT' && <EmptyState title="Buổi còn nháp" hint="Công bố buổi để bắt đầu điểm danh." />}
 
       {out.length > 0 && (
         <section className="rounded-2xl bg-amber-50/50 p-3 ring-1 ring-amber-200/60 sm:p-4">
@@ -473,12 +511,10 @@ export default function SessionBoard() {
             tabs={PARTICIPANT_FLOW.map((status) => ({ key: status, label: participantStatusText[status], count: countOf(status) }))}
           />
           <div className="rounded-b-2xl border border-t-0 border-gray-200/80 bg-white/70 p-3 sm:p-4">
-            <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>
+            {tabItems.length > 0 && <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>}
             {activeTab === 'COMPLETED' && leaderboard.length > 0 && <Leaderboard rows={leaderboard} target={target} horseName={horseName} />}
             {tabItems.length === 0 ? (
-              <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-400">
-                Không có ngựa nào ở bước này
-              </div>
+              <EmptyState title={EMPTY_TAB[activeTab].title} hint={EMPTY_TAB[activeTab].hint} className="rounded-xl border border-dashed border-gray-200 py-10" />
             ) : activeTab === 'ONGOING' && seesMetrics ? (
               <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 {tabItems.map((participant) => {
@@ -499,7 +535,7 @@ export default function SessionBoard() {
                         simulator={FEATURES.sensorSimulator && operational && manage}
                         actions={
                           manage && operational ? (
-                            <Button size="sm" onClick={() => primaryAction(participant)?.onClick()}>
+                            <Button size="sm" onClick={() => primaryAction(participant)?.onClick?.()}>
                               <CheckCircle2 size={13} /> Hoàn thành
                             </Button>
                           ) : undefined
@@ -510,7 +546,7 @@ export default function SessionBoard() {
                 })}
               </div>
             ) : (
-              <div ref={trackRef} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div ref={trackRef} className="grid gap-3 md:grid-cols-2">
                 {tabItems.map((participant) => (
                   <div key={participant.id} data-tab-card>
                     <ParticipantCard
@@ -631,7 +667,7 @@ function ParticipantCard({
   photoUrl?: string;
   groomLabel: string;
   live?: LiveSeries;
-  primary: { label: string; onClick: () => void } | null;
+  primary: PrimaryAction | null;
   pending: boolean;
   evaluation?: Evaluation | null;
   trials?: TrialResult[];
@@ -646,82 +682,87 @@ function ParticipantCard({
     <article
       data-flip-id={participant.id}
       className={cn(
-        'rounded-xl bg-white p-2.5 ring-1 transition-colors',
+        'flex h-full gap-3.5 rounded-2xl bg-white p-3.5 ring-1 transition-colors',
         participant.status === 'ONGOING' ? (level === 'CRITICAL' ? 'ring-2 ring-red-400' : level === 'WARNING' ? 'ring-2 ring-amber-300' : 'ring-2 ring-emerald-400/70') : 'ring-gray-200/80',
-        'shadow-[0_8px_18px_-16px_rgba(6,78,59,0.6)]',
+        'shadow-[0_12px_26px_-22px_rgba(6,78,59,0.6)]',
       )}
     >
-      <div className="flex items-center gap-2">
-        <Avatar src={photoUrl} name={horseName} size={30} />
-        <div className="min-w-0 flex-1">
-          <Link to={links.horse(participant.horseId)} className="block truncate text-sm font-semibold text-gray-900 hover:text-emerald-800">
-            {horseName}
-          </Link>
-          <p className="truncate text-[11px] text-gray-500">{groomLabel}</p>
+      <Link to={links.horse(participant.horseId)} className="shrink-0" tabIndex={-1} aria-hidden>
+        <Avatar src={photoUrl} name={horseName} size={56} className="rounded-xl" />
+      </Link>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <Link to={links.horse(participant.horseId)} className="block truncate text-base font-semibold text-gray-900 hover:text-emerald-800">
+              {horseName}
+            </Link>
+            <p className="truncate text-xs text-gray-500">{groomLabel}</p>
+          </div>
+          {menu.length > 0 && (
+            <ActionMenu
+              items={menu}
+              trigger={
+                <button type="button" className="-mr-1 -mt-0.5 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Thao tác khác">
+                  <MoreHorizontal size={16} />
+                </button>
+              }
+            />
+          )}
         </div>
-        {menu.length > 0 && (
-          <ActionMenu
-            items={menu}
-            trigger={
-              <button type="button" className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Thao tác khác">
-                <MoreHorizontal size={16} />
-              </button>
-            }
-          />
-        )}
-      </div>
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
-        {participant.status === 'PRESENT' && participant.checkedInAt && <span>Có mặt {formatTime(participant.checkedInAt)}</span>}
-        {participant.status === 'ONGOING' && (
-          <span className="inline-flex items-center gap-1 font-medium text-emerald-800">
-            <Clock3 size={11} /> <Elapsed since={participant.startedAt} />
-          </span>
-        )}
-        {participant.status === 'COMPLETED' && participant.startedAt && participant.completedAt && (
-          <span>
-            Chạy <Elapsed since={participant.startedAt} until={participant.completedAt} />
-          </span>
-        )}
-        {participant.status === 'ONGOING' && live?.latest && (
-          <span className={cn('ml-auto inline-flex items-center gap-1 font-mono text-xs font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
-            <HeartbeatIcon bpm={live.latest.heartRateBpm} level={level} size={13} />
-            <LiveNumber value={live.latest.heartRateBpm} />
-          </span>
-        )}
-      </div>
-
-      {lockedWarning && (
-        <p className="mt-1.5 flex items-center gap-1 rounded-md bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700">
-          <Lock size={11} /> Đang khóa huấn luyện, sẽ bị chặn khi bắt đầu
-        </p>
-      )}
-
-      {(best !== undefined || evaluation) && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+          {participant.status === 'PRESENT' && participant.checkedInAt && <span>Có mặt {formatTime(participant.checkedInAt)}</span>}
+          {participant.status === 'ONGOING' && (
+            <span className="inline-flex items-center gap-1 font-medium text-emerald-800">
+              <Clock3 size={12} /> <Elapsed since={participant.startedAt} />
+            </span>
+          )}
+          {participant.status === 'COMPLETED' && participant.startedAt && participant.completedAt && (
+            <span>
+              Chạy <Elapsed since={participant.startedAt} until={participant.completedAt} />
+            </span>
+          )}
+          {participant.status === 'ONGOING' && live?.latest && (
+            <span className={cn('inline-flex items-center gap-1 font-mono text-sm font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
+              <HeartbeatIcon bpm={live.latest.heartRateBpm} level={level} size={14} />
+              <LiveNumber value={live.latest.heartRateBpm} />
+            </span>
+          )}
           {best !== undefined && (
-            <span className={cn('rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
+            <span className={cn('rounded-md px-1.5 py-0.5 font-mono font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
               {formatRaceTime(best)}
             </span>
           )}
-          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">{evaluation.score} điểm</span>}
+          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono font-semibold text-white">{evaluation.score} điểm</span>}
         </div>
-      )}
 
-      {(primary || onEvaluate) && (
-        <div className="mt-2">
-          {primary && (
-            <Button size="sm" className="w-full" disabled={pending} variant={participant.status === 'ONGOING' ? 'secondary' : 'primary'} onClick={primary.onClick}>
-              {primary.label}
-            </Button>
-          )}
-          {onEvaluate && (
-            <Button size="sm" variant="inline" className="w-full" onClick={onEvaluate}>
-              Đánh giá
-            </Button>
-          )}
-        </div>
-      )}
+        {lockedWarning && (
+          <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-red-700">
+            <Lock size={12} /> Đang bị khóa tập
+          </p>
+        )}
+
+        {(primary || onEvaluate) && (
+          <div className="mt-auto flex justify-end gap-2 pt-3">
+            {primary?.locked ? (
+              <p className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-500 ring-1 ring-inset ring-gray-200">
+                <Clock3 size={12} className="shrink-0" /> {primary.label}
+              </p>
+            ) : (
+              primary && (
+                <Button size="sm" disabled={pending} variant={participant.status === 'ONGOING' ? 'secondary' : 'primary'} onClick={primary.onClick}>
+                  {primary.label}
+                </Button>
+              )
+            )}
+            {onEvaluate && (
+              <Button size="sm" variant="inline" onClick={onEvaluate}>
+                Đánh giá
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </article>
   );
 }

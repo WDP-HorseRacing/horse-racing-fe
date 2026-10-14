@@ -65,7 +65,7 @@ export function SessionEditSheet({
   range,
   pending,
   error,
-  submitLabel = 'Lưu buổi',
+  submitLabel = 'Lưu',
   onSubmit,
   onRemove,
   onClose,
@@ -96,6 +96,9 @@ export function SessionEditSheet({
   const errors = sessionErrors(current, subject, range);
   if (!parsedTime) errors.time = 'Giờ dạng HH:mm, ví dụ 06:30';
   const show = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
+  // So với lúc mở để hỏi trước khi đóng nếu bấm ra ngoài khi đang sửa dở.
+  const [opened] = useState(() => JSON.stringify([draft, date, time, duration]));
+  const dirty = JSON.stringify([draft, date, time, duration]) !== opened;
 
   const pickSubject = (id: string) => {
     const next = subjects.find((item) => item.id === id);
@@ -123,6 +126,9 @@ export function SessionEditSheet({
       onClose={onClose}
       title={title}
       description={description}
+      dirty={dirty}
+      onSave={submit}
+      saveLabel={submitLabel}
       footer={
         <>
           {onRemove && (

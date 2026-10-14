@@ -1,5 +1,5 @@
 // Nhãn tiếng Việt và kiểm ô cho Flow 4 (vật tư, khẩu phần, checklist, sự cố).
-// Câu lỗi validate của BE ở các API này còn tiếng Anh, nên mọi ô được kiểm ở đây trước khi gửi.
+// Mọi ô được kiểm ở đây trước khi gửi, để báo lỗi ngay dưới ô thay vì chờ BE.
 import type { ChecklistStatus, FeedingMeal, FeedingPlanStatus, IncidentStatus, SupplyCategory, SupplyMovementType, SupplyRequestStatus } from '../api/types';
 
 export const supplyCategoryText: Record<SupplyCategory, string> = {
@@ -14,6 +14,14 @@ export const SUPPLY_CATEGORIES: SupplyCategory[] = ['FEED', 'SUPPLEMENT', 'MEDIC
 /** Chỉ hai loại này được đưa vào khẩu phần. */
 export const FEEDING_CATEGORIES: SupplyCategory[] = ['FEED', 'SUPPLEMENT'];
 
+/** Đơn vị chọn được theo loại vật tư (BE nhận chuỗi tự do, FE chỉ cho chọn để khỏi gõ sai). */
+export const SUPPLY_UNITS: Record<SupplyCategory, string[]> = {
+  FEED: ['kg', 'g', 'tấn', 'bao', 'gói', 'túi', 'bó', 'kiện', 'thùng'],
+  SUPPLEMENT: ['kg', 'g', 'gói', 'túi', 'hộp', 'lọ', 'hũ', 'chai', 'lít', 'ml', 'viên', 'liều'],
+  MEDICINE: ['viên', 'vỉ', 'hộp', 'lọ', 'chai', 'ống', 'tuýp', 'liều', 'gói', 'ml', 'lít', 'g', 'mg'],
+  EQUIPMENT: ['cái', 'chiếc', 'bộ', 'đôi', 'cặp', 'cuộn', 'tấm', 'sợi', 'hộp', 'thùng'],
+};
+
 export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
   PENDING: 'Chờ duyệt',
   APPROVED: 'Đã duyệt',
@@ -22,8 +30,10 @@ export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
 };
 
 export const movementTypeText: Record<SupplyMovementType, string> = {
-  COUNT_ADJUST: 'Kiểm kê',
-  RESTOCK: 'Cấp theo đề xuất',
+  OPENING: 'Tồn ban đầu',
+  RESTOCK: 'Nhập hàng',
+  USAGE: 'Xuất dùng',
+  COUNT_ADJUST: 'Kiểm kê (cũ)',
 };
 
 export const mealText: Record<FeedingMeal, string> = {
@@ -100,3 +110,31 @@ export function textError(raw: string, { label, max, required = true }: { label:
   if (text.length > max) return `${label} tối đa ${max} ký tự`;
   return undefined;
 }
+
+/* ===== Ô số lượng (QuantityInput): dấu phẩy, tối đa 2 chữ số lẻ ===== */
+
+const MAX_DECIMALS = 2;
+const MAX_INTEGER_DIGITS = 10;
+
+/** Giữ lại chữ số và một dấu thập phân, cắt phần lẻ còn 2 chữ số. Chưa đổi dấu, để người dùng gõ tiếp tự nhiên. */
+export function sanitizeQuantity(raw: string): string {
+  let text = raw.replace(/[^\d.,]/g, '');
+  const separator = text.search(/[.,]/);
+  if (separator === -1) return text.slice(0, MAX_INTEGER_DIGITS);
+  const whole = text.slice(0, separator).slice(0, MAX_INTEGER_DIGITS);
+  const fraction = text.slice(separator + 1).replace(/[.,]/g, '').slice(0, MAX_DECIMALS);
+  text = `${whole}${text[separator]}${fraction}`;
+  return text;
+}
+
+/** Chuẩn hóa khi rời ô: dấu phẩy, bỏ số 0 thừa ở đầu, bỏ dấu phẩy treo ở cuối. */
+export function normalizeQuantity(raw: string): string {
+  const text = sanitizeQuantity(raw.trim()).replace('.', ',');
+  if (!text) return '';
+  const [whole, fraction] = text.split(',');
+  const integer = whole.replace(/^0+(?=\d)/, '') || '0';
+  return fraction ? `${integer},${fraction}` : integer;
+}
+
+/** Số có sẵn (vd 12.5 từ BE) thành chữ trong ô ("12,5"). */
+export const quantityText = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value).replace('.', ','));

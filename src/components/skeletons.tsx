@@ -206,17 +206,30 @@ export function DashboardSkeleton() {
   );
 }
 
-/** Màn chờ khi khởi động phiên (đang kiểm tra đăng nhập). */
-export function BootScreen() {
+/** Màn chờ khi khởi động phiên (đang kiểm tra đăng nhập). Có `error` thì máy chủ chưa trả lời: phiên vẫn giữ, cho thử lại. */
+export function BootScreen({ error, onRetry }: { error?: string; onRetry?: () => void }) {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-canvas p-8" role="status" aria-label="Đang khởi động">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-canvas p-8" role={error ? 'alert' : 'status'} aria-label={error ? undefined : 'Đang khởi động'}>
       <div className="relative h-14 w-14">
-        <span className="absolute inset-0 animate-ping rounded-2xl bg-emerald-500/20" />
+        {!error && <span className="absolute inset-0 animate-ping rounded-2xl bg-emerald-500/20" />}
         <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-[0_18px_36px_-16px_rgba(6,78,59,0.7)]">
           <HorseLine size={38} paint="#fdf8ea" />
         </span>
       </div>
-      <p className="text-sm text-gray-500">Đang mở HorseRacing…</p>
+      {error ? (
+        <div className="max-w-sm space-y-3 text-center">
+          <p className="text-sm text-gray-700">{error}</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Thử lại
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-500">Đang mở HorseRacing…</p>
+      )}
     </div>
   );
 }

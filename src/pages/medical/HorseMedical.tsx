@@ -466,7 +466,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
                         <HealthShift from={item.from} to={item.to} />
                         {item.reason && <p className="mt-1 text-sm text-gray-700">{item.reason}</p>}
                         <p className="mt-0.5 text-xs text-gray-500">
-                          {healthChangeSource(item.feature)} · {people.name(item.actorId, item.feature?.startsWith('F3') ? 'vet' : 'staff')}
+                          {healthChangeSource(item.feature)} · {people.name(item.actorId, item.feature?.startsWith('MED_') ? 'vet' : 'staff')}
                         </p>
                       </div>
                     </li>

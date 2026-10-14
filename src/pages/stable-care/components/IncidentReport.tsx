@@ -1,7 +1,7 @@
 // F4.4 — Groom báo sự cố tại chuồng: ngựa đang phụ trách, mô tả, một ảnh thực tế, cờ Khẩn.
 // Không có trường phân loại: các nút gợi ý chèn đúng ví dụ của đề (Bỏ ăn, Đau bụng, Sốt, Móng bị xước) vào mô tả.
 // Khẩn: BE tạo ngay yêu cầu khám khẩn và báo mọi bác sĩ. Thường: HLV khu nhận thông báo, tự xử lý hoặc chuyển bác sĩ.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { reportIncident } from '../../../api/stable-care';
 import type { Incident } from '../../../api/types';
 import { Button, Dot, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
@@ -17,11 +17,14 @@ export function IncidentReportForm({
   horse,
   onDone,
   onCancel,
+  onDirtyChange,
 }: {
   /** Mở từ một ngựa: điền sẵn, không cho đổi. */
   horse?: { id: string; name: string };
   onDone?: (incident: Incident) => void;
   onCancel?: () => void;
+  /** Báo cho hộp chứa biết đã nhập dở, để hỏi trước khi đóng. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const toast = useToast();
   const action = useAction();
@@ -32,8 +35,9 @@ export function IncidentReportForm({
   const [photo, setPhoto] = useState<PhotoUploadState>({ uploading: false });
   const [resetKey, setResetKey] = useState(0);
   const [touched, setTouched] = useState(false);
-  const picked = horse ?? (horseId ? options.byId.get(horseId) : undefined);
   const text = description.trim();
+  const dirty = text !== '' || urgent || !!photo.mediaId || photo.uploading || (!horse && horseId !== '');
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
   const descriptionError = touched ? textError(description, { label: 'Mô tả', max: MAX_DESCRIPTION }) : undefined;
 
   const addHint = (hint: string) =>
@@ -49,7 +53,7 @@ export function IncidentReportForm({
     void action.run(
       () => reportIncident({ horseId, description: text, urgent, ...(photo.mediaId ? { photoMediaId: photo.mediaId } : {}) }),
       (incident) => {
-        toast.push(urgent ? `Đã báo sự cố khẩn cho ${incident.horseName}, bác sĩ đã nhận thông báo` : `Đã báo sự cố cho ${incident.horseName}, HLV khu đã nhận thông báo`, 'success');
+        toast.push(`Đã báo sự cố ${incident.horseName}`, 'success');
         setDescription('');
         setUrgent(false);
         setPhoto({ uploading: false });
@@ -63,12 +67,12 @@ export function IncidentReportForm({
 
   if (!horse && options.loading && !options.data) return <Skeleton rows={4} />;
   if (!horse && options.error) return <ErrorBox message={options.error} />;
-  if (!horse && options.data?.length === 0) return <Notice tone="info">Bạn chưa được phân công chăm sóc ngựa nào, nên chưa báo sự cố được.</Notice>;
+  if (!horse && options.data?.length === 0) return <Notice tone="info">Bạn chưa được giao ngựa nào.</Notice>;
 
   return (
     <div className="space-y-4">
       {!horse && (
-        <Field label="Ngựa" required hint="Ngựa bạn đang được phân công chăm sóc" error={touched && !horseId ? 'Chọn ngựa' : undefined}>
+        <Field label="Ngựa" required error={touched && !horseId ? 'Chọn ngựa' : undefined}>
           <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
             <option value="">Chọn ngựa…</option>
             {options.data?.map((item) => {
@@ -141,7 +145,7 @@ export function IncidentReportForm({
           ))}
         </div>
         <p className="mt-1.5 text-xs text-gray-500">
-          {urgent ? 'Tạo ngay yêu cầu khám khẩn, mọi bác sĩ nhận thông báo.' : 'HLV khu nhận thông báo, tự xử lý hoặc chuyển bác sĩ.'}
+          {urgent ? 'Báo ngay cho mọi bác sĩ.' : 'Báo cho HLV khu.'}
         </p>
       </div>
 
@@ -153,7 +157,7 @@ export function IncidentReportForm({
           </Button>
         )}
         <Button variant={urgent ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || photo.uploading}>
-          {action.pending ? 'Đang gửi…' : photo.uploading ? 'Chờ tải ảnh xong' : picked ? `Báo sự cố ${picked.name}` : 'Báo sự cố'}
+          {action.pending ? 'Đang gửi…' : photo.uploading ? 'Đang tải ảnh…' : 'Gửi'}
         </Button>
       </div>
     </div>
@@ -161,12 +165,14 @@ export function IncidentReportForm({
 }
 
 export function IncidentReportDialog({ open, onClose, horse, onDone }: { open: boolean; onClose: () => void; horse?: { id: string; name: string }; onDone?: () => void }) {
+  const [dirty, setDirty] = useState(false);
   if (!open) return null;
   return (
-    <Modal open onClose={onClose} title={horse ? `Báo sự cố: ${horse.name}` : 'Báo sự cố'} description="Mô tả những gì bạn thấy và chụp ảnh nếu được. Chọn Khẩn nếu cần bác sĩ tới ngay.">
+    <Modal open onClose={onClose} title={horse ? `Báo sự cố: ${horse.name}` : 'Báo sự cố'} description="Cần bác sĩ tới ngay thì chọn Khẩn." dirty={dirty}>
       <IncidentReportForm
         horse={horse}
         onCancel={onClose}
+        onDirtyChange={setDirty}
         onDone={() => {
           onDone?.();
           onClose();

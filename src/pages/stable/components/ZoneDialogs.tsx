@@ -10,10 +10,7 @@ import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
 import { MAX_STALLS_PER_BARN, stallLimit, stallRoom } from './barn';
 
-/**
- * Loại ô được chọn khi thêm ô. Bỏ "Sinh sản": câu lạc bộ chỉ quản lý ngựa từ 1 tuổi nên không có ngựa đẻ tại câu lạc bộ.
- * Nhãn vẫn giữ trong stallTypeLabel để ô cũ (nếu có) vẫn hiện đúng tên.
- */
+/** Loại ô được chọn khi thêm ô. */
 const SELECTABLE_STALL_TYPES: StallType[] = ['STANDARD', 'ISOLATION', 'RECOVERY'];
 
 /* ===== Thêm / sửa khu ===== */
@@ -74,6 +71,7 @@ export function ZoneFormDialog({
       open={open}
       onClose={onClose}
       title={zone ? `Sửa ${zone.name}` : 'Thêm khu chuồng'}
+      dirty={name !== (zone?.name ?? '') || description !== (zone?.description ?? '') || capacity !== (zone?.capacity ? String(zone.capacity) : '') || headTrainerId !== ''}
       description="Tên khu không trùng với khu khác đang dùng. Sức chứa là số ô tối đa của khu (1–9)."
       footer={
         <>
@@ -87,8 +85,16 @@ export function ZoneFormDialog({
       }
     >
       <div className="space-y-4">
-        <Field label="Tên khu" required>
-          <Input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Ví dụ: Khu D" />
+        <Field label="Tên khu" required error={action.fieldErrors.name}>
+          <Input
+            value={name}
+            maxLength={80}
+            onChange={(event) => {
+              setName(event.target.value);
+              if (action.fieldErrors.name) action.clearError();
+            }}
+            placeholder="Ví dụ: Khu D"
+          />
         </Field>
         <Field
           label="Sức chứa (số ô tối đa)"
@@ -101,7 +107,7 @@ export function ZoneFormDialog({
           <Textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-16" placeholder="Vị trí, tiện nghi…" />
         </Field>
         {!zone && (
-          <Field label="HT phụ trách" hint="Có thể gán sau. Khu chưa có HT thì chưa nhận ngựa.">
+          <Field label="HLV phụ trách" hint="Có thể gán sau. Khu chưa có HLV thì chưa nhận ngựa.">
             <Select value={headTrainerId} onChange={(event) => setHeadTrainerId(event.target.value)}>
               <option value="">Chưa gán</option>
               {headTrainers.map((item) => (
@@ -112,7 +118,7 @@ export function ZoneFormDialog({
             </Select>
           </Field>
         )}
-        {action.error && <ErrorBox message={action.error} />}
+        {action.error && !action.fieldErrors.name && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
@@ -148,7 +154,7 @@ export function HeadTrainerDialog({
     if (!zone || !headTrainerId) return;
     const done = await action.run(() => updateBarn(zone.id, { headTrainerId }));
     if (done) {
-      toast.push(zone.headTrainerId ? 'Đã đổi HT phụ trách' : 'Đã gán HT phụ trách', 'success');
+      toast.push(zone.headTrainerId ? 'Đã đổi HLV phụ trách' : 'Đã gán HLV phụ trách', 'success');
       onDone();
       onClose();
     }
@@ -161,8 +167,9 @@ export function HeadTrainerDialog({
       open={!!zone}
       onClose={onClose}
       width="max-w-2xl"
-      title={`${zone?.headTrainerId ? 'Đổi' : 'Gán'} HT phụ trách ${zone?.name ?? ''}`}
-      description={zone?.headTrainerFullName ? `Hiện tại: ${zone.headTrainerFullName}` : 'Khu chưa có HT phụ trách'}
+      title={`${zone?.headTrainerId ? 'Đổi' : 'Gán'} HLV phụ trách ${zone?.name ?? ''}`}
+      dirty={headTrainerId !== (zone?.headTrainerId ?? '')}
+      description={zone?.headTrainerFullName ? `Hiện tại: ${zone.headTrainerFullName}` : 'Khu chưa có HLV phụ trách'}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -176,10 +183,10 @@ export function HeadTrainerDialog({
     >
       <div className="space-y-4">
         <ChoiceList
-          label="HT phụ trách"
+          label="HLV phụ trách"
           value={headTrainerId}
           onChange={setHeadTrainerId}
-          empty="Chưa có Head Trainer nào đang hoạt động."
+          empty="Chưa có HLV trưởng nào đang hoạt động."
           choices={headTrainers.map((item) => {
             const names = zonesOf(item.id);
             return {
@@ -191,7 +198,7 @@ export function HeadTrainerDialog({
           })}
         />
         <Notice tone="info">
-          Ngựa của khu chuyển sang phạm vi của HLV mới ngay. Nếu HLV hiện tại còn lớp đang chạy có ngựa của khu này thì chưa đổi được: cho ngựa rời lớp hoặc hoàn thành lớp trước, hoặc dùng Bàn giao ở trang Nhân sự khi HLV nghỉ. Muốn bỏ trống HLV, dùng mục "Gỡ HT phụ trách" trong menu khu.
+          Ngựa của khu chuyển sang phạm vi của HLV mới ngay. Nếu HLV hiện tại còn lớp đang chạy có ngựa của khu này thì chưa đổi được: cho ngựa rời lớp hoặc hoàn thành lớp trước, hoặc dùng Bàn giao ở trang Nhân sự khi HLV nghỉ. Muốn bỏ trống HLV, dùng mục "Gỡ HLV phụ trách" trong menu khu.
         </Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
@@ -224,18 +231,18 @@ export function UnassignTrainerDialog({
   return (
     <ConfirmDialog
       open={!!zone}
-      title={`Gỡ HT phụ trách ${zone?.name ?? ''}`}
+      title={`Gỡ HLV phụ trách ${zone?.name ?? ''}`}
       message={
         blocked ? (
-          <>Không gỡ được: khu còn {horseCount} ngựa. Đổi khu cho các ngựa này trước, hoặc đổi sang HT khác.</>
+          <>Không gỡ được: khu còn {horseCount} ngựa. Đổi khu cho các ngựa này trước, hoặc đổi sang HLV khác.</>
         ) : (
           <>
-            Gỡ <span className="font-semibold text-gray-900">{zone?.headTrainerFullName ?? 'HT'}</span> khỏi {zone?.name}. Khu sẽ không có ai phụ trách.
+            Gỡ <span className="font-semibold text-gray-900">{zone?.headTrainerFullName ?? 'HLV'}</span> khỏi {zone?.name}. Khu sẽ không có ai phụ trách.
           </>
         )
       }
-      consequences={blocked ? [] : ['Khu ngừng nhận ngựa mới cho tới khi có HT', 'Không ai xếp ô, chuyển ô hay giao Groom trong khu này']}
-      confirmLabel="Gỡ HT"
+      consequences={blocked ? [] : ['Khu ngừng nhận ngựa mới cho tới khi có HLV', 'Không ai xếp ô, chuyển ô hay giao Groom trong khu này']}
+      confirmLabel="Gỡ HLV"
       disabled={blocked}
       pending={action.pending}
       onClose={onClose}
@@ -246,7 +253,7 @@ export function UnassignTrainerDialog({
           return true;
         });
         if (done) {
-          toast.push(`Đã gỡ HT phụ trách ${zone.name}`, 'success');
+          toast.push(`Đã gỡ HLV phụ trách ${zone.name}`, 'success');
           onDone();
           onClose();
         }
@@ -519,6 +526,7 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: Stall | n
       open={!!stall}
       onClose={onClose}
       title={`Bảo trì ô ${stall?.code ?? ''}`}
+      dirty={note.trim() !== ''}
       description="Ô bảo trì không nhận ngựa cho tới khi kết thúc bảo trì."
       footer={
         <>

@@ -14,8 +14,8 @@ export const MAX_STALLS_PER_BARN = 9;
  */
 export function barnBlocker(barn: BarnListItem): string | undefined {
   if (barn.status !== 'ACTIVE') return 'Khu không ở trạng thái hoạt động';
-  if (!barn.headTrainerId) return 'Khu chưa có HT phụ trách';
-  if (!barn.hasActiveHeadTrainer) return 'HT phụ trách không còn hoạt động';
+  if (!barn.headTrainerId) return 'Khu chưa có HLV phụ trách';
+  if (!barn.hasActiveHeadTrainer) return 'HLV phụ trách không còn hoạt động';
   if (barn.availableStallCount <= 0) {
     return barn.pendingStallHorseCount > 0 ? `Hết chỗ: ${barn.pendingStallHorseCount} ngựa đang chờ xếp ô` : 'Hết ô trống';
   }

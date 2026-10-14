@@ -1,6 +1,6 @@
 // F4.2 — HLV khu lập hoặc sửa bản nháp khẩu phần cho một ngựa: 4 làn bữa, mỗi dòng một món (thức ăn hoặc thực phẩm bổ sung) và lượng.
-// "Sao từ ngựa khác" điền sẵn các dòng từ khẩu phần đang áp dụng của ngựa cùng khu để sửa tiếp.
-// Lưu nháp, hoặc lưu rồi áp dụng luôn (bản đang áp dụng cũ chuyển vào lịch sử). Kiểm hết ở đây vì câu lỗi validate của BE còn tiếng Anh.
+// "Chép từ ngựa khác" điền sẵn các dòng từ khẩu phần đang áp dụng của ngựa cùng khu để sửa tiếp.
+// Lưu nháp, hoặc lưu rồi áp dụng luôn (bản đang áp dụng cũ chuyển vào lịch sử). Kiểm hết ở đây trước khi gửi.
 import { useMemo, useRef, useState } from 'react';
 import { Copy, Plus, Trash2 } from 'lucide-react';
 import { listAllHorses } from '../../../api/horses';
@@ -8,9 +8,10 @@ import { MEAL_ORDER, applyFeedingPlan, createFeedingPlan, listFeedingPlans, plan
 import { listSupplyItems } from '../../../api/supplies';
 import type { FeedingMeal, FeedingPlan, FeedingPlanItemInput, SupplyItem } from '../../../api/types';
 import { Button, ErrorBox, Field, Input, Modal, Select, Sheet, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { QuantityInput } from './QuantityInput';
 import { useAction, useService } from '../../../hooks/useService';
 import { errorMessage } from '../../../lib/errors';
-import { FEEDING_CATEGORIES, mealText, parseQuantity, quantityError, supplyCategoryText, textError } from '../../../lib/stable-labels';
+import { FEEDING_CATEGORIES, mealText, parseQuantity, quantityError, quantityText, supplyCategoryText, textError } from '../../../lib/stable-labels';
 
 const MAX_LINES = 50;
 const MAX_QUANTITY = 1_000_000;
@@ -24,7 +25,9 @@ interface Line {
 }
 
 let nextKey = 1;
-const toLine = (input: FeedingPlanItemInput): Line => ({ key: nextKey++, meal: input.meal, supplyItemId: input.supplyItemId, quantity: String(input.quantity), note: input.note ?? '' });
+const toLine = (input: FeedingPlanItemInput): Line => ({ key: nextKey++, meal: input.meal, supplyItemId: input.supplyItemId, quantity: quantityText(input.quantity), note: input.note ?? '' });
+/** So nội dung đang nhập với lúc mở để biết có thay đổi chưa lưu. */
+const contentKey = (lines: Line[], note: string) => JSON.stringify([lines.map(({ meal, supplyItemId, quantity, note: lineNote }) => [meal, supplyItemId, quantity, lineNote]), note]);
 
 export function FeedingPlanEditor({
   horse,
@@ -47,6 +50,8 @@ export function FeedingPlanEditor({
   const [copying, setCopying] = useState(false);
   const [mode, setMode] = useState<'draft' | 'apply'>('draft');
   const list = useRef<HTMLDivElement>(null);
+  const [openedKey] = useState(() => contentKey(lines, note));
+  const dirty = contentKey(lines, note) !== openedKey;
 
   const byId = useMemo(() => new Map((supplies.data ?? []).map((item) => [item.id, item])), [supplies.data]);
   // Dòng của bản nháp còn trỏ tới vật tư đã xóa: giữ tên để HLV thấy và đổi.
@@ -93,7 +98,7 @@ export function FeedingPlanEditor({
         return saved;
       },
       () => {
-        toast.push(next === 'apply' ? `Đã áp dụng khẩu phần mới cho ${horse.name}` : 'Đã lưu bản nháp khẩu phần', 'success');
+        toast.push(next === 'apply' ? `Đã áp dụng khẩu phần mới cho ${horse.name}` : 'Đã lưu nháp', 'success');
         onSaved();
         onClose();
       },
@@ -103,7 +108,7 @@ export function FeedingPlanEditor({
   const copyFrom = (source: FeedingPlan) => {
     setLines(planLines(source).map(toLine));
     setCopying(false);
-    toast.push(`Đã điền ${planLines(source).length} món từ khẩu phần của ${source.horseName}`, 'info');
+    toast.push(`Đã chép ${planLines(source).length} món từ ${source.horseName}`, 'info');
   };
 
   const options = supplies.data ?? [];
@@ -113,8 +118,11 @@ export function FeedingPlanEditor({
       open
       onClose={onClose}
       width="max-w-3xl"
-      title={draft ? `Sửa bản nháp: ${horse.name}` : `Lập khẩu phần: ${horse.name}`}
-      description="Lượng tính theo đơn vị của vật tư. Không cần đủ cả 4 bữa."
+      title={draft ? `Sửa khẩu phần: ${horse.name}` : `Lập khẩu phần: ${horse.name}`}
+      description="Không cần đủ cả 4 bữa."
+      dirty={dirty}
+      onSave={() => submit('draft')}
+      saveLabel="Lưu nháp"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -124,7 +132,7 @@ export function FeedingPlanEditor({
             {action.pending && mode === 'draft' ? 'Đang lưu…' : 'Lưu nháp'}
           </Button>
           <Button onClick={() => submit('apply')} disabled={action.pending}>
-            {action.pending && mode === 'apply' ? 'Đang áp dụng…' : 'Lưu và áp dụng'}
+            {action.pending && mode === 'apply' ? 'Đang áp dụng…' : 'Áp dụng'}
           </Button>
         </>
       }
@@ -135,13 +143,13 @@ export function FeedingPlanEditor({
         <ErrorBox message={supplies.error} />
       ) : (
         <div ref={list} className="space-y-4">
-          {options.length === 0 && <ErrorBox message="Quản lý CLB chưa thêm thức ăn hoặc thực phẩm bổ sung vào kho, nên chưa chọn được món." />}
+          {options.length === 0 && <ErrorBox message="Kho chưa có thức ăn. Nhờ Quản lý CLB thêm vào kho." />}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-gray-600">
               {lines.length} món{touched && countError ? <span className="ml-2 font-medium text-red-600">{countError}</span> : null}
             </p>
             <Button variant="inline" size="sm" onClick={() => setCopying(true)}>
-              <Copy size={13} /> Sao từ ngựa khác
+              <Copy size={13} /> Chép từ ngựa khác
             </Button>
           </div>
 
@@ -177,7 +185,7 @@ export function FeedingPlanEditor({
                           </Field>
                           <Field error={lineError?.quantity} className="sm:col-span-3">
                             <div className="relative">
-                              <Input value={line.quantity} onChange={(event) => update(line.key, { quantity: event.target.value })} inputMode="decimal" placeholder="Lượng" className="pr-12" />
+                              <QuantityInput value={line.quantity} onChange={(quantity) => update(line.key, { quantity })} placeholder="Lượng" className="pr-12" />
                               <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">{supply?.unit}</span>
                             </div>
                           </Field>
@@ -198,10 +206,10 @@ export function FeedingPlanEditor({
             );
           })}
 
-          <Field label="Ghi chú khẩu phần" error={touched ? noteError : undefined}>
+          <Field label="Ghi chú" error={touched ? noteError : undefined}>
             <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Giảm tinh bột tuần thi đấu, uống đủ nước sau buổi tập" />
           </Field>
-          {mode === 'apply' && <p className="text-xs text-gray-500">Lưu và áp dụng: khẩu phần đang áp dụng (nếu có) chuyển vào lịch sử, Groom thấy bản mới ngay.</p>}
+          {mode === 'apply' && <p className="text-xs text-gray-500">Khẩu phần cũ sẽ chuyển vào lịch sử.</p>}
           {action.error && <ErrorBox message={action.error} />}
         </div>
       )}
@@ -210,7 +218,7 @@ export function FeedingPlanEditor({
   );
 }
 
-/** Chọn ngựa cùng khu đang có khẩu phần áp dụng để sao các dòng. */
+/** Chọn ngựa cùng khu đang có khẩu phần áp dụng để chép các dòng. */
 function CopyFromHorse({ horse, hasLines, onClose, onPick }: { horse: { id: string; barnId?: string | null }; hasLines: boolean; onClose: () => void; onPick: (plan: FeedingPlan) => void }) {
   const horses = useService(async () => (await listAllHorses({ myBarns: true })).filter((item) => item.id !== horse.id && (!horse.barnId || item.location.barn?.id === horse.barnId)), [horse.id, horse.barnId]);
   const [picking, setPicking] = useState<string>();
@@ -231,7 +239,7 @@ function CopyFromHorse({ horse, hasLines, onClose, onPick }: { horse: { id: stri
   };
 
   return (
-    <Modal open onClose={onClose} title="Sao từ ngựa khác" description={hasLines ? 'Các món đang nhập sẽ được thay bằng khẩu phần đang áp dụng của ngựa được chọn.' : 'Điền sẵn khẩu phần đang áp dụng của một ngựa cùng khu, rồi sửa tiếp.'}>
+    <Modal open onClose={onClose} title="Chép từ ngựa khác" description={hasLines ? 'Các món đang nhập sẽ bị thay.' : 'Chọn một ngựa cùng khu.'}>
       {horses.loading && !horses.data ? (
         <Skeleton rows={3} />
       ) : horses.error ? (

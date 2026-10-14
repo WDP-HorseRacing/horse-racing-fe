@@ -3,7 +3,7 @@
 // lượt dắt ngựa tập hôm nay và lịch chăm sóc đến hạn. BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
 import { Link } from 'react-router-dom';
 import { CalendarClock, Flag, Siren } from 'lucide-react';
-import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, HorseListItem, ParticipantStatus } from '../../../api/types';
+import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, HorseListItem } from '../../../api/types';
 import { Avatar, Button, EmptyState, cn } from '../../../components/ui';
 import { ProgressRing } from '../../../components/ui/ProgressRing';
 import { HealthPill } from '../../../components/ui/status';
@@ -16,9 +16,6 @@ import { participantStatusText } from '../../../lib/training-labels';
 import { checklistProgress } from '../care-helpers';
 import { ChecklistItems, ChecklistPill } from './Checklist';
 import { MealPlan } from './MealPlan';
-
-/** Lượt BE vẫn trả nhưng không còn phải dắt (đã báo BE lọc). */
-const HIDDEN_RUNS: ParticipantStatus[] = ['ABSENT', 'SKIPPED', 'INELIGIBLE', 'CANCELLED_BY_LOCK', 'CANCELLED'];
 
 /** Bữa sắp tới hoặc đang trong khoảng 2 giờ, theo giờ CLB. */
 function nextMeal(horse: GroomTodayHorse): FeedingMeal | undefined {
@@ -44,7 +41,7 @@ export function GroomDay({
 }) {
   const byId = new Map(horses.map((horse) => [horse.id, horse]));
 
-  if (today.horses.length === 0) return <EmptyState title="Bạn chưa được phân công chăm sóc ngựa nào" hint="Quản lý CLB hoặc HLV khu phân công Groom cho từng ngựa." />;
+  if (today.horses.length === 0) return <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />;
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -52,7 +49,8 @@ export function GroomDay({
         const horse = byId.get(entry.horseId);
         const checklist = entry.checklist ? (ticked[entry.checklist.id] ?? entry.checklist) : null;
         const progress = checklistProgress(checklist);
-        const runs = entry.trainingRuns.filter((run) => !HIDDEN_RUNS.includes(run.status));
+        // BE chỉ trả lượt còn phải dắt (Chờ điểm danh tới Hoàn thành), không cần lọc thêm.
+        const runs = entry.trainingRuns;
         const place = [entry.barnName, entry.stallCode ? `Ô ${entry.stallCode}` : null].filter(Boolean).join(' · ');
         return (
           <article key={entry.horseId} data-reveal className="flex flex-col rounded-3xl bg-white p-4 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-5">
@@ -91,7 +89,7 @@ export function GroomDay({
                     onChanged={onTicked}
                   />
                 ) : (
-                  <p className="rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-500">Hôm nay không có việc nào cho ngựa này.</p>
+                  <p className="rounded-xl bg-gray-50 px-3 py-3 text-sm text-gray-500">Hôm nay không có việc chăm sóc.</p>
                 )}
               </div>
               <div className="md:col-span-2">

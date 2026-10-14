@@ -18,18 +18,18 @@ export const lifecycleActionHint: Record<LifecycleAction, string> = {
   DECEASED:
     'Ngựa rời câu lạc bộ vĩnh viễn. Hồ sơ chuyển sang chỉ đọc và không đổi lại được. Ngựa còn bệnh án đang mở thì bác sĩ cần đóng bệnh án trước.',
   ACTIVE: 'Đưa ngựa trở lại hoạt động đầy đủ.',
-  DELETE: 'Xóa mềm hồ sơ tạo nhầm. Chỉ áp dụng khi hồ sơ chưa phát sinh dữ liệu nghiệp vụ nào.',
+  DELETE: 'Xóa hồ sơ tạo nhầm. Chỉ xóa được khi hồ sơ chưa có dữ liệu.',
   RESTORE: 'Đưa hồ sơ đã xóa trở lại danh sách. Ngựa luôn vào danh sách Chờ xếp khu.',
 };
 
 /** Chữ trên nút xác nhận của hộp thoại. */
 export const lifecycleActionConfirm: Record<LifecycleAction, string> = {
-  RETIRED: 'Xác nhận giải nghệ',
-  TRANSFERRED: 'Xác nhận chuyển nhượng',
-  DECEASED: 'Xác nhận ngựa đã mất',
-  ACTIVE: 'Xác nhận kích hoạt lại',
-  DELETE: 'Xác nhận xóa hồ sơ',
-  RESTORE: 'Xác nhận khôi phục hồ sơ',
+  RETIRED: 'Giải nghệ',
+  TRANSFERRED: 'Chuyển nhượng',
+  DECEASED: 'Ghi nhận đã mất',
+  ACTIVE: 'Kích hoạt lại',
+  DELETE: 'Xóa hồ sơ',
+  RESTORE: 'Khôi phục',
 };
 
 /** Câu báo sau khi làm xong. */

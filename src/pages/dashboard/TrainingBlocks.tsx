@@ -278,16 +278,23 @@ export function ManagerTrainingCards() {
 
 async function loadOwnerTraining() {
   const horses = await listAllHorses();
+  const empty = { items: [] as HorseTrainingSession[] };
+  // BE chia sẵn: "sắp tới" là lượt còn mở (kể cả đang tập) và lượt Không đủ điều kiện của buổi chưa tới giờ, "lịch sử" là lượt đã kết thúc.
   const rows = await Promise.all(
-    horses.map(async (horse) => ({ horse, sessions: (await listHorseSessions(horse.id, { limit: 30 }).catch(() => ({ items: [] as HorseTrainingSession[] }))).items })),
+    horses.map(async (horse) => {
+      const [upcoming, history] = await Promise.all([
+        listHorseSessions(horse.id, { when: 'upcoming', limit: 5 }).catch(() => empty),
+        listHorseSessions(horse.id, { when: 'history', limit: 20 }).catch(() => empty),
+      ]);
+      return { horse, upcoming: upcoming.items, history: history.items };
+    }),
   );
-  const nowIso = new Date().toISOString();
   const upcoming = rows
-    .flatMap((row) => row.sessions.filter((item) => item.scheduledStartAt > nowIso && ['PLANNED', 'PRESENT', 'READY'].includes(item.participantStatus)).map((item) => ({ horse: row.horse.name, horseId: row.horse.id, item })))
+    .flatMap((row) => row.upcoming.map((item) => ({ horse: row.horse.name, horseId: row.horse.id, item })))
     .sort((a, b) => a.item.scheduledStartAt.localeCompare(b.item.scheduledStartAt))
     .slice(0, 5);
   const reviews = rows
-    .flatMap((row) => row.sessions.filter((item) => item.evaluation).map((item) => ({ horse: row.horse.name, horseId: row.horse.id, item })))
+    .flatMap((row) => row.history.filter((item) => item.evaluation).map((item) => ({ horse: row.horse.name, horseId: row.horse.id, item })))
     .sort((a, b) => b.item.evaluation!.createdAt.localeCompare(a.item.evaluation!.createdAt))
     .slice(0, 4);
   return { upcoming, reviews };

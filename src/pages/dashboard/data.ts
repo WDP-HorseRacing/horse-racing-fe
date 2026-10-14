@@ -15,6 +15,7 @@ import { now } from '../../lib/clock';
 import { isReadOnlyHorse } from '../../lib/horse-rules';
 import { getGroomToday, listIncidents } from '../../api/stable-care';
 import { countSupplyRequests, listLowStock } from '../../api/supplies';
+import { getOwnerCosts } from '../../api/reports';
 import { FEATURES } from '../../config/features';
 
 export const inClub = (horse: HorseListItem) => !isReadOnlyHorse(horse);
@@ -266,9 +267,11 @@ export async function loadGroom() {
 export async function loadOwner() {
   const horses = await listAllHorses();
   const active = horses.filter(inClub);
-  const [cases, care] = await Promise.all([
+  const [cases, care, costs] = await Promise.all([
     Promise.all(horses.map((horse) => listHorseCases(horse.id).then((result) => ({ horse, ...result })).catch(() => ({ horse, items: [] as MedicalCase[], totalCost: undefined })))),
     Promise.all(active.map((horse) => listCareSchedules(horse.id).then((items) => items.map((schedule) => ({ schedule, horseName: horse.name }))).catch(() => []))),
+    // 30 ngày gần nhất (mặc định của BE): phí nuôi + y tế đã chốt.
+    getOwnerCosts({}).catch(() => null),
   ]);
   const schedules = care.flat().filter((item) => item.schedule.status === 'SCHEDULED');
   const allCases = cases.flatMap((entry) => entry.items.map((item) => ({ ...item, horseName: entry.horse.name })));
@@ -278,6 +281,7 @@ export async function loadOwner() {
     openCases: allCases.filter((item) => item.status === 'OPEN'),
     closedCases: allCases.filter((item) => item.status === 'CLOSED').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '')),
     medicalCost: cases.reduce((sum, entry) => sum + (entry.totalCost ?? 0), 0),
+    costs,
     schedules,
     week: medicalWeek(undefined, schedules),
     overdue: medicalOverdue(undefined, schedules),

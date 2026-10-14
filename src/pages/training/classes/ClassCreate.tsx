@@ -331,12 +331,12 @@ function CreateForm({ plans, subjects, classes }: { plans: TrainingPlan[]; subje
     );
   };
 
-  // Mã lớp trùng với lớp của HLV khác (FE không thấy): BE trả 409, gắn vào ô mã lớp.
-  const createError = create.error;
+  // Mã lớp trùng với lớp của HLV khác (FE không thấy): BE trả 409 kèm lỗi ô `code`, gắn vào ô mã lớp.
+  const codeError = create.fieldErrors.code;
   const [seenError, setSeenError] = useState<string>();
-  if (createError !== seenError) {
-    setSeenError(createError);
-    if (createError && /^Mã lớp/.test(createError)) setCodeServerError(createError);
+  if (codeError !== seenError) {
+    setSeenError(codeError);
+    if (codeError) setCodeServerError(codeError);
   }
   useEffect(() => {
     if (codeServerError && formRef.current) scrollToFirstError(formRef.current);
@@ -364,7 +364,7 @@ function CreateForm({ plans, subjects, classes }: { plans: TrainingPlan[]; subje
   return (
     <div className="space-y-5 pb-4">
       {leaveModal}
-      <PageHeader back={<BackLink fallback={links.classes} />} title="Mở lớp huấn luyện" description="Lớp theo một giáo án của bạn. Lịch buổi tập tự sinh từ giáo án ngay bên dưới, chỉnh xong mới lưu." />
+      <PageHeader back={<BackLink fallback={links.classes} />} title="Mở lớp huấn luyện" description="Lịch tạo sẵn theo giáo án, chỉnh xong thì bấm Tạo lớp." />
 
       <div ref={formRef} className="grid gap-5 lg:grid-cols-12">
         <section className="space-y-5 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80 lg:col-span-8">
@@ -502,7 +502,7 @@ function CreateForm({ plans, subjects, classes }: { plans: TrainingPlan[]; subje
         )}
         {scheduleEdited && validSetup && setupKey !== generatedKey && (
           <p className="mx-5 mt-4 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
-            Thiết lập đã đổi, lịch đang giữ bản bạn chỉnh. Bấm "Tạo lại theo giáo án" nếu muốn sinh lại.
+            Bạn vừa đổi thông tin lớp. Bấm "Tạo lại theo giáo án" để cập nhật lịch.
           </p>
         )}
 
@@ -605,9 +605,9 @@ function CreateForm({ plans, subjects, classes }: { plans: TrainingPlan[]; subje
         <p className={cn('mr-auto text-sm', blockers.length ? 'font-medium text-red-700' : 'text-gray-500')}>
           {blockers.length ? blockers.join(' · ') : `${setup.code || 'Lớp mới'}: ${sessions.length} buổi từ ${formatDate(setup.startDate)} đến ${formatDate(endDate)}`}
         </p>
-        {create.error && !/^Mã lớp/.test(create.error) && <p className="w-full text-sm text-red-700 sm:w-auto">{create.error}</p>}
+        {create.error && !create.fieldErrors.code && <p className="w-full text-sm text-red-700 sm:w-auto">{create.error}</p>}
         <Button onClick={submit} disabled={create.pending || generating}>
-          <CalendarCheck size={16} /> {create.pending ? 'Đang tạo lớp…' : `Tạo lớp với ${sessions.length} buổi`}
+          <CalendarCheck size={16} /> {create.pending ? 'Đang tạo lớp…' : 'Tạo lớp'}
         </Button>
       </div>
 
@@ -615,11 +615,11 @@ function CreateForm({ plans, subjects, classes }: { plans: TrainingPlan[]; subje
         <SessionEditSheet
           key={editing === 'new' ? `new-${newAt?.date}` : (editing as PreviewSession).uid}
           title={editing === 'new' ? 'Thêm buổi' : 'Sửa buổi'}
-          description={editing === 'new' ? `Tuần ${newAt?.week} của lớp, ${newAt ? formatDate(newAt.date) : ''}` : 'Chỉ đổi trong bản nháp này, bấm Tạo lớp mới lưu.'}
+          description={editing === 'new' ? `Tuần ${newAt?.week} của lớp, ${newAt ? formatDate(newAt.date) : ''}` : undefined}
           initial={editingDraft}
           subjects={subjects}
           range={range}
-          submitLabel={editing === 'new' ? 'Thêm buổi' : 'Cập nhật buổi'}
+          submitLabel={editing === 'new' ? 'Thêm buổi' : 'Lưu'}
           onClose={() => {
             setEditing(null);
             setNewAt(null);

@@ -37,8 +37,18 @@ export function humanizeMessage(message: string): string {
 }
 
 /**
+ * Câu lỗi hiện ngay dưới ô: bỏ tên ô tiếng Anh ở đầu câu validate mặc định của BE
+ * ("name tối đa 160 ký tự" thành "Tối đa 160 ký tự"). Câu nghiệp vụ tiếng Việt giữ nguyên.
+ */
+export function fieldMessage(field: string, message: string): string {
+  if (!message.startsWith(`${field} `)) return message;
+  const rest = message.slice(field.length + 1);
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/**
  * Đoán ô nhập liên quan từ câu lỗi của backend. Chỉ dùng khi lỗi không kèm `errors` theo ô
- * (lỗi 409, hoặc backend cũ chưa trả tên ô).
+ * (lỗi nghiệp vụ không gắn ô, ví dụ 409 dữ liệu vừa đổi).
  */
 export function fieldFromMessage(message: string | undefined): string | undefined {
   if (!message) return undefined;

@@ -4,8 +4,12 @@ import * as Popover from '@radix-ui/react-popover';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
+  BarChart3,
   Bell,
   BookOpenCheck,
+  Coins,
+  History,
+  Wallet,
   CalendarRange,
   Flag,
   Layers,
@@ -77,10 +81,12 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
   const careItem: NavItem = { name: 'Chăm sóc khu', path: links.stableCare(), icon: ClipboardList };
   const incidentsItem: NavItem = { name: 'Sự cố', path: links.incidents(), icon: Siren };
   const suppliesItem: NavItem = { name: 'Vật tư', path: links.supplies(), icon: Package };
+  const overview: NavItem = { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard };
+  const reportsItem: NavItem = { name: 'Báo cáo', path: links.reports(), icon: BarChart3 };
   switch (role) {
     case 'CLUB_MANAGER':
       return [
-        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
+        { items: [overview, reportsItem] },
         {
           group: 'Đàn ngựa',
           items: [
@@ -102,12 +108,14 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           group: 'Quản trị',
           items: [
             { name: 'Nhân sự', path: links.adminUsers, icon: UserCog },
+            { name: 'Phí nuôi', path: links.adminFees, icon: Coins },
+            { name: 'Nhật ký thao tác', path: links.adminAudit, icon: History },
           ],
         },
       ];
     case 'HEAD_TRAINER':
       return [
-        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
+        { items: [overview, reportsItem] },
         training([{ name: 'Hôm nay trên sân', path: links.today, icon: Flag }, classesItem, plansItem, subjectsItem]),
         {
           group: 'Đàn ngựa',
@@ -126,7 +134,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
       ];
     case 'VETERINARIAN':
       return [
-        { items: [{ name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard }] },
+        { items: [overview, reportsItem] },
         medical([
           { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
@@ -164,6 +172,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
             { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard },
             { name: 'Ngựa của tôi', path: links.horses, icon: Users },
             { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
+            { name: 'Chi phí', path: links.myCosts, icon: Wallet },
           ],
         },
       ];

@@ -109,7 +109,7 @@ export interface Eligibility {
 
 export interface LatestMeasurement {
   type: MeasurementType;
-  value: string;
+  value: number;
   unit: string;
   measuredAt: string;
   isAbnormal: boolean;
@@ -252,6 +252,8 @@ export interface LifecyclePreview {
   trainingLockReleased: boolean;
   examRequestsDismissed: number;
   careSchedulesCancelled: number;
+  /** Số sự cố tại chuồng đang mở sẽ tự đóng (chuyển nhượng, đã mất). */
+  incidentsClosed: number;
   healthResetTo: HealthStatus | null;
   pendingBarnAfter: boolean;
   ownerCleared: string | null;
@@ -291,7 +293,8 @@ export interface BarnPreview {
 
 export type BarnStatus = 'ACTIVE' | 'MAINTENANCE' | 'CLOSED';
 export type StallStatus = 'AVAILABLE' | 'OCCUPIED' | 'MAINTENANCE';
-export type StallType = 'STANDARD' | 'ISOLATION' | 'RECOVERY' | 'FOALING';
+/** BE đã bỏ loại ô Sinh sản (FOALING): câu lạc bộ chỉ quản lý ngựa từ 1 tuổi. */
+export type StallType = 'STANDARD' | 'ISOLATION' | 'RECOVERY';
 
 export interface Barn {
   id: string;
@@ -523,6 +526,8 @@ export interface ExamRequest {
   handledAt: string | null;
   medicalRecordId: string | null;
   alertType: 'FEVER' | 'WEIGHT_DROP' | null;
+  /** Sự cố tại chuồng sinh ra yêu cầu này (nguồn Groom báo), null nếu không có. */
+  incidentId: string | null;
   createdAt: string;
 }
 
@@ -595,6 +600,8 @@ export interface MedicalDashboard {
       horseId: string;
       horseName: string;
       barnId: string | null;
+      /** Tên khu, đi cùng barnId. */
+      barnName: string | null;
       stallId: string | null;
       stallCode: string | null;
       healthStatus: HealthStatus;
@@ -646,7 +653,9 @@ export type NotificationCategory =
   /** Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo. resource là ngựa. */
   | 'DAILY_CHECKLIST'
   /** Flow 4: sự cố mới (HLV khu) và sự cố mở quá 4 giờ (HLV khu, Quản lý CLB). resource là ngựa. */
-  | 'INCIDENT';
+  | 'INCIDENT'
+  /** Flow 4: đề xuất vật tư mới (Quản lý CLB), đã duyệt, từ chối, đã cấp (người gửi), sắp hết (Quản lý CLB, HIGH). resource null. */
+  | 'SUPPLY';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */

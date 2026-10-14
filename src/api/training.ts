@@ -1,5 +1,4 @@
 // Flow 2 — môn học, giáo án, lớp, buổi tập, lượt tập, chạy thử, đánh giá, bàn giao HLV trưởng.
-// Số BE trả dạng chuỗi (cự ly và thời gian của chạy thử) được đổi sang number ngay ở đây.
 import { isApiError } from '../lib/errors';
 import { http } from './http';
 import type {
@@ -27,16 +26,6 @@ import type {
   TrialResult,
   UpdateClassInput,
 } from './types';
-
-const num = (value: unknown): number => (value === null || value === undefined || value === '' ? 0 : Number(value));
-const numOrNull = (value: unknown): number | null => (value === null || value === undefined || value === '' ? null : Number(value));
-
-const toTimeTrial = (row: TimeTrial): TimeTrial => ({ ...row, distanceM: num(row.distanceM), targetTimeMs: numOrNull(row.targetTimeMs) });
-const toTrial = (row: TrialResult): TrialResult => ({ ...row, elapsedMs: num(row.elapsedMs) });
-const toHorseSession = (row: HorseTrainingSession): HorseTrainingSession => ({
-  ...row,
-  trialResults: row.trialResults.map((trial) => ({ ...trial, elapsedMs: num(trial.elapsedMs) })),
-});
 
 /* ===== Môn học (CM sửa, HT / VET / Groom xem) ===== */
 
@@ -90,11 +79,11 @@ export const publishSessions = (classId: string, range: { from?: string; to?: st
 export const cancelSession = (id: string, reason: string) => http.post<TrainingSession>(`/training-sessions/${id}/cancel`, { reason });
 
 /** Chỉ dùng khi sửa buổi thường thành buổi chạy thử. Thêm buổi chạy thử thì gửi targetTimeMs cùng addSession. */
-export const createTimeTrial = async (sessionId: string, input: { distanceM: number; targetTimeMs?: number; notes?: string }) =>
-  toTimeTrial(await http.post<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input));
-export const getTimeTrial = async (sessionId: string) => toTimeTrial(await http.get<TimeTrial>(`/training-sessions/${sessionId}/time-trial`));
-export const updateTimeTrial = async (sessionId: string, input: { distanceM?: number; targetTimeMs?: number | null; notes?: string | null }) =>
-  toTimeTrial(await http.patch<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input));
+export const createTimeTrial = (sessionId: string, input: { distanceM: number; targetTimeMs?: number; notes?: string }) =>
+  http.post<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input);
+export const getTimeTrial = (sessionId: string) => http.get<TimeTrial>(`/training-sessions/${sessionId}/time-trial`);
+export const updateTimeTrial = (sessionId: string, input: { distanceM?: number; targetTimeMs?: number | null; notes?: string | null }) =>
+  http.patch<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input);
 
 /* ===== Lượt tập ===== */
 
@@ -110,14 +99,13 @@ export const readyParticipant = (id: string) => http.post<Participant>(`/session
 export const startParticipant = (id: string) => http.post<Participant>(`/session-participants/${id}/start`);
 export const completeParticipant = (id: string) => http.post<Participant>(`/session-participants/${id}/complete`);
 
-export const listTrialResults = async (participantId: string) =>
-  (await http.get<TrialResult[]>(`/session-participants/${participantId}/trial-results`)).map(toTrial);
+export const listTrialResults = (participantId: string) => http.get<TrialResult[]>(`/session-participants/${participantId}/trial-results`);
 /** `videoMediaId`: video do chính HLV tải lên (uploadTrialVideo). Chỉ ghi được khi buổi đang diễn ra. */
-export const recordTrialResult = async (participantId: string, input: { attemptNo: number; elapsedMs: number; notes?: string; videoMediaId?: string }) =>
-  toTrial(await http.post<TrialResult>(`/session-participants/${participantId}/trial-results`, input));
+export const recordTrialResult = (participantId: string, input: { attemptNo: number; elapsedMs: number; notes?: string; videoMediaId?: string }) =>
+  http.post<TrialResult>(`/session-participants/${participantId}/trial-results`, input);
 /** Gắn, đổi hoặc gỡ (null) video sau buổi. Chỉ HLV trưởng của lớp, trong 7 ngày sau giờ kết thúc dự kiến, buổi chưa hủy. */
-export const updateTrialVideo = async (participantId: string, attemptNo: number, videoMediaId: string | null) =>
-  toTrial(await http.patch<TrialResult>(`/session-participants/${participantId}/trial-results/${attemptNo}`, { videoMediaId }));
+export const updateTrialVideo = (participantId: string, attemptNo: number, videoMediaId: string | null) =>
+  http.patch<TrialResult>(`/session-participants/${participantId}/trial-results/${attemptNo}`, { videoMediaId });
 
 /** 404 khi lượt chưa có đánh giá: trả null. */
 export const getEvaluation = async (participantId: string) => {
@@ -135,13 +123,8 @@ export const createEvaluation = (participantId: string, input: { score: number; 
 /* ===== Tab Huấn luyện của ngựa (CM, HT, bác sĩ, chủ ngựa) ===== */
 
 export const listHorseClasses = (horseId: string) => http.get<HorseTrainingClass[]>(`/horses/${horseId}/training/classes`);
-export const listHorseSessions = async (
-  horseId: string,
-  query: { when?: 'upcoming' | 'history'; classId?: string; page?: number; limit?: number } = {},
-) => {
-  const page = await http.get<Page<HorseTrainingSession>>(`/horses/${horseId}/training/sessions`, query);
-  return { ...page, items: page.items.map(toHorseSession) };
-};
+export const listHorseSessions = (horseId: string, query: { when?: 'upcoming' | 'history'; classId?: string; page?: number; limit?: number } = {}) =>
+  http.get<Page<HorseTrainingSession>>(`/horses/${horseId}/training/sessions`, query);
 
 /* ===== Bàn giao HLV trưởng (CM) ===== */
 

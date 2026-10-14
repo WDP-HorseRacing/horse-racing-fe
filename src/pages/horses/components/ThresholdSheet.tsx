@@ -43,7 +43,7 @@ export default function ThresholdSheet({
   const errors: string[] = [];
   if (!name.trim()) errors.push('Nhập tên bộ ngưỡng');
   if (warning >= critical) errors.push('Ngưỡng cảnh báo phải nhỏ hơn ngưỡng nguy hiểm');
-  if (to && from && to <= from) errors.push('Hết hiệu lực phải sau lúc bắt đầu hiệu lực');
+  if (to && from && to <= from) errors.push('Thời điểm kết thúc phải sau thời điểm bắt đầu');
 
   return (
     <Modal
@@ -51,7 +51,8 @@ export default function ThresholdSheet({
       width="max-w-2xl"
       onClose={onClose}
       title={`Đặt ngưỡng cho ${horseName}`}
-      description={`Tạo phiên bản ${nextVersion}. Phiên bản cũ vẫn giữ trong lịch sử.`}
+      description="Ngưỡng cũ vẫn giữ trong lịch sử."
+      dirty={warning !== current.heartRateWarningBpm || critical !== current.heartRateCriticalBpm || speed !== current.maxSpeedMps || to !== '' || name !== `Bộ ngưỡng ${nextVersion}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -69,13 +70,13 @@ export default function ThresholdSheet({
                     limits: { heartRateWarningBpm: warning, heartRateCriticalBpm: critical, maxSpeedMps: speed },
                   }),
                 () => {
-                  toast.push(`Đã lưu ngưỡng phiên bản ${nextVersion} cho ${horseName}`, 'success');
+                  toast.push(`Đã lưu ngưỡng mới cho ${horseName}`, 'success');
                   onSaved();
                 },
               )
             }
           >
-            {save.pending ? 'Đang lưu…' : 'Lưu phiên bản mới'}
+            {save.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }

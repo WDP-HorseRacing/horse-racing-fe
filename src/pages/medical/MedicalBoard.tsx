@@ -2,7 +2,7 @@
 // Bố cục: 4 số liệu → "Hàng đợi khám" (gộp yêu cầu khám, hẹn tái khám tới hạn, khám định kỳ cần chú ý; việc gấp
 // lên đầu, mỗi dòng một nút Khám) → cột phải: sức khỏe đàn (bấm để lọc), đang điều trị, chăm sóc đến hạn →
 // sơ đồ đàn theo khu thu gọn ở cuối. Bộ lọc khu và sức khỏe áp cho mọi khối (sức khỏe lọc ở FE để số đếm đủ).
-// Head Trainer chỉ thấy ngựa thuộc khu mình phụ trách và khu cách ly (BE trả toàn câu lạc bộ, FE lọc).
+// Head Trainer chỉ thấy ngựa thuộc khu mình phụ trách (BE lọc theo khu của HT).
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CalendarClock, ChevronDown, ClipboardList, FolderOpen, Map as MapIcon, Stethoscope, Syringe, X } from 'lucide-react';
@@ -17,7 +17,7 @@ import { MedicalBoardSkeleton } from '../../components/skeletons';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
 import { primeZoneScope } from '../../hooks/useMyScope';
-import { filterHealth, scopeDashboard } from './components/scope';
+import { filterHealth } from './components/scope';
 import { QUEUE_LABEL, buildQueue, matchesFilter, type QueueFilter, type QueueItem, type QueueKind } from './components/queue';
 import { healthDot } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
@@ -178,7 +178,7 @@ export default function MedicalBoard() {
       Promise.all([listBarns(), listStalls()]).then(([items, stalls]) => {
         const scope = computeZoneScope(user, items, stalls);
         if (user && scope.trainer) primeZoneScope(user.id, items, stalls);
-        // HT: chỉ các khu được xem (khu mình + khu cách ly).
+        // HT: BE chỉ trả khu mình phụ trách, lọc lại theo phạm vi cho chắc.
         return { items: items.filter((barn) => canSeeBarn(scope, barn.id)), stalls, scope };
       }),
     [user?.id, user?.role],
@@ -188,13 +188,8 @@ export default function MedicalBoard() {
   const people = usePeople();
   const exam = (visit: VisitParams = {}) => navigate(links.visitNew({ ...visit, back: links.medicalBoard }));
 
-  const visible = barns.data?.scope.visibleBarnIds;
-  // Dữ liệu theo phạm vi (HT) — dùng cho biểu đồ; `data` thêm bộ lọc sức khỏe — dùng cho các danh sách.
-  const scoped = useMemo(() => {
-    if (!board.data) return undefined;
-    if (!trainer) return board.data;
-    return visible ? scopeDashboard(board.data, visible) : undefined;
-  }, [board.data, trainer, visible]);
+  // BE đã giới hạn HT theo khu mình (mọi khối và số đếm). `scoped` dùng cho biểu đồ, `data` thêm bộ lọc sức khỏe cho các danh sách.
+  const scoped = board.data;
   const data = useMemo(() => (scoped ? filterHealth(scoped, health) : undefined), [scoped, health]);
 
   // Sơ đồ đàn: mỗi khu một lưới 3×3 ô như Sơ đồ chuồng. Ô có ngựa không khớp bộ lọc sức khỏe hiện mờ.
@@ -220,7 +215,7 @@ export default function MedicalBoard() {
   const today = todayKey();
   const queue = useMemo(() => (data ? buildQueue(data, today, links.case) : []), [data, today]);
 
-  // HT chờ có phạm vi khu rồi mới hiện, để không lóe dữ liệu toàn câu lạc bộ.
+  // HT chờ danh sách khu rồi mới hiện, để sơ đồ đàn không lóe trống.
   if ((board.loading || (trainer && barns.loading)) && !data) return <MedicalBoardSkeleton />;
   if (board.error && !data) return <ErrorBox message={board.error} />;
   if (!data || !scoped) return null;
@@ -244,7 +239,7 @@ export default function MedicalBoard() {
         title="Bảng điều khiển y tế"
         description={
           trainer
-            ? 'Việc khám và chăm sóc của ngựa trong khu bạn phụ trách và khu cách ly, việc gấp lên đầu.'
+            ? 'Việc khám và chăm sóc của ngựa trong khu bạn phụ trách, việc gấp lên đầu.'
             : 'Việc cần khám hôm nay, ngựa đang điều trị và lịch chăm sóc của toàn đàn, việc gấp lên đầu.'
         }
         actions={
@@ -412,12 +407,16 @@ export default function MedicalBoard() {
                 {data.openCases.map((item) => {
                   const due = !!item.nextVisitAt && item.nextVisitAt.slice(0, 10) <= today;
                   const days = Math.max(0, daysBetween(item.openedAt, now()));
+                  const barnName = data.herd.horses.find((horse) => horse.horseId === item.horseId)?.barnName;
                   return (
                     <li key={item.caseId}>
                       <Link to={links.case(item.caseId)} className="flex items-start gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
                         <Avatar name={item.horseName} size={32} className="rounded-lg" />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-semibold text-gray-900">{item.horseName}</span>
+                          <span className="block truncate text-sm font-semibold text-gray-900">
+                            {item.horseName}
+                            {barnName && <span className="font-normal text-gray-500"> · {barnName}</span>}
+                          </span>
                           <span className="block truncate text-xs text-gray-500">{item.initialDiagnosis}</span>
                           <span className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
                             <span className="tint-gray rounded-md px-1.5 py-0.5">Ngày thứ {days + 1}</span>

@@ -180,7 +180,12 @@ function SimulatorControls({ participantId, horseName, criticalBpm }: { particip
           <span className="font-medium text-amber-800">Mất kết nối máy chủ, đang giữ {sim.pending} điểm để gửi bù</span>
         ) : (
           <span className="text-gray-600">
-            Cảm biến giả lập đã gửi <b className="font-mono text-gray-900">{sim.sent}</b> điểm
+            Máy chủ đã nhận <b className="font-mono text-gray-900">{sim.sent}</b> điểm từ cảm biến giả lập
+          </span>
+        )}
+        {sim && sim.rejected > 0 && (
+          <span className="mt-0.5 block font-medium text-amber-800">
+            Máy chủ bỏ {sim.rejected} điểm vì thời điểm đo lệch giờ máy chủ. Kiểm tra đồng hồ máy tính.
           </span>
         )}
       </p>

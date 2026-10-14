@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "be",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "../horse-racing-ne", "start:prod"],
+      "port": 3000
+    },
+    {
+      "name": "fe",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}

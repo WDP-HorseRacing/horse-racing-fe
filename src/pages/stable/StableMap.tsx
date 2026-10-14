@@ -1,7 +1,7 @@
 // Sơ đồ chuồng (gộp cả danh mục khu và ô). Cột trái: tổng quan, các danh sách chờ xếp chỗ, ngựa cần chú ý,
 // khu cần xử lý. Cột phải: mỗi khu một thẻ lưới 3×3 ô, rê chuột vào ô để xem ngựa, bấm ô để thao tác.
 // CM: xếp/đổi khu (F1.6), quản lý khu và ô. HT của khu: xếp ô, chuyển ô, gỡ ô, giao/đổi Groom (F1.7).
-// HT chỉ thấy khu mình phụ trách và khu cách ly (khu cách ly của HT khác chỉ xem). Bấm tên khu để phóng to (?focus=).
+// HT chỉ thấy khu mình phụ trách (BE lọc /barns). Bấm tên khu để phóng to (?focus=).
 // Dữ liệu ghép từ /barns, /stalls và /horses (ô có ngựa xác định qua location.stall.id).
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -50,7 +50,7 @@ async function loadMap(user: User | null, isManager: boolean) {
     listAllHorses(),
     isManager ? listAllUsers({ role: 'HEAD_TRAINER', status: 'ACTIVE' }) : Promise.resolve([]),
   ]);
-  // HT chỉ thấy khu mình phụ trách và khu cách ly; các vai trò khác thấy toàn câu lạc bộ.
+  // HT chỉ thấy khu mình phụ trách; các vai trò khác thấy toàn câu lạc bộ.
   const scope = computeZoneScope(user, barns, stalls);
   if (user && scope.trainer) primeZoneScope(user.id, barns, stalls);
   const inClub = horses.filter((horse) => !isReadOnlyHorse(horse));
@@ -309,13 +309,13 @@ export default function StableMap() {
     const full = stallFullReason(zone.barn, zone.stalls.length);
     const items: MenuAction[] = [
       { label: 'Sửa tên, sức chứa, mô tả', onSelect: () => setFormOpen({ zone: zone.barn }) },
-      { label: zone.barn.headTrainerId ? 'Đổi HT phụ trách' : 'Gán HT phụ trách', onSelect: () => setTrainerZone(zone.barn) },
+      { label: zone.barn.headTrainerId ? 'Đổi HLV phụ trách' : 'Gán HLV phụ trách', onSelect: () => setTrainerZone(zone.barn) },
       { label: 'Đổi trạng thái', onSelect: () => setStatusZone(zone.barn) },
       { label: full ? `Thêm ô (${full})` : 'Thêm ô', disabled: !!full, onSelect: () => setStallsZone(zone) },
     ];
     if (zone.barn.headTrainerId) {
       items.push({
-        label: zone.horseCount ? `Gỡ HT phụ trách (khu còn ${zone.horseCount} ngựa)` : 'Gỡ HT phụ trách',
+        label: zone.horseCount ? `Gỡ HLV phụ trách (khu còn ${zone.horseCount} ngựa)` : 'Gỡ HLV phụ trách',
         icon: <UserMinus size={14} />,
         danger: true,
         disabled: zone.horseCount > 0,
@@ -553,7 +553,7 @@ export default function StableMap() {
                             </Button>
                           ) : noTrainer ? (
                             <Button size="sm" variant="inline" onClick={() => setTrainerZone(zone.barn)}>
-                              Gán HT
+                              Gán HLV
                             </Button>
                           ) : canAdd ? (
                             <Button size="sm" variant="inline" onClick={() => setStallsZone(zone)}>

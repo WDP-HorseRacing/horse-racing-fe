@@ -38,6 +38,11 @@ export const CaseClose = lazyPage(() => import('../pages/medical/CaseClose'));
 export const CareNew = lazyPage(() => import('../pages/medical/CareNew'));
 
 export const AdminUsers = lazyPage(() => import('../pages/admin/AdminPages').then((module) => ({ default: module.AdminUsers })));
+export const AuditLog = lazyPage(() => import('../pages/admin/AuditLog'));
+export const DailyFees = lazyPage(() => import('../pages/admin/DailyFees'));
+
+export const Reports = lazyPage(() => import('../pages/reports/Reports'));
+export const OwnerCosts = lazyPage(() => import('../pages/reports/OwnerCosts'));
 
 /** Đường dẫn trong menu → trang (khớp tiền tố dài nhất). */
 const ROUTES: [string, LazyPage][] = [
@@ -58,6 +63,10 @@ const ROUTES: [string, LazyPage][] = [
   ['/medical/periodic', PeriodicExams],
   ['/medical/care', CareSchedules],
   ['/medical/costs', CostReport],
+  ['/reports', Reports],
+  ['/reports/my-costs', OwnerCosts],
+  ['/admin/audit', AuditLog],
+  ['/admin/fees', DailyFees],
   ['/admin/users', AdminUsers],
 ];
 

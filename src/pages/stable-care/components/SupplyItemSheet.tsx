@@ -1,36 +1,87 @@
-// Ngăn chi tiết một vật tư: tồn so với ngưỡng, lần kiểm kê gần nhất, các nút thao tác theo vai trò và sổ nhập xuất.
-// Sổ chỉ thêm, không sửa: mỗi lần kiểm kê hoặc cấp theo đề xuất một dòng (chênh lệch, tồn sau, người làm).
-import { useState } from 'react';
-import { ClipboardCheck, PackagePlus, Pencil } from 'lucide-react';
-import { listSupplyMovements } from '../../../api/supplies';
-import type { SupplyItem, SupplyMovement } from '../../../api/types';
+// Ngăn chi tiết một vật tư: tồn so với ngưỡng, các lô hàng (lô cũ dùng trước), nút thao tác theo vai trò và sổ nhập xuất.
+// Sổ chỉ thêm, không sửa: tồn ban đầu, nhập hàng, cấp theo đề xuất, xuất dùng. Một lần xuất trừ nhiều lô thì BE ghi
+// mỗi lô một dòng, ở đây gộp lại thành một dòng. Tiền (đơn giá, thành tiền, giá trị tồn) chỉ hiện khi showPrice.
+import { useMemo, useState } from 'react';
+import { ArrowDownToLine, PackageMinus, PackagePlus, Pencil } from 'lucide-react';
+import { listSupplyLots, listSupplyMovements } from '../../../api/supplies';
+import type { SupplyItem, SupplyLot, SupplyMovement } from '../../../api/types';
 import { Button, EmptyState, ErrorBox, Meter, Pill, Sheet, Skeleton, cn } from '../../../components/ui';
 import { useService } from '../../../hooks/useService';
 import { now } from '../../../lib/clock';
-import { formatDateTime, formatRelative } from '../../../lib/format';
+import { formatDate, formatDateTime, formatMoney, formatRelative } from '../../../lib/format';
 import { formatAmount, formatQuantity, movementTypeText, supplyCategoryText } from '../../../lib/stable-labels';
 import { stockTone } from '../care-helpers';
 
+/** Một dòng sổ đã gộp: nhiều dòng xuất dùng của cùng một lần lấy (khác lô) thành một. */
+interface LedgerRow extends SupplyMovement {
+  lots: number;
+}
+
+/** Gộp các dòng xuất dùng liền nhau cùng người, cùng ghi chú, cách nhau dưới 2 giây (một lần lấy trừ nhiều lô). */
+function groupUsages(rows: SupplyMovement[]): LedgerRow[] {
+  const grouped: LedgerRow[] = [];
+  for (const row of rows) {
+    const last = grouped.at(-1);
+    const sameUsage =
+      last &&
+      last.type === 'USAGE' &&
+      row.type === 'USAGE' &&
+      last.creator.id === row.creator.id &&
+      (last.note ?? '') === (row.note ?? '') &&
+      Math.abs(new Date(last.createdAt).getTime() - new Date(row.createdAt).getTime()) < 2000;
+    if (sameUsage) {
+      last.delta = Math.round((last.delta + row.delta) * 100) / 100;
+      // Sổ mới nhất trước: dòng đầu nhóm có tồn sau cùng, giữ nguyên.
+      last.amount = last.amount === null || row.amount === null ? null : last.amount + row.amount;
+      last.unitPrice = last.unitPrice === row.unitPrice ? last.unitPrice : null;
+      last.lots += 1;
+    } else {
+      grouped.push({ ...row, lots: 1 });
+    }
+  }
+  return grouped;
+}
+
+const DOT: Record<SupplyMovement['type'], string> = {
+  RESTOCK: 'bg-emerald-600',
+  USAGE: 'bg-amber-500',
+  OPENING: 'bg-gray-400',
+  COUNT_ADJUST: 'bg-gray-300',
+};
+
 export function SupplyItemSheet({
   item,
+  showPrice,
   onClose,
-  onCount,
+  onReceive,
+  onUse,
   onRequest,
   onEdit,
 }: {
   item: SupplyItem;
+  /** Quản lý CLB: hiện đơn giá, thành tiền, giá trị tồn. */
+  showPrice: boolean;
   onClose: () => void;
-  onCount?: () => void;
+  onReceive?: () => void;
+  onUse?: () => void;
   onRequest?: () => void;
   onEdit?: () => void;
 }) {
   const [pages, setPages] = useState(1);
-  // Đổi tồn (kiểm kê vừa lưu) thì tải lại sổ.
+  const [showEmptyLots, setShowEmptyLots] = useState(false);
+  // Đổi tồn (nhập, xuất, cấp vừa lưu) thì tải lại sổ và lô.
   const ledger = useService(async () => {
     const results = await Promise.all(Array.from({ length: pages }, (_, index) => listSupplyMovements(item.id, index + 1, 20)));
     return { items: results.flatMap((page) => page.items), total: results[0]?.meta.total ?? 0 };
   }, [item.id, item.quantityOnHand, pages]);
-  const rows: SupplyMovement[] = ledger.data?.items ?? [];
+  const lots = useService(() => listSupplyLots(item.id), [item.id, item.quantityOnHand]);
+  const rows = useMemo(() => groupUsages(ledger.data?.items ?? []), [ledger.data]);
+
+  const allLots: SupplyLot[] = lots.data ?? [];
+  const openLots = allLots.filter((lot) => lot.remaining > 0);
+  const emptyLots = allLots.filter((lot) => lot.remaining <= 0);
+  const stockValue = openLots.reduce((sum, lot) => sum + lot.remaining * lot.unitPrice, 0);
+  const unpriced = openLots.some((lot) => lot.unitPrice === 0);
 
   return (
     <Sheet
@@ -45,14 +96,19 @@ export function SupplyItemSheet({
               <Pencil size={14} /> Sửa
             </Button>
           )}
-          {onCount && (
-            <Button variant="secondary" onClick={onCount}>
-              <ClipboardCheck size={15} /> Kiểm kê
+          {onUse && (
+            <Button variant="secondary" onClick={onUse}>
+              <PackageMinus size={15} /> Xuất dùng
+            </Button>
+          )}
+          {onReceive && (
+            <Button onClick={onReceive}>
+              <ArrowDownToLine size={15} /> Nhập hàng
             </Button>
           )}
           {onRequest && (
             <Button onClick={onRequest}>
-              <PackagePlus size={15} /> Đề xuất bổ sung
+              <PackagePlus size={15} /> Đề xuất thêm
             </Button>
           )}
         </>
@@ -61,7 +117,7 @@ export function SupplyItemSheet({
       <section className="rounded-2xl bg-gradient-to-br from-emerald-50 to-white p-4 ring-1 ring-emerald-100">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs text-gray-500">Đang có</p>
+            <p className="text-xs text-gray-500">Còn</p>
             <p className="font-mono text-3xl font-bold tabular-nums text-gray-900">
               {formatQuantity(item.quantityOnHand)} <span className="text-base font-medium text-gray-500">{item.unit}</span>
             </p>
@@ -70,10 +126,39 @@ export function SupplyItemSheet({
         </div>
         <Meter className="mt-3" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
         <p className="mt-2 text-xs text-gray-500">Báo thiếu khi còn {formatAmount(item.reorderThreshold, item.unit)} hoặc ít hơn.</p>
-        <p className="mt-1 text-xs text-gray-500">
-          {item.lastCountedAt ? `Kiểm kê ${formatRelative(item.lastCountedAt, now())} bởi ${item.lastCounter?.fullName ?? 'nhân viên'}` : 'Chưa kiểm kê lần nào'}
-        </p>
+        {showPrice && lots.data && openLots.length > 0 && (
+          <p className="mt-2 text-sm text-gray-700">
+            Giá trị tồn <span className="font-semibold tabular-nums text-gray-900">{formatMoney(Math.round(stockValue))}</span>
+            {unpriced && <span className="text-xs text-gray-500"> (có lô chưa có giá)</span>}
+          </p>
+        )}
       </section>
+
+      <h3 className="mb-2 mt-6 flex items-baseline justify-between text-sm font-semibold text-gray-900">
+        Lô hàng
+        <span className="text-xs font-normal text-gray-500">Lô nhập trước dùng trước</span>
+      </h3>
+      {lots.loading && !lots.data ? (
+        <Skeleton rows={2} />
+      ) : lots.error ? (
+        <ErrorBox message={lots.error} />
+      ) : allLots.length === 0 ? (
+        <p className="text-sm text-gray-500">Chưa có lô nào.</p>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {[...openLots, ...(showEmptyLots ? emptyLots : [])].map((lot) => (
+              <LotRow key={lot.id} lot={lot} unit={item.unit} next={lot.id === openLots[0]?.id} showPrice={showPrice} />
+            ))}
+          </ul>
+          {openLots.length === 0 && !showEmptyLots && <p className="text-sm text-gray-500">Các lô đều đã dùng hết.</p>}
+          {emptyLots.length > 0 && (
+            <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowEmptyLots((value) => !value)}>
+              {showEmptyLots ? 'Ẩn lô đã hết' : `Xem lô đã hết (${emptyLots.length})`}
+            </Button>
+          )}
+        </>
+      )}
 
       <h3 className="mb-2 mt-6 text-sm font-semibold text-gray-900">Sổ nhập xuất</h3>
       {ledger.loading && !ledger.data ? (
@@ -81,16 +166,16 @@ export function SupplyItemSheet({
       ) : ledger.error ? (
         <ErrorBox message={ledger.error} />
       ) : rows.length === 0 ? (
-        <EmptyState title="Chưa có dòng nào" hint="Mỗi lần kiểm kê hoặc cấp theo đề xuất sẽ ghi một dòng." className="py-6" />
+        <EmptyState title="Chưa có lần nhập xuất nào" className="py-6" />
       ) : (
         <>
           <ol className="relative space-y-3 border-l border-gray-200 pl-4">
             {rows.map((row) => (
               <li key={row.id} className="relative">
-                <span className={cn('absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-white', row.type === 'RESTOCK' ? 'bg-emerald-600' : 'bg-gray-400')} aria-hidden />
+                <span className={cn('absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full ring-2 ring-white', DOT[row.type])} aria-hidden />
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className="text-sm font-medium text-gray-900">
-                    {movementTypeText[row.type]}{' '}
+                    {row.type === 'RESTOCK' && row.requestId ? 'Cấp hàng' : movementTypeText[row.type]}{' '}
                     <span className={cn('font-mono tabular-nums', row.delta > 0 ? 'text-emerald-700' : row.delta < 0 ? 'text-amber-700' : 'text-gray-500')}>
                       {row.delta > 0 ? '+' : row.delta < 0 ? '−' : '±'}
                       {formatQuantity(Math.abs(row.delta))}
@@ -101,11 +186,21 @@ export function SupplyItemSheet({
                 <p className="text-xs text-gray-500" title={formatDateTime(row.createdAt)}>
                   {row.creator.fullName} · {formatRelative(row.createdAt, now())}
                 </p>
+                {showPrice && row.amount !== null && (
+                  <p className="text-xs tabular-nums text-gray-600">
+                    {row.lots > 1 ? `Trừ ${row.lots} lô` : row.unitPrice !== null ? `${formatMoney(row.unitPrice)}/${item.unit}` : ''}
+                    {' · '}
+                    <span className={row.amount < 0 ? 'text-amber-800' : 'text-emerald-800'}>
+                      {row.amount < 0 ? '−' : '+'}
+                      {formatMoney(Math.abs(row.amount))}
+                    </span>
+                  </p>
+                )}
                 {row.note && <p className="mt-0.5 text-xs text-gray-600">{row.note}</p>}
               </li>
             ))}
           </ol>
-          {rows.length < (ledger.data?.total ?? 0) && (
+          {(ledger.data?.items.length ?? 0) < (ledger.data?.total ?? 0) && (
             <Button variant="ghost" size="sm" className="mt-3" onClick={() => setPages((count) => count + 1)} disabled={ledger.loading}>
               Xem thêm
             </Button>
@@ -113,5 +208,28 @@ export function SupplyItemSheet({
         </>
       )}
     </Sheet>
+  );
+}
+
+function LotRow({ lot, unit, next, showPrice }: { lot: SupplyLot; unit: string; next: boolean; showPrice: boolean }) {
+  const empty = lot.remaining <= 0;
+  return (
+    <li className={cn('rounded-xl px-3 py-2 ring-1', empty ? 'bg-gray-50 opacity-60 ring-gray-100' : next ? 'bg-white shadow-grass-tint ring-emerald-200' : 'bg-white ring-gray-200/80')}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="text-sm text-gray-900">
+          <span className="font-medium">Nhập {formatDate(lot.createdAt)}</span>
+          {next && <span className="ml-2 text-xs text-emerald-700">dùng trước</span>}
+        </p>
+        <p className="font-mono text-sm tabular-nums text-gray-900">
+          {formatQuantity(lot.remaining)}
+          <span className="text-xs text-gray-500">
+            {' '}
+            / {formatQuantity(lot.quantity)} {unit}
+          </span>
+        </p>
+      </div>
+      {showPrice && <p className="text-xs text-gray-500">{lot.unitPrice > 0 ? `${formatMoney(lot.unitPrice)}/${unit}` : 'Chưa có giá'}</p>}
+      <Meter className="mt-1.5" value={lot.remaining} max={Math.max(lot.quantity, 0.01)} tone="green" />
+    </li>
   );
 }

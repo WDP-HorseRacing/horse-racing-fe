@@ -1,4 +1,4 @@
-// F3.11 — Lịch chăm sóc định kỳ toàn CLB (VET, CM, HT): tiêm phòng, tẩy giun, kiểm tra móng.
+// F3.11 — Lịch chăm sóc định kỳ (VET, CM toàn CLB, HT chỉ ngựa khu mình): tiêm phòng, tẩy giun, kiểm tra móng.
 // Khối "Cần làm" lấy từ bảng điều khiển (quá hạn + đến hạn trong 3 ngày); danh sách đầy đủ gom lịch
 // đang chờ của từng ngựa (CLB nhỏ nên tải song song theo ngựa).
 import { useMemo, useState } from 'react';
@@ -37,9 +37,11 @@ export default function CareSchedules() {
   const user = useStore((state) => state.currentUser);
   const canManage = can(user, 'care.manage');
   const people = usePeople();
+  const trainer = user?.role === 'HEAD_TRAINER';
   const board = useService(() => getMedicalDashboard(), []);
   const full = useService(async () => {
-    const horses = await listMedicalHorses('all');
+    // HT chỉ thấy lịch của ngựa khu mình (luật phạm vi đã chốt), khớp khối "Cần làm" mà BE đã lọc theo khu.
+    const horses = await listMedicalHorses(trainer ? 'myBarns' : 'all');
     const lists = await Promise.all(
       horses.map((horse) =>
         listCareSchedules(horse.id).then((items) =>
@@ -51,7 +53,7 @@ export default function CareSchedules() {
       horses: horses.map((horse) => ({ id: horse.id, name: horse.name, place: horsePlace(horse) })),
       rows: lists.flat().sort((a, b) => a.dueAt.localeCompare(b.dueAt)) as Row[],
     };
-  }, []);
+  }, [trainer]);
   const [type, setType] = useState<CareTaskType | ''>('');
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [search, setSearch] = useState('');
@@ -77,7 +79,7 @@ export default function CareSchedules() {
     <div className="space-y-6">
       <PageHeader
         title="Lịch chăm sóc"
-        description="Tiêm phòng, tẩy giun, kiểm tra móng đang chờ thực hiện. Hệ thống nhắc bác sĩ và người được giao lúc 7 giờ sáng ngày đến hạn."
+        description="Tiêm phòng, tẩy giun, kiểm tra móng đang chờ làm. Nhắc lúc 7 giờ sáng ngày đến hạn."
         actions={
           canManage && (
             <Button onClick={() => navigate(links.careNew())}>

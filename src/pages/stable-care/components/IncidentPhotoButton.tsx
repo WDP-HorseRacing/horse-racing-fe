@@ -1,26 +1,25 @@
 // Nút "Xem ảnh" trên yêu cầu khám nguồn "Groom báo" (hàng đợi của bác sĩ).
-// Response yêu cầu khám chưa có incidentId (đã báo BE): bấm thì mới tải sự cố của ngựa đó và khớp theo id yêu cầu khám.
+// Yêu cầu khám có `incidentId` của sự cố sinh ra nó: bấm thì mới tải sự cố đó để lấy ảnh. Không gắn sự cố thì không hiện nút.
 import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { listIncidents } from '../../../api/stable-care';
+import { getIncident } from '../../../api/stable-care';
 import type { ExamRequest } from '../../../api/types';
 import { Lightbox } from '../../../components/Lightbox';
 import { Button, useToast } from '../../../components/ui';
 import { errorMessage } from '../../../lib/errors';
 
-export function IncidentPhotoButton({ request, size = 'sm' }: { request: Pick<ExamRequest, 'id' | 'horseId' | 'horseName' | 'source'>; size?: 'sm' | 'icon' }) {
+export function IncidentPhotoButton({ request, size = 'sm' }: { request: Pick<ExamRequest, 'horseName' | 'source' | 'incidentId'>; size?: 'sm' | 'icon' }) {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [photo, setPhoto] = useState<{ src: string; caption: string } | null>(null);
-  if (request.source !== 'GROOM_INCIDENT') return null;
+  const incidentId = request.incidentId;
+  if (request.source !== 'GROOM_INCIDENT' || !incidentId) return null;
 
   const open = async () => {
     setLoading(true);
     try {
-      const incidents = await listIncidents({ horseId: request.horseId });
-      const incident = incidents.find((item) => item.examRequest?.id === request.id);
-      if (!incident) toast.push('Yêu cầu này không gắn sự cố nào nên không có ảnh (gửi trước khi có báo sự cố)', 'info');
-      else if (!incident.photoUrl) toast.push('Groom không gửi kèm ảnh', 'info');
+      const incident = await getIncident(incidentId);
+      if (!incident.photoUrl) toast.push('Sự cố này không có ảnh', 'info');
       else setPhoto({ src: incident.photoUrl, caption: incident.description });
     } catch (caught) {
       toast.push(errorMessage(caught), 'error');
