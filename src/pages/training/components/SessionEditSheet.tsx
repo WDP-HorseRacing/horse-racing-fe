@@ -1,9 +1,10 @@
-// Sửa hoặc thêm một buổi tập: dùng ở bản xem trước khi tạo lớp và ở lịch buổi của lớp (buổi nháp).
-// Đổi môn thì điền lại cường độ, cự ly, mặt sân, thời gian mục tiêu theo môn mới (vẫn sửa tay được sau đó).
-import { useState } from 'react';
+// Sửa hoặc thêm một buổi tập trên lịch tuần của lớp. Môn chỉ chọn trong giai đoạn chứa ngày của buổi (BE chặn 409 nếu sai).
+// Đổi môn thì điền lại cường độ, cự ly, mặt sân, thời gian mục tiêu và thời lượng theo môn mới (vẫn sửa tay được sau đó).
+// Thêm buổi có thể tick "Lặp lại hằng tuần": lưu cùng thứ, cùng giờ cho các tuần còn lại của giai đoạn trong một lần.
+import { useState, type ReactNode } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { TrainingIntensity, TrainingSubject } from '../../../api/types';
-import { Button, ErrorBox, Field, Input, Segmented, Select, Sheet, Textarea, invalidClass } from '../../../components/ui';
+import { Button, ErrorBox, Field, Input, Segmented, Select, Sheet, Textarea, ToggleChip, invalidClass } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { addMinutes, clubDateKey, clubInstant, clubTime, minutesBetween, parseClockTime } from '../../../lib/club-time';
 import { SURFACE_SUGGESTIONS } from '../../../lib/training-labels';
@@ -11,7 +12,7 @@ import { IntensityBars } from './bits';
 import { RaceTimeInput } from './RaceTimeInput';
 import { Stepper } from './Stepper';
 
-/** Một buổi đang soạn (chưa lưu hoặc buổi nháp). Giờ theo lịch CLB. */
+/** Một buổi đang soạn. Giờ theo lịch CLB. */
 export interface SessionDraft {
   subjectId: string;
   name: string;
@@ -61,11 +62,15 @@ export function SessionEditSheet({
   title,
   description,
   initial,
-  subjects,
+  subjects: allSubjects,
+  subjectsFor,
+  repeatWeeks,
   range,
   pending,
   error,
   submitLabel = 'Lưu',
+  removeLabel = 'Bỏ buổi',
+  extraActions,
   onSubmit,
   onRemove,
   onClose,
@@ -74,11 +79,18 @@ export function SessionEditSheet({
   description?: string;
   initial: SessionDraft;
   subjects: TrainingSubject[];
+  /** Môn dùng được cho một ngày (môn của giai đoạn chứa ngày đó). Không truyền thì dùng `subjects`. */
+  subjectsFor?: (dateKey: string) => TrainingSubject[];
+  /** Số tuần còn lại của giai đoạn sau ngày này (để lặp lại hằng tuần). 0 hoặc không truyền thì ẩn ô lặp lại. */
+  repeatWeeks?: (dateKey: string) => number;
   range?: { from: string; to: string };
   pending?: boolean;
   error?: string;
   submitLabel?: string;
-  onSubmit: (draft: SessionDraft) => void;
+  removeLabel?: string;
+  /** Nút phụ ở chân sheet (vd mở sân tập). */
+  extraActions?: ReactNode;
+  onSubmit: (draft: SessionDraft, repeat: boolean) => void;
   onRemove?: () => void;
   onClose: () => void;
 }) {
@@ -86,8 +98,11 @@ export function SessionEditSheet({
   const [date, setDate] = useState(clubDateKey(initial.scheduledStartAt));
   const [time, setTime] = useState(clubTime(initial.scheduledStartAt));
   const [duration, setDuration] = useState(Math.max(15, minutesBetween(initial.scheduledStartAt, initial.scheduledEndAt)));
+  const [repeat, setRepeat] = useState(false);
   const [touched, setTouched] = useState(false);
+  const subjects = subjectsFor ? subjectsFor(date) : allSubjects;
   const subject = subjects.find((item) => item.id === draft.subjectId);
+  const extraWeeks = repeatWeeks ? repeatWeeks(date) : 0;
   const trial = subject?.sessionType === 'TIME_TRIAL';
   const parsedTime = parseClockTime(time);
 
@@ -95,13 +110,15 @@ export function SessionEditSheet({
   const current: SessionDraft = { ...draft, scheduledStartAt: startAt, scheduledEndAt: addMinutes(startAt, duration) };
   const errors = sessionErrors(current, subject, range);
   if (!parsedTime) errors.time = 'Giờ dạng HH:mm, ví dụ 06:30';
+  if (!subject && subjects.length === 0) errors.subjectId = 'Ngày này không thuộc giai đoạn nào của lớp';
+  else if (!subject && draft.subjectId) errors.subjectId = 'Môn này không có trong giai đoạn của ngày đã chọn';
   const show = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
   // So với lúc mở để hỏi trước khi đóng nếu bấm ra ngoài khi đang sửa dở.
   const [opened] = useState(() => JSON.stringify([draft, date, time, duration]));
   const dirty = JSON.stringify([draft, date, time, duration]) !== opened;
 
-  const pickSubject = (id: string) => {
-    const next = subjects.find((item) => item.id === id);
+  const pickSubject = (id: string, list = subjects) => {
+    const next = list.find((item) => item.id === id);
     if (!next) return;
     setDraft((value) => ({
       ...value,
@@ -112,12 +129,21 @@ export function SessionEditSheet({
       surface: next.surface ?? value.surface,
       targetTimeMs: next.sessionType === 'TIME_TRIAL' ? (next.targetTimeMs ?? undefined) : undefined,
     }));
+    setDuration(next.durationMinutes);
+  };
+
+  // Đổi ngày sang giai đoạn khác mà môn đang chọn không có trong đó: chọn môn đầu của giai đoạn mới.
+  const pickDate = (value: string) => {
+    setDate(value);
+    if (!subjectsFor) return;
+    const list = subjectsFor(value);
+    if (list.length && !list.some((item) => item.id === draft.subjectId)) pickSubject(list[0].id, list);
   };
 
   const submit = () => {
     setTouched(true);
     if (Object.keys(errors).length > 0) return;
-    onSubmit({ ...current, targetTimeMs: trial ? current.targetTimeMs : undefined });
+    onSubmit({ ...current, targetTimeMs: trial ? current.targetTimeMs : undefined }, repeat && extraWeeks > 0);
   };
 
   return (
@@ -133,9 +159,10 @@ export function SessionEditSheet({
         <>
           {onRemove && (
             <Button variant="inlineDanger" className="mr-auto" onClick={onRemove}>
-              <Trash2 size={14} /> Bỏ buổi
+              <Trash2 size={14} /> {removeLabel}
             </Button>
           )}
+          {extraActions}
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
@@ -147,12 +174,12 @@ export function SessionEditSheet({
     >
       <div className="space-y-5">
         {error && <ErrorBox message={error} />}
-        <Field label="Môn học" required error={show('subjectId')} hint="Đổi môn thì cường độ, cự ly, mặt sân lấy lại theo môn mới.">
+        <Field label="Môn học" required error={show('subjectId')} hint="Chỉ có môn của giai đoạn chứa ngày này. Đổi môn thì cường độ, cự ly, thời lượng lấy lại theo môn mới.">
           <Select value={draft.subjectId} onChange={(event) => pickSubject(event.target.value)}>
             {!subject && <option value="">Chọn môn</option>}
             {subjects.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.sessionType === 'TIME_TRIAL' ? `${item.name} (chạy thử)` : item.name}
+                {item.sessionType === 'TIME_TRIAL' ? `${item.name} (chạy thử, ${item.durationMinutes} phút)` : `${item.name} (${item.durationMinutes} phút)`}
               </option>
             ))}
           </Select>
@@ -163,7 +190,7 @@ export function SessionEditSheet({
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Ngày" required error={show('date')} className="sm:col-span-3">
-            <DatePicker value={date} onChange={setDate} min={range?.from} max={range?.to} clearable={false} invalid={!!show('date')} />
+            <DatePicker value={date} onChange={pickDate} min={range?.from} max={range?.to} clearable={false} invalid={!!show('date')} />
           </Field>
           <Field label="Giờ bắt đầu" required error={show('time')}>
             <Input value={time} inputMode="numeric" placeholder="06:30" onChange={(event) => setTime(event.target.value)} onBlur={() => parsedTime && setTime(parsedTime)} className={`font-mono ${show('time') ? invalidClass : ''}`} />
@@ -173,11 +200,17 @@ export function SessionEditSheet({
           </Field>
         </div>
 
-        <Field label="Cường độ" hint="Buổi Nặng: ngựa đang cần theo dõi sẽ không được tập.">
+        {extraWeeks > 0 && (
+          <ToggleChip checked={repeat} onChange={setRepeat}>
+            Lặp lại hằng tuần đến hết giai đoạn (thêm {extraWeeks} buổi cùng giờ)
+          </ToggleChip>
+        )}
+
+        <Field label="Cường độ" hint="Ngựa đang cần theo dõi chỉ tập buổi Nhẹ. Mỗi ngựa tối đa 2 buổi, 1 buổi Nặng một ngày, hai buổi cách nhau ít nhất 3 giờ.">
           <Segmented<TrainingIntensity>
             value={draft.intensity}
             onChange={(value) => setDraft((current) => ({ ...current, intensity: value }))}
-            options={(['LIGHT', 'MODERATE', 'HEAVY'] as const).map((value) => ({ value, label: <IntensityBars intensity={value} className="text-inherit" /> }))}
+            options={(['LIGHT', 'HEAVY'] as const).map((value) => ({ value, label: <IntensityBars intensity={value} className="text-inherit" /> }))}
           />
         </Field>
 

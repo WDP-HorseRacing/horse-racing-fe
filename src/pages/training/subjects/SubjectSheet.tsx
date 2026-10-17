@@ -1,5 +1,6 @@
 // Thêm hoặc sửa một môn học (Club Manager). Kiểm tra giống BE trước khi gửi:
-// tên 1 đến 160 ký tự và không trùng, cự ly 0 đến 20.000 m, môn chạy thử cự ly lớn hơn 0, môn thường không có thời gian mục tiêu.
+// tên 1 đến 160 ký tự và không trùng, cự ly 0 đến 20.000 m, thời lượng 15 đến 480 phút, môn chạy thử cự ly lớn hơn 0,
+// môn thường không có thời gian mục tiêu. Thời lượng là độ dài một buổi: lịch lớp tự tính giờ kết thúc theo số này.
 import { useState } from 'react';
 import { Flag, Footprints } from 'lucide-react';
 import { createSubject, updateSubject } from '../../../api/training';
@@ -18,6 +19,7 @@ interface Draft {
   sessionType: TrainingSessionType;
   intensity: TrainingIntensity;
   plannedDistanceM: number;
+  durationMinutes: number;
   surface: string;
   targetTimeMs?: number;
   targetRaw: string;
@@ -28,8 +30,9 @@ function initial(subject?: TrainingSubject): Draft {
     name: subject?.name ?? '',
     description: subject?.description ?? '',
     sessionType: subject?.sessionType ?? 'REGULAR',
-    intensity: subject?.intensity ?? 'MODERATE',
+    intensity: subject?.intensity ?? 'LIGHT',
     plannedDistanceM: subject?.plannedDistanceM ?? 1600,
+    durationMinutes: subject?.durationMinutes ?? 60,
     surface: subject?.surface ?? '',
     targetTimeMs: subject?.targetTimeMs ?? undefined,
     targetRaw: '',
@@ -55,13 +58,14 @@ export default function SubjectSheet({
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const trial = draft.sessionType === 'TIME_TRIAL';
 
-  const errors: Partial<Record<'name' | 'plannedDistanceM' | 'targetTimeMs' | 'surface', string>> = {};
+  const errors: Partial<Record<'name' | 'plannedDistanceM' | 'durationMinutes' | 'targetTimeMs' | 'surface', string>> = {};
   const name = draft.name.trim();
   if (!name) errors.name = 'Nhập tên môn';
   else if (name.length > 160) errors.name = 'Tên tối đa 160 ký tự';
   else if (existingNames.some((item) => item.trim().toLowerCase() === name.toLowerCase())) errors.name = 'Tên môn đã có trong danh mục';
   if (!Number.isInteger(draft.plannedDistanceM) || draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) errors.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
   else if (trial && draft.plannedDistanceM === 0) errors.plannedDistanceM = 'Môn chạy thử phải có cự ly lớn hơn 0';
+  if (!Number.isInteger(draft.durationMinutes) || draft.durationMinutes < 15 || draft.durationMinutes > 480) errors.durationMinutes = 'Thời lượng từ 15 đến 480 phút';
   if (trial && draft.targetRaw.trim() && !draft.targetTimeMs) errors.targetTimeMs = 'Phút từ 0 đến 59, giây từ 0 đến 59,99';
   if (draft.surface.trim().length > 80) errors.surface = 'Mặt sân tối đa 80 ký tự';
 
@@ -81,6 +85,7 @@ export default function SubjectSheet({
       sessionType: draft.sessionType,
       intensity: draft.intensity,
       plannedDistanceM: draft.plannedDistanceM,
+      durationMinutes: draft.durationMinutes,
       surface: draft.surface.trim() || (subject ? null : undefined),
       targetTimeMs: trial ? (draft.targetTimeMs ?? (subject ? null : undefined)) : subject?.targetTimeMs ? null : undefined,
     };
@@ -146,17 +151,20 @@ export default function SubjectSheet({
           </div>
         </Field>
 
-        <Field label="Cường độ" hint="Ngựa đang cần theo dõi không tập được buổi cường độ nặng.">
+        <Field label="Cường độ" hint="Ngựa đang cần theo dõi chỉ tập buổi Nhẹ. Mỗi ngựa tối đa 1 buổi Nặng một ngày.">
           <Segmented<TrainingIntensity>
             value={draft.intensity}
             onChange={(value) => set('intensity', value)}
-            options={(['LIGHT', 'MODERATE', 'HEAVY'] as const).map((value) => ({ value, label: <IntensityBars intensity={value} className="text-inherit" /> }))}
+            options={(['LIGHT', 'HEAVY'] as const).map((value) => ({ value, label: <IntensityBars intensity={value} className="text-inherit" /> }))}
           />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Cự ly dự kiến" required name="plannedDistanceM" error={fieldError('plannedDistanceM')}>
             <Stepper value={draft.plannedDistanceM} onChange={(value) => set('plannedDistanceM', value)} min={0} max={20000} step={100} suffix="m" label="cự ly" />
+          </Field>
+          <Field label="Thời lượng một buổi" required name="durationMinutes" error={fieldError('durationMinutes')}>
+            <Stepper value={draft.durationMinutes} onChange={(value) => set('durationMinutes', value)} min={15} max={480} step={15} suffix="phút" label="thời lượng" />
           </Field>
           {trial && (
             <Field label="Thời gian mục tiêu" name="targetTimeMs" error={fieldError('targetTimeMs')} hint="Ví dụ 1 phút 15,4 giây">
@@ -200,6 +208,7 @@ function fieldFromSubjectMessage(message: string | undefined) {
   if (!message) return undefined;
   if (message.includes('Tên môn')) return 'name';
   if (message.includes('cự ly')) return 'plannedDistanceM';
+  if (message.includes('Thời lượng') || message.includes('thời lượng')) return 'durationMinutes';
   if (message.includes('thời gian mục tiêu')) return 'targetTimeMs';
   return fieldFromMessage(message);
 }

@@ -2,6 +2,7 @@
 // sức khỏe, khóa huấn luyện, lịch chăm sóc, báo cáo chi phí.
 import { http } from './http';
 import type {
+  CareAssigneeType,
   CareInstructions,
   CareSchedule,
   CareStatus,
@@ -29,7 +30,8 @@ import type {
 } from './types';
 
 /* Bảng điều khiển và khám định kỳ */
-export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus } = {}) =>
+/** `careAssignee = 'me'`: khối lịch chăm sóc chỉ còn lịch người gọi là người làm, các khối khác không đổi. */
+export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus; careAssignee?: 'me' } = {}) =>
   http.get<MedicalDashboard>('/medical/dashboard', query);
 export const listCheckups = (query: { status?: CheckupDueStatus; barnId?: string } = {}) =>
   http.get<CheckupItem[]>('/medical/checkups', query);
@@ -81,11 +83,15 @@ export const releaseLock = (id: string, conclusion: string) => http.post<Trainin
 
 /* Lịch chăm sóc (tiêm phòng, tẩy giun, kiểm tra móng) */
 export const listCareSchedules = (horseId: string) => http.get<CareSchedule[]>(`/horses/${horseId}/care-schedules`);
-export const createCareSchedule = (horseId: string, input: { type: CareTaskType; dueAt: string; assignedTo?: string; notes?: string }) =>
-  http.post<CareSchedule>(`/horses/${horseId}/care-schedules`, input);
+/** Giao: bỏ trống là chưa giao; `GROOM` không kèm người là Groom phụ trách; `GROOM`/`VET` kèm `assignedTo` là người cụ thể. */
+export const createCareSchedule = (
+  horseId: string,
+  input: { type: CareTaskType; dueAt: string; assigneeType?: CareAssigneeType; assignedTo?: string; notes?: string },
+) => http.post<CareSchedule>(`/horses/${horseId}/care-schedules`, input);
+/** Đổi cách giao: gửi `assigneeType` (null để bỏ giao) kèm `assignedTo` nếu chọn người. */
 export const updateCareSchedule = (
   id: string,
-  input: { dueAt?: string; assignedTo?: string | null; notes?: string | null; reason?: string },
+  input: { dueAt?: string; assigneeType?: CareAssigneeType | null; assignedTo?: string | null; notes?: string | null; reason?: string },
 ) => http.patch<CareSchedule>(`/care-schedules/${id}`, input);
 export const completeCareSchedule = (id: string, nextDueAt?: string) =>
   http.post<{ completed: CareSchedule; next: CareSchedule | null }>(`/care-schedules/${id}/complete`, nextDueAt ? { nextDueAt } : {});

@@ -29,7 +29,7 @@ import { prefersReducedMotion } from '../../../lib/motion';
 import { Figure, IntensityBars, TrialBadge } from '../components/bits';
 import SubjectSheet from './SubjectSheet';
 
-type Filter = 'ALL' | 'LIGHT' | 'MODERATE' | 'HEAVY' | 'TRIAL';
+type Filter = 'ALL' | 'LIGHT' | 'HEAVY' | 'TRIAL';
 
 export default function SubjectsPage() {
   const user = useStore((state) => state.currentUser);
@@ -87,7 +87,6 @@ export default function SubjectsPage() {
   const counts = {
     ALL: rows.length,
     LIGHT: rows.filter((item) => item.sessionType === 'REGULAR' && item.intensity === 'LIGHT').length,
-    MODERATE: rows.filter((item) => item.sessionType === 'REGULAR' && item.intensity === 'MODERATE').length,
     HEAVY: rows.filter((item) => item.sessionType === 'REGULAR' && item.intensity === 'HEAVY').length,
     TRIAL: rows.filter((item) => item.sessionType === 'TIME_TRIAL').length,
   };
@@ -146,7 +145,6 @@ export default function SubjectsPage() {
                 options={[
                   { value: 'ALL', label: 'Tất cả', count: counts.ALL },
                   { value: 'LIGHT', label: 'Nhẹ', count: counts.LIGHT },
-                  { value: 'MODERATE', label: 'Trung bình', count: counts.MODERATE },
                   { value: 'HEAVY', label: 'Nặng', count: counts.HEAVY },
                   { value: 'TRIAL', label: 'Chạy thử', count: counts.TRIAL },
                 ]}
@@ -179,6 +177,7 @@ export default function SubjectsPage() {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                         <IntensityBars intensity={subject.intensity} />
                         <span className="font-mono tabular-nums">{formatMeters(subject.plannedDistanceM)}</span>
+                        <span className="font-mono tabular-nums">{subject.durationMinutes} phút</span>
                         {subject.surface && <span>{subject.surface}</span>}
                         {subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(subject.targetTimeMs)}</span>}
                       </div>
@@ -210,6 +209,7 @@ export default function SubjectsPage() {
                     <Figure label="Loại buổi" value={sessionTypeText[selected.sessionType]} mono={false} />
                     <Figure label="Cường độ" value={<IntensityBars intensity={selected.intensity} />} mono={false} />
                     <Figure label="Cự ly dự kiến" value={formatMeters(selected.plannedDistanceM)} />
+                    <Figure label="Thời lượng một buổi" value={`${selected.durationMinutes} phút`} />
                     <Figure label="Mặt sân" value={selected.surface ?? 'Chưa ghi'} mono={false} />
                     {selected.sessionType === 'TIME_TRIAL' && (
                       <Figure label="Thời gian mục tiêu" value={selected.targetTimeMs ? formatRaceTime(selected.targetTimeMs) : 'Chưa đặt'} className="col-span-2" />

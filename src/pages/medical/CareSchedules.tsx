@@ -15,6 +15,7 @@ import {
   DataTable,
   ErrorBox,
   FilterSelect,
+  NotFound,
   PageHeader,
   SearchInput,
   SectionTitle,
@@ -26,7 +27,7 @@ import { careTypeLabel } from '../../lib/api-labels';
 import { formatDateTime } from '../../lib/format';
 import { links } from '../../lib/links';
 import { CareDialogs, CareDue, CareRowActions, type CareDialog } from './components/care';
-import { CARE_TYPES, careDaysLeft } from './components/care-rules';
+import { CARE_TYPES, assigneeText, careDaysLeft } from './components/care-rules';
 import { horsePlace, listMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { Count, HorseChip } from './components/parts';
@@ -35,10 +36,19 @@ type Row = CareSchedule & { horseName: string; place: string };
 
 export default function CareSchedules() {
   const user = useStore((state) => state.currentUser);
+  // Groom, chủ ngựa không có trang này (BE không cho xem bảng điều khiển y tế): lịch của họ nằm ở Việc hôm nay và hồ sơ ngựa.
+  if (user?.role === 'GROOM' || user?.role === 'HORSE_OWNER') return <NotFound message="Lịch chăm sóc của bạn nằm ở Việc hôm nay và trong hồ sơ từng ngựa." />;
+  return <CareSchedulesPage />;
+}
+
+function CareSchedulesPage() {
+  const user = useStore((state) => state.currentUser);
   const canManage = can(user, 'care.manage');
   const people = usePeople();
   const trainer = user?.role === 'HEAD_TRAINER';
-  const board = useService(() => getMedicalDashboard(), []);
+  // Bác sĩ lọc khối "Cần làm" chỉ còn lịch mình là người làm (BE lọc theo người làm hiện tại).
+  const [mine, setMine] = useState(false);
+  const board = useService(() => getMedicalDashboard(mine ? { careAssignee: 'me' } : {}), [mine]);
   const full = useService(async () => {
     // HT chỉ thấy lịch của ngựa khu mình (luật phạm vi đã chốt), khớp khối "Cần làm" mà BE đã lọc theo khu.
     const horses = await listMedicalHorses(trainer ? 'myBarns' : 'all');
@@ -142,7 +152,11 @@ export default function CareSchedules() {
                   key: 'assignee',
                   header: 'Người thực hiện',
                   render: (row) =>
-                    row.assignedTo ? <span className="text-sm text-gray-700">{people.name(row.assignedTo)}</span> : <span className="text-xs text-gray-400">Chưa giao</span>,
+                    row.assigneeType ? (
+                      <span className="text-sm text-gray-700">{assigneeText(row, (id) => people.name(id))}</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">Chưa giao</span>
+                    ),
                 },
                 {
                   key: 'actions',
@@ -157,7 +171,16 @@ export default function CareSchedules() {
 
         <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4 lg:self-start">
           <Card>
-            <SectionTitle icon={<Syringe size={16} />}>
+            <SectionTitle
+              icon={<Syringe size={16} />}
+              action={
+                user?.role === 'VETERINARIAN' && (
+                  <ToggleChip checked={mine} onChange={setMine}>
+                    Lịch của tôi
+                  </ToggleChip>
+                )
+              }
+            >
               Cần làm trong 3 ngày{board.data && board.data.careSchedules.length > 0 && <Count value={board.data.careSchedules.length} />}
             </SectionTitle>
             {board.loading && !board.data ? (
@@ -173,7 +196,7 @@ export default function CareSchedules() {
                     <HorseChip
                       horse={{ id: row.horseId, name: row.horseName }}
                       size={32}
-                      sub={`${careTypeLabel[row.type]} · ${row.assignedTo ? people.name(row.assignedTo) : 'chưa giao'}`}
+                      sub={`${careTypeLabel[row.type]} · ${row.assignedToName ?? 'chưa có người làm'}`}
                     />
                     <CareDue dueAt={`${row.dueDate}T12:00:00`} />
                   </li>
@@ -182,7 +205,7 @@ export default function CareSchedules() {
             )}
           </Card>
           <p className="px-1 text-xs leading-relaxed text-gray-500">
-            Người thực hiện là Groom đang phụ trách ngựa hoặc bác sĩ. Groom hoàn tất lịch được giao trong hồ sơ ngựa. Khi hoàn tất, bác sĩ có thể hẹn luôn lần tới.
+            Lịch giao "Groom phụ trách" tự theo Groom mới khi HLV đổi Groom. Giao đích danh thì giữ đúng người đó. Groom hoàn tất lịch mình là người làm trong hồ sơ ngựa hoặc màn Hôm nay. Khi hoàn tất, bác sĩ có thể hẹn luôn lần tới.
           </p>
         </aside>
       </div>

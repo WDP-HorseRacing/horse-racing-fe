@@ -43,7 +43,7 @@ export function TrainerTodayCard() {
       ) : data.error ? (
         <ErrorBox message={data.error} />
       ) : items.length === 0 ? (
-        <p className="text-sm text-gray-500">Hôm nay không có buổi tập nào đã công bố.</p>
+        <p className="text-sm text-gray-500">Hôm nay không có buổi tập nào.</p>
       ) : (
         <ul className="-mx-2 space-y-1">
           {items.map((item) => {
@@ -233,8 +233,8 @@ export function ManagerTrainingCards() {
   const classes: TrainingClass[] = data.data?.classes ?? [];
   const monday = mondayOf(clubToday());
   const week = Array.from({ length: 7 }, (_, index) => addDateKey(monday, index));
-  const sessions = (data.data?.sessions ?? []).filter((session) => session.status !== 'DRAFT' && session.status !== 'CANCELLED');
-  const colors = { DRAFT: '#9ca3af', ACTIVE: '#047857', COMPLETED: '#6ee7b7', CANCELLED: '#d1d5db' } as const;
+  const sessions = (data.data?.sessions ?? []).filter((session) => session.status !== 'CANCELLED');
+  const colors = { ACTIVE: '#047857', COMPLETED: '#6ee7b7', CANCELLED: '#d1d5db' } as const;
   return (
     <>
       <Card className="flex flex-col">
@@ -246,7 +246,7 @@ export function ManagerTrainingCards() {
         ) : (
           <DonutChart
             centerLabel="lớp"
-            segments={(['ACTIVE', 'DRAFT', 'COMPLETED', 'CANCELLED'] as const).map((status) => ({
+            segments={(['ACTIVE', 'COMPLETED', 'CANCELLED'] as const).map((status) => ({
               key: status,
               label: classStatusText[status],
               value: classes.filter((item) => item.status === status).length,
@@ -261,7 +261,7 @@ export function ManagerTrainingCards() {
           <Skeleton rows={3} />
         ) : (
           <ColumnChart
-            caption="Số buổi đã công bố mỗi ngày trong tuần (lịch câu lạc bộ)"
+            caption="Số buổi mỗi ngày trong tuần (lịch câu lạc bộ)"
             columns={week.map((day) => ({
               key: day,
               label: `${weekdayShort[isoWeekdayOf(day)]} ${day.slice(8, 10)}`,

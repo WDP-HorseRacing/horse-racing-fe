@@ -126,7 +126,7 @@ export async function request<T>(method: string, path: string, options: RequestO
     const body = (data && typeof data === 'object' ? data : {}) as {
       message?: string | string[];
       details?: string[] | null;
-      errors?: { field?: string; message?: string }[];
+      errors?: { field?: string; message?: string; conflictId?: string }[];
     };
     let message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
     const details = body.details ?? null;
@@ -136,12 +136,14 @@ export async function request<T>(method: string, path: string, options: RequestO
     }
     // Lỗi 400 và lỗi trùng 409 có thể kèm `errors` theo từng ô: màn hình gắn câu lỗi ngay dưới ô đó.
     const fieldErrors: Record<string, string> = {};
+    const conflictIds: Record<string, string> = {};
     for (const item of body.errors ?? []) {
       if (item.field && item.message && !fieldErrors[item.field]) fieldErrors[item.field] = humanizeMessage(fieldMessage(item.field, item.message));
+      if (item.field && item.conflictId) conflictIds[item.field] = item.conflictId;
     }
     // 422 chỉ dùng cho số đo ngoài khoảng bình thường chưa xác nhận: màn hình hỏi lại người dùng.
     const field = response.status === 422 ? 'confirmAbnormal' : Object.keys(fieldErrors)[0];
-    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field, fieldErrors);
+    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field, fieldErrors, conflictIds);
   }
   return data as T;
 }

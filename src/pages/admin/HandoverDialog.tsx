@@ -1,4 +1,4 @@
-// Bàn giao công việc của một huấn luyện viên trưởng (Club Manager): mọi khu chuồng, mọi giáo án và mọi lớp nháp hoặc đang chạy
+// Bàn giao công việc của một huấn luyện viên trưởng (Club Manager): mọi khu chuồng, mọi giáo án và mọi lớp đang chạy
 // chuyển sang HLV nhận trong một lần. Lớp đã kết thúc giữ HLV cũ để tra lịch sử. Xem trước số lượng trước khi xác nhận.
 import { useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
@@ -19,7 +19,7 @@ export default function HandoverDialog({ from, trainers, onClose, onDone }: { fr
     return {
       barns: barns.filter((barn) => barn.headTrainerId === from.id),
       plans: plans.filter((plan) => plan.headTrainerId === from.id),
-      classes: classes.filter((item) => item.headTrainerId === from.id && (item.status === 'DRAFT' || item.status === 'ACTIVE')),
+      classes: classes.filter((item) => item.headTrainerId === from.id && item.status === 'ACTIVE'),
     };
   }, [from.id]);
   const target = candidates.find((user) => user.id === toId);
@@ -50,7 +50,7 @@ export default function HandoverDialog({ from, trainers, onClose, onDone }: { fr
       open
       onClose={onClose}
       title={`Bàn giao công việc của ${from.fullName}`}
-      description="Chuyển một lần mọi khu chuồng, giáo án và lớp nháp hoặc đang chạy sang huấn luyện viên trưởng khác."
+      description="Chuyển một lần mọi khu chuồng, giáo án và lớp đang chạy sang huấn luyện viên trưởng khác."
       width="max-w-xl"
       footer={
         <>
@@ -100,7 +100,7 @@ export default function HandoverDialog({ from, trainers, onClose, onDone }: { fr
                 {[
                   { label: 'Khu chuồng', items: preview.data.barns.map((barn) => barn.name) },
                   { label: 'Giáo án', items: preview.data.plans.map((plan) => plan.name) },
-                  { label: 'Lớp nháp, đang chạy', items: preview.data.classes.map((item) => item.code) },
+                  { label: 'Lớp đang chạy', items: preview.data.classes.map((item) => item.code) },
                 ].map((group) => (
                   <div key={group.label} className="rounded-xl bg-gray-50 p-3 ring-1 ring-gray-100">
                     <p className="text-xs text-gray-500">{group.label}</p>

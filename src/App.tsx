@@ -20,6 +20,8 @@ import {
   HorseList,
   HorseForm,
   HorseDetail,
+  PastHorses,
+  PastHorseDetail,
   StableMap,
   SubjectsPage,
   PlanList,
@@ -127,6 +129,8 @@ const router = createBrowserRouter(
           {/* Flow 1 — hồ sơ và lý lịch ngựa */}
           <Route path="horses" element={<HorseList />} />
           <Route path="horses/new" element={<HorseForm />} />
+          <Route path="horses/past" element={<PastHorses />} />
+          <Route path="horses/past/:id" element={<PastHorseDetail />} />
           <Route path="horses/:id" element={<HorseDetail />} />
           <Route path="horses/:id/edit" element={<HorseForm />} />
           <Route path="stable" element={<StableMap />} />

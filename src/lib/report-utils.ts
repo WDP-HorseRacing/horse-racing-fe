@@ -34,6 +34,5 @@ export function weeklyColumns(weeks: ReportWeek[], { withHeartRate = true }: { w
 
 export const INTENSITY_COLORS: Record<TrainingIntensity, string> = {
   LIGHT: '#6ee7b7',
-  MODERATE: '#10b981',
-  HEAVY: '#065f46',
+  HEAVY: '#047857',
 };

@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
 import { useService } from '../../hooks/useService';
-import { getHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
+import { getHorse, getPastHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
 import { uploadHorsePhoto } from '../../api/media';
 import { ActionMenu, Button, Notice, NotFound, Reveal, Tabs, cn, useToast } from '../../components/ui';
 import { DeletedPill, EligibilityView, HealthPill, LifecyclePill } from '../../components/ui/status';
@@ -24,6 +24,7 @@ import BodyTab from './tabs/BodyTab';
 import TrainingTab from './tabs/TrainingTab';
 import CareTab from './tabs/CareTab';
 import ReportTab from './tabs/ReportTab';
+import SurchargeTab from './tabs/SurchargeTab';
 import { can } from '../../auth/permissions';
 import { useMyScope } from '../../hooks/useMyScope';
 import { FEATURES } from '../../config/features';
@@ -95,7 +96,11 @@ export default function HorseDetail() {
   const { scope: zone } = useMyScope();
 
   if (loading && !data) return <HorseDetailSkeleton />;
-  if (error || !data) return <NotFound message={error && !error.startsWith('Không tìm thấy') ? error : undefined} />;
+  if (error || !data) {
+    // Chủ cũ mở link hồ sơ ngựa đã bán (vd từ thông báo cũ): chuyển sang trang Ngựa đã bán của con đó nếu có.
+    if (user?.role === 'HORSE_OWNER' && error?.startsWith('Không tìm thấy')) return <PastHorseFallback id={id} />;
+    return <NotFound message={error && !error.startsWith('Không tìm thấy') ? error : undefined} />;
+  }
   const { horse, permissions } = data;
 
   const isHorseGroom = !!horse.groom && horse.groom.id === user?.id;
@@ -103,12 +108,15 @@ export default function HorseDetail() {
   const barnId = horse.location.barn?.id;
   const trainerOfZone = user?.role === 'HEAD_TRAINER' && !!barnId && !!zone?.myBarnIds.has(barnId);
   const canViewCare = user?.role === 'CLUB_MANAGER' || user?.role === 'VETERINARIAN' || trainerOfZone || isHorseGroom;
+  // Tab Phụ phí: Quản lý CLB, HLV khu hiện tại của ngựa, chủ ngựa (BE trả 403 cho HLV khu khác, Groom, bác sĩ).
+  const canViewSurcharge = user?.role === 'CLUB_MANAGER' || trainerOfZone || user?.role === 'HORSE_OWNER';
   const tabs = [
     { key: 'overview', label: 'Tổng quan' },
     { key: 'pedigree', label: 'Phả hệ' },
     { key: 'body', label: 'Chỉ số cơ thể' },
     ...(FEATURES.training && permissions.canViewTrainingTab ? [{ key: 'training', label: 'Huấn luyện' }] : []),
     ...(FEATURES.stableCare && canViewCare ? [{ key: 'care', label: 'Chăm sóc' }] : []),
+    ...(canViewSurcharge ? [{ key: 'surcharge', label: 'Phụ phí' }] : []),
     // Báo cáo theo kỳ: BE cho Quản lý CLB, HLV, bác sĩ, chủ ngựa (Groom thì 403).
     ...(can(user, 'report.horse') ? [{ key: 'report', label: 'Báo cáo' }] : []),
   ];
@@ -301,6 +309,7 @@ export default function HorseDetail() {
         {tab === 'body' && <BodyTab horseId={horse.id} canRecord={permissions.canRecordMeasurement} canDelete={permissions.canDeleteMeasurement} />}
         {tab === 'training' && <TrainingTab horse={horse} permissions={permissions} />}
         {tab === 'care' && <CareTab horse={horse} trainerOfZone={trainerOfZone} />}
+        {tab === 'surcharge' && <SurchargeTab horse={horse} canManage={can(user, 'surcharge.manage')} canApply={trainerOfZone && can(user, 'surcharge.apply')} />}
         {tab === 'report' && <ReportTab horse={horse} owner={user?.role === 'HORSE_OWNER'} />}
       </div>
 
@@ -345,3 +354,10 @@ export default function HorseDetail() {
   );
 }
 
+
+/** Chủ ngựa không còn quyền xem hồ sơ: nếu từng sở hữu con này thì chuyển sang bản cơ bản ở Ngựa đã bán. */
+function PastHorseFallback({ id }: { id: string }) {
+  const past = useService(() => getPastHorse(id).then(() => true).catch(() => false), [id]);
+  if (past.loading) return <HorseDetailSkeleton />;
+  return past.data ? <Navigate to={links.pastHorse(id)} replace /> : <NotFound />;
+}

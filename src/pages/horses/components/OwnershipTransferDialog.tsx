@@ -1,11 +1,11 @@
 // Chuyển nhượng nội bộ: chủ ngựa bán cho chủ khác trong câu lạc bộ. Quản lý ghi nhận sau khi hai bên đã thỏa thuận.
 // Ngựa giữ nguyên khu, ô, Groom, lớp. Chủ mới bắt đầu sở hữu từ lúc lưu, đây cũng là mốc chia chi phí y tế.
 import { useEffect, useState } from 'react';
-import { useAction, useService } from '../../../hooks/useService';
+import { useAction } from '../../../hooks/useService';
 import { transferOwnership } from '../../../api/horses';
-import { listAllUsers } from '../../../api/users';
-import { Button, ErrorBox, Field, Modal, Notice, Select, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
+import { Button, ErrorBox, Field, Modal, Notice, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { formatDate } from '../../../lib/format';
+import { OwnerSelect } from './OwnerSelect';
 
 const REASON_MAX = 500;
 
@@ -22,8 +22,8 @@ export default function OwnershipTransferDialog({
 }) {
   const toast = useToast();
   const action = useAction();
-  const owners = useService(() => (open ? listAllUsers({ role: 'HORSE_OWNER', status: 'ACTIVE' }) : Promise.resolve([])), [open]);
   const [newOwnerId, setNewOwnerId] = useState('');
+  const [newOwnerName, setNewOwnerName] = useState('');
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -34,7 +34,6 @@ export default function OwnershipTransferDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const candidates = (owners.data ?? []).filter((item) => item.id !== horse.owner?.id);
   const ownerError = action.fieldErrors.newOwnerId;
   const reasonError = action.fieldErrors.reason;
   const formError = action.error && !ownerError && !reasonError ? action.error : undefined;
@@ -45,8 +44,7 @@ export default function OwnershipTransferDialog({
     if (!canSubmit) return;
     const done = await action.run(() => transferOwnership(horse.id, { newOwnerId, reason: reason.trim(), version: horse.version }));
     if (done) {
-      const name = candidates.find((item) => item.id === newOwnerId)?.fullName ?? 'chủ mới';
-      toast.push(`Đã chuyển ${horse.name} sang ${name}`, 'success');
+      toast.push(`Đã chuyển ${horse.name} sang ${newOwnerName || 'chủ mới'}`, 'success');
       onDone();
       onClose();
     }
@@ -79,28 +77,23 @@ export default function OwnershipTransferDialog({
           {horse.ownerSince && <p className="text-xs text-gray-500">Sở hữu từ {formatDate(horse.ownerSince)}</p>}
         </div>
         <Field label="Chủ mới" name="newOwnerId" required error={ownerError} hint="Chủ ngựa đang hoạt động, trừ chủ hiện tại.">
-          <Select
+          <OwnerSelect
             value={newOwnerId}
-            disabled={owners.loading && !owners.data}
-            onChange={(event) => {
-              setNewOwnerId(event.target.value);
+            exclude={horse.owner?.id}
+            invalid={!!ownerError}
+            placeholder="Chọn chủ mới"
+            onChange={(id, owner) => {
+              setNewOwnerId(id);
+              setNewOwnerName(owner?.fullName ?? '');
               if (ownerError) action.clearError();
             }}
-            className={cn(ownerError && invalidClass)}
-          >
-            <option value="">{owners.loading && !owners.data ? 'Đang tải…' : 'Chọn chủ mới'}</option>
-            {candidates.map((owner) => (
-              <option key={owner.id} value={owner.id}>
-                {owner.fullName} · {owner.email}
-              </option>
-            ))}
-          </Select>
+          />
         </Field>
         <Field label="Lý do" name="reason" required error={reasonError} hint="Ví dụ: chủ cũ bán lại cho chủ mới.">
           <Textarea value={reason} maxLength={REASON_MAX} onChange={(event) => setReason(event.target.value)} className={cn(reasonError && invalidClass)} />
         </Field>
         <Notice tone="info">
-          Chủ mới sở hữu từ lúc lưu. Chi phí các bệnh án đã đóng trước đó vẫn tính cho chủ cũ. Chủ cũ không xem được hồ sơ ngựa nữa.
+          Chủ mới sở hữu từ lúc lưu. Chi phí các bệnh án đã đóng trước đó vẫn tính cho chủ cũ. Chủ cũ chỉ còn xem thông tin cơ bản ở mục Ngựa đã bán.
         </Notice>
         {formError && <ErrorBox message={formError} />}
         {stale && (
@@ -115,7 +108,6 @@ export default function OwnershipTransferDialog({
             Tải lại hồ sơ mới nhất
           </Button>
         )}
-        {owners.error && <ErrorBox message={owners.error} />}
       </div>
     </Modal>
   );

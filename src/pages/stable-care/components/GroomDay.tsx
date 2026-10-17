@@ -41,10 +41,44 @@ export function GroomDay({
 }) {
   const byId = new Map(horses.map((horse) => [horse.id, horse]));
 
-  if (today.horses.length === 0) return <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />;
+  const others = today.otherCareSchedules ?? [];
+  // Lịch ở ngựa không phụ trách: Groom vẫn có việc dù chưa được giao ngựa nào.
+  const otherBlock = others.length > 0 && (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 xl:col-span-2">
+      <h3 className="text-sm font-semibold text-gray-900">Lịch chăm sóc ở ngựa khác</h3>
+      <p className="mt-0.5 text-xs text-gray-500">Bác sĩ giao đích danh cho bạn ở ngựa bạn không phụ trách.</p>
+      <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {others.map((care) => (
+          <li key={care.id}>
+            <Link
+              to={links.horseMedical(care.horseId)}
+              className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition', care.overdue ? 'bg-red-50 text-red-800 hover:bg-red-100' : 'hover:bg-gray-50')}
+            >
+              <CalendarClock size={14} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                <b className="font-semibold">{care.horseName}</b> · {careTypeLabel[care.type]}
+              </span>
+              <span className="shrink-0 text-xs">{care.overdue ? `Quá hạn từ ${formatDate(care.dueAt)}` : 'Đến hạn hôm nay'}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
+  if (today.horses.length === 0)
+    return otherBlock ? (
+      <div className="space-y-4">
+        {otherBlock}
+        <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />
+      </div>
+    ) : (
+      <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />
+    );
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      {otherBlock}
       {today.horses.map((entry) => {
         const horse = byId.get(entry.horseId);
         const checklist = entry.checklist ? (ticked[entry.checklist.id] ?? entry.checklist) : null;

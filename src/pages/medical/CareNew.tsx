@@ -16,8 +16,8 @@ import { careTypeLabel } from '../../lib/api-labels';
 import { formatDateTime } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { now } from '../../lib/clock';
-import { CareLine } from './components/care';
-import { CARE_TYPES } from './components/care-rules';
+import { CareAssigneeField, CareLine } from './components/care';
+import { ASSIGNEE_MODE_LABEL, CARE_TYPES, assigneeError, assigneeInput, type AssigneeChoice } from './components/care-rules';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { localToIso, toLocalInput, todayKey } from './components/utils';
@@ -51,7 +51,8 @@ export default function CareNew() {
   const [horseId, setHorseId] = useState(fixedHorseId ?? '');
   const [type, setType] = useState<CareTaskType>('VACCINATION');
   const [dueAt, setDueAt] = useState(defaultDue);
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  // Mặc định giao Groom phụ trách: đổi Groom thì lịch tự theo Groom mới.
+  const [assignee, setAssignee] = useState<AssigneeChoice>({ mode: 'HORSE_GROOM', userId: '' });
   const [notes, setNotes] = useState('');
   const [attempted, setAttempted] = useState(false);
 
@@ -68,17 +69,14 @@ export default function CareNew() {
 
   if (!can(user, 'care.manage')) return <NotFound message="Chỉ bác sĩ thú y tạo được lịch chăm sóc." />;
 
-  // Mặc định giao cho Groom của ngựa (nếu có); người dùng đổi được.
-  const assignee = assignedTo ?? groom?.id ?? '';
-  const assignees: { id: string; label: string }[] = [];
-  if (groom) assignees.push({ id: groom.id, label: `${groom.fullName} (Groom của ngựa)` });
-  if (user && user.id !== groom?.id) assignees.push({ id: user.id, label: `Tôi (${user.name})` });
 
   const dueIso = localToIso(dueAt);
   const errors: Record<string, string> = {};
   if (!horseId) errors.horse = 'Chọn ngựa';
   if (!dueIso) errors.dueAt = 'Chọn ngày đến hạn';
   else if (dueAt.slice(0, 10) < todayKey()) errors.dueAt = 'Ngày đến hạn đã qua';
+  const assigneeProblem = assigneeError(assignee);
+  if (assigneeProblem) errors.assignee = assigneeProblem;
   const show = (key: string) => (attempted ? errors[key] : undefined);
 
   const upcoming = (context.data?.schedules ?? []).filter((row) => row.status === 'SCHEDULED');
@@ -96,7 +94,8 @@ export default function CareNew() {
         createCareSchedule(horse.id, {
           type,
           dueAt: dueIso!,
-          ...(assignee ? { assignedTo: assignee } : {}),
+          ...(assigneeInput(assignee).assigneeType ? { assigneeType: assigneeInput(assignee).assigneeType! } : {}),
+          ...(assigneeInput(assignee).assignedTo ? { assignedTo: assigneeInput(assignee).assignedTo! } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
         }),
       () => {
@@ -122,7 +121,7 @@ export default function CareNew() {
                     value={horseId}
                     onChange={(event) => {
                       setHorseId(event.target.value);
-                      setAssignedTo(null);
+                      setAssignee((current) => (current.mode === 'GROOM' ? { mode: 'HORSE_GROOM', userId: '' } : current));
                     }}
                     className={cn(show('horse') && invalidClass)}
                   >
@@ -165,18 +164,8 @@ export default function CareNew() {
             {horseId && context.loading && !context.data ? (
               <Skeleton rows={1} />
             ) : (
-              <Field className="sm:max-w-md">
-                <Select value={assignee} onChange={(event) => setAssignedTo(event.target.value)} disabled={!horse}>
-                  <option value="">Chưa giao</option>
-                  {assignees.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <CareAssigneeField horseId={horse?.id} groom={groom} value={assignee} onChange={setAssignee} error={show('assignee')} className="sm:max-w-xl" hideLabel />
             )}
-            {horse && !groom && <p className="text-sm text-gray-500">Ngựa chưa có Groom phụ trách.</p>}
           </FormSection>
 
           <FormSection icon={<NotebookPen size={16} />} title="Ghi chú">
@@ -196,7 +185,7 @@ export default function CareNew() {
                 <ul className="space-y-2.5">
                   {upcoming.map((row) => (
                     <li key={row.id}>
-                      <CareLine schedule={row} people={people} />
+                      <CareLine schedule={row} people={people} groomName={groom?.fullName} />
                     </li>
                   ))}
                 </ul>
@@ -213,7 +202,13 @@ export default function CareNew() {
                 {horse ? ` cho ${horse.name}` : ''}
                 {dueIso ? `, đến hạn ${formatDateTime(dueIso)}` : ''}
               </Outcome>
-              <Outcome>{assignee ? `Giao cho ${assignees.find((item) => item.id === assignee)?.label ?? people.name(assignee)}` : 'Chưa giao người thực hiện'}</Outcome>
+              <Outcome>
+                {assignee.mode === 'NONE'
+                  ? 'Chưa giao người thực hiện'
+                  : assignee.mode === 'HORSE_GROOM'
+                    ? `Giao Groom phụ trách${groom ? ` (hiện là ${groom.fullName})` : ', ngựa chưa có Groom'}`
+                    : `${ASSIGNEE_MODE_LABEL[assignee.mode]}: ${assignee.userId ? people.name(assignee.userId) : 'chưa chọn người'}`}
+              </Outcome>
               {sameType.length > 0 && (
                 <Outcome tone="warning">
                   Ngựa đã có {sameType.length} lịch {careTypeLabel[type].toLowerCase()} đang chờ (gần nhất {formatDateTime(sameType[0].dueAt)})

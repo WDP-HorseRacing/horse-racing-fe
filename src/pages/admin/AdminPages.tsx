@@ -297,7 +297,7 @@ export function AdminUsers() {
           </Field>
           <Notice tone="info">
             Hệ thống không cho đổi vai trò khi tài khoản còn là chủ của ngựa đang ở câu lạc bộ, còn là Groom của ngựa nào, hoặc
-            còn đứng tên HLV trưởng của một khu. Hãy chuyển trách nhiệm cho người khác trước.
+            còn đứng tên HLV trưởng của một khu, hoặc còn lịch chăm sóc chưa làm được bác sĩ giao đích danh. Hãy chuyển trách nhiệm cho người khác trước (lịch chăm sóc thì nhờ bác sĩ giao lại).
           </Notice>
         </div>
       </Modal>

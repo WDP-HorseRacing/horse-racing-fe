@@ -11,11 +11,10 @@ import type {
 
 export const intensityText: Record<TrainingIntensity, string> = {
   LIGHT: 'Nhẹ',
-  MODERATE: 'Trung bình',
   HEAVY: 'Nặng',
 };
 
-export const INTENSITIES: TrainingIntensity[] = ['LIGHT', 'MODERATE', 'HEAVY'];
+export const INTENSITIES: TrainingIntensity[] = ['LIGHT', 'HEAVY'];
 
 export const sessionTypeText: Record<TrainingSessionType, string> = {
   REGULAR: 'Buổi thường',
@@ -23,15 +22,13 @@ export const sessionTypeText: Record<TrainingSessionType, string> = {
 };
 
 export const classStatusText: Record<TrainingClassStatus, string> = {
-  DRAFT: 'Nháp',
   ACTIVE: 'Đang chạy',
   COMPLETED: 'Đã hoàn thành',
   CANCELLED: 'Đã hủy',
 };
 
 export const sessionStatusText: Record<TrainingSessionStatus, string> = {
-  DRAFT: 'Nháp',
-  SCHEDULED: 'Đã công bố',
+  SCHEDULED: 'Đã lên lịch',
   IN_PROGRESS: 'Đang diễn ra',
   COMPLETED: 'Đã xong',
   CANCELLED: 'Đã hủy',
@@ -70,7 +67,7 @@ export const alertLevelText: Record<MetricAlertLevel, string> = {
 
 /** Lý do lượt "Không đủ điều kiện" BE ghi bằng mã. */
 const INELIGIBLE_REASON: Record<string, string> = {
-  HEALTH_UNDER_OBSERVATION: 'Đang cần theo dõi, không tập buổi nặng',
+  HEALTH_UNDER_OBSERVATION: 'Đang cần theo dõi, chỉ tập buổi Nhẹ',
   HEALTH_INJURED: 'Đang chấn thương',
   HEALTH_QUARANTINED: 'Đang cách ly',
   LIFECYCLE_RETIRED: 'Đã giải nghệ',

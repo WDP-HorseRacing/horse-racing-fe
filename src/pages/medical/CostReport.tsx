@@ -7,7 +7,9 @@ import { useService } from '../../hooks/useService';
 import { getCostReport } from '../../api/medical';
 import { listBarns } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
-import { Card, DataTable, ErrorBox, FilterSelect, Meter, PageHeader, Skeleton, Toolbar } from '../../components/ui';
+import { Card, DataTable, ErrorBox, FilterSelect, Meter, NotFound, PageHeader, Skeleton, Toolbar } from '../../components/ui';
+import { can } from '../../auth/permissions';
+import { useStore } from '../../store/store';
 import { formatDate, formatMoney, toDateKey } from '../../lib/format';
 import { links } from '../../lib/links';
 import { now } from '../../lib/clock';
@@ -20,6 +22,13 @@ function monthStart(): string {
 }
 
 export default function CostReport() {
+  const user = useStore((state) => state.currentUser);
+  // Mở thẳng link khi không phải Quản lý CLB: báo không có quyền, không gọi API (BE trả 403).
+  if (!can(user, 'medical.cost.report')) return <NotFound message="Báo cáo chi phí y tế dành cho Quản lý câu lạc bộ." />;
+  return <CostReportPage />;
+}
+
+function CostReportPage() {
   const navigate = useNavigate();
   const [from, setFrom] = useState(monthStart);
   const [to, setTo] = useState(() => toDateKey(now()));

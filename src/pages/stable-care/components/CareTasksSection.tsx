@@ -1,11 +1,12 @@
-// F4.3 — Việc chăm sóc riêng của ngựa (vd "Ngâm chân nước đá 10/10 đến 17/10"): HLV khu gắn và gỡ, Quản lý CLB, Groom xem.
-// Việc riêng cộng vào checklist mỗi ngày trong khoảng. Gắn từ hôm nay thì checklist hôm nay có thêm dòng và Groom được báo.
-// Gỡ: chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc ở hôm nay.
+// F4.3 — Việc chăm sóc riêng của ngựa: HLV khu gắn và gỡ, Quản lý CLB, Groom xem. Hai kiểu:
+// - Gắn thêm (vd "Ngâm chân nước đá 10/10 đến 17/10"): loại việc không áp mọi ngựa, cộng vào checklist mỗi ngày trong khoảng.
+// - Miễn việc chung (vd không tắm 5 ngày vì ngựa sốt): loại việc đang áp mọi ngựa, bỏ khỏi checklist trong khoảng, lý do bắt buộc.
+// Gắn từ hôm nay thì checklist hôm nay đổi ngay. Gỡ: chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc sớm.
 import { useState } from 'react';
 import { CalendarPlus, ChevronDown, Trash2 } from 'lucide-react';
 import { attachCareTask, listHorseCareTasks, listTaskTypes, removeCareTask } from '../../../api/stable-care';
-import type { HorseCareTask } from '../../../api/types';
-import { Button, ConfirmDialog, ErrorBox, Field, Modal, Pill, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import type { HorseCareTask, HorseCareTaskMode } from '../../../api/types';
+import { Button, ConfirmDialog, ErrorBox, Field, Modal, Pill, Segmented, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { useAction, useService } from '../../../hooks/useService';
 import { addDateKey, clubToday, diffDateKeys } from '../../../lib/club-time';
@@ -34,20 +35,27 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
 
   const row = (task: HorseCareTask) => {
     const state = taskState(task, today);
+    const exempt = task.mode === 'EXEMPT';
     return (
-      <li key={task.id} className={cn('flex items-start gap-3 rounded-xl px-3 py-2.5 ring-1', state === 'running' ? 'bg-emerald-50/60 ring-emerald-100' : 'bg-white ring-gray-200/80')}>
+      <li
+        key={task.id}
+        className={cn(
+          'flex items-start gap-3 rounded-xl px-3 py-2.5 ring-1',
+          state !== 'running' ? 'bg-white ring-gray-200/80' : exempt ? 'bg-amber-50/70 ring-amber-100' : 'bg-emerald-50/60 ring-emerald-100',
+        )}
+      >
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-900">
-            {task.taskType.name}
+            {exempt ? <span className="text-amber-900">Miễn: {task.taskType.name}</span> : task.taskType.name}
             <Pill tone={state === 'running' ? 'green' : state === 'upcoming' ? 'amber' : 'gray'}>{state === 'running' ? 'Đang áp dụng' : state === 'upcoming' ? 'Sắp tới' : 'Đã kết thúc'}</Pill>
           </p>
           <p className="text-xs text-gray-500">
             {task.fromDate === task.toDate ? `Ngày ${formatDateShort(task.fromDate)}` : `${formatDateShort(task.fromDate)} đến ${formatDateShort(task.toDate)}`} · HLV {task.creator.fullName}
           </p>
-          {task.note && <p className="mt-0.5 text-xs text-gray-600">{task.note}</p>}
+          {task.note && <p className="mt-0.5 text-xs text-gray-600">{exempt ? `Lý do: ${task.note}` : task.note}</p>}
         </div>
         {canManage && state !== 'ended' && (
-          <Button variant="ghost" size="icon" title="Gỡ việc" onClick={() => setRemoving(task)}>
+          <Button variant="ghost" size="icon" title={exempt ? 'Gỡ miễn' : 'Gỡ việc'} onClick={() => setRemoving(task)}>
             <Trash2 size={15} />
           </Button>
         )}
@@ -63,7 +71,7 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
         </div>
         {canManage && (
           <Button variant="inline" size="sm" onClick={() => setAttaching(true)}>
-            <CalendarPlus size={14} /> Thêm việc
+            <CalendarPlus size={14} /> Thêm hoặc miễn việc
           </Button>
         )}
       </div>
@@ -90,7 +98,8 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
           horse={horse}
           onClose={() => setAttaching(false)}
           onDone={(task) => {
-            toast.push(task.fromDate === today ? `Đã thêm ${task.taskType.name}` : `Đã thêm ${task.taskType.name} từ ${formatDateShort(task.fromDate)}`, 'success');
+            const what = task.mode === 'EXEMPT' ? `Đã miễn ${task.taskType.name}` : `Đã thêm ${task.taskType.name}`;
+            toast.push(task.fromDate === today ? what : `${what} từ ${formatDateShort(task.fromDate)}`, 'success');
             tasks.reload();
             onChanged?.();
           }}
@@ -98,8 +107,14 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
       )}
       <ConfirmDialog
         open={!!removing}
-        title={`Gỡ ${removing?.taskType.name ?? 'việc'}`}
-        message={removing && removing.fromDate > today ? 'Việc này sẽ bị xóa.' : 'Việc dừng từ ngày mai.'}
+        title={removing?.mode === 'EXEMPT' ? `Gỡ miễn ${removing.taskType.name}` : `Gỡ ${removing?.taskType.name ?? 'việc'}`}
+        message={
+          removing?.mode === 'EXEMPT'
+            ? `${removing.taskType.name} có lại trong checklist từ hôm nay, Groom được báo.`
+            : removing && removing.fromDate > today
+              ? 'Việc này sẽ bị xóa.'
+              : 'Việc dừng từ ngày mai.'
+        }
         confirmLabel="Gỡ"
         pending={remove.pending}
         onClose={() => {
@@ -128,27 +143,30 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
 function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; name: string }; onClose: () => void; onDone: (task: HorseCareTask) => void }) {
   const today = clubToday();
   const action = useAction();
-  // Chỉ loại đang dùng và không áp mọi ngựa mới gắn riêng được.
-  const types = useService(async () => (await listTaskTypes()).filter((type) => type.active && !type.appliesToAll), []);
+  const [mode, setMode] = useState<HorseCareTaskMode>('EXTRA');
+  const exempt = mode === 'EXEMPT';
+  // Gắn thêm: loại đang dùng và không áp mọi ngựa. Miễn: loại đang dùng và đang áp mọi ngựa.
+  const allTypes = useService(async () => (await listTaskTypes()).filter((type) => type.active), []);
+  const types = { ...allTypes, data: allTypes.data?.filter((type) => type.appliesToAll === exempt) };
   const [typeId, setTypeId] = useState('');
   const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(addDateKey(today, 6));
   const [note, setNote] = useState('');
   const [touched, setTouched] = useState(false);
-  const chosenType = typeId || types.data?.[0]?.id || '';
+  const chosenType = (types.data?.some((type) => type.id === typeId) ? typeId : '') || types.data?.[0]?.id || '';
 
   const errors = {
     type: !chosenType ? 'Chọn loại việc' : undefined,
     from: !fromDate ? 'Chọn ngày bắt đầu' : fromDate < today ? 'Không chọn ngày đã qua' : undefined,
     to: !toDate ? 'Chọn ngày kết thúc' : toDate < fromDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : diffDateKeys(fromDate, toDate) + 1 > MAX_DAYS ? `Tối đa ${MAX_DAYS} ngày` : undefined,
-    note: textError(note, { label: 'Ghi chú', max: 200, required: false }),
+    note: textError(note, { label: exempt ? 'Lý do' : 'Ghi chú', max: 200, required: exempt }),
   };
 
   const submit = () => {
     setTouched(true);
     if (Object.values(errors).some(Boolean)) return;
     void action.run(
-      () => attachCareTask(horse.id, { taskTypeId: chosenType, fromDate, toDate, ...(note.trim() ? { note: note.trim() } : {}) }),
+      () => attachCareTask(horse.id, { taskTypeId: chosenType, fromDate, toDate, mode, ...(note.trim() ? { note: note.trim() } : {}) }),
       (task) => {
         onDone(task);
         onClose();
@@ -160,31 +178,44 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
     <Modal
       open
       onClose={onClose}
-      title={`Thêm việc riêng cho ${horse.name}`}
-      description="Groom sẽ thấy việc này mỗi ngày trong khoảng đã chọn."
-      dirty={!!typeId || fromDate !== today || toDate !== addDateKey(today, 6) || note !== ''}
+      title={`Việc riêng của ${horse.name}`}
+      description={exempt ? 'Checklist của ngựa không có việc này trong khoảng đã chọn, hết hạn thì tự có lại.' : 'Groom sẽ thấy việc này mỗi ngày trong khoảng đã chọn.'}
+      dirty={!!typeId || exempt || fromDate !== today || toDate !== addDateKey(today, 6) || note !== ''}
       onSave={submit}
-      saveLabel="Thêm"
+      saveLabel={exempt ? 'Miễn' : 'Thêm'}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
           <Button onClick={submit} disabled={action.pending || types.loading}>
-            {action.pending ? 'Đang lưu…' : 'Thêm'}
+            {action.pending ? 'Đang lưu…' : exempt ? 'Miễn việc' : 'Thêm'}
           </Button>
         </>
       }
     >
+      <Segmented<HorseCareTaskMode>
+        value={mode}
+        onChange={(value) => {
+          setMode(value);
+          setTouched(false);
+          action.clearError();
+        }}
+        options={[
+          { value: 'EXTRA', label: 'Gắn thêm việc' },
+          { value: 'EXEMPT', label: 'Miễn việc chung' },
+        ]}
+      />
+      <div className="mt-4" />
       {types.loading && !types.data ? (
         <Skeleton rows={3} />
       ) : types.error ? (
         <ErrorBox message={types.error} />
       ) : types.data?.length === 0 ? (
-        <ErrorBox message="Chưa có loại việc nào. Nhờ Quản lý CLB thêm ở trang Chăm sóc khu." />
+        <ErrorBox message={exempt ? 'Chưa có loại việc nào áp mọi ngựa để miễn.' : 'Chưa có loại việc riêng nào. Nhờ Quản lý CLB thêm ở trang Chăm sóc khu.'} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Loại việc" required error={touched ? errors.type : undefined} className="sm:col-span-2">
+          <Field label={exempt ? 'Việc chung được miễn' : 'Loại việc'} required error={touched ? errors.type : undefined} className="sm:col-span-2">
             <Select value={chosenType} onChange={(event) => setTypeId(event.target.value)}>
               {types.data?.map((type) => (
                 <option key={type.id} value={type.id}>
@@ -199,8 +230,13 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
           <Field label="Đến ngày" required error={touched ? errors.to : undefined}>
             <DatePicker value={toDate} onChange={setToDate} min={fromDate || today} clearable={false} invalid={touched && !!errors.to} />
           </Field>
-          <Field label="Ghi chú" error={touched ? errors.note : undefined} className="sm:col-span-2">
-            <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Ngâm 15 phút sau buổi tập, nước có đá" />
+          <Field label={exempt ? 'Lý do miễn' : 'Ghi chú'} required={exempt} error={touched ? errors.note : undefined} className="sm:col-span-2">
+            <Textarea
+              rows={2}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder={exempt ? 'Ví dụ: Ngựa sốt, không tắm trong 5 ngày' : 'Ví dụ: Ngâm 15 phút sau buổi tập, nước có đá'}
+            />
           </Field>
           {action.error && (
             <div className="sm:col-span-2">

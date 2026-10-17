@@ -1,9 +1,10 @@
-// F4.4 — Groom báo sự cố tại chuồng: ngựa đang phụ trách, mô tả, một ảnh thực tế, cờ Khẩn.
+// F4.4 — Groom báo sự cố tại chuồng: mọi ngựa đang ở CLB (ngựa mình phụ trách lên đầu), mô tả, một ảnh (tùy chọn), cờ Khẩn.
+// Báo hộ ngựa người khác phụ trách thì Groom phụ trách và HLV khu cùng được báo.
 // Không có trường phân loại: các nút gợi ý chèn đúng ví dụ của đề (Bỏ ăn, Đau bụng, Sốt, Móng bị xước) vào mô tả.
 // Khẩn: BE tạo ngay yêu cầu khám khẩn và báo mọi bác sĩ. Thường: HLV khu nhận thông báo, tự xử lý hoặc chuyển bác sĩ.
 import { useEffect, useState } from 'react';
 import { reportIncident } from '../../../api/stable-care';
-import type { Incident } from '../../../api/types';
+import type { HorseListItem, Incident } from '../../../api/types';
 import { Button, Dot, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 import { useAction } from '../../../hooks/useService';
 import { healthLabel } from '../../../lib/labels';
@@ -28,7 +29,8 @@ export function IncidentReportForm({
 }) {
   const toast = useToast();
   const action = useAction();
-  const options = useMedicalHorses('myHorses', !horse);
+  const options = useMedicalHorses('all', !horse);
+  const mine = useMedicalHorses('myHorses', !horse);
   const [horseId, setHorseId] = useState(horse?.id ?? '');
   const [description, setDescription] = useState('');
   const [urgent, setUrgent] = useState(false);
@@ -67,24 +69,45 @@ export function IncidentReportForm({
 
   if (!horse && options.loading && !options.data) return <Skeleton rows={4} />;
   if (!horse && options.error) return <ErrorBox message={options.error} />;
-  if (!horse && options.data?.length === 0) return <Notice tone="info">Bạn chưa được giao ngựa nào.</Notice>;
+  if (!horse && options.data?.length === 0) return <Notice tone="info">Câu lạc bộ chưa có ngựa nào.</Notice>;
+
+  const mineIds = new Set((mine.data ?? []).map((item) => item.id));
+  const option = (item: HorseListItem) => {
+    const place = horsePlace(item);
+    return (
+      <option key={item.id} value={item.id}>
+        {item.name}
+        {place ? ` · ${place}` : ''}
+        {item.healthStatus !== 'ELIGIBLE' ? ` · ${healthLabel[item.healthStatus]}` : ''}
+      </option>
+    );
+  };
+  const reportingForOther = !horse && !!horseId && !!mine.data && !mineIds.has(horseId);
 
   return (
     <div className="space-y-4">
       {!horse && (
-        <Field label="Ngựa" required error={touched && !horseId ? 'Chọn ngựa' : undefined}>
+        <Field
+          label="Ngựa"
+          required
+          error={touched && !horseId ? 'Chọn ngựa' : undefined}
+          hint={reportingForOther ? 'Bạn không phụ trách ngựa này: Groom phụ trách và HLV khu sẽ được báo.' : 'Báo được cho mọi ngựa đang ở câu lạc bộ, kể cả ngựa người khác phụ trách.'}
+        >
           <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
             <option value="">Chọn ngựa…</option>
-            {options.data?.map((item) => {
-              const place = horsePlace(item);
-              return (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                  {place ? ` · ${place}` : ''}
-                  {item.healthStatus !== 'ELIGIBLE' ? ` · ${healthLabel[item.healthStatus]}` : ''}
-                </option>
-              );
-            })}
+            {/* Ô chọn tự làm không có nhóm: dùng dòng tắt làm tiêu đề nhóm. */}
+            {mineIds.size > 0 && (
+              <option value="__mine" disabled>
+                Ngựa tôi phụ trách
+              </option>
+            )}
+            {(options.data ?? []).filter((item) => mineIds.has(item.id)).map(option)}
+            {mineIds.size > 0 && (
+              <option value="__others" disabled>
+                Ngựa khác trong câu lạc bộ
+              </option>
+            )}
+            {(options.data ?? []).filter((item) => !mineIds.has(item.id)).map(option)}
           </Select>
         </Field>
       )}

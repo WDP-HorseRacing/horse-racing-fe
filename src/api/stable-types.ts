@@ -39,8 +39,11 @@ export interface SupplyItemInput {
   openingUnitPrice?: number;
 }
 
-/** OPENING: tồn ban đầu. RESTOCK: nhập hàng hoặc cấp theo đề xuất. USAGE: xuất dùng. COUNT_ADJUST: kiểm kê, chỉ còn ở dữ liệu cũ. */
-export type SupplyMovementType = 'OPENING' | 'RESTOCK' | 'USAGE' | 'COUNT_ADJUST';
+/**
+ * OPENING: tồn ban đầu. RESTOCK: nhập hàng hoặc cấp theo đề xuất. USAGE: xuất dùng.
+ * USAGE_REVERSAL: hủy một lần xuất ghi nhầm (số dương, ghi chú là lý do). COUNT_ADJUST: kiểm kê, chỉ còn ở dữ liệu cũ.
+ */
+export type SupplyMovementType = 'OPENING' | 'RESTOCK' | 'USAGE' | 'USAGE_REVERSAL' | 'COUNT_ADJUST';
 
 export interface SupplyMovement {
   id: string;
@@ -55,6 +58,10 @@ export interface SupplyMovement {
   unitPrice: number | null;
   /** Tiền của dòng = chênh lệch × đơn giá, âm là xuất. */
   amount: number | null;
+  /** Mã lần xuất: chung cho các dòng USAGE của một lần xuất (trừ nhiều lô) và dòng USAGE_REVERSAL hủy nó. null với dòng xuất cũ (không hủy được). */
+  usageId: string | null;
+  /** true ở dòng USAGE của lần xuất đã hủy. */
+  cancelled: boolean;
   note: string | null;
   creator: UserBrief;
   createdAt: string;
@@ -146,9 +153,13 @@ export interface ChecklistTaskType {
   active: boolean;
 }
 
+/** EXTRA: gắn thêm loại việc không áp mọi ngựa. EXEMPT: miễn loại việc đang áp mọi ngựa (lý do ở `note`). */
+export type HorseCareTaskMode = 'EXTRA' | 'EXEMPT';
+
 export interface HorseCareTask {
   id: string;
   horseId: string;
+  mode: HorseCareTaskMode;
   taskType: ChecklistTaskType;
   fromDate: string;
   toDate: string;
@@ -211,9 +222,16 @@ export interface GroomTodayHorse {
   careSchedules: GroomTodayCare[];
 }
 
+/** Lịch chăm sóc giao đích danh cho Groom ở ngựa Groom không phụ trách (vd Groom chuyên làm móng). */
+export interface GroomTodayOtherCare extends GroomTodayCare {
+  horseId: string;
+  horseName: string;
+}
+
 export interface GroomToday {
   date: string;
   horses: GroomTodayHorse[];
+  otherCareSchedules: GroomTodayOtherCare[];
 }
 
 /* ===== Sự cố tại chuồng ===== */

@@ -4,12 +4,12 @@ import { http } from './http';
 import type { UserRole } from '../types/domain';
 import type { Page } from './types';
 
-export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'RESTORE';
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'RESTORE' | 'LOGIN_FAILED' | 'PASSWORD_CHANGE';
 
 export interface AuditLog {
   id: string;
   createdAt: string;
-  /** null khi hệ thống tự làm. */
+  /** null khi hệ thống tự làm, hoặc dòng đăng nhập sai (entityId là tài khoản bị thử). */
   actor: { id: string; fullName: string; role: UserRole | null } | null;
   action: AuditAction;
   entityType: string;

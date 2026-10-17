@@ -171,6 +171,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           items: [
             { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard },
             { name: 'Ngựa của tôi', path: links.horses, icon: Users },
+            { name: 'Ngựa đã bán', path: links.pastHorses, icon: History },
             { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
             { name: 'Chi phí', path: links.myCosts, icon: Wallet },
           ],
