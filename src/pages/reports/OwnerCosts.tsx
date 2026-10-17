@@ -36,7 +36,7 @@ export default function OwnerCosts() {
       {manager && <BackLink fallback={links.reports('finance')}>Báo cáo tài chính</BackLink>}
       <PageHeader
         title={manager ? `Chi phí của ${data?.ownerName ?? 'chủ ngựa'}` : 'Chi phí'}
-        description="Phí nuôi theo ngày và chi phí y tế của các bệnh án đã đóng trong kỳ."
+        description="Phí nuôi theo ngày, phụ phí riêng từng ngựa và chi phí y tế của các bệnh án đã đóng trong kỳ."
       />
       <PeriodBar period={period} />
 
@@ -58,6 +58,7 @@ export default function OwnerCosts() {
                   className="mt-5"
                   parts={[
                     { key: 'fee', label: 'Phí nuôi', value: data.dailyFee, color: '#059669', text: formatMoney(data.dailyFee) },
+                    { key: 'surcharge', label: 'Phụ phí', value: data.surcharge, color: '#84cc16', text: formatMoney(data.surcharge) },
                     { key: 'medical', label: 'Y tế', value: data.medicalCost, color: '#f59e0b', text: formatMoney(data.medicalCost) },
                   ]}
                 />
@@ -75,13 +76,14 @@ export default function OwnerCosts() {
                 { key: 'horse', header: 'Ngựa', render: (row) => <span className="font-semibold text-gray-900">{row.horseName}</span> },
                 { key: 'days', header: 'Ngày tính phí', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{row.billedDays}</span> },
                 { key: 'fee', header: 'Phí nuôi', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.dailyFee)}</span> },
+                { key: 'surcharge', header: 'Phụ phí', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.surcharge)}</span> },
                 { key: 'cases', header: 'Bệnh án', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{row.caseCount}</span> },
                 { key: 'medical', header: 'Y tế', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.medicalCost)}</span> },
                 { key: 'total', header: 'Tổng', className: 'text-right', render: (row) => <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.total)}</span> },
               ]}
             />
             <p className="text-xs leading-relaxed text-gray-500">
-              Phí nuôi tính từng ngày ngựa còn ở CLB, cho người làm chủ lúc hết ngày (ngày chuyển chủ tính cho chủ mới). Ngựa đã chuyển nhượng ra ngoài hoặc đã mất không tính phí. Y tế
+              Phí nuôi tính từng ngày ngựa còn ở CLB, cho người làm chủ lúc hết ngày (ngày chuyển chủ tính cho chủ mới). Ngựa đã chuyển nhượng ra ngoài hoặc đã mất không tính phí. Phụ phí là khoản riêng từng ngựa do CLB ghi, tính theo ngày trong khoảng của khoản đó. Y tế
               chỉ tính bệnh án đã đóng, thuộc người làm chủ lúc đóng.
             </p>
           </div>

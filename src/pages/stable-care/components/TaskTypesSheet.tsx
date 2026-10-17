@@ -18,9 +18,12 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
   const [all, setAll] = useState(true);
   const [touched, setTouched] = useState(false);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  // Loại việc vừa đổi: lỗi của BE (vd 409 còn ngựa được gắn thêm hoặc miễn) hiện ngay dòng đó.
+  const [changedId, setChangedId] = useState<string | null>(null);
   const nameError = textError(name, { label: 'Tên loại việc', max: MAX_NAME });
 
   const add = () => {
+    setChangedId(null);
     setTouched(true);
     if (nameError) return;
     void action.run(
@@ -34,7 +37,8 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
     );
   };
 
-  const change = (type: ChecklistTaskType, input: { name?: string; appliesToAll?: boolean; active?: boolean }, done: string) =>
+  const change = (type: ChecklistTaskType, input: { name?: string; appliesToAll?: boolean; active?: boolean }, done: string) => {
+    setChangedId(type.id);
     void action.run(
       () => updateTaskType(type.id, input),
       () => {
@@ -43,6 +47,7 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
         types.reload();
       },
     );
+  };
 
   const rename = (type: ChecklistTaskType) => {
     if (!editing) return;
@@ -74,10 +79,10 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
             <Plus size={15} /> Thêm
           </Button>
         </div>
-        <p className="mt-2 text-xs text-gray-500">{all ? 'Ngựa nào cũng có việc này mỗi ngày.' : 'HLV khu tự thêm cho từng ngựa.'}</p>
+        <p className="mt-2 text-xs text-gray-500">{all ? 'Ngựa nào cũng có việc này mỗi ngày. HLV khu miễn được cho từng ngựa (vd ngựa sốt không tắm).' : 'HLV khu tự thêm cho từng ngựa.'}</p>
       </section>
 
-      {action.error && (
+      {action.error && !changedId && (
         <div className="mt-3">
           <ErrorBox message={action.error} />
         </div>
@@ -140,6 +145,7 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
                   {type.active ? 'Ngưng dùng' : 'Dùng lại'}
                 </Button>
               </div>
+              {action.error && changedId === type.id && <p className="mt-2 text-xs font-medium text-red-700">{action.error}</p>}
             </li>
           ))}
         </ul>

@@ -14,7 +14,7 @@ import { formatDate } from '../../../lib/format';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
 import { WeekRibbon } from '../components/bits';
-import { planPhases, planSessionCount, planSubjects } from '../plan-helpers';
+import { formatTotalMinutes, planPhases, planSessionCount, planSubjects } from '../plan-helpers';
 import { useUserNames } from '../hooks';
 
 export default function PlanList() {
@@ -75,7 +75,7 @@ export default function PlanList() {
           hint={
             canManage
               ? data.data?.subjectCount
-                ? 'Giáo án gồm các môn xếp theo thứ tự, mỗi môn học trong vài tuần. Lập xong thì mở lớp từ giáo án.'
+                ? 'Giáo án gồm các giai đoạn, mỗi giai đoạn có các môn và số buổi tối thiểu mỗi tuần. Lập xong thì mở lớp từ giáo án.'
                 : 'Câu lạc bộ chưa có môn học nào. Nhờ quản lý câu lạc bộ thêm môn trước khi lập giáo án.'
               : 'Huấn luyện viên trưởng chưa lập giáo án.'
           }
@@ -179,7 +179,9 @@ function PlanCard({
           <span className="inline-flex items-center gap-1.5">
             <CalendarRange size={14} className="text-gray-400" /> {plan.phases.length} giai đoạn, {subjects.length} môn
           </span>
-          <span>{sessions} buổi</span>
+          <span>
+            Tối thiểu {sessions} buổi, {formatTotalMinutes(plan.minTotalMinutes)}
+          </span>
           {trials > 0 && <span>{trials} môn chạy thử</span>}
           <span className="inline-flex items-center gap-1.5">
             <Layers size={14} className="text-gray-400" /> {classCount ? `${classCount} lớp dùng` : 'Chưa có lớp'}

@@ -94,7 +94,11 @@ for (const code of ['SD-C01', 'SD-C02', 'SD-C03']) {
 }
 await step('Ngoc Lan chu Chau Ngoc Anh', async () => {
   const h = await cm.get(`/horses/${H.ngocLan}`);
-  return cm.patch(`/horses/${H.ngocLan}`, { version: h.version, ownerId: byEmail['anh.chau@horseracing.vn'] });
+  const anh = byEmail['anh.chau@horseracing.vn'];
+  if (h.ownerId === anh) return h;
+  // Seed mới của BE gán chủ cho mọi ngựa, nên chuyển chủ thay vì gán chủ lần đầu.
+  if (h.ownerId) return cm.post(`/horses/${H.ngocLan}/ownership-transfers`, { newOwnerId: anh, reason: 'Dữ liệu demo', version: h.version });
+  return cm.patch(`/horses/${H.ngocLan}`, { version: h.version, ownerId: anh });
 });
 
 // 4. Y tế (bác sĩ Phạm Thu Hà)
@@ -132,7 +136,7 @@ const open = await step('Thien Ly mo benh an', () =>
     nextVisitAt: iso(2, 9),
     measurements: [{ type: 'TEMPERATURE', value: 38.1 }],
     prescriptions: [{ medicine: 'Phenylbutazone', dosage: '2 g', frequency: '1 lần/ngày', startDate: day(-5), endDate: day(2) }],
-    injuries: [{ bodyRegion: 'LEFT_FRONT_LEG', injuryType: 'INFLAMMATION', recoveryStatus: 'ACUTE', notes: 'Gân gấp nông, 1/3 giữa cẳng' }],
+    injuries: [{ bodyRegion: 'LEFT_FRONT_LEG', position: { x: 0.45, y: -0.7, z: -0.2 }, injuryType: 'INFLAMMATION', recoveryStatus: 'ACUTE', notes: 'Gân gấp nông, 1/3 giữa cẳng' }],
   }),
 );
 if (open?.caseId) {
@@ -142,7 +146,7 @@ if (open?.caseId) {
       diagnosis: 'Giảm sưng, còn đau nhẹ khi ấn.',
       careInstructions: 'Tiếp tục chườm lạnh 2 lần/ngày. Tăng dắt bộ lên 15 phút.',
       nextVisitAt: iso(3, 9),
-      injuries: [{ bodyRegion: 'LEFT_FRONT_LEG', injuryType: 'INFLAMMATION', recoveryStatus: 'RECOVERING' }],
+      injuries: [{ bodyRegion: 'LEFT_FRONT_LEG', position: { x: 0.45, y: -0.7, z: -0.2 }, injuryType: 'INFLAMMATION', recoveryStatus: 'RECOVERING' }],
     }),
   );
 }
@@ -156,7 +160,7 @@ const lg = await step('Lam Giang mo benh an', () =>
     initialDiagnosis: 'Vết rách da đùi sau phải',
     diagnosis: 'Vết rách 6 cm, không tổn thương cơ. Khâu 5 mũi.',
     careInstructions: 'Giữ vết thương khô, thay băng mỗi sáng.',
-    injuries: [{ bodyRegion: 'RIGHT_HIND_LEG', injuryType: 'LACERATION', recoveryStatus: 'ACUTE' }],
+    injuries: [{ bodyRegion: 'RIGHT_HIND_LEG', position: { x: -0.55, y: -0.7, z: 0.2 }, injuryType: 'LACERATION', recoveryStatus: 'ACUTE' }],
     prescriptions: [{ medicine: 'Amoxicillin', dosage: '10 mg/kg', frequency: '2 lần/ngày', startDate: day(-6), endDate: day(-1) }],
   }),
 );
@@ -167,7 +171,7 @@ if (lg?.caseId) {
       diagnosis: 'Vết thương lành tốt, đã cắt chỉ.',
       healthStatus: 'UNDER_OBSERVATION',
       healthReason: 'Vết thương đã lành, theo dõi thêm trước khi tập nặng',
-      injuries: [{ bodyRegion: 'RIGHT_HIND_LEG', injuryType: 'LACERATION', recoveryStatus: 'HEALED' }],
+      injuries: [{ bodyRegion: 'RIGHT_HIND_LEG', position: { x: -0.55, y: -0.7, z: 0.2 }, injuryType: 'LACERATION', recoveryStatus: 'HEALED' }],
     }),
   );
   const prev = await step('Lam Giang xem truoc dong', () => vet.get(`/medical-cases/${lg.caseId}/close-preview`));

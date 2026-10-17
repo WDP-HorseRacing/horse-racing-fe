@@ -264,6 +264,14 @@ function ManagerDashboard({ name }: { name: string }) {
 
   const attention: Attention[] = [
     ...stableAttention(data.stable, false),
+    ...data.surcharges.map((row) => ({
+      key: `sur-${row.id}`,
+      level: 'info' as const,
+      title: `Phụ phí của ${row.horseName} chờ HLV áp dụng`,
+      detail: !row.barnName ? 'Ngựa chưa xếp khu' : !row.headTrainerName ? `${row.barnName} chưa có HLV` : `Chờ HLV ${row.headTrainerName} · ${row.description}`,
+      to: links.horse(row.horseId, 'surcharge'),
+      cta: 'Xem',
+    })),
     ...urgent.map((item) => ({
       key: `req-${item.id}`,
       level: 'danger' as const,
@@ -405,6 +413,14 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   const attention: Attention[] = [
     ...stableAttention(data.stable, true),
+    ...data.surcharges.map((row) => ({
+      key: `sur-${row.id}`,
+      level: 'warn' as const,
+      title: `Phụ phí mới cho ${row.horseName}`,
+      detail: `${row.description} · ${formatMoney(row.dailyAmount)}/ngày từ ${formatDate(row.startDate)}`,
+      to: links.horse(row.horseId, 'surcharge'),
+      cta: 'Áp dụng',
+    })),
     ...requests
       .filter((item) => item.urgent)
       .map((item) => ({
@@ -435,7 +451,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
       key: `watch-${horse.id}`,
       level: 'info' as const,
       title: `${horse.name} cần theo dõi`,
-      detail: 'Vẫn được tập, không được đăng ký đua',
+      detail: 'Chỉ tập buổi Nhẹ, không được đăng ký đua',
       to: links.horse(horse.id),
       cta: 'Hồ sơ',
     })),
@@ -847,7 +863,7 @@ function OwnerDashboard({ name }: { name: string }) {
           <Stat
             value={data.costs ? formatMoney(data.costs.total) : formatMoney(data.medicalCost)}
             label={data.costs ? 'Chi phí 30 ngày qua' : 'Chi phí y tế đã chốt'}
-            hint={data.costs ? 'Phí nuôi và y tế' : undefined}
+            hint={data.costs ? 'Phí nuôi, phụ phí và y tế' : undefined}
             icon={<Wallet size={18} />}
             onClick={() => navigate(links.myCosts)}
           />

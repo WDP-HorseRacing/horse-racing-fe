@@ -176,6 +176,29 @@ export interface PedigreeNode {
   childId: string;
 }
 
+/** Một khoảng sở hữu của chủ cũ (ngựa đã bán). */
+export interface OwnershipSpan {
+  startedAt: string;
+  endedAt: string | null;
+}
+
+/** Ngựa chủ ngựa từng sở hữu, nay đã chuyển chủ hoặc bán ra ngoài (`GET /past-horses`). */
+export interface PastHorse {
+  horseId: string;
+  name: string;
+  photoUrl: string | null;
+  /** Mới nhất trước. */
+  periods: OwnershipSpan[];
+}
+
+/** Thông tin cơ bản của ngựa đã bán: phả hệ 2 đời chỉ tên, `canOpen` luôn false. */
+export interface PastHorseDetail extends PastHorse {
+  gender: Gender | null;
+  dateOfBirth: string | null;
+  color: string | null;
+  ancestors: PedigreeNode[];
+}
+
 export interface Pedigree {
   horseId: string;
   horseName: string;
@@ -205,11 +228,13 @@ export interface CreateHorseInput {
   gender: Gender;
   breed?: string | null;
   color?: string | null;
+  /** Bắt buộc khi tạo (đúng 15 chữ số). Khi sửa không gửi null hay chuỗi rỗng (BE không cho xóa số chip). */
   microchipId?: string | null;
   dateOfBirth?: string | null;
   sireId?: string | null;
   damId?: string | null;
   mediaId?: string | null;
+  /** Bắt buộc khi tạo: chủ ngựa đang hoạt động. */
   ownerId?: string | null;
   barnId?: string;
 }
@@ -256,7 +281,10 @@ export interface LifecyclePreview {
   incidentsClosed: number;
   healthResetTo: HealthStatus | null;
   pendingBarnAfter: boolean;
+  /** Tên chủ sẽ kết thúc sở hữu (bán ra ngoài), null nếu giữ chủ. */
   ownerCleared: string | null;
+  /** Kích hoạt lại từ Đã chuyển nhượng: bắt buộc chọn chủ mới (gửi `ownerId`). */
+  ownerRequired: boolean;
   summary: string | null;
 }
 
@@ -406,6 +434,7 @@ export interface Injury {
   id: string;
   medicalRecordId: string;
   bodyRegion: BodyRegion;
+  /** Tọa độ 3D trên mô hình ngựa. BE bắt buộc khi ghi; dòng rất cũ có thể null. */
   position: { x: number; y: number; z: number } | null;
   injuryType: InjuryType;
   recoveryStatus: RecoveryStatus;
@@ -446,6 +475,8 @@ export interface PrescriptionInput {
 
 export interface InjuryInput {
   bodyRegion: BodyRegion;
+  /** Bắt buộc. Web gắn điểm cố định theo vùng (lib/injury-position). */
+  position: { x: number; y: number; z: number };
   injuryType: InjuryType;
   recoveryStatus: RecoveryStatus;
   notes?: string;
@@ -562,11 +593,17 @@ export interface HealthChangeResult {
   changed: boolean;
 }
 
+/** Cách giao lịch chăm sóc: GROOM không kèm người là "Groom phụ trách ngựa" (tự theo Groom mới), VET luôn kèm bác sĩ. */
+export type CareAssigneeType = 'GROOM' | 'VET';
+
 export interface CareSchedule {
   id: string;
   horseId: string;
   type: CareType;
   dueAt: string;
+  /** null là chưa giao ai. */
+  assigneeType: CareAssigneeType | null;
+  /** null kèm `assigneeType = GROOM` nghĩa là Groom đang phụ trách ngựa. */
   assignedTo: string | null;
   status: CareStatus;
   completedAt: string | null;
@@ -614,7 +651,9 @@ export interface MedicalDashboard {
     horseName: string;
     type: CareType;
     dueDate: string;
+    /** Người làm hiện tại (đã tra Groom phụ trách), null nếu chưa có ai. */
     assignedTo: string | null;
+    assignedToName: string | null;
   }[];
   openCases: {
     caseId: string;
@@ -650,12 +689,19 @@ export type NotificationCategory =
   | 'HORSE_LIFECYCLE'
   | 'OWNERSHIP'
   | 'PERFORMANCE_ALERT'
-  /** Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo. resource là ngựa. */
+  /**
+   * Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo (resource là ngựa).
+   * Quản lý CLB: lỗi sinh checklist hôm nay và đã đủ lại (resource null).
+   */
   | 'DAILY_CHECKLIST'
   /** Flow 4: sự cố mới (HLV khu) và sự cố mở quá 4 giờ (HLV khu, Quản lý CLB). resource là ngựa. */
   | 'INCIDENT'
   /** Flow 4: đề xuất vật tư mới (Quản lý CLB), đã duyệt, từ chối, đã cấp (người gửi), sắp hết (Quản lý CLB, HIGH). resource null. */
-  | 'SUPPLY';
+  | 'SUPPLY'
+  /** Phụ phí mới của ngựa: HLV khu hiện tại và chủ ngựa được báo. resource là ngựa. */
+  | 'SURCHARGE'
+  /** Buổi tập có ngựa mình dắt bị hủy: Groom được báo (HIGH), liệt kê ngựa của mình. resource null. */
+  | 'TRAINING_SESSION';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */

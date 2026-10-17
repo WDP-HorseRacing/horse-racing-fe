@@ -1,9 +1,9 @@
 // CM gán chủ sở hữu cho ngựa chưa có chủ. Ngựa đã có chủ thì đổi chủ bằng chuyển nhượng nội bộ (OwnershipTransferDialog).
 import { useEffect, useState } from 'react';
-import { useAction, useService } from '../../../hooks/useService';
+import { useAction } from '../../../hooks/useService';
 import { updateHorse } from '../../../api/horses';
-import { listAllUsers } from '../../../api/users';
-import { Button, ErrorBox, Field, Modal, Notice, Select, useToast } from '../../../components/ui';
+import { Button, ErrorBox, Field, Modal, Notice, useToast } from '../../../components/ui';
+import { OwnerSelect } from './OwnerSelect';
 
 export default function OwnerDialog({
   open,
@@ -18,7 +18,6 @@ export default function OwnerDialog({
 }) {
   const toast = useToast();
   const action = useAction();
-  const owners = useService(() => (open ? listAllUsers({ role: 'HORSE_OWNER', status: 'ACTIVE' }) : Promise.resolve([])), [open]);
   const [ownerId, setOwnerId] = useState('');
 
   useEffect(() => {
@@ -60,14 +59,7 @@ export default function OwnerDialog({
     >
       <div className="space-y-4">
         <Field label="Chủ sở hữu" required hint="Chủ ngựa đang hoạt động.">
-          <Select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
-            <option value="">{owners.loading && !owners.data ? 'Đang tải…' : 'Chọn chủ sở hữu'}</option>
-            {(owners.data ?? []).map((owner) => (
-              <option key={owner.id} value={owner.id}>
-                {owner.fullName} · {owner.email}
-              </option>
-            ))}
-          </Select>
+          <OwnerSelect value={ownerId} onChange={(id) => setOwnerId(id)} />
         </Field>
         <Notice tone="info">Chủ sở hữu bắt đầu từ lúc lưu. Sau này muốn đổi chủ thì dùng Chuyển chủ trên hồ sơ ngựa.</Notice>
         {action.error && <ErrorBox message={action.error} />}

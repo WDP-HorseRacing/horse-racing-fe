@@ -8,6 +8,8 @@ export const Profile = lazyPage(() => import('../pages/Profile'));
 export const HorseList = lazyPage(() => import('../pages/horses/HorseList'));
 export const HorseForm = lazyPage(() => import('../pages/horses/HorseForm'));
 export const HorseDetail = lazyPage(() => import('../pages/horses/HorseDetail'));
+export const PastHorses = lazyPage(() => import('../pages/horses/PastHorses'));
+export const PastHorseDetail = lazyPage(() => import('../pages/horses/PastHorses').then((module) => ({ default: module.PastHorseDetail })));
 export const StableMap = lazyPage(() => import('../pages/stable/StableMap'));
 
 export const SubjectsPage = lazyPage(() => import('../pages/training/subjects/SubjectsPage'));
@@ -49,6 +51,7 @@ const ROUTES: [string, LazyPage][] = [
   ['/dashboard', Dashboard],
   ['/profile', Profile],
   ['/horses', HorseList],
+  ['/horses/past', PastHorses],
   ['/stable', StableMap],
   ['/stable/incidents', Incidents],
   ['/stable/care', StableCare],

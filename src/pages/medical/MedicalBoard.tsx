@@ -12,7 +12,7 @@ import { listBarns, listStalls } from '../../api/stable';
 import type { HealthStatus, MedicalDashboard } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Avatar, Button, Card, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, Stat, cn } from '../../components/ui';
+import { Avatar, Button, Card, Dot, EmptyState, ErrorBox, FilterSelect, PageHeader, Stat, ToggleChip, cn } from '../../components/ui';
 import { MedicalBoardSkeleton } from '../../components/skeletons';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
@@ -184,7 +184,9 @@ export default function MedicalBoard() {
     [user?.id, user?.role],
   );
   // Gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE: đổi tab sức khỏe không phải gọi lại API. (BE nay cũng đếm 4 ô theo khu, không theo bộ lọc sức khỏe.)
-  const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined }), [barnId]);
+  // "Lịch của tôi": khối chăm sóc đến hạn chỉ còn lịch người xem là người làm, các khối khác không đổi.
+  const [careMine, setCareMine] = useState(false);
+  const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined, ...(careMine ? { careAssignee: 'me' as const } : {}) }), [barnId, careMine]);
   const people = usePeople();
   const exam = (visit: VisitParams = {}) => navigate(links.visitNew({ ...visit, back: links.medicalBoard }));
 
@@ -438,30 +440,37 @@ export default function MedicalBoard() {
           </SideCard>
 
           <SideCard icon={<Syringe size={15} />} title="Chăm sóc đến hạn" count={data.careSchedules.length} to={links.careSchedules} toLabel="Lịch chăm sóc">
-            {careByType.length === 0 ? (
-              <p className="text-sm text-gray-500">Không có tiêm phòng, tẩy giun, kiểm tra móng nào đến hạn trong 3 ngày tới.</p>
-            ) : (
-              <div className="space-y-3">
-                {careByType.map((group) => (
-                  <div key={group.type}>
-                    <p className="mb-1 text-xs font-semibold text-gray-500">
-                      {careTypeLabel[group.type]} · {group.rows.length}
-                    </p>
-                    <ul className="space-y-1">
-                      {group.rows.map((row) => (
-                        <li key={row.scheduleId} className="flex items-center justify-between gap-3 text-sm">
-                          <button type="button" onClick={() => openHorse(row.horseId)} className="min-w-0 truncate text-left text-gray-800 hover:underline">
-                            {row.horseName}
-                            <span className="ml-1.5 text-xs text-gray-400">{row.assignedTo ? people.name(row.assignedTo) : 'chưa giao'}</span>
-                          </button>
-                          <CareDue dueAt={`${row.dueDate}T12:00:00`} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+            {user?.role === 'VETERINARIAN' && (
+              <ToggleChip checked={careMine} onChange={setCareMine}>
+                Lịch của tôi
+              </ToggleChip>
             )}
+            <div className={cn(user?.role === 'VETERINARIAN' && 'mt-3')}>
+              {careByType.length === 0 ? (
+                <p className="text-sm text-gray-500">Không có tiêm phòng, tẩy giun, kiểm tra móng nào đến hạn trong 3 ngày tới.</p>
+              ) : (
+                <div className="space-y-3">
+                  {careByType.map((group) => (
+                    <div key={group.type}>
+                      <p className="mb-1 text-xs font-semibold text-gray-500">
+                        {careTypeLabel[group.type]} · {group.rows.length}
+                      </p>
+                      <ul className="space-y-1">
+                        {group.rows.map((row) => (
+                          <li key={row.scheduleId} className="flex items-center justify-between gap-3 text-sm">
+                            <button type="button" onClick={() => openHorse(row.horseId)} className="min-w-0 truncate text-left text-gray-800 hover:underline">
+                              {row.horseName}
+                              <span className="ml-1.5 text-xs text-gray-400">{row.assignedToName ?? 'chưa có người làm'}</span>
+                            </button>
+                            <CareDue dueAt={`${row.dueDate}T12:00:00`} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </SideCard>
         </div>
       </div>

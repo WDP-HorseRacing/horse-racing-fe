@@ -190,6 +190,9 @@ function TrainingReport({ period, trainer }: { period: Period; trainer: boolean 
 
 const FEE_COLOR = '#059669';
 const MEDICAL_COLOR = '#f59e0b';
+const SURCHARGE_COLOR = '#84cc16';
+/** Mã dòng "Chưa có chủ" trong bảng theo chủ. */
+const UNOWNED = 'unowned';
 
 function FinanceReport({ period }: { period: Period }) {
   const navigate = useNavigate();
@@ -217,6 +220,7 @@ function FinanceReport({ period }: { period: Period }) {
                   <SplitBar
                     parts={[
                       { key: 'fee', label: 'Phí nuôi', value: data.ownerCharges.dailyFee, color: FEE_COLOR, text: formatMoney(data.ownerCharges.dailyFee) },
+                      { key: 'surcharge', label: 'Phụ phí', value: data.ownerCharges.surcharge, color: SURCHARGE_COLOR, text: formatMoney(data.ownerCharges.surcharge) },
                       { key: 'medical', label: 'Y tế', value: data.ownerCharges.medicalCost, color: MEDICAL_COLOR, text: formatMoney(data.ownerCharges.medicalCost) },
                     ]}
                   />
@@ -245,22 +249,37 @@ function FinanceReport({ period }: { period: Period }) {
                 </Link>
               </div>
               <DataTable
-                rows={data.owners}
+                rows={[
+                  ...data.owners,
+                  // Phần chưa có chủ: dòng cuối, không mở được trang chi phí.
+                  ...(data.unowned?.total ? [{ ...data.unowned, ownerId: UNOWNED, ownerName: 'Chưa có chủ' }] : []),
+                ]}
                 rowKey={(row) => row.ownerId}
-                onRowClick={(row) => navigate(links.ownerCosts(row.ownerId))}
+                onRowClick={(row) => row.ownerId !== UNOWNED && navigate(links.ownerCosts(row.ownerId))}
                 pageSize={15}
                 emptyTitle="Không có chủ ngựa nào phát sinh chi phí trong kỳ"
                 columns={[
-                  { key: 'owner', header: 'Chủ ngựa', render: (row) => <span className="font-semibold text-gray-900">{row.ownerName}</span> },
+                  {
+                    key: 'owner',
+                    header: 'Chủ ngựa',
+                    render: (row) =>
+                      row.ownerId === UNOWNED ? (
+                        <span className="text-gray-500" title="Ngày ngựa ở CLB mà không có chủ, và bệnh án đóng lúc ngựa không có chủ">
+                          Chưa có chủ <span className="text-xs">({data.unowned.billedDays} ngày tính phí)</span>
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-gray-900">{row.ownerName}</span>
+                      ),
+                  },
                   { key: 'fee', header: 'Phí nuôi', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.dailyFee)}</span> },
+                  { key: 'surcharge', header: 'Phụ phí', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.surcharge)}</span> },
                   { key: 'medical', header: 'Y tế', className: 'text-right', render: (row) => <span className="tabular-nums text-gray-700">{formatMoney(row.medicalCost)}</span> },
                   { key: 'total', header: 'Tổng', className: 'text-right', render: (row) => <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.total)}</span> },
                 ]}
               />
             </section>
             <p className="text-xs leading-relaxed text-gray-500">
-              Phí nuôi tính từng ngày cho người làm chủ lúc hết ngày, ngày chuyển chủ tính cho chủ mới. Y tế chỉ tính bệnh án đã đóng trong kỳ. Tổng y tế của CLB có thể lớn hơn tổng các chủ
-              vì có bệnh án đóng lúc ngựa chưa có chủ.
+              Phí nuôi tính từng ngày cho người làm chủ lúc hết ngày, ngày chuyển chủ tính cho chủ mới. Phụ phí là khoản riêng từng ngựa, tính theo ngày trong khoảng đã ghi. Y tế chỉ tính bệnh án đã đóng trong kỳ. Dòng "Chưa có chủ" gom các ngày ngựa ở CLB mà không có chủ (sau kích hoạt lại hoặc khôi phục hồ sơ) và bệnh án đóng lúc đó, nên tổng các dòng bằng khoản thu ở trên.
             </p>
           </div>
         )

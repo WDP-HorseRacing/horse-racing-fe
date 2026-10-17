@@ -278,6 +278,7 @@ export default function Supplies() {
           onUse={canUse && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
           onRequest={canRequest ? () => setDialog({ kind: 'request', item: opened }) : undefined}
           onEdit={canManage ? () => setDialog({ kind: 'item', item: opened }) : undefined}
+          onChanged={afterItemChange}
         />
       )}
 

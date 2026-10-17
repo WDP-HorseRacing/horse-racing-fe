@@ -1,10 +1,12 @@
 // F3.11 — Lịch chăm sóc định kỳ (tiêm phòng, tẩy giun, kiểm tra móng).
-// VET tạo, dời/giao lại, hủy, hoàn tất (kèm hẹn lần tới); Groom hoàn tất lịch được giao cho mình.
+// VET tạo, dời/giao lại, hủy, hoàn tất (kèm hẹn lần tới); Groom hoàn tất lịch mình là người làm.
+// Giao theo vai trò: chưa giao, Groom phụ trách (tự theo Groom mới khi HLV đổi Groom), một Groom cụ thể, một bác sĩ cụ thể.
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CalendarPlus, Check, Syringe } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
 import { getHorse } from '../../../api/horses';
+import { listGroomHistory } from '../../../api/stable';
 import { cancelCareSchedule, completeCareSchedule, createCareSchedule, listCareSchedules, updateCareSchedule } from '../../../api/medical';
 import type { CareSchedule, CareTaskType, Person } from '../../../api/types';
 import {
@@ -18,6 +20,7 @@ import {
   Modal,
   Pill,
   SectionTitle,
+  Segmented,
   Select,
   Skeleton,
   Textarea,
@@ -31,7 +34,19 @@ import { formatDateTime } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { useStore } from '../../../store/store';
 import { links } from '../../../lib/links';
-import { CARE_TYPES, careDaysLeft, useCareRights } from './care-rules';
+import {
+  ASSIGNEE_MODE_LABEL,
+  CARE_TYPES,
+  assigneeError,
+  assigneeInput,
+  assigneeOf,
+  assigneeText,
+  careDaysLeft,
+  sameAssignee,
+  useCareRights,
+  type AssigneeChoice,
+  type AssigneeMode,
+} from './care-rules';
 import { usePeople, type People } from './people';
 import { localToIso, toLocalInput, todayKey } from './utils';
 import { DateTimePicker } from '../../../components/ui/DatePicker';
@@ -45,6 +60,88 @@ export function CareDue({ dueAt, status = 'SCHEDULED' }: { dueAt: string; status
   if (days === 0) return <Pill tone="amber">Đến hạn hôm nay</Pill>;
   if (days <= 3) return <Pill tone="amber">Còn {days} ngày</Pill>;
   return <span className="text-xs text-gray-500">Còn {days} ngày</span>;
+}
+
+/* ===== Chọn người làm ===== */
+
+/**
+ * Bốn cách giao. Bác sĩ không tải được danh sách tài khoản (chỉ Quản lý CLB), nên:
+ * Groom cụ thể chọn trong các Groom từng phụ trách ngựa này, bác sĩ cụ thể là chính mình (hoặc người đang được giao).
+ */
+export function CareAssigneeField({
+  horseId,
+  groom,
+  value,
+  onChange,
+  current,
+  error,
+  className,
+  hideLabel = false,
+}: {
+  horseId?: string;
+  groom: Person | null;
+  value: AssigneeChoice;
+  onChange: (value: AssigneeChoice) => void;
+  /** Người đang được giao (khi sửa), để giữ trong danh sách dù không còn ở đó. */
+  current?: { id: string; label: string; mode: AssigneeMode };
+  error?: string;
+  className?: string;
+  /** Ô nằm trong khối đã có tiêu đề "Người thực hiện". */
+  hideLabel?: boolean;
+}) {
+  const user = useStore((state) => state.currentUser);
+  const history = useService(() => (horseId ? listGroomHistory(horseId).catch(() => []) : Promise.resolve([])), [horseId]);
+  const grooms = new Map<string, string>();
+  if (groom) grooms.set(groom.id, `${groom.fullName} (đang phụ trách)`);
+  (history.data ?? []).forEach((row) => row.groom && !grooms.has(row.groom.id) && grooms.set(row.groom.id, `${row.groom.fullName} (từng phụ trách)`));
+  const vets = new Map<string, string>();
+  if (user?.role === 'VETERINARIAN') vets.set(user.id, `Tôi (${user.name})`);
+  if (current?.mode === 'GROOM' && !grooms.has(current.id)) grooms.set(current.id, `${current.label} (đang được giao)`);
+  if (current?.mode === 'VET' && !vets.has(current.id)) vets.set(current.id, `${current.label} (đang được giao)`);
+  const people = value.mode === 'GROOM' ? grooms : value.mode === 'VET' ? vets : null;
+
+  const pick = (mode: AssigneeMode) => {
+    const list = mode === 'GROOM' ? grooms : mode === 'VET' ? vets : null;
+    // Đổi kiểu giao: nếu chỉ có một người hợp lệ thì chọn sẵn.
+    onChange({ mode, userId: list && list.size === 1 ? [...list.keys()][0] : '' });
+  };
+
+  return (
+    <Field
+      label={hideLabel ? undefined : "Người thực hiện"}
+      error={error}
+      className={className}
+      hint={
+        value.mode === 'HORSE_GROOM'
+          ? groom
+            ? `Hiện là ${groom.fullName}. HLV đổi Groom thì lịch tự theo Groom mới.`
+            : 'Ngựa chưa có Groom phụ trách. Lịch tự giao khi HLV giao Groom.'
+          : value.mode === 'GROOM'
+            ? 'Giữ đúng người này dù HLV đổi Groom phụ trách (vd Groom chuyên làm móng).'
+            : value.mode === 'VET'
+              ? 'Chỉ bác sĩ được chọn làm lịch này.'
+              : undefined
+      }
+    >
+      <div className="space-y-2">
+        <Segmented<AssigneeMode>
+          value={value.mode}
+          onChange={pick}
+          options={(['NONE', 'HORSE_GROOM', 'GROOM', 'VET'] as const).map((mode) => ({ value: mode, label: ASSIGNEE_MODE_LABEL[mode] }))}
+        />
+        {people && (
+          <Select value={value.userId} onChange={(event) => onChange({ ...value, userId: event.target.value })}>
+            <option value="">{people.size === 0 ? (value.mode === 'GROOM' ? 'Ngựa chưa có Groom nào' : 'Không có bác sĩ để chọn') : 'Chọn người'}</option>
+            {[...people].map(([id, label]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </div>
+    </Field>
+  );
 }
 
 /* ===== Sửa lịch (tạo mới là trang riêng: CareNew) ===== */
@@ -62,7 +159,6 @@ export function CareFormModal({
 }) {
   const toast = useToast();
   const action = useAction();
-  const user = useStore((state) => state.currentUser);
   const detail = useService(() => (horse.groom === undefined ? getHorse(horse.id).then((item) => item.groom) : Promise.resolve(horse.groom)), [horse.id]);
   const groom = detail.data ?? null;
   const people = usePeople(groom ? [groom] : []);
@@ -75,40 +171,38 @@ export function CareFormModal({
     date.setHours(8, 0, 0, 0);
     return toLocalInput(date);
   });
-  const [assignedTo, setAssignedTo] = useState(schedule?.assignedTo ?? '');
+  const [assignee, setAssignee] = useState<AssigneeChoice>(() => (schedule ? assigneeOf(schedule) : { mode: 'HORSE_GROOM', userId: '' }));
   const [notes, setNotes] = useState(schedule?.notes ?? '');
   const [reason, setReason] = useState('');
-  const [opened] = useState(() => JSON.stringify([type, dueAt, assignedTo, notes]));
-  const dirty = JSON.stringify([type, dueAt, assignedTo, notes]) !== opened || reason.trim() !== '';
+  const [opened] = useState(() => JSON.stringify([type, dueAt, assignee, notes]));
+  const dirty = JSON.stringify([type, dueAt, assignee, notes]) !== opened || reason.trim() !== '';
+  const assigneeProblem = assigneeError(assignee);
 
   const dueIso = localToIso(dueAt);
   const dueChanged = !!schedule && !!dueIso && new Date(dueIso).getTime() !== new Date(schedule.dueAt).getTime();
   const dayError = dueAt && dueAt.slice(0, 10) < todayKey() && (!schedule || dueChanged) ? 'Ngày đến hạn không được ở quá khứ' : undefined;
 
-  const assignees: { id: string; label: string }[] = [];
-  if (groom) assignees.push({ id: groom.id, label: `${groom.fullName} (Groom của ngựa)` });
-  if (user && user.id !== groom?.id) assignees.push({ id: user.id, label: `Tôi (${user.name})` });
-  if (schedule?.assignedTo && !assignees.some((item) => item.id === schedule.assignedTo)) {
-    assignees.push({ id: schedule.assignedTo, label: `${people.name(schedule.assignedTo)} (đang được giao)` });
-  }
+  const current = schedule?.assignedTo && schedule.assigneeType ? { id: schedule.assignedTo, label: people.name(schedule.assignedTo), mode: schedule.assigneeType as AssigneeMode } : undefined;
 
   const submit = () =>
     action.run(
       async () => {
         if (!schedule) {
+          const input = assigneeInput(assignee);
           return createCareSchedule(horse.id, {
             type,
             dueAt: dueIso!,
-            ...(assignedTo ? { assignedTo } : {}),
+            ...(input.assigneeType ? { assigneeType: input.assigneeType } : {}),
+            ...(input.assignedTo ? { assignedTo: input.assignedTo } : {}),
             ...(notes.trim() ? { notes: notes.trim() } : {}),
           });
         }
-        const patch: { dueAt?: string; assignedTo?: string | null; notes?: string | null; reason?: string } = {};
+        const patch: Parameters<typeof updateCareSchedule>[1] = {};
         if (dueChanged) {
           patch.dueAt = dueIso;
           patch.reason = reason.trim();
         }
-        if ((schedule.assignedTo ?? '') !== assignedTo) patch.assignedTo = assignedTo || null;
+        if (!sameAssignee(assigneeOf(schedule), assignee)) Object.assign(patch, assigneeInput(assignee));
         if ((schedule.notes ?? '') !== notes.trim()) patch.notes = notes.trim() || null;
         return updateCareSchedule(schedule.id, patch);
       },
@@ -130,7 +224,7 @@ export function CareFormModal({
           <Button variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button onClick={submit} disabled={action.pending || !dueIso || !!dayError || (dueChanged && !reason.trim())}>
+          <Button onClick={submit} disabled={action.pending || !dueIso || !!dayError || !!assigneeProblem || (dueChanged && !reason.trim())}>
             {action.pending ? 'Đang lưu…' : schedule ? 'Lưu' : 'Tạo lịch'}
           </Button>
         </>
@@ -165,20 +259,11 @@ export function CareFormModal({
             <Input value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Chờ lô vắc-xin mới" />
           </Field>
         )}
-        <Field label="Người thực hiện" hint={groom ? undefined : 'Ngựa chưa có Groom.'}>
-          {detail.loading && !detail.data ? (
-            <Skeleton rows={1} />
-          ) : (
-            <Select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)}>
-              <option value="">Chưa giao</option>
-              {assignees.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+        {detail.loading && !detail.data ? (
+          <Skeleton rows={1} />
+        ) : (
+          <CareAssigneeField horseId={horse.id} groom={groom} value={assignee} onChange={setAssignee} current={current} />
+        )}
         <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea rows={2} maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ví dụ: Vắc-xin cúm ngựa, mũi nhắc lại" />
         </Field>
@@ -333,6 +418,7 @@ export function CareRowActions({
   onDialog: (dialog: CareDialog) => void;
 }) {
   const rights = useCareRights();
+  const horseGroomId = horse.groom === undefined ? undefined : (horse.groom?.id ?? null);
   if (schedule.status !== 'SCHEDULED') return null;
   const menu: MenuAction[] = rights.manage
     ? [
@@ -342,7 +428,7 @@ export function CareRowActions({
     : [];
   return (
     <div className="flex items-center justify-end gap-1">
-      {rights.canComplete(schedule) && (
+      {rights.canComplete(schedule, horseGroomId) && (
         <Button size="sm" variant="secondary" onClick={() => onDialog({ kind: 'complete', horseName: horse.name, schedule })}>
           <Check size={14} /> Hoàn tất
         </Button>
@@ -353,7 +439,7 @@ export function CareRowActions({
 }
 
 /** Một dòng lịch: loại, hạn, người được giao, ghi chú. */
-export function CareLine({ schedule, people }: { schedule: CareSchedule; people: People }) {
+export function CareLine({ schedule, people, groomName }: { schedule: CareSchedule; people: People; groomName?: string | null }) {
   return (
     <div className="min-w-0">
       <p className="flex flex-wrap items-center gap-2 text-sm">
@@ -365,7 +451,7 @@ export function CareLine({ schedule, people }: { schedule: CareSchedule; people:
       <p className="mt-0.5 text-xs text-gray-500">
         {schedule.status === 'COMPLETED' && schedule.completedAt
           ? `Hoàn tất ${formatDateTime(schedule.completedAt)} · ${people.name(schedule.completedBy)}`
-          : `Đến hạn ${formatDateTime(schedule.dueAt)} · ${schedule.assignedTo ? people.name(schedule.assignedTo) : 'chưa giao người thực hiện'}`}
+          : `Đến hạn ${formatDateTime(schedule.dueAt)} · ${assigneeText(schedule, (id) => people.name(id), groomName)}`}
       </p>
       {schedule.status === 'CANCELLED' && schedule.cancelReason && <p className="mt-0.5 text-xs text-gray-500">Hủy: {schedule.cancelReason}</p>}
       {schedule.notes && schedule.status === 'SCHEDULED' && <p className="mt-1 text-sm text-gray-700">{schedule.notes}</p>}
@@ -418,7 +504,7 @@ export function CareScheduleSection({
         <EmptyState
           className="py-6"
           title={isGroomOnly ? 'Không có lịch nào giao cho bạn' : 'Chưa có lịch chăm sóc'}
-          hint={isGroomOnly ? 'Bác sĩ giao lịch tiêm phòng, tẩy giun, kiểm tra móng cho Groom phụ trách ngựa.' : 'Tiêm phòng, tẩy giun, kiểm tra móng định kỳ do bác sĩ lên lịch.'}
+          hint={isGroomOnly ? 'Bác sĩ giao lịch tiêm phòng, tẩy giun, kiểm tra móng cho Groom phụ trách ngựa hoặc giao đích danh cho bạn.' : 'Tiêm phòng, tẩy giun, kiểm tra móng định kỳ do bác sĩ lên lịch.'}
         />
       ) : (
         <div className="space-y-3">
@@ -428,7 +514,7 @@ export function CareScheduleSection({
             <ul className="-my-2 divide-y divide-gray-100">
               {upcoming.map((row) => (
                 <li key={row.id} className="flex items-start justify-between gap-3 py-2.5">
-                  <CareLine schedule={row} people={people} />
+                  <CareLine schedule={row} people={people} groomName={horse.groom?.fullName} />
                   {!readOnly && <CareRowActions schedule={row} horse={horse} onDialog={setDialog} />}
                 </li>
               ))}

@@ -46,7 +46,7 @@ export const CAPABILITIES: Capability[] = [
   { key: 'plan.view', code: 'F2.2', group: 'Huấn luyện', feature: 'Xem giáo án', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S } },
   { key: 'plan.manage', code: 'F2.2', group: 'Huấn luyện', feature: 'Lập, sửa, xóa giáo án của mình', roles: { HEAD_TRAINER: S } },
   { key: 'class.view', code: 'F2.3', group: 'Huấn luyện', feature: 'Xem lớp và buổi tập', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
-  { key: 'class.manage', code: 'F2.3', group: 'Huấn luyện', feature: 'Mở lớp, ghi danh, công bố và hủy buổi', roles: { HEAD_TRAINER: Z } },
+  { key: 'class.manage', code: 'F2.3', group: 'Huấn luyện', feature: 'Mở lớp, xếp lịch buổi, ghi danh và hủy buổi', roles: { HEAD_TRAINER: Z } },
   { key: 'session.run', code: 'F2.3', group: 'Huấn luyện', feature: 'Điểm danh, bắt đầu, hoàn thành lượt tập, ghi kết quả chạy thử', roles: { HEAD_TRAINER: Z, GROOM: G } },
   { key: 'realtime.view', code: 'F2.4', group: 'Huấn luyện', feature: 'Theo dõi nhịp tim, tốc độ khi tập', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
   { key: 'threshold.view', code: 'F2.4', group: 'Huấn luyện', feature: 'Xem ngưỡng nhịp tim và tốc độ', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
@@ -102,11 +102,14 @@ export const CAPABILITIES: Capability[] = [
   { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự: tạo tài khoản, đổi vai trò, khóa tài khoản', roles: { CLUB_MANAGER: A } },
   { key: 'audit.view', code: 'QT', group: 'Quản trị', feature: 'Xem nhật ký thao tác, trước và sau khi đổi', roles: { CLUB_MANAGER: A } },
   { key: 'fee.manage', code: 'QT', group: 'Quản trị', feature: 'Đặt và xóa mức phí nuôi theo ngày', roles: { CLUB_MANAGER: A } },
+  { key: 'surcharge.view', code: 'QT', group: 'Quản trị', feature: 'Xem phụ phí riêng của ngựa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, HORSE_OWNER: O } },
+  { key: 'surcharge.manage', code: 'QT', group: 'Quản trị', feature: 'Ghi, kết thúc sớm, xóa phụ phí riêng của ngựa', roles: { CLUB_MANAGER: A } },
+  { key: 'surcharge.apply', code: 'QT', group: 'Quản trị', feature: 'Xác nhận đã áp dụng phụ phí cho ngựa trong khu', roles: { HEAD_TRAINER: Z } },
 
   // ===== Báo cáo =====
   { key: 'report.training', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo huấn luyện theo kỳ, theo khu', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
   { key: 'report.finance', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo tài chính CLB, chi phí từng chủ ngựa', roles: { CLUB_MANAGER: A } },
-  { key: 'report.ownerCosts', code: 'BC', group: 'Báo cáo', feature: 'Xem phí nuôi và chi phí y tế của mình', roles: { HORSE_OWNER: S } },
+  { key: 'report.ownerCosts', code: 'BC', group: 'Báo cáo', feature: 'Xem phí nuôi, phụ phí và chi phí y tế của mình', roles: { HORSE_OWNER: S } },
   { key: 'report.horse', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo tiến độ và sức khỏe của một ngựa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, HORSE_OWNER: O } },
 ];
 

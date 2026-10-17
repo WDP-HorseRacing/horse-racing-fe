@@ -38,6 +38,8 @@ export const auditFeatureText: Record<string, string> = {
   PERF_EVAL: 'Đánh giá buổi tập',
   PERF_THRESHOLD: 'Ngưỡng cảnh báo',
   DAILY_FEE: 'Phí nuôi',
+  HORSE_SURCHARGE: 'Phụ phí ngựa',
+  AUTH: 'Đăng nhập',
 };
 
 export const auditEntityText: Record<string, string> = {
@@ -80,6 +82,7 @@ export const auditEntityText: Record<string, string> = {
   CARE_TASK_TYPE: 'Loại việc',
   HORSE_CARE_TASK: 'Việc riêng',
   DAILY_FEE: 'Phí nuôi',
+  HORSE_SURCHARGE: 'Phụ phí ngựa',
   REFRESH_SESSION: 'Phiên đăng nhập',
 };
 
@@ -90,9 +93,11 @@ export const auditActionText: Record<AuditAction, string> = {
   LOGIN: 'Đăng nhập',
   LOGOUT: 'Đăng xuất',
   RESTORE: 'Khôi phục',
+  LOGIN_FAILED: 'Đăng nhập sai',
+  PASSWORD_CHANGE: 'Đổi mật khẩu',
 };
 
-export const AUDIT_ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE', 'RESTORE'];
+export const AUDIT_ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'LOGIN', 'LOGOUT', 'LOGIN_FAILED', 'PASSWORD_CHANGE'];
 
 export const featureLabel = (feature: string | null | undefined) => (feature ? (auditFeatureText[feature] ?? feature) : 'Khác');
 export const entityLabel = (entityType: string) => auditEntityText[entityType] ?? entityType;

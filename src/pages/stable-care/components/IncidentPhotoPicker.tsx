@@ -86,7 +86,7 @@ export function IncidentPhotoPicker({ onChange, disabled, resetKey }: { onChange
   return (
     <div>
       <p className="mb-1.5 text-sm font-medium text-gray-600">
-        Ảnh <span className="font-normal text-gray-400">(nên có)</span>
+        Ảnh <span className="font-normal text-gray-400">(tùy chọn)</span>
       </p>
       <input ref={input} type="file" accept={ACCEPT} className="hidden" onChange={(event) => event.target.files?.[0] && void start(event.target.files[0])} />
       {!file ? (

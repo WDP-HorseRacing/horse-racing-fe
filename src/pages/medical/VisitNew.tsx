@@ -35,6 +35,7 @@ import {
 import { UrgentPill } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
 import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, measurementSpec, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
+import { positionOfRegion, type InjuryPosition } from '../../lib/injury-position';
 import { addDays, formatDate, formatDateTime } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { now } from '../../lib/clock';
@@ -66,6 +67,8 @@ interface InjuryRow {
   injuryType: InjuryType | '';
   recoveryStatus: RecoveryStatus;
   notes: string;
+  /** Buổi khám ghi lại: giữ tọa độ cũ nếu vẫn cùng vùng (có thể do mobile chấm trên mô hình 3D). */
+  kept?: { region: BodyRegion; position: InjuryPosition };
 }
 
 let rowKey = 0;
@@ -163,6 +166,7 @@ function VisitForm(props: VisitOptions) {
         injuryType: item.injuryType,
         recoveryStatus: item.recoveryStatus,
         notes: item.notes ?? '',
+        kept: item.position ? { region: item.bodyRegion, position: item.position } : undefined,
       })) ?? [],
   );
   const [attempted, setAttempted] = useState(false);
@@ -266,6 +270,7 @@ function VisitForm(props: VisitOptions) {
       if (injuries.length) {
         base.injuries = injuries.map((row) => ({
           bodyRegion: row.bodyRegion as BodyRegion,
+          position: row.kept && row.kept.region === row.bodyRegion ? row.kept.position : positionOfRegion(row.bodyRegion as BodyRegion),
           injuryType: row.injuryType as InjuryType,
           recoveryStatus: row.recoveryStatus,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),

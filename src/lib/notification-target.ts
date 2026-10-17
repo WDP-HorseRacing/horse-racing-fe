@@ -8,6 +8,10 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
   // Vật tư: BE không gửi đối tượng. Sắp hết (HIGH) mở kho, còn lại là tin về đề xuất nên mở tab Đề xuất.
   if (item.category === 'SUPPLY') return item.priority === 'HIGH' ? links.supplies() : links.supplies('requests');
   const resource = item.resource;
+  // Buổi tập bị hủy (Groom): BE không gửi đối tượng, mở màn Dắt ngựa tập để xem lịch còn lại.
+  if (item.category === 'TRAINING_SESSION') return links.today;
+  // Lỗi sinh checklist hôm nay (Quản lý CLB, không kèm ngựa): mở Chăm sóc khu, nơi có nút "Sinh lại checklist hôm nay".
+  if (item.category === 'DAILY_CHECKLIST' && !resource) return role === 'CLUB_MANAGER' ? links.stableCare() : links.dashboard;
   if (!resource) return undefined;
   if (resource.type === 'MEDICAL_CASE') return links.case(resource.id);
   // Cảnh báo thể lực khi tập: mở chi tiết lượt tập (id là lượt tập, horseId đi kèm để tìm buổi).
@@ -20,7 +24,7 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
     case 'MEASUREMENT_ALERT':
       return links.horse(horseId, 'body');
     case 'EXAM_REQUEST':
-      // Bác sĩ xử lý yêu cầu ở hàng đợi; vai trò khác xem ở hồ sơ y tế của ngựa.
+      // Bác sĩ xử lý yêu cầu ở hàng đợi; vai trò khác (người gửi nhận kết quả khám hoặc bỏ qua) xem ở hồ sơ y tế của ngựa.
       return role === 'VETERINARIAN' ? links.requests : links.horseMedical(horseId);
     case 'HEALTH_STATUS':
     case 'CARE_REMINDER':
@@ -31,6 +35,9 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
     // HLV gắn việc có hiệu lực hôm nay: Groom mở màn Việc hôm nay.
     case 'DAILY_CHECKLIST':
       return role === 'GROOM' ? links.dashboard : links.horse(horseId, 'care');
+    // Phụ phí mới (HLV khu, chủ ngựa): mở tab Phụ phí của ngựa.
+    case 'SURCHARGE':
+      return links.horse(horseId, 'surcharge');
     default:
       return links.horse(horseId);
   }

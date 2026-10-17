@@ -16,6 +16,8 @@ import { isReadOnlyHorse } from '../../lib/horse-rules';
 import { getGroomToday, listIncidents } from '../../api/stable-care';
 import { countSupplyRequests, listLowStock } from '../../api/supplies';
 import { getOwnerCosts } from '../../api/reports';
+import { listHorseSurcharges, listUnappliedSurcharges, type UnappliedSurcharge } from '../../api/billing';
+import { clubDateKey } from '../../lib/club-time';
 import { FEATURES } from '../../config/features';
 
 export const inClub = (horse: HorseListItem) => !isReadOnlyHorse(horse);
@@ -140,6 +142,8 @@ function dashboardCare(dashboard: MedicalDashboard): { schedule: CareSchedule; h
       horseId: item.horseId,
       type: item.type,
       dueAt: item.dueDate,
+      // Dashboard chỉ trả người làm hiện tại (đã tra Groom phụ trách), không trả cách giao.
+      assigneeType: null,
       assignedTo: item.assignedTo,
       status: 'SCHEDULED',
       completedAt: null,
@@ -157,7 +161,7 @@ export const todayKey = () => toDateKey(now());
 export async function loadManager() {
   // Chi phí 6 tháng: BE chưa gom theo tháng nên gọi cost-report cho từng tháng (song song).
   const months = lastMonths(6);
-  const [horses, barns, stalls, medical, checkups, costs, stable] = await Promise.all([
+  const [horses, barns, stalls, medical, checkups, costs, stable, surcharges] = await Promise.all([
     listAllHorses(),
     listBarns(),
     listStalls(),
@@ -171,6 +175,8 @@ export async function loadManager() {
       ),
     ),
     loadStableSummary(true),
+    // Phụ phí HLV khu chưa xác nhận áp dụng (chưa kết thúc).
+    listUnappliedSurcharges().catch(() => [] as UnappliedSurcharge[]),
   ]);
   const club = horses.filter(inClub);
   const care = dashboardCare(medical);
@@ -182,6 +188,7 @@ export async function loadManager() {
     checkups,
     costs,
     stable,
+    surcharges,
     week: medicalWeek(medical, care),
     overdue: medicalOverdue(medical, care),
   };
@@ -195,6 +202,17 @@ export async function loadTrainer(userId: string) {
   const ids = new Set(mine.map((horse) => horse.id));
   const care = dashboardCare(medical);
   primeZoneScope(userId, barns, stalls);
+  // BE chưa có danh sách phụ phí chưa áp dụng theo khu: gọi từng ngựa trong khu (vài con), lỗi thì bỏ qua.
+  const today = clubDateKey(new Date());
+  const surcharges = (
+    await Promise.all(
+      mine.map((horse) =>
+        listHorseSurcharges(horse.id)
+          .then((rows) => rows.filter((row) => !row.appliedAt && row.endDate >= today).map((row) => ({ ...row, horseName: horse.name })))
+          .catch(() => []),
+      ),
+    )
+  ).flat();
   return {
     horses: mine,
     barns: barns.filter((barn) => barn.headTrainerId === userId),
@@ -202,6 +220,7 @@ export async function loadTrainer(userId: string) {
     medical,
     stable,
     ids,
+    surcharges,
     week: medicalWeek(medical, care, ids),
     overdue: medicalOverdue(medical, care, ids),
   };

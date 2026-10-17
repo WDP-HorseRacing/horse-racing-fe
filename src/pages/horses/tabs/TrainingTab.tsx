@@ -188,7 +188,7 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
                   <span
                     key={intensity}
                     title={`${intensityText[intensity]}: ${load.byIntensity[intensity]} lượt`}
-                    className={intensity === 'HEAVY' ? 'bg-emerald-700' : intensity === 'MODERATE' ? 'bg-emerald-400' : 'bg-emerald-200'}
+                    className={intensity === 'HEAVY' ? 'bg-emerald-700' : 'bg-emerald-200'}
                     style={{ flexGrow: load.byIntensity[intensity] }}
                   />
                 ) : null,

@@ -110,13 +110,18 @@ export const getHorseHealthReport = (horseId: string, period: ReportPeriod) => h
 export interface ClubFinance {
   from: string;
   to: string;
-  /** Khoản CLB thu của chủ: phí nuôi + chi phí y tế (bệnh án đóng trong kỳ). */
-  ownerCharges: { dailyFee: number; medicalCost: number; total: number };
+  /** Khoản CLB thu của chủ: phí nuôi + phụ phí riêng từng ngựa + chi phí y tế (bệnh án đóng trong kỳ). */
+  ownerCharges: { dailyFee: number; surcharge: number; medicalCost: number; total: number };
   /** purchased: giá trị nhập hàng trong kỳ (không gồm tồn ban đầu). used: giá trị đã xuất dùng. */
   supplies: { purchased: number; used: number };
   /** Luôn 0 (chưa có giải đua). */
   prizeMoney: number;
-  owners: { ownerId: string; ownerName: string; dailyFee: number; medicalCost: number; total: number }[];
+  owners: { ownerId: string; ownerName: string; dailyFee: number; surcharge: number; medicalCost: number; total: number }[];
+  /**
+   * Phần không có chủ: ngày ngựa ở CLB mà lúc hết ngày không có chủ (sau kích hoạt lại, khôi phục hồ sơ khi chủ cũ không còn hoạt động)
+   * và bệnh án đóng lúc ngựa không có chủ. `ownerCharges` = tổng `owners` + `unowned`. Không có thì các số bằng 0.
+   */
+  unowned: { billedDays: number; dailyFee: number; surcharge: number; medicalCost: number; total: number };
 }
 
 export interface OwnerCosts {
@@ -125,10 +130,12 @@ export interface OwnerCosts {
   from: string;
   to: string;
   dailyFee: number;
+  /** Phụ phí riêng từng ngựa, đã cộng vào total. */
+  surcharge: number;
   medicalCost: number;
   total: number;
   prizeMoney: number;
-  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; caseCount: number; medicalCost: number; total: number }[];
+  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; surcharge: number; caseCount: number; medicalCost: number; total: number }[];
 }
 
 export const getClubFinance = (period: ReportPeriod) => http.get<ClubFinance>('/reports/club/finance', { ...period });

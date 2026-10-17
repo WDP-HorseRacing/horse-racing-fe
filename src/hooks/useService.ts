@@ -55,19 +55,21 @@ const NO_FIELD_ERRORS: Record<string, string> = {};
 
 /**
  * Bọc một thao tác ghi: trả về hàm chạy, trạng thái đang gửi và lỗi tiếng Việt.
- * `fieldErrors` là lỗi theo từng ô backend trả về (tên ô trong body → câu lỗi).
+ * `fieldErrors` là lỗi theo từng ô backend trả về (tên ô trong body → câu lỗi), `conflictIds` là id bản ghi gây trùng (409) theo ô.
  */
 export function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [field, setField] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(NO_FIELD_ERRORS);
+  const [conflictIds, setConflictIds] = useState<Record<string, string>>(NO_FIELD_ERRORS);
 
   const run = useCallback(async <T,>(fn: () => Promise<T>, onDone?: (result: T) => void) => {
     setPending(true);
     setError(undefined);
     setField(undefined);
     setFieldErrors(NO_FIELD_ERRORS);
+    setConflictIds(NO_FIELD_ERRORS);
     try {
       const result = await track(fn());
       onDone?.(result);
@@ -77,6 +79,7 @@ export function useAction() {
       if (caught instanceof AppError) {
         setField(caught.field);
         setFieldErrors(caught.fieldErrors);
+        setConflictIds(caught.conflictIds);
       }
       return undefined;
     } finally {
@@ -88,7 +91,8 @@ export function useAction() {
     setError(undefined);
     setField(undefined);
     setFieldErrors(NO_FIELD_ERRORS);
+    setConflictIds(NO_FIELD_ERRORS);
   }, []);
 
-  return { run, pending, error, field, fieldErrors, clearError };
+  return { run, pending, error, field, fieldErrors, conflictIds, clearError };
 }

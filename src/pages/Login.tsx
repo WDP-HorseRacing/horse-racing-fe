@@ -44,6 +44,8 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // Số lần sai liên tiếp của email đang gõ: Keycloak khóa tạm tài khoản sau 5 lần sai, nhắc từ lần thứ 3.
+  const [failures, setFailures] = useState({ email: '', count: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [googlePending, setGooglePending] = useState(false);
   // Lỗi từ trang /auth/callback (hủy đăng nhập, tài khoản chưa được cấp…), lấy một lần.
@@ -82,6 +84,8 @@ export const Login = () => {
       navigate(next, { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không đăng nhập được, vui lòng thử lại.');
+      const key = email.trim().toLowerCase();
+      setFailures((current) => ({ email: key, count: current.email === key ? current.count + 1 : 1 }));
     } finally {
       setIsLoading(false);
     }
@@ -229,6 +233,9 @@ export const Login = () => {
             {error && (
               <div className="rounded-xl bg-white p-3 text-sm font-medium text-red-700 shadow-[inset_3px_0_0_0_#ef4444] ring-1 ring-red-200" role="alert">
                 {error}
+                {failures.count >= 3 && failures.email === email.trim().toLowerCase() && (
+                  <p className="mt-1 text-xs font-normal text-red-600">Sai 5 lần liên tiếp thì tài khoản bị khóa tạm vài phút, sau đó tự mở.</p>
+                )}
               </div>
             )}
 

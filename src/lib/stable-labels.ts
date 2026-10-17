@@ -33,6 +33,7 @@ export const movementTypeText: Record<SupplyMovementType, string> = {
   OPENING: 'Tồn ban đầu',
   RESTOCK: 'Nhập hàng',
   USAGE: 'Xuất dùng',
+  USAGE_REVERSAL: 'Hủy lần xuất',
   COUNT_ADJUST: 'Kiểm kê (cũ)',
 };
 

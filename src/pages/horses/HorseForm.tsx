@@ -229,7 +229,7 @@ export default function HorseForm() {
   const [photoPreview, setPhotoPreview] = useState<string>();
   const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
   const [attempted, setAttempted] = useState(false);
-  const [chipCheck, setChipCheck] = useState<{ value: string; holder?: string } | null>(null);
+  const [chipCheck, setChipCheck] = useState<{ value: string; holder?: string; holderId?: string } | null>(null);
 
   // Lỗi backend thuộc về một ô (trùng chip, cha mẹ sai…): hiện dưới ô đó, mất khi người dùng sửa ô.
   // Backend trả tên ô trong `errors`; lỗi không kèm tên ô thì đoán theo câu lỗi.
@@ -315,6 +315,9 @@ export default function HorseForm() {
       }
     }
     const chip = form.microchipId.trim();
+    // BE bắt buộc số chip khi tạo và không cho xóa khi sửa (chỉ đổi sang số khác).
+    if (!chip && !editing) result.microchipId = 'Nhập số chip (đúng 15 chữ số)';
+    else if (!chip && savedChip) result.microchipId = 'Không xóa được số chip, chỉ đổi sang số khác';
     // Số chip cũ (dữ liệu nhập trước khi có luật 15 chữ số) không chặn việc sửa các trường khác.
     if (chip && changed(chip, savedChip)) {
       if (!/^\d{15}$/.test(chip)) result.microchipId = 'Số chip phải gồm đúng 15 chữ số';
@@ -328,6 +331,7 @@ export default function HorseForm() {
     const damError = birthChanged || changed(form.damId, savedDam) ? parentError(dam) : undefined;
     if (sireError) result.sireId = sireError;
     if (damError) result.damId = damError;
+    if (!editing && !form.ownerId) result.ownerId = 'Chọn chủ sở hữu';
     if (barn && barnBlocker(barn)) result.barnId = `${barn.name}: ${barnBlocker(barn)!.toLowerCase()}`;
     return result;
   }, [aptitudeOnly, editing, form, today, chipCheck, sire, dam, barn, savedBirth, savedSire, savedDam, savedChip, savedBreed, savedColor]);
@@ -354,7 +358,7 @@ export default function HorseForm() {
       const status = hit?.isDeleted ? 'đã xóa' : hit?.lifecycleStatus === 'TRANSFERRED' ? 'đã chuyển nhượng' : hit?.lifecycleStatus === 'DECEASED' ? 'đã mất' : '';
       // Ghi chú trạng thái, trừ khi tên đã có sẵn chữ đó.
       const note = hit && status && !hit.name.toLowerCase().includes(status) ? ` (${status})` : '';
-      setChipCheck({ value: chip, holder: hit ? `${hit.name}${note}` : undefined });
+      setChipCheck({ value: chip, holder: hit ? `${hit.name}${note}` : undefined, holderId: hit?.id });
     } catch {
       // Không kiểm được lúc này: backend vẫn chặn trùng khi lưu.
       setChipCheck(null);
@@ -383,6 +387,8 @@ export default function HorseForm() {
     );
   }
 
+  // Ngựa đang giữ số chip trùng: từ lỗi 409 của BE (conflictId) hoặc từ lần kiểm khi rời ô.
+  const chipHolderId = action.conflictIds.microchipId ?? (chipCheck?.value === form.microchipId.trim() ? chipCheck.holderId : undefined);
   const text = (value: string) => (value.trim() ? value.trim() : null);
   const backTo = editing && horse ? links.horse(horse.id) : links.horses;
 
@@ -433,11 +439,11 @@ export default function HorseForm() {
           gender: form.gender as Gender,
           breed: text(form.breed) ?? undefined,
           color: text(form.color) ?? undefined,
-          microchipId: text(form.microchipId) ?? undefined,
+          microchipId: form.microchipId.trim(),
           dateOfBirth: form.dateOfBirth || undefined,
           sireId: form.sireId || undefined,
           damId: form.damId || undefined,
-          ownerId: form.ownerId || undefined,
+          ownerId: form.ownerId,
           mediaId,
           barnId: form.barnId || undefined,
         };
@@ -582,7 +588,7 @@ export default function HorseForm() {
                       invalid={!!err('dateOfBirth')}
                     />
                   </Field>
-                  <Field label="Số chip" name="microchipId" error={err('microchipId')} className="sm:col-span-3">
+                  <Field label="Số chip" name="microchipId" required={!editing || !!savedChip} error={err('microchipId')} className="sm:col-span-3">
                     <Input
                       value={form.microchipId}
                       maxLength={15}
@@ -593,6 +599,11 @@ export default function HorseForm() {
                       placeholder="704098100000014"
                       spellCheck={false}
                     />
+                    {chipHolderId && (
+                      <Link to={links.horse(chipHolderId)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline">
+                        Mở hồ sơ ngựa đang giữ số chip <ArrowRight size={12} />
+                      </Link>
+                    )}
                   </Field>
                 </div>
               </div>
@@ -678,16 +689,20 @@ export default function HorseForm() {
                 <Field
                   label="Chủ sở hữu"
                   name="ownerId"
+                  required={!editing}
                   error={err('ownerId')}
                   hint={ownerLocked ? 'Đổi chủ bằng nút Chuyển chủ trên hồ sơ ngựa.' : undefined}
                 >
                   <Select
                     value={form.ownerId}
                     disabled={ownerLocked || loadingList(owners.loading, owners.data)}
-                    onChange={(event) => set('ownerId', event.target.value)}
+                    onChange={(event) => {
+                      set('ownerId', event.target.value);
+                      touch('ownerId');
+                    }}
                     className={cn(err('ownerId') && invalidClass)}
                   >
-                    <option value="">{loadingList(owners.loading, owners.data) ? 'Đang tải…' : 'Chưa có chủ'}</option>
+                    <option value="">{loadingList(owners.loading, owners.data) ? 'Đang tải…' : editing ? 'Chưa có chủ' : 'Chọn chủ sở hữu'}</option>
                     {ownerMissing && horse?.ownerId && <option value={horse.ownerId}>{horse.owner?.fullName ?? 'Chủ hiện tại'} (tài khoản đã khóa)</option>}
                     {(owners.data ?? []).map((item) => (
                       <option key={item.id} value={item.id}>

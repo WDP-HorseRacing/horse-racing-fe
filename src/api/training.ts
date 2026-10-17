@@ -2,8 +2,10 @@
 import { isApiError } from '../lib/errors';
 import { http } from './http';
 import type {
-  ClassSessionInput,
+  ClassPlan,
+  ClassProgress,
   CreateClassInput,
+  EnrollableHorse,
   Enrollment,
   Evaluation,
   HandoverResult,
@@ -11,9 +13,6 @@ import type {
   HorseTrainingSession,
   Page,
   Participant,
-  PublishedSession,
-  SchedulePreview,
-  ScheduleInput,
   SessionInput,
   TimeTrial,
   TrainingClass,
@@ -36,12 +35,12 @@ export const updateSubject = (id: string, input: Partial<TrainingSubjectInput>) 
 export const deleteSubject = (id: string) => http.del<void>(`/training-subjects/${id}`);
 
 /* ===== Giáo án (HT của mình, CM xem tất cả) ===== */
-// BE đã sắp giai đoạn theo thứ tự, thứ trong tuần tăng dần.
+// BE đã sắp giai đoạn theo thứ tự. Mỗi môn có số buổi tối thiểu mỗi tuần, không còn thứ cố định.
 
 export const listPlans = () => http.get<TrainingPlan[]>('/training-plans');
 export const getPlan = (id: string) => http.get<TrainingPlan>(`/training-plans/${id}`);
 export const createPlan = (input: TrainingPlanInput) => http.post<TrainingPlan>('/training-plans', input);
-/** Thay toàn bộ các giai đoạn của giáo án. Lớp đã tạo từ giáo án giữ nguyên buổi tập. */
+/** Thay toàn bộ các giai đoạn của giáo án. Lớp đã tạo giữ bản giáo án đã chép lúc tạo lớp. */
 export const replacePlan = (id: string, input: TrainingPlanInput) => http.put<TrainingPlan>(`/training-plans/${id}`, input);
 export const deletePlan = (id: string) => http.del<void>(`/training-plans/${id}`);
 
@@ -50,15 +49,20 @@ export const deletePlan = (id: string) => http.del<void>(`/training-plans/${id}`
 /** BE tự lọc theo vai trò: CM, bác sĩ thấy tất cả, HT lớp mình, Groom lớp có lượt mình dắt, chủ ngựa lớp có ngựa mình. */
 export const listClasses = () => http.get<TrainingClass[]>('/classes');
 export const getClass = (id: string) => http.get<TrainingClass>(`/classes/${id}`);
-/** Mỗi ngày có môn theo giáo án sinh một buổi. Không lưu gì. */
-export const previewSchedule = (input: ScheduleInput) => http.post<SchedulePreview>('/classes/schedule-preview', input);
+/** Lớp tạo ra đang chạy luôn, chưa có buổi: HLV xếp buổi trên lịch tuần. */
 export const createClass = (input: CreateClassInput) => http.post<TrainingClass>('/classes', input);
 export const updateClass = (id: string, input: UpdateClassInput) => http.patch<TrainingClass>(`/classes/${id}`, input);
-export const setClassStatus = (id: string, status: Exclude<TrainingClassStatus, 'DRAFT'>, cancelReason?: string) =>
+export const setClassStatus = (id: string, status: Exclude<TrainingClassStatus, 'ACTIVE'>, cancelReason?: string) =>
   http.patch<TrainingClass>(`/classes/${id}/status`, status === 'CANCELLED' ? { status, cancelReason } : { status });
+/** Giáo án đã chép vào lớp, có khoảng ngày từng giai đoạn. Mọi vai trò xem được lớp đều đọc được. */
+export const getClassPlan = (classId: string) => http.get<ClassPlan>(`/classes/${classId}/plan`);
+/** Tiến độ xếp lịch theo tuần so với số buổi tối thiểu của giáo án. */
+export const getClassProgress = (classId: string) => http.get<ClassProgress>(`/classes/${classId}/progress`);
 
 /** Danh sách kèm tên và ảnh ngựa. */
 export const listEnrollments = (classId: string) => http.get<Enrollment[]>(`/classes/${classId}/enrollments`);
+/** Ngựa ghi danh được (HLV của lớp): đã loại ngựa đã ghi danh, trùng giờ, vượt giới hạn tập trong ngày. Lớp không chạy thì 409. */
+export const listEnrollableHorses = (classId: string) => http.get<EnrollableHorse[]>(`/classes/${classId}/enrollable-horses`);
 export const enrollHorse = (classId: string, horseId: string, enrolledAt?: string) =>
   http.post<Enrollment>(`/classes/${classId}/enrollments`, enrolledAt ? { horseId, enrolledAt } : { horseId });
 export const leaveEnrollment = (id: string, input: { leftAt?: string; reason?: string }) =>
@@ -68,14 +72,15 @@ export const leaveEnrollment = (id: string, input: { leftAt?: string; reason?: s
 
 export const listSessions = (classId: string) => http.get<TrainingSession[]>(`/classes/${classId}/sessions`);
 export const getSession = (id: string) => http.get<TrainingSession>(`/training-sessions/${id}`);
-/** BE chặn 409 khi trùng giờ với buổi khác của lớp, hoặc với lịch ở lớp khác của ngựa đang học lớp này. */
+/**
+ * Buổi lưu xong là SCHEDULED, có hiệu lực ngay. BE trả 409 khi môn không thuộc giai đoạn chứa ngày đó,
+ * khi trùng giờ, hoặc vượt giới hạn tập trong ngày (2 buổi, 1 buổi Nặng, cách nhau 3 giờ).
+ */
 export const addSession = (classId: string, input: SessionInput) => http.post<TrainingSession>(`/classes/${classId}/sessions`, input);
+/** Thêm nhiều buổi một lần (lặp lại hằng tuần). Một buổi lỗi thì không lưu buổi nào, câu báo có tiền tố "Buổi N: ". */
+export const addSessions = (classId: string, sessions: SessionInput[]) => http.post<TrainingSession[]>(`/classes/${classId}/sessions/bulk`, { sessions });
+/** Chỉ sửa được buổi đã lên lịch, chưa tới giờ, chưa có ngựa điểm danh (còn lại 409). */
 export const updateSession = (id: string, input: Partial<Omit<SessionInput, 'targetTimeMs'>>) => http.patch<TrainingSession>(`/training-sessions/${id}`, input);
-/** Ngựa trùng giờ với lớp khác không được tạo lượt, nằm trong `skippedHorses`. */
-export const publishSession = (id: string) => http.post<PublishedSession>(`/training-sessions/${id}/publish`);
-/** Công bố một lần mọi buổi nháp của lớp, hoặc chỉ buổi có ngày (lịch CLB) trong khoảng from đến to. */
-export const publishSessions = (classId: string, range: { from?: string; to?: string } = {}) =>
-  http.post<PublishedSession[]>(`/classes/${classId}/sessions/publish`, range);
 export const cancelSession = (id: string, reason: string) => http.post<TrainingSession>(`/training-sessions/${id}/cancel`, { reason });
 
 /** Chỉ dùng khi sửa buổi thường thành buổi chạy thử. Thêm buổi chạy thử thì gửi targetTimeMs cùng addSession. */
@@ -131,4 +136,3 @@ export const listHorseSessions = (horseId: string, query: { when?: 'upcoming' | 
 export const handOverHeadTrainer = (fromId: string, toHeadTrainerId: string) =>
   http.post<HandoverResult>(`/users/${fromId}/head-trainer-handover`, { toHeadTrainerId });
 
-export type { ClassSessionInput };

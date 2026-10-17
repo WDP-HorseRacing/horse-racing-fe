@@ -1,4 +1,4 @@
-// Tab Thông tin của lớp. HLV phụ trách sửa được khi lớp còn nháp hoặc đang chạy (không đổi giáo án, HLV).
+// Tab Thông tin của lớp. HLV phụ trách sửa được khi lớp đang chạy (không đổi giáo án, HLV).
 // Đổi ngày bắt đầu thì ngày kết thúc tự tính lại. BE chặn khi buổi hoặc ghi danh nằm ngoài khoảng mới.
 import { useState } from 'react';
 import { updateClass } from '../../../api/training';
@@ -16,7 +16,7 @@ import type { ClassBundle } from './class-bundle';
 export default function ClassInfoTab({ bundle, manage, reload }: { bundle: ClassBundle; manage: boolean; reload: () => void }) {
   const toast = useToast();
   const { item, plan, sessions, enrollments } = bundle;
-  const editable = manage && (item.status === 'DRAFT' || item.status === 'ACTIVE');
+  const editable = manage && item.status === 'ACTIVE';
   const [code, setCode] = useState(item.code);
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? '');

@@ -34,6 +34,8 @@ export const links = {
   horseNew: '/horses/new',
   horse: (id: string, tab?: string) => `/horses/${id}${tab ? `?tab=${tab}` : ''}`,
   horseEdit: (id: string) => `/horses/${id}/edit`,
+  pastHorses: '/horses/past',
+  pastHorse: (id: string) => `/horses/past/${id}`,
   stable: '/stable',
   /** Flow 4 */
   stableCare: (barnId?: string) => withQuery('/stable/care', { barn: barnId }),

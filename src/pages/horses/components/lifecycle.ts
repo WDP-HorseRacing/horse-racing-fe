@@ -14,7 +14,7 @@ export const lifecycleActionLabel: Record<LifecycleAction, string> = {
 
 export const lifecycleActionHint: Record<LifecycleAction, string> = {
   RETIRED: 'Ngựa vẫn ở câu lạc bộ, vẫn được chăm sóc và chữa bệnh. Ngựa không học lớp, không đăng ký đua.',
-  TRANSFERRED: 'Ngựa rời câu lạc bộ. Hồ sơ chuyển sang chỉ đọc, giữ tên chủ cũ.',
+  TRANSFERRED: 'Ngựa rời câu lạc bộ. Hồ sơ chuyển sang chỉ đọc, kết thúc sở hữu của chủ hiện tại.',
   DECEASED:
     'Ngựa rời câu lạc bộ vĩnh viễn. Hồ sơ chuyển sang chỉ đọc và không đổi lại được. Ngựa còn bệnh án đang mở thì bác sĩ cần đóng bệnh án trước.',
   ACTIVE: 'Đưa ngựa trở lại hoạt động đầy đủ.',

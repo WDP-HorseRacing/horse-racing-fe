@@ -96,7 +96,7 @@ export default function TrainingToday() {
     <div ref={scope} className="space-y-5">
       <PageHeader
         title={groom ? 'Dắt ngựa tập' : 'Hôm nay trên sân'}
-        description={groom ? 'Dắt ngựa ra sân rồi điểm danh. Khởi động xong thì báo sẵn sàng.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
+        description={groom ? 'Dắt ngựa ra sân rồi điểm danh. Khởi động xong thì báo sẵn sàng.' : 'Mọi buổi trong ngày của các lớp bạn phụ trách.'}
       />
 
       <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export default function TrainingToday() {
       ) : board.error ? (
         <ErrorBox message={board.error} />
       ) : items.length === 0 ? (
-        <EmptyState title="Không có buổi tập nào trong ngày" hint={groom ? 'Khi HLV công bố buổi có ngựa bạn được giao, lịch hiện ở đây.' : 'Công bố buổi ở trang lớp để buổi hiện ở đây.'} />
+        <EmptyState title="Không có buổi tập nào trong ngày" hint={groom ? 'Khi HLV xếp buổi có ngựa bạn được giao, lịch hiện ở đây.' : 'Xếp buổi trên lịch tuần của lớp để buổi hiện ở đây.'} />
       ) : (
         <ol className="relative space-y-4 border-l-2 border-emerald-100 pl-6">
           {items.map((item, position) => (

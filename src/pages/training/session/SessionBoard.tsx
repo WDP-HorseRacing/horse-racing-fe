@@ -17,19 +17,18 @@ import {
   listParticipants,
   listTrialResults,
   markParticipantAbsent,
-  publishSession,
   readyParticipant,
   startParticipant,
 } from '../../../api/training';
 import { CLUB_DEFAULT_LIMITS, getThresholds } from '../../../api/performance';
-import type { Evaluation, HorseThresholds, Participant, ParticipantStatus, PublishedSession, TrialResult } from '../../../api/types';
-import { ActionMenu, Avatar, Button, EmptyState, ErrorBox, NotFound, Tabs, cn, useToast } from '../../../components/ui';
+import type { Evaluation, HorseThresholds, Participant, ParticipantStatus, TrialResult } from '../../../api/types';
+import { ActionMenu, Avatar, Button, EmptyState, ErrorBox, NotFound, Notice, Tabs, cn, useToast } from '../../../components/ui';
 import { useAction, useService } from '../../../hooks/useService';
 import { useStore } from '../../../store/store';
 import { useCrumbs } from '../../../components/Breadcrumb';
 import { links } from '../../../lib/links';
 import { formatDate, formatTime } from '../../../lib/format';
-import { clubTime } from '../../../lib/club-time';
+import { addMinutes, clubTime } from '../../../lib/club-time';
 import { now } from '../../../lib/clock';
 import { actionWindow, lockedText, openingText, windowOpensAt, type WindowKind } from '../../../lib/training-window';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
@@ -43,8 +42,6 @@ import { IntensityBars, ParticipantPill, SessionStatusPill, TrialBadge } from '.
 import { HeartbeatIcon, LiveNumber, useFlip } from '../components/motion';
 import { Elapsed, LiveMonitorCard } from '../components/LiveMonitor';
 import { ReasonDialog } from '../components/ReasonDialog';
-import { SkippedHorsesDialog } from '../components/SkippedHorsesDialog';
-import { sessionsWithSkips } from '../plan-helpers';
 import { useGroomIndex, useHorseIndex, useLiveMetrics, type LiveSeries } from '../hooks';
 import { CompleteDialog, EvaluationSheet, GroomDialog, TrialDialog } from './dialogs';
 import { BackLink } from '../../../components/BackLink';
@@ -222,7 +219,6 @@ export default function SessionBoard() {
     setParams(params, { replace: true });
   }, [chosenTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [skipped, setSkipped] = useState<PublishedSession[]>([]);
   const action = useAction();
   const sessionAction = useAction();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -417,23 +413,6 @@ export default function SessionBoard() {
             )}
             {manage && (
               <div className="flex gap-2">
-                {session.status === 'DRAFT' && trainingClass?.status === 'ACTIVE' && (
-                  <Button
-                    disabled={sessionAction.pending}
-                    onClick={() =>
-                      void sessionAction.run(
-                        () => publishSession(session.id),
-                        (published) => {
-                          toast.push('Đã công bố buổi', 'success');
-                          setSkipped(sessionsWithSkips([published]));
-                          reload();
-                        },
-                      )
-                    }
-                  >
-                    Công bố buổi
-                  </Button>
-                )}
                 {session.status !== 'COMPLETED' && session.status !== 'CANCELLED' && (
                   <Button variant="inlineDanger" onClick={() => setDialog({ kind: 'cancelSession' })}>
                     <XCircle size={14} /> Hủy buổi
@@ -461,7 +440,11 @@ export default function SessionBoard() {
       </section>
 
       {(action.error || sessionAction.error) && <ErrorBox message={(action.error ?? sessionAction.error)!} />}
-      {session.status === 'DRAFT' && <EmptyState title="Buổi còn nháp" hint="Công bố buổi để bắt đầu điểm danh." />}
+      {ongoing.length > 0 && clock.getTime() > new Date(session.scheduledEndAt).getTime() && (
+        <Notice tone="info">
+          Đã qua giờ kết thúc buổi. Lượt còn Đang chạy sẽ được hệ thống tự hoàn thành 30 phút sau giờ kết thúc ({clubTime(addMinutes(session.scheduledEndAt, 30))}), giờ xong ghi theo giờ kết thúc buổi.
+        </Notice>
+      )}
 
       {out.length > 0 && (
         <section className="rounded-2xl bg-amber-50/50 p-3 ring-1 ring-amber-200/60 sm:p-4">
@@ -503,76 +486,73 @@ export default function SessionBoard() {
         </section>
       )}
 
-      {session.status !== 'DRAFT' && (
-        <section>
-          <Tabs
-            active={activeTab}
-            onChange={(key) => pickTab(key as ParticipantStatus)}
-            tabs={PARTICIPANT_FLOW.map((status) => ({ key: status, label: participantStatusText[status], count: countOf(status) }))}
-          />
-          <div className="rounded-b-2xl border border-t-0 border-gray-200/80 bg-white/70 p-3 sm:p-4">
-            {tabItems.length > 0 && <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>}
-            {activeTab === 'COMPLETED' && leaderboard.length > 0 && <Leaderboard rows={leaderboard} target={target} horseName={horseName} />}
-            {tabItems.length === 0 ? (
-              <EmptyState title={EMPTY_TAB[activeTab].title} hint={EMPTY_TAB[activeTab].hint} className="rounded-xl border border-dashed border-gray-200 py-10" />
-            ) : activeTab === 'ONGOING' && seesMetrics ? (
-              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                {tabItems.map((participant) => {
-                  const limits = thresholds.data?.get(participant.horseId);
-                  return (
-                    <div key={participant.id} data-tab-card>
-                      <LiveMonitorCard
-                        participantId={participant.id}
-                        horseId={participant.horseId}
-                        horseName={horseName(participant)}
-                        photoUrl={horsePhoto(participant)}
-                        startedAt={participant.startedAt}
-                        live={live[participant.id]}
-                        limits={limits?.activeLimits ?? CLUB_DEFAULT_LIMITS}
-                        limitsSource={limits?.source ?? 'CLUB_DEFAULT'}
-                        acknowledged={acked.has(participant.id)}
-                        onAcknowledge={() => setAcked((current) => new Set([...current, participant.id]))}
-                        simulator={FEATURES.sensorSimulator && operational && manage}
-                        actions={
-                          manage && operational ? (
-                            <Button size="sm" onClick={() => primaryAction(participant)?.onClick?.()}>
-                              <CheckCircle2 size={13} /> Hoàn thành
-                            </Button>
-                          ) : undefined
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div ref={trackRef} className="grid gap-3 md:grid-cols-2">
-                {tabItems.map((participant) => (
+      <section>
+        <Tabs
+          active={activeTab}
+          onChange={(key) => pickTab(key as ParticipantStatus)}
+          tabs={PARTICIPANT_FLOW.map((status) => ({ key: status, label: participantStatusText[status], count: countOf(status) }))}
+        />
+        <div className="rounded-b-2xl border border-t-0 border-gray-200/80 bg-white/70 p-3 sm:p-4">
+          {tabItems.length > 0 && <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>}
+          {activeTab === 'COMPLETED' && leaderboard.length > 0 && <Leaderboard rows={leaderboard} target={target} horseName={horseName} />}
+          {tabItems.length === 0 ? (
+            <EmptyState title={EMPTY_TAB[activeTab].title} hint={EMPTY_TAB[activeTab].hint} className="rounded-xl border border-dashed border-gray-200 py-10" />
+          ) : activeTab === 'ONGOING' && seesMetrics ? (
+            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              {tabItems.map((participant) => {
+                const limits = thresholds.data?.get(participant.horseId);
+                return (
                   <div key={participant.id} data-tab-card>
-                    <ParticipantCard
-                      participant={participant}
+                    <LiveMonitorCard
+                      participantId={participant.id}
+                      horseId={participant.horseId}
                       horseName={horseName(participant)}
                       photoUrl={horsePhoto(participant)}
-                      groomLabel={groomLabel(participant)}
-                      live={seesMetrics ? live[participant.id] : undefined}
-                      primary={primaryAction(participant)}
-                      pending={action.pending}
-                      evaluation={extras.data?.evaluations.get(participant.id)}
-                      trials={extras.data?.trials.get(participant.id)}
-                      target={target}
-                      menu={menuOf(participant)}
-                      onEvaluate={manage && participant.status === 'COMPLETED' && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
+                      startedAt={participant.startedAt}
+                      live={live[participant.id]}
+                      limits={limits?.activeLimits ?? CLUB_DEFAULT_LIMITS}
+                      limitsSource={limits?.source ?? 'CLUB_DEFAULT'}
+                      acknowledged={acked.has(participant.id)}
+                      onAcknowledge={() => setAcked((current) => new Set([...current, participant.id]))}
+                      simulator={FEATURES.sensorSimulator && operational && manage}
+                      actions={
+                        manage && operational ? (
+                          <Button size="sm" onClick={() => primaryAction(participant)?.onClick?.()}>
+                            <CheckCircle2 size={13} /> Hoàn thành
+                          </Button>
+                        ) : undefined
+                      }
                     />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+                );
+              })}
+            </div>
+          ) : (
+            <div ref={trackRef} className="grid gap-3 md:grid-cols-2">
+              {tabItems.map((participant) => (
+                <div key={participant.id} data-tab-card>
+                  <ParticipantCard
+                    participant={participant}
+                    horseName={horseName(participant)}
+                    photoUrl={horsePhoto(participant)}
+                    groomLabel={groomLabel(participant)}
+                    live={seesMetrics ? live[participant.id] : undefined}
+                    primary={primaryAction(participant)}
+                    pending={action.pending}
+                    evaluation={extras.data?.evaluations.get(participant.id)}
+                    trials={extras.data?.trials.get(participant.id)}
+                    target={target}
+                    menu={menuOf(participant)}
+                    onEvaluate={manage && participant.status === 'COMPLETED' && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Hộp thoại */}
-      {skipped.length > 0 && <SkippedHorsesDialog sessions={skipped} onClose={() => setSkipped([])} />}
       {dialog?.kind === 'absent' && (
         <ReasonDialog
           title={`Báo vắng ${horseName(dialog.participant)}`}
