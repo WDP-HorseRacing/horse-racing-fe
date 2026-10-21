@@ -1,11 +1,12 @@
 // F3.9 — Trang đóng bệnh án (VET).
 // Chi phí đã ghi ở từng buổi khám, trang này chỉ hiện tổng. Còn vết chấn thương chưa lành thì BE chặn đóng:
 // trang liệt kê vết và dẫn sang ghi buổi tái khám đánh dấu Đã lành.
-// Cột trái: kết luận cuối, chi phí, quyết định với khóa huấn luyện còn hiệu lực.
+// Chọn "Ngựa đã mất" thì đóng kèm ghi nhận mất (ngày mất là hôm nay): không chặn vì vết chưa lành, BE tự gỡ khóa.
+// Cột trái: kết cục, kết luận cuối, chi phí, quyết định với khóa huấn luyện còn hiệu lực.
 // Cột phải: tóm tắt bệnh án, yêu cầu khám còn chờ của ngựa, nút đóng.
 import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Bandage, FileCheck2, Lock, Plus, Wallet } from 'lucide-react';
+import { Ban, Bandage, FileCheck2, HeartCrack, ListChecks, Lock, Plus, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
 import { closeCase, getCase, getClosePreview, getInjuries, listHorseExamRequests } from '../../api/medical';
@@ -23,6 +24,7 @@ import { RequestMeta, RequestText } from './components/parts';
 import { dateToIso, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { DatePicker } from '../../components/ui/DatePicker';
+import { lifecycleConsequences } from '../horses/components/lifecycle';
 
 const CONCLUSION_MAX = 4000;
 
@@ -50,6 +52,7 @@ export default function CaseClose() {
   const [conclusion, setConclusion] = useState('');
   const [decision, setDecision] = useState<'RELEASE' | 'KEEP' | ''>('');
   const [keepDate, setKeepDate] = useState('');
+  const [deceased, setDeceased] = useState(false);
   const [attempted, setAttempted] = useState(false);
 
   const item = data.data?.item;
@@ -71,10 +74,13 @@ export default function CaseClose() {
     );
   }
 
-  const lock = preview.activeLock;
+  // Ngựa mất: BE tự gỡ khóa, không gửi lựa chọn khóa.
+  const lock = deceased ? null : preview.activeLock;
   const unhealed = injuries.filter((injury) => injury.currentRecoveryStatus !== 'HEALED');
-  // Đếm của BE là chuẩn, danh sách lấy từ diễn biến chấn thương.
-  const blocked = preview.unhealedInjuryCount > 0;
+  const death = preview.deathImpact;
+  const deathBlocked = deceased && !!death && !death.allowed;
+  // Đếm của BE là chuẩn, danh sách lấy từ diễn biến chấn thương. Đóng kèm ngựa mất thì không chặn.
+  const blocked = deceased ? deathBlocked : preview.unhealedInjuryCount > 0;
   const followUp = links.visitNew({ horseId: horse.id, caseId: item.id, back: links.caseClose(item.id) });
   const errors: Record<string, string> = {};
   if (!conclusion.trim()) errors.conclusion = 'Nhập kết luận cuối';
@@ -96,9 +102,10 @@ export default function CaseClose() {
           finalConclusion: conclusion.trim(),
           ...(lock ? { lockDecision: decision as 'RELEASE' | 'KEEP' } : {}),
           ...(lock && decision === 'KEEP' ? { lockExpectedEnd: dateToIso(keepDate) } : {}),
+          ...(deceased ? { deceased: true } : {}),
         }),
       () => {
-        toast.push(`Đã đóng bệnh án của ${horse.name}`, 'success');
+        toast.push(deceased ? `Đã đóng bệnh án và ghi nhận ${horse.name} đã mất` : `Đã đóng bệnh án của ${horse.name}`, 'success');
         navigate(links.case(item.id), { replace: true });
       },
     );
@@ -114,7 +121,49 @@ export default function CaseClose() {
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:col-span-8">
-          {blocked && (
+          <FormSection icon={<HeartCrack size={16} />} title="Kết cục">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {([false, true] as const).map((value) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() => setDeceased(value)}
+                  aria-pressed={deceased === value}
+                  className={cn(
+                    'rounded-xl bg-white px-4 py-3 text-left transition',
+                    deceased === value ? (value ? 'ring-2 ring-red-600' : 'ring-2 ring-emerald-700') : 'ring-1 ring-gray-200 hover:ring-gray-300',
+                  )}
+                >
+                  <span className="block text-sm font-semibold text-gray-900">{value ? 'Ngựa đã mất' : 'Kết thúc điều trị'}</span>
+                  <span className="block text-xs text-gray-500">
+                    {value ? 'Đóng bệnh án và ghi nhận ngựa mất hôm nay. Hồ sơ chỉ đọc vĩnh viễn.' : 'Ngựa khỏi hoặc ổn định, tiếp tục ở câu lạc bộ.'}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {deceased && death && !death.allowed && (
+              <Notice tone="danger" icon={<Ban size={16} />}>
+                {death.blockedReason ?? 'Không ghi nhận ngựa mất được lúc này'}
+              </Notice>
+            )}
+            {deceased && death?.allowed && (
+              <div className="overflow-hidden rounded-xl bg-white shadow-[inset_3px_0_0_0_#dc2626] ring-1 ring-red-200/70">
+                <div className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-gray-900">
+                  <ListChecks size={15} className="text-red-400" /> Những gì sẽ thay đổi khi ghi nhận mất
+                </div>
+                <ul className="divide-y divide-gray-100 border-t border-gray-100 text-sm">
+                  {lifecycleConsequences(death).map((line) => (
+                    <li key={line} className="flex gap-3 px-4 py-2.5 text-gray-700">
+                      <span className="mt-1.5 block h-1.5 w-1.5 shrink-0 rounded-full bg-red-300" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </FormSection>
+
+          {!deceased && blocked && (
             <Notice tone="danger" icon={<Bandage size={16} />}>
               <p className="font-medium">Còn {preview.unhealedInjuryCount} chấn thương chưa lành, chưa đóng được bệnh án.</p>
               <p className="mt-0.5">Ghi một buổi tái khám đánh dấu Đã lành cho từng vết dưới đây rồi quay lại đóng.</p>
@@ -135,20 +184,23 @@ export default function CaseClose() {
             </Notice>
           )}
 
-          {preview.healthWarning && (
+          {!deceased && preview.healthWarning && (
             <Notice tone="warning">
               Ngựa vẫn đang <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Ngựa khỏi rồi thì nhớ đổi lại sức khỏe.
             </Notice>
           )}
 
           <FormSection icon={<FileCheck2 size={16} />} title="Kết luận cuối">
-            <Field name="conclusion" error={show('conclusion')} counter={<CharCount value={conclusion} max={CONCLUSION_MAX} />}>
+            <Field
+              name="conclusion"
+              error={show('conclusion')}
+              hint={deceased ? 'Ghi nguyên nhân mất. Câu này cũng là lý do ghi nhận mất trong nhật ký hồ sơ.' : undefined} counter={<CharCount value={conclusion} max={CONCLUSION_MAX} />}>
               <Textarea
                 rows={6}
                 maxLength={CONCLUSION_MAX}
                 value={conclusion}
                 onChange={(event) => setConclusion(event.target.value)}
-                placeholder="Ví dụ: Hồi phục hoàn toàn sau 2 tuần giảm tải, siêu âm gân bình thường"
+                placeholder={deceased ? 'Ví dụ: Đau bụng cấp không qua khỏi' : 'Ví dụ: Hồi phục hoàn toàn sau 2 tuần giảm tải, siêu âm gân bình thường'}
                 className={cn('min-h-36', show('conclusion') && invalidClass)}
               />
             </Field>
@@ -245,14 +297,15 @@ export default function CaseClose() {
           <SaveCard>
             <ul className="space-y-1.5">
               <Outcome>Bệnh án chuyển sang Đã đóng, không thêm buổi khám, không mở lại</Outcome>
+              {deceased && <Outcome tone="warning">Ghi nhận {horse.name} đã mất hôm nay, không đổi lại được</Outcome>}
               <Outcome>Chủ ngựa và quản lý nhận thông báo kèm chi phí {formatMoney(item.totalCost ?? 0)}</Outcome>
               {lock && decision === 'RELEASE' && <Outcome>Gỡ khóa huấn luyện</Outcome>}
               {lock && decision === 'KEEP' && <Outcome tone="warning">Giữ khóa{keepDate ? ` tới khoảng ${formatDate(keepDate)}` : ''}</Outcome>}
             </ul>
             {action.error && <ErrorBox message={action.error} />}
             <div className="space-y-2 border-t border-gray-100 pt-4">
-              <Button className="h-11 w-full" onClick={submit} disabled={action.pending || blocked}>
-                {action.pending ? 'Đang lưu…' : 'Đóng bệnh án'}
+              <Button variant={deceased ? 'danger' : 'primary'} className="h-11 w-full" onClick={submit} disabled={action.pending || blocked}>
+                {action.pending ? 'Đang lưu…' : deceased ? 'Đóng và ghi nhận mất' : 'Đóng bệnh án'}
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => navigate(back)} disabled={action.pending}>
                 Hủy

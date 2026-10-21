@@ -199,6 +199,8 @@ export interface TrainingSession {
   location: string | null;
   surface: string | null;
   notes: string | null;
+  /** Thời gian mục tiêu của buổi chạy thử (ms). Buổi thường luôn null. */
+  targetTimeMs: number | null;
   status: TrainingSessionStatus;
   cancelledAt: string | null;
   cancelledBy: string | null;
@@ -207,8 +209,8 @@ export interface TrainingSession {
 
 export interface SessionInput {
   name: string;
-  /** BE lấy loại buổi theo môn. Gửi lệch loại buổi của môn thì 400. */
-  sessionType: TrainingSessionType;
+  /** Chỉ khi thêm buổi, tùy chọn: BE lấy loại buổi theo môn, gửi lệch thì 400. Sửa buổi không nhận. */
+  sessionType?: TrainingSessionType;
   subjectId: string;
   intensity: TrainingIntensity;
   plannedDistanceM: number;
@@ -218,17 +220,8 @@ export interface SessionInput {
   location?: string | null;
   surface?: string | null;
   notes?: string | null;
-  /** Chỉ khi thêm buổi chạy thử: BE tạo luôn cấu hình chạy thử. DTO sửa buổi không nhận. */
+  /** Chỉ buổi chạy thử. Khi sửa: không gửi thì giữ, gửi `null` để bỏ mục tiêu. */
   targetTimeMs?: number | null;
-}
-
-export interface TimeTrial {
-  id: string;
-  sessionId: string;
-  distanceM: number;
-  targetTimeMs: number | null;
-  notes: string | null;
-  createdAt: string;
 }
 
 export interface Participant {
@@ -258,7 +251,6 @@ export interface Participant {
 
 export interface TrialResult {
   id: string;
-  timeTrialId: string;
   sessionParticipantId: string;
   attemptNo: number;
   elapsedMs: number;

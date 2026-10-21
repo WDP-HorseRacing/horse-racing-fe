@@ -1,17 +1,13 @@
 // F1.8 — đổi vòng đời, xóa và khôi phục hồ sơ: bắt buộc lý do, hiện bảng hệ quả (do backend tính) trước khi xác nhận.
-// Ghi nhận ngựa mất cần thêm ngày mất, và bị chặn khi ngựa còn bệnh án đang mở (bác sĩ đóng trước).
+// Ghi nhận ngựa mất lấy hôm nay làm ngày mất, và bị chặn khi ngựa còn bệnh án đang mở (bác sĩ đóng trước).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Ban, CircleCheck, ListChecks } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
 import { changeLifecycle, deleteHorse, previewDeletion, previewLifecycle, previewRestore, restoreHorse } from '../../../api/horses';
-import type { LifecyclePreview } from '../../../api/types';
 import { Button, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, useToast } from '../../../components/ui';
-import { DatePicker } from '../../../components/ui/DatePicker';
-import { healthLabel } from '../../../lib/labels';
 import { links } from '../../../lib/links';
-import { toDateKey } from '../../../lib/format';
-import { now } from '../../../lib/clock';
+import { formatMoney } from '../../../lib/format';
 import { OwnerSelect } from './OwnerSelect';
 import {
   destructiveActions,
@@ -19,6 +15,7 @@ import {
   lifecycleActionDone,
   lifecycleActionHint,
   lifecycleActionLabel,
+  lifecycleConsequences,
   type LifecycleAction,
 } from './lifecycle';
 
@@ -30,28 +27,6 @@ interface PreviewView {
   consequences: string[];
   /** Kích hoạt lại ngựa đã chuyển nhượng: phải chọn chủ mới. */
   ownerRequired?: boolean;
-}
-
-function lifecycleConsequences(data: LifecyclePreview): string[] {
-  const cause = data.to === 'DECEASED' ? 'ngựa mất' : 'chuyển nhượng';
-  const lines: string[] = [];
-  if (data.classesWithdrawn) lines.push(`Rút khỏi ${data.classesWithdrawn} lớp đang học (buổi đã học giữ lịch sử)`);
-  if (data.raceRegistrationsWithdrawn) lines.push(`Rút ${data.raceRegistrationsWithdrawn} đăng ký thi đấu chưa diễn ra`);
-  if (data.stallReleased) lines.push(`Trả ô ${data.stallReleased} về trống`);
-  if (data.barnCleared) lines.push(`Rời ${data.barnCleared}`);
-  if (data.groomEnded) lines.push(`Kết thúc phân công Groom ${data.groomEnded} (Groom nhận thông báo)`);
-  if (data.trainingLockReleased) lines.push(`Tự gỡ lệnh khóa huấn luyện với ghi chú "Gỡ do ${cause}"`);
-  if (data.examRequestsDismissed) lines.push(`Bỏ qua ${data.examRequestsDismissed} yêu cầu khám đang chờ (lý do "Do ${cause}")`);
-  if (data.careSchedulesCancelled) lines.push(`Hủy ${data.careSchedulesCancelled} lịch chăm sóc và lịch hẹn khám đã lên`);
-  if (data.incidentsClosed) lines.push(`Tự đóng ${data.incidentsClosed} sự cố tại chuồng đang mở (kết quả "Ngựa đã ${data.to === 'DECEASED' ? 'mất' : 'chuyển nhượng'}")`);
-  if (data.healthResetTo) lines.push(`Sức khỏe đặt về "${healthLabel[data.healthResetTo]}"`);
-  if (data.pendingBarnAfter) lines.push('Ngựa vào danh sách Chờ xếp khu');
-  if (data.ownerCleared) lines.push(`Kết thúc sở hữu của ${data.ownerCleared}, hồ sơ không còn chủ. Chủ cũ chỉ xem thông tin cơ bản ở mục Ngựa đã bán`);
-  if (data.to === 'TRANSFERRED') lines.push('Hồ sơ chuyển sang chỉ đọc');
-  if (data.ownerRequired) lines.push('Chọn chủ sở hữu mới, giai đoạn sở hữu mới bắt đầu từ lúc lưu');
-  if (data.to === 'DECEASED') lines.push('Hồ sơ chuyển sang chỉ đọc vĩnh viễn, giữ tên chủ, ngựa vẫn hiện trong phả hệ');
-  if (data.to === 'RETIRED' && lines.length === 0) lines.push('Giữ khu, ô, Groom và toàn bộ dữ liệu y tế');
-  return lines;
 }
 
 async function loadPreview(horseId: string, action: LifecycleAction): Promise<PreviewView> {
@@ -76,6 +51,10 @@ async function loadPreview(horseId: string, action: LifecycleAction): Promise<Pr
     if (data.barnCleared) lines.push(`Rời ${data.barnCleared}, vào danh sách Chờ xếp khu`);
     else lines.push('Ngựa vào danh sách Chờ xếp khu');
     if (data.ownerCleared) lines.push(`Bỏ trống chủ sở hữu ${data.ownerCleared} (tài khoản không còn là chủ ngựa đang hoạt động)`);
+    if (data.rebilledDays > 0) {
+      const fees = [`${formatMoney(data.rebilledDailyFee)} phí ngày`, ...(data.rebilledSurcharge ? [`${formatMoney(data.rebilledSurcharge)} phụ phí`] : [])].join(', ');
+      lines.push(`Tính lại phí ${data.rebilledDays} ngày hồ sơ bị xóa: ${fees} cho ${data.rebilledOwnerName ?? 'mục Chưa có chủ'}`);
+    }
     return { allowed: true, blockers: [], summary: data.summary, consequences: lines };
   }
   const data = await previewLifecycle(horseId, action);
@@ -95,7 +74,7 @@ export default function LifecycleDialog({
   onClose,
   onDone,
 }: {
-  horse: { id: string; name: string; dateOfBirth?: string | null };
+  horse: { id: string; name: string };
   action: LifecycleAction | null;
   onClose: () => void;
   onDone: () => void;
@@ -103,13 +82,11 @@ export default function LifecycleDialog({
   const toast = useToast();
   const run = useAction();
   const [reason, setReason] = useState('');
-  const [dateOfDeath, setDateOfDeath] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const preview = useService(() => (action ? loadPreview(horse.id, action) : Promise.resolve(undefined)), [horse.id, action]);
 
   useEffect(() => {
     setReason('');
-    setDateOfDeath('');
     setOwnerId('');
     run.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,24 +94,14 @@ export default function LifecycleDialog({
 
   const data = preview.data;
   const deceased = action === 'DECEASED';
-  const today = toDateKey(now());
-
-  // Ngày mất: không ở tương lai, không trước ngày sinh. Backend kiểm lại và trả lỗi theo ô.
-  const deathError =
-    run.fieldErrors.dateOfDeath ??
-    (dateOfDeath && dateOfDeath > today
-      ? 'Ngày mất không được ở tương lai'
-      : dateOfDeath && horse.dateOfBirth && dateOfDeath < horse.dateOfBirth
-        ? 'Ngày mất không được trước ngày sinh'
-        : undefined);
   const reasonError = run.fieldErrors.reason;
   const ownerError = run.fieldErrors.ownerId;
-  const formError = run.error && !run.fieldErrors.dateOfDeath && !run.fieldErrors.reason && !ownerError ? run.error : undefined;
+  const formError = run.error && !run.fieldErrors.reason && !ownerError ? run.error : undefined;
   const ownerRequired = !!data?.ownerRequired;
   // Bị chặn vì còn bệnh án: dẫn sang hồ sơ y tế để báo bác sĩ đóng bệnh án.
   const blockedByCase = !!data && !data.allowed && (action === 'TRANSFERRED' || deceased) && /bệnh án/i.test(data.blockedReason ?? '');
 
-  const canSubmit = !!data?.allowed && !!reason.trim() && !run.pending && (!deceased || (!!dateOfDeath && !deathError)) && (!ownerRequired || !!ownerId);
+  const canSubmit = !!data?.allowed && !!reason.trim() && !run.pending && (!ownerRequired || !!ownerId);
 
   const submit = async () => {
     if (!action || !canSubmit) return;
@@ -142,7 +109,7 @@ export default function LifecycleDialog({
     const done = await run.run(async () => {
       if (action === 'DELETE') await deleteHorse(horse.id, why);
       else if (action === 'RESTORE') await restoreHorse(horse.id, why);
-      else await changeLifecycle(horse.id, { lifecycleStatus: action, reason: why, dateOfDeath: deceased ? dateOfDeath : undefined, ownerId: ownerRequired ? ownerId : undefined });
+      else await changeLifecycle(horse.id, { lifecycleStatus: action, reason: why, ownerId: ownerRequired ? ownerId : undefined });
       return true;
     });
     if (done) {
@@ -159,7 +126,7 @@ export default function LifecycleDialog({
       width="max-w-2xl"
       title={action ? `${lifecycleActionLabel[action]}: ${horse.name}` : ''}
       description={action ? lifecycleActionHint[action] : undefined}
-      dirty={reason.trim() !== '' || dateOfDeath !== '' || ownerId !== ''}
+      dirty={reason.trim() !== '' || ownerId !== ''}
       onSave={() => void submit()}
       saveLabel={action ? lifecycleActionConfirm[action] : 'Lưu'}
       footer={
@@ -228,21 +195,6 @@ export default function LifecycleDialog({
             </div>
           )}
 
-          {data.allowed && deceased && (
-            <Field label="Ngày mất" name="dateOfDeath" required error={deathError}>
-              <DatePicker
-                value={dateOfDeath}
-                min={horse.dateOfBirth ?? undefined}
-                max={today}
-                onChange={(value) => {
-                  setDateOfDeath(value);
-                  if (run.fieldErrors.dateOfDeath) run.clearError();
-                }}
-                invalid={!!deathError}
-              />
-            </Field>
-          )}
-
           {data.allowed && ownerRequired && (
             <Field label="Chủ sở hữu mới" name="ownerId" required error={ownerError} hint="Ngựa đã bán ra ngoài nên không còn chủ. Hệ thống không tự gán lại chủ cũ.">
               <OwnerSelect
@@ -264,7 +216,7 @@ export default function LifecycleDialog({
               error={reasonError}
               hint={deceased ? 'Ví dụ: đau bụng cấp không qua khỏi.' : undefined}
             >
-              <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus={!deceased} />
+              <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus />
             </Field>
           )}
           {formError && <ErrorBox message={formError} />}

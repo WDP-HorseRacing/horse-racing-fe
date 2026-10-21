@@ -76,7 +76,7 @@ export interface SupplyLot {
   createdAt: string;
 }
 
-export type SupplyRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED';
+export type SupplyRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED' | 'CANCELLED';
 
 export interface SupplyRequest {
   id: string;
@@ -85,7 +85,8 @@ export interface SupplyRequest {
   item: SupplyItem;
   requestedBy: string;
   requester: UserBrief;
-  quantity: number;
+  /** Số thực nhận khi cấp. Null tới khi Đã cấp (người gửi chỉ ghi nhu cầu vào `note`). */
+  quantity: number | null;
   status: SupplyRequestStatus;
   note: string | null;
   reviewer: UserBrief | null;
@@ -93,6 +94,11 @@ export interface SupplyRequest {
   fulfiller: UserBrief | null;
   fulfilledAt: string | null;
   rejectionReason: string | null;
+  /** Quản lý hủy đề xuất đã duyệt (vd nhà cung cấp hết hàng). */
+  cancelledBy: string | null;
+  canceller: UserBrief | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -168,7 +174,8 @@ export interface HorseCareTask {
   createdAt: string;
 }
 
-export type ChecklistStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'INCOMPLETE';
+/** `CANCELLED`: ngựa chuyển nhượng hoặc mất trong ngày, checklist chỉ đọc (việc đã tick giữ nguyên). */
+export type ChecklistStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'INCOMPLETE' | 'CANCELLED';
 
 export interface ChecklistItem {
   id: string;
@@ -238,11 +245,22 @@ export interface GroomTodayAssistedRun extends GroomTodayRun {
   horseName: string;
 }
 
+/** Ngày hẹn bác sĩ hôm nay ở ngựa Groom phụ trách: chỉ để chuẩn bị ngựa, không hoàn tất được. */
+export interface GroomTodayVetAppointment {
+  id: string;
+  horseId: string;
+  horseName: string;
+  type: Extract<CareType, 'ROUTINE_CHECKUP' | 'FOLLOW_UP'>;
+  scheduledAt: string;
+}
+
 export interface GroomToday {
   date: string;
   horses: GroomTodayHorse[];
   otherCareSchedules: GroomTodayOtherCare[];
   assistedRuns: GroomTodayAssistedRun[];
+  /** Theo giờ hẹn. */
+  horseVetAppointments: GroomTodayVetAppointment[];
 }
 
 /* ===== Sự cố tại chuồng ===== */

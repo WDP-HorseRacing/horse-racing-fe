@@ -59,7 +59,7 @@ function CostReportPage() {
           đến
           <DatePicker value={to} min={from || undefined} onChange={setTo} size="sm" className="w-40" />
         </label>
-        <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
+        <FilterSelect value={barnId} onChange={setBarnId} label="Khu của ngựa lúc khám">
           <option value="">Mọi khu</option>
           {barns.data?.map((barn) => (
             <option key={barn.id} value={barn.id}>
@@ -97,7 +97,7 @@ function CostReportPage() {
               <p className="mt-1 text-xs text-gray-500">
                 {formatDate(report.data.from)} – {formatDate(report.data.to)}
               </p>
-              <p className="mt-4 text-xs text-gray-500">Buổi khám đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: buổi khám thuộc người làm chủ vào ngày khám. Lọc theo khu tính theo khu hiện tại của ngựa.</p>
+              <p className="mt-4 text-xs text-gray-500">Buổi khám đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: buổi khám thuộc người làm chủ vào ngày khám. Lọc theo khu tính theo khu ngựa ở lúc khám, nên ngựa đã đổi khu vẫn tính đúng chỗ cũ.</p>
             </Card>
             <div className="lg:col-span-8">
               <DataTable

@@ -7,6 +7,7 @@ import type {
   CaseStatus,
   HealthStatus,
   InjuryType,
+  LifecycleStatus,
   LockStatus,
   MeasurementType,
   ParticipantStatus,
@@ -46,6 +47,8 @@ export interface TrainingDashboard {
     horseName: string;
     barnId: string | null;
     barnName: string | null;
+    /** Ngựa đã giải nghệ, chuyển nhượng, đã mất vẫn có dòng nếu có lượt tập trong kỳ. */
+    lifecycleStatus: LifecycleStatus;
     healthStatus: HealthStatus;
     trainingLocked: boolean;
     completed: number;
@@ -58,7 +61,10 @@ export interface TrainingDashboard {
   }[];
 }
 
-/** Chỉ ngựa đang hoạt động. barnId: một khu. mine: các khu người gọi phụ trách (HLV). Mặc định toàn CLB. */
+/**
+ * `herd` chỉ ngựa đang hoạt động. `training`, `weekly`, `horses` gồm cả ngựa đã rời CLB có lượt tập trong kỳ.
+ * barnId: một khu. mine: các khu người gọi phụ trách (HLV). Mặc định toàn CLB.
+ */
 export const getTrainingDashboard = (query: ReportPeriod & { barnId?: string; mine?: boolean }) =>
   http.get<TrainingDashboard>('/reports/dashboard', { ...query, mine: query.mine ? 'true' : undefined });
 

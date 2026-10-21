@@ -1,7 +1,7 @@
 // F2.3 — Chi tiết lớp: đầu trang có thời gian của lớp, số phút đã xếp so với tối thiểu của giáo án và nút theo trạng thái,
 // thẻ "Việc tiếp theo" (xếp lịch, ghi danh, mở sân tập), rồi các tab Lịch buổi, Ngựa, Kết quả, Thông tin (khóa tab qua ?tab=).
 // Lớp chạy ngay khi tạo: không còn kích hoạt hay công bố, buổi lưu xong có hiệu lực ngay.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { CalendarDays, Check, CheckCircle2, Flag, UserPlus, XCircle } from 'lucide-react';
 import { getClass, getClassPlan, getClassProgress, getPlan, listEnrollments, listSessions, listSubjects, setClassStatus } from '../../../api/training';
@@ -48,6 +48,15 @@ export default function ClassDetail() {
     return { item, sessions, enrollments, plan, classPlan, progress, subjects };
   }, [id, user?.id]);
   const users = useUserNames(user?.role === 'CLUB_MANAGER');
+  // Lớp quá ngày kết thúc có thể tự hoàn thành mà không ai bấm: quay lại tab thì tải lại lớp.
+  const { reload: reloadClass } = data;
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) reloadClass();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [reloadClass]);
   useCrumbs(data.data ? [{ label: data.data.item.name }] : null, [{ label: 'Lớp huấn luyện', to: links.classes }]);
 
   if (data.loading && !data.data) return <ClassSkeleton />;
@@ -139,7 +148,7 @@ function ClassView({
         setCancelOpen(false);
         reload();
       },
-    );
+    ).then((result) => result === undefined && reload());
 
   const steps = [
     { key: 'schedule', label: 'Xếp lịch buổi', done: counted.length > 0 },

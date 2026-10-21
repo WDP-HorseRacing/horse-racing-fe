@@ -1,7 +1,7 @@
 // Tab Kết quả: lưới ngựa theo buổi đã diễn ra. Ô tô đậm nhạt theo điểm đánh giá của HLV,
 // buổi chạy thử hiện thời gian tốt nhất và chênh lệch với mục tiêu. Mỗi ngựa một lần gọi lịch tập của ngựa trong lớp.
 import { Link } from 'react-router-dom';
-import { getTimeTrial, listHorseSessions } from '../../../api/training';
+import { listHorseSessions } from '../../../api/training';
 import type { HorseTrainingSession } from '../../../api/types';
 import { EmptyState, ErrorBox, Notice, Skeleton, cn } from '../../../components/ui';
 import { useService } from '../../../hooks/useService';
@@ -26,14 +26,9 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
 
   const data = useService(async () => {
     if (groom || held.length === 0) return { rows: new Map<string, HorseTrainingSession[]>(), targets: new Map<string, number | null>() };
-    const [rows, targets] = await Promise.all([
-      Promise.all(horseIds.map(async (horseId) => [horseId, (await listHorseSessions(horseId, { classId: item.id, limit: 100 })).items] as const)),
-      Promise.all(
-        held
-          .filter((session) => session.sessionType === 'TIME_TRIAL')
-          .map(async (session) => [session.id, (await getTimeTrial(session.id).catch(() => null))?.targetTimeMs ?? null] as const),
-      ),
-    ]);
+    const rows = await Promise.all(horseIds.map(async (horseId) => [horseId, (await listHorseSessions(horseId, { classId: item.id, limit: 100 })).items] as const));
+    // Mục tiêu chạy thử nằm trên buổi.
+    const targets = held.filter((session) => session.sessionType === 'TIME_TRIAL').map((session) => [session.id, session.targetTimeMs] as const);
     return { rows: new Map(rows), targets: new Map(targets) };
   }, [item.id, horseIds.join(','), held.map((session) => session.id).join(',')]);
 

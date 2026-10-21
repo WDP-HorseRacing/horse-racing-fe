@@ -9,6 +9,8 @@ export interface VisitParams {
   conclusion?: 'NORMAL' | 'ISSUE';
   /** Buổi khám đã hủy cần ghi lại. */
   replaces?: string;
+  /** Buổi khám cần sửa (mở form sửa thay vì ghi mới). */
+  edit?: string;
   back?: string;
 }
 
@@ -70,6 +72,7 @@ export const links = {
       requestIds: params.requestIds?.join(','),
       conclusion: params.conclusion,
       replaces: params.replaces,
+      edit: params.edit,
       back: params.back,
     }),
   periodic: '/medical/periodic',

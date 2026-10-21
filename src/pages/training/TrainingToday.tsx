@@ -81,8 +81,12 @@ export default function TrainingToday() {
     return locked ? { label: locked, locked: true as const } : { label, onClick, locked: false as const };
   };
   const nextStep = (item: DayBoardItem, participant: Participant) => {
-    if (!groom || !operational(item)) return null;
+    if (!groom) return null;
     const name = horseName(participant);
+    // Báo vắng nhầm: điểm danh lại trong khung giờ điểm danh, kể cả buổi đang hiện Đã xong mà chưa tới giờ kết thúc.
+    if (participant.status === 'ABSENT' && item.session.status !== 'CANCELLED' && actionWindow(item.session, 'checkIn', clock).state === 'open')
+      return { label: 'Điểm danh lại', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)), locked: false as const };
+    if (!operational(item)) return null;
     if (participant.status === 'PLANNED') return gated(item, 'checkIn', 'Điểm danh', () => run(`${name} có mặt`, () => checkInParticipant(participant.id)));
     if (participant.status === 'PRESENT') return gated(item, 'start', 'Báo sẵn sàng', () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)));
     return null;

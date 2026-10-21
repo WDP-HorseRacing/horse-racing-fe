@@ -1,7 +1,7 @@
 // Dòng thời gian buổi khám — thẻ chỉ đọc. Buổi đã hủy vẫn hiện (mờ, kèm lý do hủy).
 // Chấm mốc xám; chỉ buổi để ngựa ở Chấn thương / Cách ly mới có chấm đỏ.
 import { Link } from 'react-router-dom';
-import { Ban, Bandage, CalendarClock, FolderOpen, NotebookPen, Pill as PillIcon, RotateCcw, Wallet } from 'lucide-react';
+import { Ban, Bandage, CalendarClock, FolderOpen, NotebookPen, Pencil, Pill as PillIcon, RotateCcw, Wallet } from 'lucide-react';
 import { Button, Pill, cn } from '../../../components/ui';
 import { HealthPill } from '../../../components/ui/status';
 import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, recoveryLabel, visitKindLabel } from '../../../lib/api-labels';
@@ -35,6 +35,7 @@ export function VisitCard({
   caseLabel,
   onVoid,
   onAdjustCost,
+  onEdit,
   compact = false,
 }: {
   record: MedicalRecord;
@@ -43,6 +44,7 @@ export function VisitCard({
   caseLabel?: string;
   onVoid?: () => void;
   onAdjustCost?: () => void;
+  onEdit?: () => void;
   compact?: boolean;
 }) {
   // HT không có key cost: không hiện dòng chi phí.
@@ -180,8 +182,13 @@ export function VisitCard({
         )}
       </div>
 
-      {!voided && (onVoid || onAdjustCost) && (
+      {!voided && (onVoid || onAdjustCost || onEdit) && (
         <div className="mt-3 flex flex-wrap justify-end gap-2">
+          {onEdit && (
+            <Button size="sm" variant="inline" onClick={onEdit}>
+              <Pencil size={14} /> Sửa buổi khám
+            </Button>
+          )}
           {onAdjustCost && (
             <Button size="sm" variant="inline" onClick={onAdjustCost}>
               <Wallet size={14} /> Điều chỉnh chi phí
@@ -204,17 +211,19 @@ export function VisitTimeline({
   people,
   caseLabel,
   onVoid,
-  canVoid,
   onAdjustCost,
+  onEdit,
+  ownRecord,
   compact,
 }: {
   records: MedicalRecord[];
   people: People;
   caseLabel?: (record: MedicalRecord) => string | undefined;
   onVoid?: (record: MedicalRecord) => void;
-  /** Chỉ bác sĩ ghi phiếu được hủy: lọc buổi nào hiện nút Hủy. */
-  canVoid?: (record: MedicalRecord) => boolean;
   onAdjustCost?: (record: MedicalRecord) => void;
+  onEdit?: (record: MedicalRecord) => void;
+  /** Hủy, sửa, điều chỉnh chi phí chỉ dành cho bác sĩ ghi phiếu: lọc buổi nào hiện các nút này. */
+  ownRecord?: (record: MedicalRecord) => boolean;
   compact?: boolean;
 }) {
   return (
@@ -235,8 +244,9 @@ export function VisitTimeline({
               people={people}
               caseLabel={caseLabel?.(record)}
               compact={compact}
-              onVoid={onVoid && (canVoid?.(record) ?? true) ? () => onVoid(record) : undefined}
-              onAdjustCost={onAdjustCost ? () => onAdjustCost(record) : undefined}
+              onVoid={onVoid && (ownRecord?.(record) ?? true) ? () => onVoid(record) : undefined}
+              onAdjustCost={onAdjustCost && (ownRecord?.(record) ?? true) ? () => onAdjustCost(record) : undefined}
+              onEdit={onEdit && (ownRecord?.(record) ?? true) ? () => onEdit(record) : undefined}
             />
           </li>
         );

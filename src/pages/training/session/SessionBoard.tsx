@@ -13,7 +13,6 @@ import {
   getClass,
   getEvaluation,
   getSession,
-  getTimeTrial,
   listParticipants,
   listTrialResults,
   markParticipantAbsent,
@@ -32,6 +31,7 @@ import { formatDate, formatTime } from '../../../lib/format';
 import { addMinutes, clubTime } from '../../../lib/club-time';
 import { now } from '../../../lib/clock';
 import { actionWindow, lockedText, openingText, windowOpensAt, type WindowKind } from '../../../lib/training-window';
+import { leftClub } from '../../../lib/horse-rules';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
 import { PARTICIPANT_FLOW, PARTICIPANT_OUT, ineligibleReasonText, isParticipantOpen, participantStatusText } from '../../../lib/training-labels';
 import { playAlertBeep } from '../../../lib/sound';
@@ -97,12 +97,8 @@ export default function SessionBoard() {
   const board = useService(
     async () => {
       const session = await getSession(id);
-      const [trainingClass, participants, timeTrial] = await Promise.all([
-        getClass(session.classId).catch(() => undefined),
-        listParticipants(id),
-        session.sessionType === 'TIME_TRIAL' ? getTimeTrial(id).catch(() => null) : Promise.resolve(null),
-      ]);
-      return { session, trainingClass, participants, timeTrial };
+      const [trainingClass, participants] = await Promise.all([getClass(session.classId).catch(() => undefined), listParticipants(id)]);
+      return { session, trainingClass, participants };
     },
     [id],
     { silent: true },
@@ -263,7 +259,15 @@ export default function SessionBoard() {
   const horsePhoto = (participant: Participant) => participant.horsePhotoUrl ?? horses.get(participant.horseId)?.photoUrl ?? undefined;
   // Groom được giao chỉ dắt ngựa: điểm danh, báo vắng, báo sẵn sàng. Bắt đầu, hoàn thành, ghi chạy thử là việc của HLV trưởng.
   const canAttend = (participant: Participant) => manage || (role === 'GROOM' && participant.assignedGroomId === user?.id);
-  const target = board.data.timeTrial?.targetTimeMs ?? null;
+  // Ngựa đã chuyển nhượng, đã mất: lượt chỉ xem, không ghi kết quả, đánh giá.
+  const departed = (participant: Participant) => {
+    const status = horses.get(participant.horseId)?.lifecycleStatus;
+    return !!status && leftClub(status);
+  };
+  // Báo vắng nhầm: điểm danh lại khi còn khung giờ điểm danh, kể cả buổi đang hiện Đã xong mà chưa tới giờ kết thúc.
+  const canRecheck = (participant: Participant) =>
+    participant.status === 'ABSENT' && session.status !== 'CANCELLED' && canAttend(participant) && actionWindow(session, 'checkIn', clock).state === 'open';
+  const target = session.targetTimeMs;
   const operational = session.status === 'SCHEDULED' || session.status === 'IN_PROGRESS';
   // BE chuyển buổi sang Đang diễn ra khi lượt đầu tiên bắt đầu, không so với giờ trên lịch.
   const firstStart = participants.map((participant) => participant.startedAt).filter((value): value is string => !!value).sort()[0];
@@ -328,7 +332,11 @@ export default function SessionBoard() {
       ? [{ label: 'Báo vắng', icon: <UserX size={14} />, onSelect: () => setDialog({ kind: 'absent', participant }) }]
       : []),
     ...(manage && isParticipantOpen(participant.status) ? [{ label: 'Đổi Groom dắt', icon: <UserCog size={14} />, onSelect: () => setDialog({ kind: 'groom', participant }) }] : []),
-    ...(session.sessionType === 'TIME_TRIAL' && session.status === 'IN_PROGRESS' && manage && (participant.status === 'ONGOING' || finished(participant.status))
+    ...(session.sessionType === 'TIME_TRIAL' &&
+    (session.status === 'IN_PROGRESS' || session.status === 'COMPLETED') &&
+    manage &&
+    !departed(participant) &&
+    (participant.status === 'ONGOING' || finished(participant.status))
       ? [{ label: 'Ghi thời gian chạy', icon: <Flag size={14} />, onSelect: () => setDialog({ kind: 'trial', participant }) }]
       : []),
     ...(manage && operational && participant.status === 'ONGOING'
@@ -490,6 +498,17 @@ export default function SessionBoard() {
                     </p>
                   )}
                 </div>
+                {canRecheck(participant) && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0"
+                    disabled={action.pending}
+                    onClick={() => run(`${horseName(participant)} có mặt`, () => checkInParticipant(participant.id))}
+                  >
+                    Điểm danh lại
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
@@ -556,7 +575,7 @@ export default function SessionBoard() {
                     trials={extras.data?.trials.get(participant.id)}
                     target={target}
                     menu={menuOf(participant)}
-                    onEvaluate={manage && finished(participant.status) && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
+                    onEvaluate={manage && !departed(participant) && finished(participant.status) && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
                   />
                 </div>
               ))}

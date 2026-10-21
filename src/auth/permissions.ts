@@ -95,8 +95,8 @@ export const CAPABILITIES: Capability[] = [
   { key: 'supply.use', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư (trừ thuốc), trừ tồn ngay, ghi chú bắt buộc', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
   { key: 'supply.useMedicine', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư loại thuốc', roles: { CLUB_MANAGER: A, VETERINARIAN: A } },
   { key: 'supply.price', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đơn giá, thành tiền và giá trị tồn', roles: { CLUB_MANAGER: A } },
-  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, GROOM: S } },
-  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, GROOM: S } },
+  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
+  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
   { key: 'supplyRequest.review', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Duyệt, từ chối, đánh dấu đã cấp đề xuất', roles: { CLUB_MANAGER: A } },
 
   // ===== Quản trị =====

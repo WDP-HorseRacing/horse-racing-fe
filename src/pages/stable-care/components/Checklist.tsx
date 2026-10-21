@@ -10,7 +10,7 @@ import { errorMessage } from '../../../lib/errors';
 import { formatTime } from '../../../lib/format';
 import { checklistStatusText } from '../../../lib/stable-labels';
 
-const STATUS_TONE: Record<ChecklistStatus, 'gray' | 'amber' | 'green' | 'red'> = { PENDING: 'gray', IN_PROGRESS: 'amber', COMPLETED: 'green', INCOMPLETE: 'red' };
+const STATUS_TONE: Record<ChecklistStatus, 'gray' | 'amber' | 'green' | 'red'> = { PENDING: 'gray', IN_PROGRESS: 'amber', COMPLETED: 'green', INCOMPLETE: 'red', CANCELLED: 'gray' };
 
 export function ChecklistPill({ status }: { status: ChecklistStatus }) {
   return <Pill tone={STATUS_TONE[status]}>{checklistStatusText[status]}</Pill>;

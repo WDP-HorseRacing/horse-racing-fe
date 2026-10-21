@@ -1,12 +1,14 @@
 // Sửa hoặc thêm một buổi tập trên lịch tuần của lớp. Môn chỉ chọn trong giai đoạn chứa ngày của buổi (BE chặn 409 nếu sai).
 // Đổi môn thì điền lại cường độ, cự ly, mặt sân, thời gian mục tiêu và thời lượng theo môn mới (vẫn sửa tay được sau đó).
 // Thêm buổi có thể tick "Lặp lại hằng tuần": lưu cùng thứ, cùng giờ cho các tuần còn lại của giai đoạn trong một lần.
+// Không xếp buổi ở quá khứ: giờ bắt đầu phải sau thời điểm hiện tại (BE kiểm lại, lỗi theo ô hiện đúng chỗ).
 import { useState, type ReactNode } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { TrainingIntensity, TrainingSubject } from '../../../api/types';
 import { Button, ErrorBox, Field, Input, Segmented, Select, Sheet, Textarea, ToggleChip, invalidClass } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
-import { addMinutes, clubDateKey, clubInstant, clubTime, minutesBetween, parseClockTime } from '../../../lib/club-time';
+import { addMinutes, clubDateKey, clubInstant, clubTime, clubToday, minutesBetween, parseClockTime } from '../../../lib/club-time';
+import { now } from '../../../lib/clock';
 import { SURFACE_SUGGESTIONS } from '../../../lib/training-labels';
 import { IntensityBars } from './bits';
 import { RaceTimeInput } from './RaceTimeInput';
@@ -47,7 +49,8 @@ export function sessionErrors(draft: SessionDraft, subject: TrainingSubject | un
   if (!subject) errors.subjectId = 'Chọn môn học';
   if (!draft.name.trim()) errors.name = 'Nhập tên buổi';
   else if (draft.name.trim().length > 160) errors.name = 'Tên tối đa 160 ký tự';
-  if (new Date(draft.scheduledEndAt) <= new Date(draft.scheduledStartAt)) errors.time = 'Giờ kết thúc phải sau giờ bắt đầu';
+  if (new Date(draft.scheduledStartAt) <= now()) errors.time = 'Giờ bắt đầu phải sau thời điểm hiện tại';
+  else if (new Date(draft.scheduledEndAt) <= new Date(draft.scheduledStartAt)) errors.time = 'Giờ kết thúc phải sau giờ bắt đầu';
   if (range) {
     const start = clubDateKey(draft.scheduledStartAt);
     const end = clubDateKey(draft.scheduledEndAt);
@@ -56,6 +59,15 @@ export function sessionErrors(draft: SessionDraft, subject: TrainingSubject | un
   if (draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) errors.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
   else if (subject?.sessionType === 'TIME_TRIAL' && draft.plannedDistanceM <= 0) errors.plannedDistanceM = 'Buổi chạy thử phải có cự ly lớn hơn 0';
   return errors;
+}
+
+function safeInstant(dateKey: string, time: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return undefined;
+  try {
+    return clubInstant(dateKey, time);
+  } catch {
+    return undefined;
+  }
 }
 
 export function SessionEditSheet({
@@ -68,6 +80,7 @@ export function SessionEditSheet({
   range,
   pending,
   error,
+  fieldErrors = {},
   submitLabel = 'Lưu',
   removeLabel = 'Bỏ buổi',
   extraActions,
@@ -86,6 +99,8 @@ export function SessionEditSheet({
   range?: { from: string; to: string };
   pending?: boolean;
   error?: string;
+  /** Lỗi theo ô của BE (`scheduledStartAt`, `sessions.N.scheduledStartAt`...). */
+  fieldErrors?: Record<string, string>;
   submitLabel?: string;
   removeLabel?: string;
   /** Nút phụ ở chân sheet (vd mở sân tập). */
@@ -106,13 +121,25 @@ export function SessionEditSheet({
   const trial = subject?.sessionType === 'TIME_TRIAL';
   const parsedTime = parseClockTime(time);
 
-  const startAt = date && parsedTime ? clubInstant(date, parsedTime) : draft.scheduledStartAt;
+  // Ngày gõ tay sai dạng thì giữ giờ cũ thay vì vỡ trang.
+  const startAt = (date && parsedTime && safeInstant(date, parsedTime)) || draft.scheduledStartAt;
   const current: SessionDraft = { ...draft, scheduledStartAt: startAt, scheduledEndAt: addMinutes(startAt, duration) };
   const errors = sessionErrors(current, subject, range);
   if (!parsedTime) errors.time = 'Giờ dạng HH:mm, ví dụ 06:30';
   if (!subject && subjects.length === 0) errors.subjectId = 'Ngày này không thuộc giai đoạn nào của lớp';
   else if (!subject && draft.subjectId) errors.subjectId = 'Môn này không có trong giai đoạn của ngày đã chọn';
-  const show = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
+  // Lỗi BE theo ô, kể cả ô lồng của thêm nhiều buổi ("sessions.0.scheduledStartAt").
+  const serverError = (name: string) => Object.entries(fieldErrors).find(([key]) => key === name || key.endsWith(`.${name}`))?.[1];
+  const server: typeof errors = {
+    time: serverError('scheduledStartAt') ?? serverError('scheduledEndAt'),
+    subjectId: serverError('subjectId'),
+    name: serverError('name'),
+    plannedDistanceM: serverError('plannedDistanceM'),
+    targetTimeMs: serverError('targetTimeMs'),
+  };
+  const show = (key: keyof typeof errors) => (touched ? errors[key] : undefined) ?? server[key];
+  const fieldShown = Object.values(server).some(Boolean);
+  const minDate = range?.from && range.from > clubToday() ? range.from : clubToday();
   // So với lúc mở để hỏi trước khi đóng nếu bấm ra ngoài khi đang sửa dở.
   const [opened] = useState(() => JSON.stringify([draft, date, time, duration]));
   const dirty = JSON.stringify([draft, date, time, duration]) !== opened;
@@ -173,7 +200,7 @@ export function SessionEditSheet({
       }
     >
       <div className="space-y-5">
-        {error && <ErrorBox message={error} />}
+        {error && !fieldShown && <ErrorBox message={error} />}
         <Field label="Môn học" required error={show('subjectId')} hint="Chỉ có môn của giai đoạn chứa ngày này. Đổi môn thì cường độ, cự ly, thời lượng lấy lại theo môn mới.">
           <Select value={draft.subjectId} onChange={(event) => pickSubject(event.target.value)}>
             {!subject && <option value="">Chọn môn</option>}
@@ -190,7 +217,7 @@ export function SessionEditSheet({
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Ngày" required error={show('date')} className="sm:col-span-3">
-            <DatePicker value={date} onChange={pickDate} min={range?.from} max={range?.to} clearable={false} invalid={!!show('date')} />
+            <DatePicker value={date} onChange={pickDate} min={minDate} max={range?.to} clearable={false} invalid={!!show('date')} />
           </Field>
           <Field label="Giờ bắt đầu" required error={show('time')}>
             <Input value={time} inputMode="numeric" placeholder="06:30" onChange={(event) => setTime(event.target.value)} onBlur={() => parsedTime && setTime(parsedTime)} className={`font-mono ${show('time') ? invalidClass : ''}`} />
@@ -219,7 +246,7 @@ export function SessionEditSheet({
             <Stepper value={draft.plannedDistanceM} onChange={(value) => setDraft((current) => ({ ...current, plannedDistanceM: value }))} min={0} max={20000} step={100} suffix="m" label="cự ly" />
           </Field>
           {trial && (
-            <Field label="Thời gian mục tiêu" hint="Ví dụ 1 phút 15,4 giây">
+            <Field label="Thời gian mục tiêu" error={show('targetTimeMs')} hint="Ví dụ 1 phút 15,4 giây. Bỏ trống nếu buổi này không đặt mục tiêu.">
               <RaceTimeInput value={draft.targetTimeMs} onChange={(ms) => setDraft((current) => ({ ...current, targetTimeMs: ms }))} />
             </Field>
           )}

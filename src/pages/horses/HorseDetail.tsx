@@ -314,7 +314,7 @@ export default function HorseDetail() {
       </div>
 
       <LifecycleDialog
-        horse={{ id: horse.id, name: horse.name, dateOfBirth: horse.dateOfBirth }}
+        horse={{ id: horse.id, name: horse.name }}
         action={lifecycle}
         onClose={() => setLifecycle(null)}
         onDone={reload}

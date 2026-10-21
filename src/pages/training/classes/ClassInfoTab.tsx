@@ -7,7 +7,7 @@ import { Button, CharCount, ErrorBox, Field, InfoGrid, Input, Notice, Select, Te
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { useAction } from '../../../hooks/useService';
 import { formatDate, formatDateTime } from '../../../lib/format';
-import { classEndDate, clubDateKey } from '../../../lib/club-time';
+import { classEndDate, clubDateKey, clubToday } from '../../../lib/club-time';
 import { distanceLabel } from '../../../lib/labels';
 import { classStatusText } from '../../../lib/training-labels';
 import { Stepper } from '../components/Stepper';
@@ -31,6 +31,8 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
     const day = clubDateKey(session.scheduledStartAt);
     return day < startDate || day > endDate;
   }).length;
+  // Đổi ngày bắt đầu thì không được ở quá khứ. Giữ nguyên ngày cũ của lớp đã bắt đầu thì không sao.
+  const startError = save.fieldErrors.startDate ?? (startDate !== item.startDate && startDate < clubToday() ? 'Ngày bắt đầu không được ở quá khứ' : undefined);
   const changed = code !== item.code || name !== item.name || description !== (item.description ?? '') || raceAptitude !== (item.raceAptitude ?? '') || maxHorses !== item.maxHorses || startDate !== item.startDate;
 
   if (!editable) {
@@ -67,12 +69,12 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
         toast.push('Đã lưu thông tin lớp', 'success');
         reload();
       },
-    );
+    ).then((result) => result === undefined && reload());
 
   return (
     <div className="grid gap-5 lg:grid-cols-12">
       <div className="space-y-4 lg:col-span-8">
-        {save.error && !save.fieldErrors.code && <ErrorBox message={save.error} />}
+        {save.error && !save.fieldErrors.code && !save.fieldErrors.startDate && <ErrorBox message={save.error} />}
         <div className="grid gap-4 sm:grid-cols-5">
           <Field label="Mã lớp" required className="sm:col-span-2" error={save.fieldErrors.code}>
             <Input
@@ -89,8 +91,17 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Ngày bắt đầu" hint={`Kết thúc ${formatDate(endDate)} (tự tính)`}>
-            <DatePicker value={startDate} onChange={setStartDate} clearable={false} />
+          <Field label="Ngày bắt đầu" hint={`Kết thúc ${formatDate(endDate)} (tự tính)`} error={startError}>
+            <DatePicker
+              value={startDate}
+              min={clubToday()}
+              onChange={(value) => {
+                setStartDate(value);
+                if (save.fieldErrors.startDate) save.clearError();
+              }}
+              clearable={false}
+              invalid={!!startError}
+            />
           </Field>
           <Field label="Sĩ số tối đa" error={maxHorses < activeHorses ? `Không nhỏ hơn số ngựa đang học (${activeHorses})` : undefined}>
             <Stepper value={maxHorses} onChange={setMaxHorses} min={1} max={50} suffix="ngựa" label="sĩ số" />
@@ -121,7 +132,7 @@ export default function ClassInfoTab({ bundle, manage, reload }: { bundle: Class
           }}>
             Hoàn tác
           </Button>
-          <Button disabled={!changed || save.pending || !code.trim() || !name.trim() || maxHorses < activeHorses} onClick={submit}>
+          <Button disabled={!changed || save.pending || !code.trim() || !name.trim() || maxHorses < activeHorses || (!!startError && !save.fieldErrors.startDate)} onClick={submit}>
             {save.pending ? 'Đang lưu…' : 'Lưu thông tin'}
           </Button>
         </div>

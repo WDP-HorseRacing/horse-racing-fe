@@ -5,6 +5,7 @@ import type { AuditAction } from '../api/audit';
 export const auditFeatureText: Record<string, string> = {
   HORSE_CREATE: 'Tạo hồ sơ ngựa',
   HORSE_UPDATE: 'Sửa hồ sơ ngựa',
+  HORSE_OWNER: 'Chuyển chủ',
   HORSE_MEASURE: 'Chỉ số cơ thể',
   HORSE_BARN: 'Xếp khu, xếp ô',
   HORSE_LIFECYCLE: 'Vòng đời ngựa',

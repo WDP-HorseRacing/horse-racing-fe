@@ -27,6 +27,7 @@ export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
   APPROVED: 'Đã duyệt',
   REJECTED: 'Từ chối',
   FULFILLED: 'Đã cấp',
+  CANCELLED: 'Đã hủy',
 };
 
 export const movementTypeText: Record<SupplyMovementType, string> = {
@@ -63,6 +64,7 @@ export const checklistStatusText: Record<ChecklistStatus, string> = {
   IN_PROGRESS: 'Đang làm',
   COMPLETED: 'Xong',
   INCOMPLETE: 'Không hoàn thành',
+  CANCELLED: 'Đã hủy',
 };
 
 export const incidentStatusText: Record<IncidentStatus, string> = {

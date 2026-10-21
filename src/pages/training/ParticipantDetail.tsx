@@ -2,18 +2,20 @@
 // BE chưa có API đọc một lượt: thông tin buổi tìm trong lịch tập của ngựa. Điểm đo, tổng kết, chạy thử, đánh giá đều nhận id lượt.
 // Chủ ngựa không xem được điểm đo từng giây (BE chặn), chỉ thấy 5 chỉ số tổng kết, kết quả chạy thử và nhận xét (đặc tả F2.4 xem rút gọn).
 // Groom không xem nhịp tim và tổng kết (BE trả 403): trang chỉ báo và dẫn về lịch dắt ngựa.
-// HLV của lớp sửa được thời gian chạy thử, video và đánh giá trong 7 ngày sau buổi (lý do bắt buộc khi sửa số).
+// Mọi HLV trưởng xem được mọi lượt. Chỉ HLV của lớp sửa thời gian chạy thử, video và đánh giá (lý do bắt buộc khi sửa số),
+// ngựa đã rời CLB thì chỉ xem.
 import { useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Film, Flag, HeartPulse, MessageSquareQuote, Pencil, Radio, Timer, Trash2 } from 'lucide-react';
 import { getHorse } from '../../api/horses';
 import { CLUB_DEFAULT_LIMITS, getParticipantSummary, getThresholds, listMetrics } from '../../api/performance';
-import { getClass, getEvaluation, getTimeTrial, listHorseSessions, listTrialResults, updateTrialVideo } from '../../api/training';
+import { getClass, getEvaluation, getSession, listHorseSessions, listTrialResults, updateTrialVideo } from '../../api/training';
 import type { Evaluation, HorseTrainingSession, TrialResult } from '../../api/types';
 import { Button, ConfirmDialog, EmptyState, NotFound, Notice, Skeleton, cn, useToast } from '../../components/ui';
 import { useAction, useService } from '../../hooks/useService';
 import { useStore } from '../../store/store';
 import { useCrumbs } from '../../components/Breadcrumb';
+import { leftClub } from '../../lib/horse-rules';
 import { links } from '../../lib/links';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { clubTime } from '../../lib/club-time';
@@ -62,7 +64,8 @@ export default function ParticipantDetail() {
     const [horse, row, summary, metrics, trials, evaluation, thresholds] = await Promise.all([
       horseId ? getHorse(horseId).catch(() => undefined) : Promise.resolve(undefined),
       horseId ? findSessionRow(horseId, id).catch(() => undefined) : Promise.resolve(undefined),
-      getParticipantSummary(id),
+      // Tổng kết lỗi thì vẫn hiện trang, các ô số để trống.
+      getParticipantSummary(id).catch(() => null),
       owner ? Promise.resolve(null) : listMetrics(id).catch(() => null),
       listTrialResults(id).catch(() => []),
       getEvaluation(id).catch(() => null),
@@ -70,7 +73,8 @@ export default function ParticipantDetail() {
     ]);
     const trial = row?.sessionType === 'TIME_TRIAL';
     const [target, trainerId] = await Promise.all([
-      trial ? getTimeTrial(row.sessionId).then((item) => item.targetTimeMs, () => null) : Promise.resolve(null),
+      // HLV ngoài lớp không đọc được buổi (404): coi như không có mục tiêu.
+      trial ? getSession(row.sessionId).then((item) => item.targetTimeMs, () => null) : Promise.resolve(null),
       // Chỉ HLV trưởng của lớp sửa kết quả, video, đánh giá sau buổi: cần biết lớp do ai phụ trách.
       row && role === 'HEAD_TRAINER' ? getClass(row.classId).then((item) => item.headTrainerId, () => null) : Promise.resolve(null),
     ]);
@@ -78,7 +82,9 @@ export default function ParticipantDetail() {
   }, [id, horseId]);
 
   const ongoing = data.data?.row?.participantStatus === 'ONGOING';
-  const live = useLiveMetrics({ sessionId: data.data?.row?.sessionId, participantIds: ongoing ? [id] : [], socket: role === 'HEAD_TRAINER', enabled: ongoing && !owner });
+  const classTrainer = !!user && !!data.data?.trainerId && data.data.trainerId === user.id;
+  // Socket buổi chỉ mở cho HLV của lớp. Người khác đọc điểm đo đã lưu.
+  const live = useLiveMetrics({ sessionId: data.data?.row?.sessionId, participantIds: ongoing ? [id] : [], socket: classTrainer, enabled: ongoing && !owner });
   const points = live[id]?.points.length ? live[id].points : (data.data?.metrics ?? []);
 
   useCrumbs(
@@ -109,21 +115,23 @@ export default function ParticipantDetail() {
   }
   if (data.loading && !data.data) return <Skeleton rows={6} />;
   if (data.error || !data.data) return <NotFound message={data.error} />;
-  const { horse, row, summary, trials, evaluation, thresholds, target, trainerId } = data.data;
-  const classTrainer = !!user && !!trainerId && trainerId === user.id;
+  const { horse, row, summary, trials, evaluation, thresholds, target } = data.data;
+  const departed = !!horse && leftClub(horse.lifecycleStatus);
   const videoOpen = !!row && resultEditable(row);
-  const canEditVideo = classTrainer && videoOpen;
+  const canEditVideo = classTrainer && videoOpen && !departed;
+  // Sân tập của buổi chỉ HLV của lớp, quản lý, bác sĩ mở được.
+  const canOpenBoard = classTrainer || role === 'CLUB_MANAGER' || role === 'VETERINARIAN';
   const limits = thresholds?.limits ?? CLUB_DEFAULT_LIMITS;
-  const duration = summary.firstRecordedAt && summary.lastRecordedAt ? (new Date(summary.lastRecordedAt).getTime() - new Date(summary.firstRecordedAt).getTime()) / 1000 : undefined;
+  const duration = summary?.firstRecordedAt && summary.lastRecordedAt ? (new Date(summary.lastRecordedAt).getTime() - new Date(summary.firstRecordedAt).getTime()) / 1000 : undefined;
   const best = trials.length ? Math.min(...trials.map((item) => item.elapsedMs)) : undefined;
-  const alerts = summary.warningCount + summary.criticalCount;
+  const alerts = summary ? summary.warningCount + summary.criticalCount : undefined;
 
   const figures = [
-    { label: 'Nhịp tim trung bình', value: summary.avgHeartRateBpm ?? '—', unit: 'bpm' },
-    { label: 'Nhịp tim cao nhất', value: summary.maxHeartRateBpm ?? '—', unit: 'bpm', tone: summary.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateCriticalBpm ? 'red' : summary.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateWarningBpm ? 'amber' : undefined },
-    { label: 'Tốc độ trung bình', value: formatSpeed(summary.avgSpeedMps) },
-    { label: 'Tốc độ cao nhất', value: formatSpeed(summary.maxSpeedMps), tone: summary.maxSpeedMps && summary.maxSpeedMps > limits.maxSpeedMps ? 'amber' : undefined },
-    { label: 'Số giây vượt ngưỡng', value: alerts, hint: summary.criticalCount ? `${summary.criticalCount} giây nguy hiểm` : undefined, tone: summary.criticalCount ? 'red' : summary.warningCount ? 'amber' : undefined },
+    { label: 'Nhịp tim trung bình', value: summary?.avgHeartRateBpm ?? '—', unit: 'bpm' },
+    { label: 'Nhịp tim cao nhất', value: summary?.maxHeartRateBpm ?? '—', unit: 'bpm', tone: summary?.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateCriticalBpm ? 'red' : summary?.maxHeartRateBpm && summary.maxHeartRateBpm > limits.heartRateWarningBpm ? 'amber' : undefined },
+    { label: 'Tốc độ trung bình', value: formatSpeed(summary?.avgSpeedMps ?? null) },
+    { label: 'Tốc độ cao nhất', value: formatSpeed(summary?.maxSpeedMps ?? null), tone: summary?.maxSpeedMps && summary.maxSpeedMps > limits.maxSpeedMps ? 'amber' : undefined },
+    { label: 'Số giây vượt ngưỡng', value: alerts ?? '—', hint: summary?.criticalCount ? `${summary.criticalCount} giây nguy hiểm` : undefined, tone: summary?.criticalCount ? 'red' : summary?.warningCount ? 'amber' : undefined },
   ];
 
   return (
@@ -161,7 +169,7 @@ export default function ParticipantDetail() {
                 <Radio size={13} className="animate-pulse" /> Đang chạy, cập nhật trực tiếp
               </span>
             )}
-            {row && !owner && (
+            {row && canOpenBoard && (
               <Link to={links.session(row.sessionId)} className="text-sm font-medium text-emerald-800 hover:underline">
                 Mở sân tập của buổi
               </Link>
@@ -265,8 +273,8 @@ export default function ParticipantDetail() {
                   ))}
                 </ul>
               )}
-              {classTrainer && !videoOpen && trials.length > 0 && (
-                <p className="mt-2 text-xs text-gray-500">{row?.sessionStatus === 'CANCELLED' ? 'Buổi đã hủy, không sửa kết quả được.' : 'Đã quá hạn sửa kết quả (7 ngày sau buổi).'}</p>
+              {classTrainer && trials.length > 0 && (!videoOpen || departed) && (
+                <p className="mt-2 text-xs text-gray-500">{departed ? 'Ngựa đã rời câu lạc bộ, kết quả chỉ được xem.' : 'Buổi đã hủy, không sửa kết quả được.'}</p>
               )}
             </div>
           )}

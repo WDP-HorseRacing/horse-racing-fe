@@ -1,18 +1,18 @@
 // Phí nuôi theo ngày (chỉ Quản lý CLB): một mức chung cho mọi ngựa, đồng mỗi con mỗi ngày.
-// Đặt mức áp dụng từ hôm nay trở đi. Mức đã áp dụng không sửa, không xóa: muốn đổi thì đặt mức mới từ ngày sau.
+// Đặt mức áp dụng từ hôm nay trở đi. Mức sắp áp dụng và mức đang áp dụng sửa được số tiền kèm lý do, mức đã thay thì chỉ xem.
 // Báo cáo tài chính và chi phí chủ ngựa lấy mức đang áp dụng của từng ngày.
 import { useState } from 'react';
-import { CalendarPlus, Trash2 } from 'lucide-react';
-import { createDailyFee, deleteDailyFee, listDailyFees, type DailyFee } from '../../api/billing';
+import { CalendarPlus, Pencil, Trash2 } from 'lucide-react';
+import { createDailyFee, deleteDailyFee, listDailyFees, updateDailyFee, type DailyFee } from '../../api/billing';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { MoneyInput } from '../../components/MoneyInput';
-import { Button, ConfirmDialog, ErrorBox, Field, Modal, NotFound, PageHeader, Pill, Skeleton, cn, useToast } from '../../components/ui';
+import { Button, ConfirmDialog, ErrorBox, Field, Input, Modal, NotFound, PageHeader, Pill, Skeleton, cn, useToast } from '../../components/ui';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { useAction, useService } from '../../hooks/useService';
 import { clubDateKey } from '../../lib/club-time';
 import { now } from '../../lib/clock';
-import { formatDate, formatMoney, moneyError, parseMoney } from '../../lib/format';
+import { formatDate, formatMoney, formatMoneyInput, moneyError, parseMoney } from '../../lib/format';
 import { useStore } from '../../store/store';
 
 export default function DailyFees() {
@@ -20,6 +20,7 @@ export default function DailyFees() {
   const toast = useToast();
   const [creating, setCreating] = useState(false);
   const [removing, setRemoving] = useState<DailyFee | null>(null);
+  const [editing, setEditing] = useState<DailyFee | null>(null);
   const remove = useAction();
   useCrumbs([{ label: 'Phí nuôi' }]);
   const allowed = can(user, 'fee.manage');
@@ -80,7 +81,7 @@ export default function DailyFees() {
               </section>
             )}
             <p className="px-1 text-xs leading-relaxed text-gray-500">
-              Không sửa được mức đã áp dụng. Muốn đổi thì đặt mức mới. Ngày chuyển chủ tính cho chủ mới. Ngựa đã chuyển nhượng ra ngoài hoặc đã mất không tính phí.
+              Mức đang áp dụng nhập sai thì sửa số tiền kèm lý do, báo cáo phí tính lại cho mọi ngày của mức đó. Muốn đổi giá từ một ngày thì đặt mức mới. Ngày chuyển chủ tính cho chủ mới. Ngựa đã chuyển nhượng ra ngoài hoặc đã mất không tính phí.
             </p>
           </div>
 
@@ -100,6 +101,11 @@ export default function DailyFees() {
                         {formatMoney(fee.dailyFee)}
                       </span>
                       {active ? <Pill tone="green">Đang áp dụng</Pill> : future ? <Pill tone="amber">Sắp áp dụng</Pill> : <Pill tone="gray">Đã thay</Pill>}
+                      {(future || active) && (
+                        <Button variant="ghost" size="icon" title="Sửa số tiền" onClick={() => setEditing(fee)}>
+                          <Pencil size={15} />
+                        </Button>
+                      )}
                       {future && (
                         <Button variant="ghost" size="icon" title="Xóa mức này" onClick={() => setRemoving(fee)}>
                           <Trash2 size={15} />
@@ -115,6 +121,7 @@ export default function DailyFees() {
       )}
 
       {creating && <FeeDialog today={today} onClose={() => setCreating(false)} onDone={() => fees.reload()} />}
+      {editing && <EditFeeDialog fee={editing} active={editing.id === current?.id} onClose={() => setEditing(null)} onDone={() => fees.reload()} />}
       <ConfirmDialog
         open={!!removing}
         title={removing ? `Xóa mức từ ${formatDate(removing.effectiveFrom)}` : 'Xóa mức phí'}
@@ -200,6 +207,78 @@ function FeeDialog({ today, onClose, onDone }: { today: string; onClose: () => v
         </Field>
         <Field label="Số tiền" required error={touched ? errors.dailyFee : undefined}>
           <MoneyInput value={amount} onChange={edit(setAmount)} suffix="đ/con/ngày" autoFocus placeholder="Ví dụ: 250.000" />
+        </Field>
+      </div>
+      {action.error && !Object.keys(action.fieldErrors).length && (
+        <div className="mt-4">
+          <ErrorBox message={action.error} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function EditFeeDialog({ fee, active, onClose, onDone }: { fee: DailyFee; active: boolean; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
+  const initial = formatMoneyInput(String(fee.dailyFee));
+  const [amount, setAmount] = useState(initial);
+  const [reason, setReason] = useState('');
+  const [touched, setTouched] = useState(false);
+  const clientErrors = {
+    dailyFee: moneyError(amount, { label: 'Số tiền' }),
+    reason: !reason.trim() ? 'Nhập lý do sửa' : undefined,
+  };
+  const errors = {
+    dailyFee: clientErrors.dailyFee ?? action.fieldErrors.dailyFee,
+    reason: clientErrors.reason ?? action.fieldErrors.reason,
+  };
+  const edit = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    if (action.error) action.clearError();
+  };
+
+  const submit = () => {
+    setTouched(true);
+    if (Object.values(clientErrors).some(Boolean)) return;
+    void action.run(
+      () => updateDailyFee(fee.id, { dailyFee: parseMoney(amount), reason: reason.trim() }),
+      (saved) => {
+        toast.push(`Đã sửa mức từ ${formatDate(saved.effectiveFrom)} thành ${formatMoney(saved.dailyFee)}`, 'success');
+        onDone();
+        onClose();
+      },
+    );
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Sửa mức phí từ ${formatDate(fee.effectiveFrom)}`}
+      description={active ? 'Mức đang áp dụng. Báo cáo phí tính lại theo số mới cho mọi ngày từ ngày áp dụng, chủ ngựa không nhận thông báo.' : 'Mức sắp áp dụng. Ngày áp dụng giữ nguyên.'}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button onClick={submit} disabled={action.pending}>
+            {action.pending ? 'Đang lưu…' : 'Lưu'}
+          </Button>
+        </>
+      }
+      dirty={amount !== initial || reason.trim() !== ''}
+      onSave={submit}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Áp dụng từ">
+          <p className="flex h-10 items-center rounded-xl bg-gray-50 px-3 text-sm tabular-nums text-gray-600 ring-1 ring-gray-200">{formatDate(fee.effectiveFrom)}</p>
+        </Field>
+        <Field label="Số tiền" required error={touched ? errors.dailyFee : undefined}>
+          <MoneyInput value={amount} onChange={edit(setAmount)} suffix="đ/con/ngày" autoFocus />
+        </Field>
+        <Field label="Lý do sửa" required error={touched ? errors.reason : undefined} className="sm:col-span-2">
+          <Input value={reason} maxLength={500} onChange={(event) => edit(setReason)(event.target.value)} placeholder="Ví dụ: Nhập nhầm số tiền" />
         </Field>
       </div>
       {action.error && !Object.keys(action.fieldErrors).length && (

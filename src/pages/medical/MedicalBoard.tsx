@@ -390,7 +390,7 @@ export default function MedicalBoard() {
               <div className="border-t border-gray-100 p-5">
                 <EmptyState
                   title={queue.length === 0 ? 'Không có ngựa nào cần khám lúc này' : 'Không có mục nào trong nhóm này'}
-                  hint={queue.length === 0 ? 'Yêu cầu khám từ Groom, cảnh báo chỉ số, hẹn tái khám và khám định kỳ đến hạn sẽ hiện ở đây.' : 'Chọn "Tất cả" để xem toàn bộ hàng đợi.'}
+                  hint={queue.length === 0 ? 'Yêu cầu khám, sự cố khẩn được chuyển, hẹn tái khám và khám định kỳ đến hạn sẽ hiện ở đây.' : 'Chọn "Tất cả" để xem toàn bộ hàng đợi.'}
                 />
               </div>
             ) : (

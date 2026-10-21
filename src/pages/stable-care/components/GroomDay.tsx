@@ -3,14 +3,14 @@
 // lượt dắt ngựa tập hôm nay (kèm sân, mặt sân) và lịch chăm sóc đến hạn. BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
 // Thêm hai khối chung: lịch chăm sóc ở ngựa khác và lượt dắt hộ (HLV giao dắt ngựa Groom không phụ trách).
 import { Link } from 'react-router-dom';
-import { CalendarClock, Flag, Siren } from 'lucide-react';
+import { CalendarClock, Flag, Siren, Stethoscope } from 'lucide-react';
 import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, GroomTodayRun, HorseListItem } from '../../../api/types';
 import { Avatar, Button, EmptyState, cn } from '../../../components/ui';
 import { ProgressRing } from '../../../components/ui/ProgressRing';
 import { HealthPill } from '../../../components/ui/status';
 import { careTypeLabel } from '../../../lib/api-labels';
 import { clubTime } from '../../../lib/club-time';
-import { formatDate } from '../../../lib/format';
+import { formatDate, formatTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
 import { MEAL_HOUR, mealText } from '../../../lib/stable-labels';
 import { participantStatusText } from '../../../lib/training-labels';
@@ -103,9 +103,33 @@ export function GroomDay({
     </section>
   );
 
+  const vetAppointments = today.horseVetAppointments ?? [];
+  // Ngày hẹn khám định kỳ, tái khám hôm nay: Groom chuẩn bị ngựa, bác sĩ ghi buổi khám.
+  const vetBlock = vetAppointments.length > 0 && (
+    <section className="rounded-2xl bg-amber-50/60 p-4 ring-1 ring-amber-200/80 xl:col-span-2">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+        <Stethoscope size={15} className="text-amber-700" /> Lịch hẹn bác sĩ hôm nay
+      </h3>
+      <p className="mt-0.5 text-xs text-gray-500">Giữ ngựa ở chuồng, sạch sẽ trước giờ hẹn để bác sĩ khám.</p>
+      <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {vetAppointments.map((appointment) => (
+          <li key={appointment.id}>
+            <Link to={links.horse(appointment.horseId)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-amber-100/60">
+              <span className="w-11 shrink-0 font-semibold tabular-nums text-amber-800">{formatTime(appointment.scheduledAt)}</span>
+              <span className="min-w-0 flex-1 truncate">
+                <b className="font-semibold">{appointment.horseName}</b> · {appointment.type === 'FOLLOW_UP' ? 'Tái khám' : 'Khám định kỳ'}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
   if (today.horses.length === 0)
-    return otherBlock || assistedBlock ? (
+    return otherBlock || assistedBlock || vetBlock ? (
       <div className="space-y-4">
+        {vetBlock}
         {assistedBlock}
         {otherBlock}
         <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />
@@ -116,6 +140,7 @@ export function GroomDay({
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      {vetBlock}
       {assistedBlock}
       {otherBlock}
       {today.horses.map((entry) => {
@@ -158,7 +183,7 @@ export function GroomDay({
                   <ChecklistItems
                     large
                     checklist={checklist}
-                    editable={checklist.status !== 'INCOMPLETE'}
+                    editable={checklist.status !== 'INCOMPLETE' && checklist.status !== 'CANCELLED'}
                     onChanged={onTicked}
                   />
                 ) : (

@@ -305,12 +305,12 @@ export function DatePicker({
       return;
     }
     const key = parseTyped(draft);
-    if (key) {
+    if (key && inRange(key, min, max)) {
       if (key !== value) onChange(key);
       setDraft(displayKey(key));
     } else {
-      if (draft !== value) onChange(draft);
-      setDraft(draft);
+      // Gõ sai dạng hoặc ngoài khoảng cho phép: trả về ngày cũ, không để chuỗi thô lọt lên API.
+      setDraft(parseKey(value) ? displayKey(value) : value);
     }
   };
 

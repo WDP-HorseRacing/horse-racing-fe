@@ -4,15 +4,16 @@
 //  b) Tái khám trong bệnh án đang mở — POST /medical-cases/:caseId/visits.
 // Ngựa đã có bệnh án mở thì backend chặn buổi ngoài bệnh án (409), nên trang tự chuyển sang (b).
 // Chấn thương theo từng vết: vết đang theo dõi chỉ ghi mức hồi phục mới (injuryUpdates), vết mới gửi kèm vị trí (newInjuries).
-// Chi phí ghi theo từng buổi khám, bỏ trống là 0.
-// Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, back.
+// Chi phí ghi theo từng buổi khám, bỏ trống là 0. Thời điểm khám là lúc lưu (BE không nhận `examDate`).
+// Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, edit, back.
+// Có `edit=<id buổi khám>` thì mở trang sửa buổi khám (VisitEdit), dùng chung các khối trong components/visit-form.
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bandage, Check, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, Bandage, FolderOpen, HeartPulse, Plus, Stethoscope, Trash2, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
 import { createFollowUpVisit, createStandaloneVisit, getInjuries, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
-import type { BodyRegion, HealthStatus, InjuryType, MeasurementType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
+import type { BodyRegion, HealthStatus, InjuryType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -34,36 +35,37 @@ import {
   scrollToFirstError,
   useToast,
 } from '../../components/ui';
-import { UrgentPill } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
-import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, measurementSpec, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
+import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
 import { positionOfRegion, type InjuryPosition } from '../../lib/injury-position';
-import { addDays, formatDate, formatDateTime, formatMoney } from '../../lib/format';
+import { formatDate, formatMoney } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
-import { now } from '../../lib/clock';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { PlaceLockModal } from './components/modals';
 import { usePeople } from './components/people';
-import { HealthPicker, RequestMeta, RequestText } from './components/parts';
+import { HealthPicker } from './components/parts';
 import { MAX_COST, formatMoneyInput, isSevere, localToIso, parseMoney, toLocalInput, todayKey } from './components/utils';
 import { RecoveryTag } from './components/ExamTimeline';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
-import { DatePicker, DateTimePicker } from '../../components/ui/DatePicker';
+import { DateTimePicker } from '../../components/ui/DatePicker';
+import { CareNotesSection, MetricFields, PrescriptionSection, RequestChooser } from './components/visit-form';
+import {
+  emptyMetrics,
+  nextRowKey,
+  parseMetrics,
+  prescriptionErrors,
+  prescriptionInputs,
+  prescriptionRowsOf,
+  type MetricValues,
+  type PrescriptionRow,
+} from './components/visit-form-utils';
+import VisitEdit from './VisitEdit';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
 
-const METRICS: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 const REGIONS = Object.keys(bodyRegionLabel) as BodyRegion[];
 const INJURY_TYPES = Object.keys(injuryTypeLabel) as InjuryType[];
 const RECOVERY = Object.keys(recoveryLabel) as RecoveryStatus[];
 
-interface PrescriptionRow {
-  key: number;
-  medicine: string;
-  dosage: string;
-  frequency: string;
-  startDate: string;
-  endDate: string;
-}
 /** Vết chấn thương mới phát hiện ở buổi này. */
 interface InjuryRow {
   key: number;
@@ -79,9 +81,6 @@ interface InjuryUpdate {
   status: RecoveryStatus | '';
   notes: string;
 }
-
-let rowKey = 0;
-const nextKey = () => (rowKey += 1);
 
 interface VisitOptions {
   horseId?: string;
@@ -99,6 +98,7 @@ interface VisitOptions {
 export default function VisitNew() {
   const user = useStore((state) => state.currentUser);
   const [params] = useSearchParams();
+  const editId = params.get('edit') ?? undefined;
   const replacesId = params.get('replaces') ?? undefined;
   const replaced = useService(async () => {
     if (!replacesId) return undefined;
@@ -108,6 +108,7 @@ export default function VisitNew() {
   }, [replacesId]);
 
   if (!can(user, 'exam.record')) return <NotFound message="Chỉ bác sĩ thú y ghi được buổi khám." />;
+  if (editId) return <VisitEdit key={editId} id={editId} back={safeInternalPath(params.get('back'))} />;
   if (replaced.loading) return <Skeleton rows={6} />;
   if (replaced.error) return <ErrorBox message={replaced.error} />;
 
@@ -153,36 +154,23 @@ function VisitForm(props: VisitOptions) {
     };
   }, [horseId]);
 
-  const recentDay = (value?: string | null) => !!value && new Date(value).getTime() >= addDays(now(), -7).getTime();
-
   const [kindChoice, setKindChoice] = useState<'ROUTINE' | 'REQUEST' | null>(props.kind ?? (replaces && replaces.kind !== 'FOLLOW_UP' ? replaces.kind : null));
   const [selected, setSelected] = useState<string[]>(props.requestIds ?? []);
   const [conclusion, setConclusion] = useState<VisitConclusion>(props.conclusion ?? replaces?.conclusion ?? 'NORMAL');
   const [initialDiagnosis, setInitialDiagnosis] = useState('');
-  const [examDate, setExamDate] = useState(() => toLocalInput(replaces && recentDay(replaces.examDate) ? replaces.examDate : now()));
-  const [metrics, setMetrics] = useState<Record<MeasurementType, string>>({ WEIGHT: '', HEIGHT: '', BODY_CONDITION: '', TEMPERATURE: '' });
+  const [metrics, setMetrics] = useState<MetricValues>(emptyMetrics);
   const [diagnosis, setDiagnosis] = useState(replaces?.diagnosis ?? '');
   const [careInstructions, setCareInstructions] = useState(replaces?.careInstructions ?? '');
   const [healthAfter, setHealthAfter] = useState<HealthStatus | ''>('');
   const [healthReason, setHealthReason] = useState('');
   const [nextVisitAt, setNextVisitAt] = useState(() => (replaces?.nextVisitAt && replaces.nextVisitAt.slice(0, 10) >= todayKey() ? toLocalInput(replaces.nextVisitAt) : ''));
-  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>(
-    () =>
-      replaces?.prescriptions.map((item) => ({
-        key: nextKey(),
-        medicine: item.medicine,
-        dosage: item.dosage ?? '',
-        frequency: item.frequency ?? '',
-        startDate: item.startDate,
-        endDate: item.endDate ?? '',
-      })) ?? [],
-  );
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>(() => prescriptionRowsOf(replaces?.prescriptions ?? []));
   const [injuries, setInjuries] = useState<InjuryRow[]>(
     () =>
       replaces?.injuries
         .filter((item) => !replacesTracked?.has(item.injuryId))
         .map((item) => ({
-          key: nextKey(),
+          key: nextRowKey(),
           bodyRegion: item.bodyRegion,
           injuryType: item.injuryType,
           recoveryStatus: item.recoveryStatus,
@@ -230,43 +218,14 @@ function VisitForm(props: VisitOptions) {
   );
 
   /* ----- Kiểm tra trước khi gửi, lỗi gắn vào từng ô (backend vẫn kiểm lại) ----- */
-  const parsed: { type: MeasurementType; value: number }[] = [];
-  const metricErrors: Partial<Record<MeasurementType, string>> = {};
-  const abnormal: string[] = [];
-  METRICS.forEach((type) => {
-    const raw = metrics[type].trim().replace(',', '.');
-    if (!raw) return;
-    const spec = measurementSpec[type];
-    const value = Number(raw);
-    if (!Number.isFinite(value)) {
-      metricErrors[type] = 'Nhập một số';
-      return;
-    }
-    if (value < spec.hardMin || value > spec.hardMax) {
-      metricErrors[type] = `Giá trị phải trong khoảng ${spec.hardMin}–${spec.hardMax} ${spec.unit}`;
-      return;
-    }
-    if (value < spec.min || value > spec.max) abnormal.push(`${spec.name} ${raw} ${spec.unit} (bình thường ${spec.min}–${spec.max})`);
-    parsed.push({ type, value });
-  });
+  const { parsed, errors: metricErrors, abnormal } = parseMetrics(metrics);
 
   const errors: Record<string, string> = {};
   if (!horse && !fixedHorseId) errors.horse = 'Chọn ngựa được khám';
-  const examIso = localToIso(examDate);
-  if (!examIso) errors.examDate = 'Nhập thời điểm khám';
-  else if (new Date(examIso).getTime() > now().getTime() + 60_000) errors.examDate = 'Thời điểm khám đang ở tương lai';
-  else if (new Date(examIso).getTime() < addDays(now(), -7).getTime()) errors.examDate = 'Chỉ nhập lùi được tối đa 7 ngày';
-  else if (followUp && openCase && new Date(examIso).getTime() < new Date(openCase.openedAt).getTime()) {
-    errors.examDate = `Sớm hơn lúc mở bệnh án (${formatDateTime(openCase.openedAt)})`;
-  }
   if (!followUp && kind === 'REQUEST' && selectedIds.length === 0) errors.requests = 'Chọn ít nhất một yêu cầu khám được xử lý';
   if (issue && !initialDiagnosis.trim()) errors.initialDiagnosis = 'Nhập chẩn đoán ban đầu';
   if (healthChanged && !healthReason.trim()) errors.healthReason = 'Nhập lý do đổi trạng thái';
-  prescriptions.forEach((row) => {
-    if (!row.medicine.trim() || !row.dosage.trim() || !row.frequency.trim() || !row.startDate) errors[`rx.${row.key}`] = 'Nhập đủ tên thuốc, liều, tần suất và ngày bắt đầu';
-    else if (row.endDate && row.endDate < row.startDate) errors[`rx.${row.key}`] = 'Ngày kết thúc sớm hơn ngày bắt đầu';
-    else if (standaloneNormal && !row.endDate) errors[`rx.${row.key}`] = 'Đơn thuốc của buổi khám không mở bệnh án phải có ngày kết thúc';
-  });
+  Object.assign(errors, prescriptionErrors(prescriptions, standaloneNormal));
   if (!costOk) errors.cost = 'Chi phí là số nguyên từ 0 đến 10 tỷ đồng';
   if (allowCaseFields) {
     // Hai vết mới cùng vùng, cùng loại vẫn ghi được (vd hai vết rách ở cùng chân).
@@ -280,7 +239,7 @@ function VisitForm(props: VisitOptions) {
 
   const buildBase = (confirm: boolean): VisitInputBase => {
     const trim = (value: string) => value.trim() || undefined;
-    const base: VisitInputBase = { examDate: examIso, diagnosis: trim(diagnosis), careInstructions: trim(careInstructions) };
+    const base: VisitInputBase = { diagnosis: trim(diagnosis), careInstructions: trim(careInstructions) };
     if (selectedIds.length) base.requestIds = selectedIds;
     if (healthAfter) {
       base.healthStatus = healthAfter;
@@ -290,15 +249,7 @@ function VisitForm(props: VisitOptions) {
       base.measurements = parsed;
       if (confirm) base.confirmAbnormal = true;
     }
-    if (prescriptions.length) {
-      base.prescriptions = prescriptions.map((row) => ({
-        medicine: row.medicine.trim(),
-        dosage: row.dosage.trim(),
-        frequency: row.frequency.trim(),
-        startDate: row.startDate,
-        ...(row.endDate ? { endDate: row.endDate } : {}),
-      }));
-    }
+    if (prescriptions.length) base.prescriptions = prescriptionInputs(prescriptions);
     if (cost.trim()) base.cost = costValue;
     if (allowCaseFields) {
       if (chosenUpdates.length) {
@@ -361,7 +312,7 @@ function VisitForm(props: VisitOptions) {
       <PageHeader
         back={<BackLink to={cancelTo}>Quay lại</BackLink>}
         title={title}
-        description="Buổi khám đã lưu thì không sửa được. Ghi sai thì hủy rồi ghi lại."
+        description="Thời điểm khám là lúc lưu. Ghi sai thì bác sĩ ghi phiếu sửa lại buổi khám kèm lý do."
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
@@ -466,94 +417,19 @@ function VisitForm(props: VisitOptions) {
             <>
               {/* Yêu cầu khám */}
               {(pendingRows.length > 0 || kind === 'REQUEST') && (
-                <FormSection
-                  icon={<ClipboardList size={16} />}
-                  title="Yêu cầu khám được xử lý"
-                  aside={pendingRows.length > 0 ? <span className="text-xs text-gray-500">Đã chọn {selectedIds.length}/{pendingRows.length}</span> : undefined}
-                >
-                  <div data-field="requests" data-invalid={show('requests') ? 'true' : undefined} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {pendingRows.length === 0 ? (
-                      <p className="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-500 lg:col-span-2">Ngựa không có yêu cầu khám đang chờ.</p>
-                    ) : (
-                      pendingRows.map((row) => {
-                        const checked = selectedIds.includes(row.id);
-                        return (
-                          <label
-                            key={row.id}
-                            className={cn(
-                              'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-300',
-                              checked
-                                ? 'bg-emerald-50/50 ring-2 ring-emerald-500 shadow-[0_8px_30px_rgb(16,185,129,0.12)]'
-                                : 'ring-1 ring-gray-200 hover:shadow-lg hover:shadow-gray-200/50 hover:-translate-y-0.5',
-                              row.urgent && !checked && 'shadow-[inset_4px_0_0_0_#ef4444]',
-                            )}
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                {row.urgent && <UrgentPill urgent />}
-                                <RequestMeta request={row} people={people} showUrgent={false} />
-                              </span>
-                              <span className="mt-2 block text-sm">
-                                <RequestText text={row.description} />
-                              </span>
-                            </span>
-                            <div className={cn(
-                              'mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                              checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white group-hover:border-emerald-400'
-                            )}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(event) => setSelected(event.target.checked ? [...selectedIds, row.id] : selectedIds.filter((id) => id !== row.id))}
-                                className="peer sr-only"
-                              />
-                              {checked && <Check size={14} strokeWidth={3} />}
-                            </div>
-                          </label>
-                        );
-                      })
-                    )}
-                    {show('requests') && <p className="text-xs font-medium text-red-600 lg:col-span-2">{show('requests')}</p>}
-                  </div>
-                </FormSection>
+                <RequestChooser rows={pendingRows} selected={selectedIds} onChange={setSelected} people={people} error={show('requests')} />
               )}
 
               {/* Khám */}
               <FormSection icon={<Activity size={16} />} title="Kết quả khám">
-                <Field label="Thời điểm khám" required name="examDate" error={show('examDate')} className="sm:max-w-xs">
-                  <DateTimePicker
-                    value={examDate}
-                    min={toLocalInput(addDays(now(), -7))}
-                    max={toLocalInput(now())}
-                    onChange={setExamDate}
-                    invalid={!!show('examDate')}
-                  />
-                </Field>
-                <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {METRICS.map((type) => {
-                    const spec = measurementSpec[type];
-                    return (
-                      <Field key={type} label={`${spec.name} (${spec.unit})`} name={`metric.${type}`} error={metricErrors[type]}>
-                        <Input
-                          inputMode="decimal"
-                          value={metrics[type]}
-                          onChange={(event) => {
-                            setMetrics({ ...metrics, [type]: event.target.value });
-                            if (needsConfirm) action.clearError();
-                          }}
-                          onBlur={() => {
-                            const val = metrics[type].trim().replace(',', '.');
-                            if (val && !isNaN(Number(val))) {
-                              setMetrics({ ...metrics, [type]: Number(val).toFixed(2).replace(/\.00$/, '') });
-                            }
-                          }}
-                          placeholder={`${spec.min}–${spec.max}`}
-                          className={cn('tabular-nums', metricErrors[type] && invalidClass)}
-                        />
-                      </Field>
-                    );
-                  })}
-                </div>
+                <MetricFields
+                  values={metrics}
+                  errors={metricErrors}
+                  onChange={(type, value) => {
+                    setMetrics((current) => ({ ...current, [type]: value }));
+                    if (needsConfirm) action.clearError();
+                  }}
+                />
                 <Field label="Chẩn đoán và hướng điều trị" counter={<CharCount value={diagnosis} max={4000} />}>
                   <Textarea
                     value={diagnosis}
@@ -581,64 +457,7 @@ function VisitForm(props: VisitOptions) {
                 )}
               </FormSection>
 
-              <FormSection
-                icon={<PillIcon size={16} />}
-                title="Đơn thuốc"
-                aside={
-                  prescriptions.length < 20 && (
-                    <Button
-                      size="sm"
-                      variant="inline"
-                      onClick={() => setPrescriptions([...prescriptions, { key: nextKey(), medicine: '', dosage: '', frequency: '', startDate: todayKey(), endDate: '' }])}
-                    >
-                      <Plus size={14} /> Thêm thuốc
-                    </Button>
-                  )
-                }
-              >
-                {prescriptions.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa kê thuốc.</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {prescriptions.map((row) => {
-                      const update = (patch: Partial<PrescriptionRow>) => setPrescriptions(prescriptions.map((item) => (item.key === row.key ? { ...item, ...patch } : item)));
-                      const rowError = show(`rx.${row.key}`);
-                      return (
-                        <div key={row.key} data-field={`rx.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-4', rowError && 'ring-1 ring-red-200')}>
-                          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-12">
-                            <div className="sm:col-span-5">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tên thuốc</label>
-                              <Input placeholder="Ví dụ: Amoxicillin" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-4">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Liều lượng</label>
-                              <Input placeholder="Ví dụ: 2 viên, 50ml, ..." maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-3">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tần suất</label>
-                              <Input placeholder="Ví dụ: 2 lần/ngày" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-12 flex items-end gap-3">
-                              <div className="flex-1">
-                                <label className="mb-1.5 block text-xs font-medium text-gray-700">Thời gian dùng thuốc</label>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <DatePicker className="w-[140px]" value={row.startDate} onChange={(value) => update({ startDate: value })} />
-                                  <span className="text-sm font-medium text-gray-400">→</span>
-                                  <DatePicker className="w-[140px]" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
-                                </div>
-                              </div>
-                              <Button type="button" size="icon" variant="ghost" className="mb-0.5 shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50" title="Bỏ thuốc này" onClick={() => setPrescriptions(prescriptions.filter((item) => item.key !== row.key))}>
-                                <Trash2 size={18} />
-                              </Button>
-                            </div>
-                          </div>
-                          {rowError && <p className="mt-3 text-xs font-medium text-red-600">{rowError}</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </FormSection>
+              <PrescriptionSection rows={prescriptions} onChange={setPrescriptions} show={show} />
 
               {/* Chấn thương + hẹn tái khám: chỉ khi mở bệnh án hoặc tái khám */}
               {allowCaseFields && (
@@ -647,7 +466,7 @@ function VisitForm(props: VisitOptions) {
                   title="Chấn thương và hẹn tái khám"
                   aside={
                     injuries.length < 20 && (
-                      <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
+                      <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextRowKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
                         <Plus size={14} /> Thêm chấn thương mới
                       </Button>
                     )
@@ -753,17 +572,7 @@ function VisitForm(props: VisitOptions) {
                 </Field>
               </FormSection>
 
-              <FormSection icon={<NotebookPen size={16} />} title="Ghi chú chăm sóc cho Groom">
-                <Field counter={<CharCount value={careInstructions} max={2000} />}>
-                  <Textarea
-                    rows={3}
-                    maxLength={2000}
-                    value={careInstructions}
-                    onChange={(event) => setCareInstructions(event.target.value)}
-                    placeholder="Ví dụ: Chườm lạnh chân trước trái 2 lần/ngày, chỉ dắt bộ nhẹ 10 phút"
-                  />
-                </Field>
-              </FormSection>
+              <CareNotesSection value={careInstructions} onChange={setCareInstructions} />
             </>
           )}
         </div>

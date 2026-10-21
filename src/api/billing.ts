@@ -1,5 +1,5 @@
 // Phí nuôi ngựa theo ngày (chỉ Quản lý CLB) và phụ phí riêng từng ngựa.
-// Đặt mức áp dụng từ một ngày (từ hôm nay trở đi). Không sửa được: muốn đổi thì xóa mức chưa áp dụng hoặc đặt mức mới.
+// Đặt mức áp dụng từ một ngày (từ hôm nay trở đi). Sửa số tiền được ở mức sắp áp dụng và mức đang áp dụng (kèm lý do).
 import { http } from './http';
 
 export interface DailyFee {
@@ -15,6 +15,11 @@ export interface DailyFee {
 export const listDailyFees = () => http.get<DailyFee[]>('/daily-fees');
 /** Ngày trước hôm nay: 400 ở effectiveFrom. Trùng ngày: 409 ở effectiveFrom. */
 export const createDailyFee = (input: { effectiveFrom: string; dailyFee: number }) => http.post<DailyFee>('/daily-fees', input);
+/**
+ * Sửa số tiền (bắt buộc lý do), không sửa ngày áp dụng. Chỉ mức sắp áp dụng và mức đang áp dụng, mức đã thay thì 409.
+ * Báo cáo phí tính lại theo số mới cho mọi ngày mức đó áp dụng, không báo chủ ngựa.
+ */
+export const updateDailyFee = (id: string, input: { dailyFee: number; reason: string }) => http.patch<DailyFee>(`/daily-fees/${id}`, input);
 /** Chỉ xóa được mức chưa áp dụng (ngày sau hôm nay), còn lại 409. */
 export const deleteDailyFee = (id: string) => http.del<void>(`/daily-fees/${id}`);
 

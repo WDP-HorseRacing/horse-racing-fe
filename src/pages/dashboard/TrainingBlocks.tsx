@@ -14,7 +14,7 @@ import { useStore } from '../../store/store';
 import { links } from '../../lib/links';
 import { formatDate, formatRelative } from '../../lib/format';
 import { addDateKey, clubDateKey, clubTime, clubToday, diffDateKeys, isoWeekdayOf, mondayOf } from '../../lib/club-time';
-import { classStatusText, participantStatusText, weekdayShort } from '../../lib/training-labels';
+import { PARTICIPANT_OUT, classStatusText, participantStatusText, weekdayShort } from '../../lib/training-labels';
 import { now } from '../../lib/clock';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../training/components/bits';
 import { ProgressFill } from '../training/components/motion';
@@ -322,7 +322,10 @@ export function OwnerTrainingCards() {
                     <span className="block truncate text-sm font-semibold text-gray-900">{horse}</span>
                     <span className="block truncate text-xs text-gray-500">{item.name}</span>
                   </span>
-                  <span className="text-xs text-gray-500">{participantStatusText[item.participantStatus]}</span>
+                  <span className="max-w-40 text-right text-xs text-gray-500">
+                    <span className={cn(PARTICIPANT_OUT.includes(item.participantStatus) && 'font-medium text-amber-800')}>{participantStatusText[item.participantStatus]}</span>
+                    {PARTICIPANT_OUT.includes(item.participantStatus) && item.cancelReason && <span className="block truncate" title={item.cancelReason}>{item.cancelReason}</span>}
+                  </span>
                 </Link>
               </li>
             ))}

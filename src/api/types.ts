@@ -50,7 +50,8 @@ export type Gender = 'MALE' | 'FEMALE' | 'GELDING';
 export type RaceAptitude = 'SPRINTER' | 'MILER' | 'STAYER';
 export type HealthStatus = 'ELIGIBLE' | 'UNDER_OBSERVATION' | 'INJURED' | 'QUARANTINED';
 export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED' | 'DECEASED';
-export type PlacementStatus = 'PENDING_BARN' | 'PENDING_STALL' | 'PLACED' | 'NOT_APPLICABLE';
+/** PENDING_GROOM: đã có khu và ô nhưng chưa có Groom phụ trách. PLACED: đủ khu, ô và Groom. */
+export type PlacementStatus = 'PENDING_BARN' | 'PENDING_STALL' | 'PENDING_GROOM' | 'PLACED' | 'NOT_APPLICABLE';
 export type EligibilityReason =
   | 'PROFILE_DELETED'
   | 'LIFECYCLE_RETIRED'
@@ -285,6 +286,12 @@ export interface LifecyclePreview {
   ownerCleared: string | null;
   /** Kích hoạt lại từ Đã chuyển nhượng: bắt buộc chọn chủ mới (gửi `ownerId`). */
   ownerRequired: boolean;
+  /** Chốt chăm sóc chuồng khi chuyển nhượng hoặc ghi nhận mất (giải nghệ thì 0, false). */
+  feedingPlansArchived: number;
+  draftFeedingPlansDeleted: number;
+  careTasksEnded: number;
+  careTasksDeleted: number;
+  checklistCancelled: boolean;
   summary: string | null;
 }
 
@@ -301,6 +308,12 @@ export interface RestorePreview {
   horseId: string;
   barnCleared: string | null;
   ownerCleared: string | null;
+  /** Phí tính lại cho những ngày hồ sơ bị xóa (từ ngày xóa tới hôm nay). */
+  rebilledDays: number;
+  rebilledDailyFee: number;
+  rebilledSurcharge: number;
+  /** Chủ trong thời gian đó, null là vào mục Chưa có chủ của báo cáo. */
+  rebilledOwnerName: string | null;
   summary: string;
 }
 
@@ -392,8 +405,9 @@ export type CaseStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
 export type ExamRequestStatus = 'PENDING' | 'EXAMINED' | 'DISMISSED';
 export type ExamRequestSource = 'GROOM_INCIDENT' | 'MEASUREMENT_ALERT' | 'STAFF' | 'VET';
 export type CheckupDueStatus = 'OK' | 'DUE_SOON' | 'OVERDUE';
-export type CareType = 'VACCINATION' | 'DEWORMING' | 'FARRIER' | 'ROUTINE_CHECKUP';
-export type CareTaskType = Exclude<CareType, 'ROUTINE_CHECKUP'>;
+/** ROUTINE_CHECKUP: ngày hẹn khám định kỳ. FOLLOW_UP: lịch tái khám của bệnh án (từ `nextVisitAt`). Hai loại này không qua route lịch chăm sóc. */
+export type CareType = 'VACCINATION' | 'DEWORMING' | 'FARRIER' | 'ROUTINE_CHECKUP' | 'FOLLOW_UP';
+export type CareTaskType = Exclude<CareType, 'ROUTINE_CHECKUP' | 'FOLLOW_UP'>;
 export type CareStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
 export type LockStatus = 'ACTIVE' | 'RELEASED';
 export type BodyRegion =
@@ -504,8 +518,8 @@ export interface InjuryUpdateInput {
   notes?: string;
 }
 
+/** Thời điểm khám là lúc lưu, BE không nhận `examDate`. */
 export interface VisitInputBase {
-  examDate?: string;
   requestIds?: string[];
   diagnosis?: string;
   healthStatus?: HealthStatus;
@@ -555,14 +569,62 @@ export interface ClosePreview {
   healthStatus: HealthStatus;
   healthWarning: boolean;
   pendingRequestCount: number;
-  /** Số vết chưa lành: lớn hơn 0 thì BE chặn đóng bệnh án. */
+  /** Số vết chưa lành: lớn hơn 0 thì BE chặn đóng bệnh án (trừ khi đóng kèm ngựa mất). */
   unhealedInjuryCount: number;
+  /** Hệ quả nếu đóng kèm ghi nhận ngựa mất. */
+  deathImpact?: LifecyclePreview;
 }
 
 export interface CloseCaseInput {
   finalConclusion: string;
   lockDecision?: 'RELEASE' | 'KEEP';
   lockExpectedEnd?: string;
+  /** Đóng bệnh án và ghi nhận ngựa mất (ngày mất là hôm nay). Không gửi kèm lựa chọn khóa. */
+  deceased?: boolean;
+}
+
+/** Lần đổi sức khỏe sau buổi khám, làm sức khỏe hiện tại không đổi theo buổi khám bị hủy hoặc sửa. */
+export interface LaterHealthChange {
+  changedAt: string;
+  changedBy: string | null;
+  to: HealthStatus;
+}
+
+/** Hủy buổi khám: sức khỏe về như trước, giữ lần đổi sau, buổi không đổi sức khỏe, hoặc buổi cũ không rõ sức khỏe trước. */
+export interface VoidVisitResult extends MedicalRecord {
+  healthOutcome: 'REVERTED' | 'KEPT_LATER_CHANGE' | 'NOT_CHANGED_BY_VISIT' | 'UNKNOWN_BEFORE';
+  laterHealthChange: LaterHealthChange | null;
+}
+
+/** Sửa một vết của buổi khám. Vùng, loại, vị trí chỉ sửa được ở vết phát hiện tại buổi này. */
+export interface VisitInjuryEdit {
+  injuryId: string;
+  recoveryStatus?: RecoveryStatus;
+  notes?: string | null;
+  bodyRegion?: BodyRegion;
+  injuryType?: InjuryType;
+  position?: { x: number; y: number; z: number };
+}
+
+/** PATCH /medical-records/:id: chỉ bác sĩ ghi phiếu, bắt buộc lý do, ô không gửi giữ nguyên, null là xóa. */
+export interface VisitUpdateInput {
+  reason: string;
+  diagnosis?: string | null;
+  careInstructions?: string | null;
+  nextVisitAt?: string | null;
+  healthStatus?: HealthStatus;
+  measurements?: { type: MeasurementType; value: number }[];
+  confirmAbnormal?: boolean;
+  prescriptions?: PrescriptionInput[];
+  injuries?: VisitInjuryEdit[];
+  removedInjuryIds?: string[];
+  requestIds?: string[];
+  initialDiagnosis?: string;
+}
+
+export interface VisitUpdateResult extends MedicalRecord {
+  healthOutcome: 'UNCHANGED' | 'UPDATED' | 'KEPT_LATER_CHANGE';
+  laterHealthChange: LaterHealthChange | null;
 }
 
 export interface ExamRequest {

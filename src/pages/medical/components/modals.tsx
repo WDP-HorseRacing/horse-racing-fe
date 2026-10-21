@@ -15,7 +15,7 @@ import {
   setCheckupAppointment,
   voidRecord,
 } from '../../../api/medical';
-import type { CheckupItem, ExamRequest, HealthStatus, MedicalCase, MedicalRecord, TrainingLock } from '../../../api/types';
+import type { CheckupItem, ExamRequest, HealthStatus, MedicalCase, MedicalRecord, TrainingLock, VoidVisitResult } from '../../../api/types';
 import { Button, Dot, ErrorBox, Field, Input, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 import { HealthPill, UrgentPill } from '../../../components/ui/status';
 import { healthLabel } from '../../../lib/labels';
@@ -507,11 +507,13 @@ export function ReleaseLockModal({
   );
 }
 
-/* ===== Hủy buổi khám (F3.6, VET) ===== */
+/* ===== Hủy buổi khám (F3.6, chỉ bác sĩ ghi phiếu) ===== */
 
 export function VoidVisitModal({
   record,
   horseName,
+  people,
+  requestIds = [],
   caseInfo,
   onClose,
   onVoided,
@@ -519,22 +521,27 @@ export function VoidVisitModal({
 }: {
   record: MedicalRecord;
   horseName: string;
+  /** Tra tên người đổi sức khỏe sau buổi khám (khi sức khỏe không tự quay lại). */
+  people: People;
+  /** Yêu cầu khám đang gắn vào buổi này, lấy trước khi hủy (BE bỏ liên kết sau khi hủy) để ghi lại buổi thay thế. */
+  requestIds?: string[];
   /** Bệnh án của buổi khám (nếu có) và số buổi khác chưa hủy trong bệnh án đó. */
   caseInfo?: { status: MedicalCase['status']; otherActiveVisits: number };
   onClose: () => void;
   onVoided: () => void;
-  onReRecord?: (record: MedicalRecord) => void;
+  onReRecord?: (record: MedicalRecord, requestIds: string[]) => void;
 }) {
   const toast = useToast();
   const action = useAction();
   const [reason, setReason] = useState('');
-  const [voided, setVoided] = useState<MedicalRecord | null>(null);
+  const [voided, setVoided] = useState<VoidVisitResult | null>(null);
   const opening = !!record.caseId && record.conclusion === 'ISSUE';
 
   const consequences = [
     'Số đo ghi trong buổi này bị gỡ khỏi bảng chỉ số cơ thể.',
-    'Trạng thái sức khỏe không tự quay lại như trước buổi khám.',
-    'Yêu cầu khám đã gắn vẫn giữ trạng thái Đã khám.',
+    'Sức khỏe ngựa về như trước buổi khám, trừ khi đã có người đổi sau đó.',
+    ...(requestIds.length ? [`${requestIds.length} yêu cầu khám đã gắn quay về hàng đợi chờ khám.`] : []),
+    ...(record.nextVisitAt ? ['Lịch tái khám của buổi này bị hủy, lịch của buổi trước trở lại.'] : []),
     'Buổi khám không còn được tính vào hạn khám định kỳ.',
   ];
   let blocked: string | undefined;
@@ -566,7 +573,7 @@ export function VoidVisitModal({
               Đóng
             </Button>
             {onReRecord && (
-              <Button onClick={() => onReRecord(voided)}>
+              <Button onClick={() => onReRecord(voided, requestIds)}>
                 <RotateCcw size={15} /> Ghi lại
               </Button>
             )}
@@ -577,7 +584,20 @@ export function VoidVisitModal({
           <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
           Buổi khám {formatDateTime(record.examDate)} vẫn hiện trong hồ sơ, được đánh dấu đã hủy kèm lý do.
         </p>
-        {onReRecord && <p className="mt-3 text-sm text-gray-500">Nếu ghi sai, bạn có thể ghi lại buổi thay thế với nội dung được điền sẵn.</p>}
+        {voided.healthOutcome === 'REVERTED' && <p className="mt-3 text-sm text-gray-700">Sức khỏe ngựa đã về như trước buổi khám.</p>}
+        {voided.healthOutcome === 'KEPT_LATER_CHANGE' && (
+          <Notice tone="warning" className="mt-3">
+            Sức khỏe hiện tại
+            {voided.laterHealthChange ? ` (${healthLabel[voided.laterHealthChange.to]}) do ${people.name(voided.laterHealthChange.changedBy)} đổi lúc ${formatDateTime(voided.laterHealthChange.changedAt)}` : ' đã được đổi sau buổi khám'}
+            , không tự quay lại. Đổi bằng Đổi trạng thái sức khỏe nếu cần.
+          </Notice>
+        )}
+        {requestIds.length > 0 && <p className="mt-3 text-sm text-gray-700">{requestIds.length} yêu cầu khám đã quay về hàng đợi.</p>}
+        {onReRecord && (
+          <p className="mt-3 text-sm text-gray-500">
+            Nếu ghi sai, bạn có thể ghi lại buổi thay thế với nội dung{requestIds.length ? ' và yêu cầu khám' : ''} được điền sẵn.
+          </p>
+        )}
       </Modal>
     );
   }
@@ -601,7 +621,7 @@ export function VoidVisitModal({
       }
     >
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">Buổi khám đã lưu thì không sửa được. Ghi sai thì hủy rồi ghi lại.</p>
+        <p className="text-sm text-gray-600">Ghi sai một vài ô thì dùng Sửa buổi khám. Hủy khi cả buổi ghi nhầm (sai ngựa, sai buổi).</p>
         {blocked ? (
           <Notice tone="warning">{blocked}</Notice>
         ) : (

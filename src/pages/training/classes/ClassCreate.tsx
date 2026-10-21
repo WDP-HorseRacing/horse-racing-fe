@@ -120,8 +120,10 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
   else if (codeServerError) errors.code = codeServerError;
   if (!setup.name.trim()) errors.name = 'Nhập tên lớp';
   if (!setup.startDate) errors.startDate = 'Chọn ngày bắt đầu';
+  else if (setup.startDate < today) errors.startDate = 'Ngày bắt đầu không được ở quá khứ';
+  else if (create.fieldErrors.startDate) errors.startDate = create.fieldErrors.startDate;
   // Mã trùng thì báo ngay, không chờ bấm Tạo lớp.
-  const showError = (key: keyof Setup) => (touched || (key === 'code' && (owner || codeServerError)) ? errors[key] : undefined);
+  const showError = (key: keyof Setup) => (touched || (key === 'code' && (owner || codeServerError)) || (key === 'startDate' && create.fieldErrors.startDate) ? errors[key] : undefined);
 
   const pickPlan = (id: string) => {
     const next = plans.find((item) => item.id === id);
@@ -181,7 +183,7 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
           </Button>
         }
       />
-      {create.error && !create.fieldErrors.code && <ErrorBox message={create.error} />}
+      {create.error && !create.fieldErrors.code && !create.fieldErrors.startDate && <ErrorBox message={create.error} />}
 
       <div ref={formRef} className="grid items-start gap-5 lg:grid-cols-12 [&>*]:min-w-0">
         <section className="space-y-5 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80 lg:col-span-7">
@@ -221,7 +223,7 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
           </div>
           <div className="grid gap-4 sm:grid-cols-[1.2fr_1fr]">
             <Field label="Ngày bắt đầu" required name="startDate" error={showError('startDate')}>
-              <DatePicker value={setup.startDate} onChange={pickStart} clearable={false} />
+              <DatePicker value={setup.startDate} onChange={pickStart} min={today} clearable={false} invalid={!!showError('startDate')} />
             </Field>
             <Field label="Sĩ số tối đa">
               <Stepper value={setup.maxHorses} onChange={(value) => set('maxHorses', value)} min={1} max={50} suffix="ngựa" label="sĩ số" />

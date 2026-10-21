@@ -27,6 +27,9 @@ import type {
   TrackedInjury,
   TrainingLock,
   VisitInputBase,
+  VisitUpdateInput,
+  VisitUpdateResult,
+  VoidVisitResult,
 } from './types';
 
 /* Bảng điều khiển và khám định kỳ */
@@ -40,6 +43,8 @@ export const listCheckups = (query: { status?: CheckupDueStatus; barnId?: string
   http.get<CheckupItem[]>('/medical/checkups', query);
 export const setCheckupAppointment = (horseId: string, scheduledAt: string, reason?: string) =>
   http.put<{ id: string; horseId: string; scheduledAt: string }>(`/horses/${horseId}/checkup-appointment`, reason ? { scheduledAt, reason } : { scheduledAt });
+/** Hủy ngày hẹn khám định kỳ đang hiệu lực (bác sĩ, bắt buộc lý do). */
+export const cancelCheckupAppointment = (horseId: string, reason: string) => http.del<void>(`/horses/${horseId}/checkup-appointment`, { reason });
 
 /* Buổi khám */
 export const listHorseRecords = (horseId: string) => http.get<MedicalRecord[]>(`/horses/${horseId}/medical-records`);
@@ -48,9 +53,14 @@ export const createStandaloneVisit = (horseId: string, input: StandaloneVisitInp
   http.post<MedicalRecord>(`/horses/${horseId}/medical-records`, input);
 export const createFollowUpVisit = (caseId: string, input: VisitInputBase) =>
   http.post<MedicalRecord>(`/medical-cases/${caseId}/visits`, input);
-/** Chỉ bác sĩ ghi phiếu được hủy. */
-export const voidRecord = (id: string, reason: string) => http.post<MedicalRecord>(`/medical-records/${id}/void`, { reason });
-/** Chỉ bác sĩ. Bệnh án mở hay đóng đều sửa được. */
+/**
+ * Chỉ bác sĩ ghi phiếu được hủy. Yêu cầu khám đã gắn quay về hàng đợi, sức khỏe về như trước buổi khám
+ * nếu chưa có lần đổi sau (`healthOutcome`).
+ */
+export const voidRecord = (id: string, reason: string) => http.post<VoidVisitResult>(`/medical-records/${id}/void`, { reason });
+/** Sửa buổi khám: chỉ bác sĩ ghi phiếu, bắt buộc lý do, chỉ gửi ô đổi. Không sửa thời điểm khám, chi phí. */
+export const updateVisit = (id: string, input: VisitUpdateInput) => http.patch<VisitUpdateResult>(`/medical-records/${id}`, input);
+/** Chỉ bác sĩ ghi phiếu, kể cả ngựa đã chuyển nhượng, đã mất. Bệnh án mở hay đóng đều sửa được. */
 export const adjustVisitCost = (id: string, cost: number, reason: string) =>
   http.patch<MedicalRecord>(`/medical-records/${id}/cost`, { cost, reason });
 

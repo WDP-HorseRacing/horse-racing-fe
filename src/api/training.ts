@@ -14,7 +14,6 @@ import type {
   Page,
   Participant,
   SessionInput,
-  TimeTrial,
   TrainingClass,
   TrainingClassStatus,
   TrainingPlan,
@@ -79,16 +78,12 @@ export const getSession = (id: string) => http.get<TrainingSession>(`/training-s
 export const addSession = (classId: string, input: SessionInput) => http.post<TrainingSession>(`/classes/${classId}/sessions`, input);
 /** Thêm nhiều buổi một lần (lặp lại hằng tuần). Một buổi lỗi thì không lưu buổi nào, câu báo có tiền tố "Buổi N: ". */
 export const addSessions = (classId: string, sessions: SessionInput[]) => http.post<TrainingSession[]>(`/classes/${classId}/sessions/bulk`, { sessions });
-/** Chỉ sửa được buổi đã lên lịch, chưa tới giờ, chưa có ngựa điểm danh (còn lại 409). */
-export const updateSession = (id: string, input: Partial<Omit<SessionInput, 'targetTimeMs'>>) => http.patch<TrainingSession>(`/training-sessions/${id}`, input);
+/**
+ * Chỉ sửa được buổi đã lên lịch, chưa tới giờ, chưa có ngựa điểm danh (còn lại 409).
+ * Loại buổi theo môn (không gửi `sessionType`). Mục tiêu chạy thử gửi `targetTimeMs` trên chính route này.
+ */
+export const updateSession = (id: string, input: Partial<Omit<SessionInput, 'sessionType'>>) => http.patch<TrainingSession>(`/training-sessions/${id}`, input);
 export const cancelSession = (id: string, reason: string) => http.post<TrainingSession>(`/training-sessions/${id}/cancel`, { reason });
-
-/** Chỉ dùng khi sửa buổi thường thành buổi chạy thử. Thêm buổi chạy thử thì gửi targetTimeMs cùng addSession. */
-export const createTimeTrial = (sessionId: string, input: { distanceM: number; targetTimeMs?: number; notes?: string }) =>
-  http.post<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input);
-export const getTimeTrial = (sessionId: string) => http.get<TimeTrial>(`/training-sessions/${sessionId}/time-trial`);
-export const updateTimeTrial = (sessionId: string, input: { distanceM?: number; targetTimeMs?: number | null; notes?: string | null }) =>
-  http.patch<TimeTrial>(`/training-sessions/${sessionId}/time-trial`, input);
 
 /* ===== Lượt tập ===== */
 
@@ -107,11 +102,11 @@ export const completeParticipant = (id: string) => http.post<Participant>(`/sess
 export const stopParticipant = (id: string, reason: string) => http.post<Participant>(`/session-participants/${id}/stop`, { reason });
 
 export const listTrialResults = (participantId: string) => http.get<TrialResult[]>(`/session-participants/${participantId}/trial-results`);
-/** `videoMediaId`: video do chính HLV tải lên (uploadTrialVideo). Chỉ ghi được khi buổi đang diễn ra. */
+/** `videoMediaId`: video do chính HLV tải lên (uploadTrialVideo). Ghi được khi buổi đang diễn ra hoặc đã xong, không giới hạn thời gian. */
 export const recordTrialResult = (participantId: string, input: { attemptNo: number; elapsedMs: number; notes?: string; videoMediaId?: string }) =>
   http.post<TrialResult>(`/session-participants/${participantId}/trial-results`, input);
 /**
- * Sửa kết quả chạy thử sau buổi: chỉ HLV trưởng của lớp, trong 7 ngày sau giờ kết thúc dự kiến, buổi chưa hủy.
+ * Sửa kết quả chạy thử sau buổi: chỉ HLV trưởng của lớp, buổi chưa hủy, không giới hạn thời gian.
  * Đổi `elapsedMs` hoặc `notes` bắt buộc `reason`. Chỉ gắn, đổi, gỡ video thì không cần.
  */
 export const updateTrialResult = (
@@ -134,7 +129,7 @@ export const getEvaluation = async (participantId: string) => {
 };
 export const createEvaluation = (participantId: string, input: { score: number; comment?: string }) =>
   http.post<Evaluation>(`/session-participants/${participantId}/evaluation`, input);
-/** Sửa đánh giá trong 7 ngày sau buổi, lý do bắt buộc. Chỉ HLV trưởng phụ trách lớp. */
+/** Sửa đánh giá sau buổi, lý do bắt buộc. Chỉ HLV trưởng phụ trách lớp. */
 export const updateEvaluation = (participantId: string, input: { score?: number; comment?: string | null; reason: string }) =>
   http.patch<Evaluation>(`/session-participants/${participantId}/evaluation`, input);
 
