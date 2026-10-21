@@ -1,7 +1,7 @@
 // Phạm vi khu của người xem. Luật đã chốt (BA, 13/10): HLV trưởng làm việc theo khu, tra cứu toàn câu lạc bộ,
-// thao tác chỉ khu mình. Các màn làm việc (sơ đồ chuồng, bảng điều khiển y tế, yêu cầu khám, bệnh án, lịch chăm sóc)
-// chỉ hiện khu mình. BE đã lọc `/barns` và bảng điều khiển y tế, FE lọc thêm ở đây cho chắc.
-// Khu cách ly là khu của HLV được giao, HLV khác không thấy. `canManageBarn` vẫn chặn thao tác nếu BE trả thêm khu khác.
+// thao tác chỉ khu mình. Từ 18/10 BE trả mọi khu cho HT (`/barns`, bảng điều khiển y tế), kèm bộ lọc `mine=true`.
+// Sơ đồ chuồng và bảng điều khiển y tế có công tắc "Khu của tôi" (mặc định bật, lọc theo `visibleBarnIds`), tắt thì xem mọi khu.
+// `canManageBarn` chặn thao tác ở khu không do HT phụ trách.
 // BE không có loại khu: khu cách ly = khu có ít nhất một ô và mọi ô đều là ô cách ly (chỉ dùng để gắn nhãn).
 import type { BarnListItem, Role, Stall } from '../api/types';
 

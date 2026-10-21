@@ -17,7 +17,7 @@ import { formatDateTime } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { now } from '../../lib/clock';
 import { CareAssigneeField, CareLine } from './components/care';
-import { ASSIGNEE_MODE_LABEL, CARE_TYPES, assigneeError, assigneeInput, type AssigneeChoice } from './components/care-rules';
+import { ASSIGNEE_MODE_LABEL, CARE_TYPES, assigneeError, assigneeInput, defaultAssignee, fitAssignee, type AssigneeChoice } from './components/care-rules';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { localToIso, toLocalInput, todayKey } from './components/utils';
@@ -52,7 +52,8 @@ export default function CareNew() {
   const [type, setType] = useState<CareTaskType>('VACCINATION');
   const [dueAt, setDueAt] = useState(defaultDue);
   // Mặc định giao Groom phụ trách: đổi Groom thì lịch tự theo Groom mới.
-  const [assignee, setAssignee] = useState<AssigneeChoice>({ mode: 'HORSE_GROOM', userId: '' });
+  const vetId = user?.role === 'VETERINARIAN' ? user.id : undefined;
+  const [assignee, setAssignee] = useState<AssigneeChoice>(() => defaultAssignee('VACCINATION', vetId));
   const [notes, setNotes] = useState('');
   const [attempted, setAttempted] = useState(false);
 
@@ -145,7 +146,10 @@ export default function CareNew() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setType(value)}
+                    onClick={() => {
+                      setType(value);
+                      setAssignee((prev) => fitAssignee(prev, value, vetId));
+                    }}
                     aria-pressed={type === value}
                     className={cn('rounded-xl bg-white px-4 py-3 text-left transition', type === value ? 'ring-2 ring-emerald-700' : 'ring-1 ring-gray-200 hover:ring-gray-300')}
                   >
@@ -164,7 +168,7 @@ export default function CareNew() {
             {horseId && context.loading && !context.data ? (
               <Skeleton rows={1} />
             ) : (
-              <CareAssigneeField horseId={horse?.id} groom={groom} value={assignee} onChange={setAssignee} error={show('assignee')} className="sm:max-w-xl" hideLabel />
+              <CareAssigneeField horseId={horse?.id} type={type} groom={groom} value={assignee} onChange={setAssignee} error={show('assignee')} className="sm:max-w-xl" hideLabel />
             )}
           </FormSection>
 

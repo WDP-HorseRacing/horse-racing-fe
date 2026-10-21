@@ -430,20 +430,32 @@ export interface Prescription {
   endDate: string | null;
 }
 
+/** Một dòng chấn thương của buổi khám: vùng, loại, vị trí lấy từ vết; mức, ghi chú là của buổi đó. */
 export interface Injury {
   id: string;
   medicalRecordId: string;
+  /** Vết chấn thương mà dòng này ghi nhận. */
+  injuryId: string;
   bodyRegion: BodyRegion;
-  /** Tọa độ 3D trên mô hình ngựa. BE bắt buộc khi ghi; dòng rất cũ có thể null. */
   position: { x: number; y: number; z: number } | null;
   injuryType: InjuryType;
   recoveryStatus: RecoveryStatus;
   notes: string | null;
 }
 
-export interface InjuryTimelineItem extends Injury {
-  examDate: string;
-  caseId: string | null;
+/** Một vết chấn thương sống qua nhiều buổi khám (GET /horses/:id/injuries). */
+export interface TrackedInjury {
+  id: string;
+  horseId: string;
+  bodyRegion: BodyRegion;
+  injuryType: InjuryType;
+  position: { x: number; y: number; z: number };
+  firstMedicalRecordId: string;
+  firstExamDate: string;
+  /** Mức ở lần khám mới nhất chưa hủy. */
+  currentRecoveryStatus: RecoveryStatus;
+  /** Tăng dần theo ngày khám, chỉ buổi chưa hủy. */
+  history: { medicalRecordId: string; examDate: string; caseId: string | null; recoveryStatus: RecoveryStatus; notes: string | null }[];
 }
 
 export interface MedicalRecord {
@@ -461,6 +473,9 @@ export interface MedicalRecord {
   voidedAt: string | null;
   voidReason: string | null;
   replacesRecordId: string | null;
+  /** Chi phí buổi khám (VND). Không có key với HT. null kèm costHidden khi buổi thuộc giai đoạn chủ khác sở hữu. */
+  cost?: number | null;
+  costHidden?: boolean;
   prescriptions: Prescription[];
   injuries: Injury[];
 }
@@ -482,6 +497,13 @@ export interface InjuryInput {
   notes?: string;
 }
 
+/** Mức hồi phục mới của một vết đang theo dõi. Vị trí, vùng, loại giữ như lúc phát hiện. */
+export interface InjuryUpdateInput {
+  injuryId: string;
+  recoveryStatus: RecoveryStatus;
+  notes?: string;
+}
+
 export interface VisitInputBase {
   examDate?: string;
   requestIds?: string[];
@@ -493,8 +515,11 @@ export interface VisitInputBase {
   measurements?: { type: MeasurementType; value: number }[];
   confirmAbnormal?: boolean;
   prescriptions?: PrescriptionInput[];
-  injuries?: InjuryInput[];
+  injuryUpdates?: InjuryUpdateInput[];
+  newInjuries?: InjuryInput[];
   replacesRecordId?: string;
+  /** Chi phí buổi khám (VND), bỏ trống là 0. */
+  cost?: number;
 }
 
 export interface StandaloneVisitInput extends VisitInputBase {
@@ -512,10 +537,8 @@ export interface MedicalCase {
   initialDiagnosis: string;
   closedAt: string | null;
   finalConclusion: string | null;
-  /** Không có key với HT. null khi bệnh án chưa đóng, hoặc khi chi phí thuộc chủ khác (costHidden). */
-  totalCost?: number | null;
-  /** Chủ ngựa xem bệnh án đóng trong thời gian chủ khác sở hữu: chi phí bị ẩn. Không có key với HT. */
-  costHidden?: boolean;
+  /** Tổng chi phí các buổi khám chưa hủy, có cả lúc đang điều trị. Chủ ngựa chỉ được cộng phần của mình. Không có key với HT. */
+  totalCost?: number;
 }
 
 export interface MedicalCaseList {
@@ -532,11 +555,12 @@ export interface ClosePreview {
   healthStatus: HealthStatus;
   healthWarning: boolean;
   pendingRequestCount: number;
+  /** Số vết chưa lành: lớn hơn 0 thì BE chặn đóng bệnh án. */
+  unhealedInjuryCount: number;
 }
 
 export interface CloseCaseInput {
   finalConclusion: string;
-  totalCost: number;
   lockDecision?: 'RELEASE' | 'KEEP';
   lockExpectedEnd?: string;
 }
@@ -665,14 +689,41 @@ export interface MedicalDashboard {
     nextVisitAt: string | null;
   }[];
   pendingRequests: ExamRequest[];
+  /** Ngựa Chấn thương hoặc Cách ly mà không có bệnh án đang mở, Cách ly trước. */
+  horsesWithoutCase: {
+    horseId: string;
+    horseName: string;
+    barnId: string | null;
+    barnName: string | null;
+    stallId: string | null;
+    stallCode: string | null;
+    healthStatus: HealthStatus;
+    /** Lúc chuyển sang trạng thái hiện tại. */
+    since: string | null;
+  }[];
+  /** Đơn thuốc đang hiệu lực hôm nay, theo tên ngựa rồi tên thuốc. */
+  todayPrescriptions: {
+    prescriptionId: string;
+    horseId: string;
+    horseName: string;
+    medicine: string;
+    dosage: string;
+    frequency: string;
+    startDate: string;
+    /** null là dùng tới khi đóng bệnh án. */
+    endDate: string | null;
+    medicalRecordId: string;
+    caseId: string | null;
+  }[];
 }
 
+/** Báo cáo chi phí y tế theo ngày khám, gồm cả buổi khám ngoài bệnh án. */
 export interface CostReport {
   from: string;
   to: string;
-  caseCount: number;
+  visitCount: number;
   totalCost: number;
-  items: { horseId: string; horseName: string; caseCount: number; totalCost: number }[];
+  items: { horseId: string; horseName: string; visitCount: number; totalCost: number }[];
 }
 
 /* ===== Thông báo (socket notification.created và REST /notifications dùng chung một dạng) ===== */

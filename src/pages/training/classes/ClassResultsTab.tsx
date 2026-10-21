@@ -78,10 +78,10 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
                     <td key={session.id} className="p-0">
                       <Link
                         to={links.participant(entry.participantId, horseId)}
-                        title={entry.evaluation?.comment ?? participantStatusText[entry.participantStatus]}
+                        title={entry.evaluation?.comment ?? entry.stoppedReason ?? participantStatusText[entry.participantStatus]}
                         className={cn(
                           'flex h-14 min-w-24 flex-col items-center justify-center rounded-lg px-2 text-center transition hover:ring-2 hover:ring-emerald-400',
-                          score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : 'bg-gray-50 text-gray-500',
+                          score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : entry.participantStatus === 'STOPPED' ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-500',
                         )}
                       >
                         {score !== undefined ? <span className="font-mono text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}

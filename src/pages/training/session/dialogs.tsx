@@ -1,10 +1,11 @@
 // Hộp thoại của Sân tập: ghi thời gian chạy thử (kèm video), hoàn thành lượt, đánh giá sau buổi, đổi Groom dắt.
+// Sau buổi (7 ngày): sửa thời gian chạy thử và sửa đánh giá, đều bắt buộc lý do.
 import { useState } from 'react';
 import { Flag } from 'lucide-react';
-import { assignParticipantGroom, completeParticipant, createEvaluation, listTrialResults, recordTrialResult } from '../../../api/training';
+import { assignParticipantGroom, completeParticipant, createEvaluation, listTrialResults, recordTrialResult, updateEvaluation, updateTrialResult } from '../../../api/training';
 import { getParticipantSummary } from '../../../api/performance';
-import type { GroomWorkload, Participant, TrialResult } from '../../../api/types';
-import { Button, ErrorBox, Field, Modal, Notice, Select, Sheet, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import type { Evaluation, GroomWorkload, Participant, TrialResult } from '../../../api/types';
+import { Button, ErrorBox, Field, Input, Modal, Notice, Select, Sheet, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
 import { useAction, useService } from '../../../hooks/useService';
 import { formatDelta, formatRaceTime, formatSpeed } from '../../../lib/training-format';
 import { RaceTimeInput } from '../components/RaceTimeInput';
@@ -131,6 +132,87 @@ export function TrialDialog({
   );
 }
 
+/* ===== Sửa thời gian một lần chạy thử (sau buổi, HLV của lớp) ===== */
+
+export function TrialEditDialog({
+  participantId,
+  trial,
+  horseName,
+  targetTimeMs,
+  onClose,
+  onDone,
+}: {
+  participantId: string;
+  trial: TrialResult;
+  horseName: string;
+  targetTimeMs?: number | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const [elapsed, setElapsed] = useState<number | undefined>(trial.elapsedMs);
+  const [notes, setNotes] = useState(trial.notes ?? '');
+  const [reason, setReason] = useState('');
+  const [touched, setTouched] = useState(false);
+  const save = useAction();
+  const timeChanged = !!elapsed && elapsed !== trial.elapsedMs;
+  const notesChanged = notes.trim() !== (trial.notes ?? '');
+  const changed = timeChanged || notesChanged;
+
+  const submit = () => {
+    setTouched(true);
+    if (!elapsed || !changed || !reason.trim()) return;
+    void save.run(
+      () =>
+        updateTrialResult(participantId, trial.attemptNo, {
+          ...(timeChanged ? { elapsedMs: elapsed } : {}),
+          ...(notesChanged ? { notes: notes.trim() || null } : {}),
+          reason: reason.trim(),
+        }),
+      () => {
+        toast.push(`Đã sửa lần chạy ${trial.attemptNo} của ${horseName}`, 'success');
+        onDone();
+      },
+    );
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Sửa lần chạy ${trial.attemptNo} của ${horseName}`}
+      description={`Đang ghi ${formatRaceTime(trial.elapsedMs)}. Nhật ký thao tác giữ số cũ và lý do.`}
+      width="max-w-lg"
+      dirty={changed || reason.trim() !== ''}
+      onSave={submit}
+      saveLabel="Lưu"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button disabled={save.pending} onClick={submit}>
+            {save.pending ? 'Đang lưu…' : 'Lưu'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {save.error && <ErrorBox message={save.error} />}
+        <Field label="Thời gian" required error={touched && !elapsed ? 'Nhập phút và giây' : undefined} hint={targetTimeMs && elapsed ? `${formatDelta(elapsed - targetTimeMs)} so với mục tiêu ${formatRaceTime(targetTimeMs)}` : undefined}>
+          <RaceTimeInput value={elapsed} invalid={touched && !elapsed} onChange={(ms) => setElapsed(ms)} autoFocus />
+        </Field>
+        <Field label="Ghi chú lần chạy">
+          <Textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </Field>
+        <Field label="Lý do sửa" required error={touched && !reason.trim() ? 'Nhập lý do sửa' : touched && !changed ? 'Chưa đổi thời gian hay ghi chú' : undefined}>
+          <Input value={reason} maxLength={500} placeholder="Ví dụ: Bấm lại theo video" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 /* ===== Hoàn thành lượt buổi thường ===== */
 
 export function CompleteDialog({ participant, horseName, onClose, onDone }: { participant: Participant; horseName: string; onClose: () => void; onDone: () => void }) {
@@ -187,18 +269,20 @@ export function CompleteDialog({ participant, horseName, onClose, onDone }: { pa
   );
 }
 
-/* ===== Đánh giá sau buổi (HLV, lưu một lần) ===== */
+/* ===== Đánh giá sau buổi (HLV). Có `existing` là sửa đánh giá đã lưu (7 ngày sau buổi, lý do bắt buộc) ===== */
 
 export function EvaluationSheet({
   participant,
   horseName,
   sessionName,
+  existing,
   onClose,
   onDone,
 }: {
-  participant: Participant;
+  participant: Pick<Participant, 'id'>;
   horseName: string;
   sessionName: string;
+  existing?: Evaluation;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -211,10 +295,32 @@ export function EvaluationSheet({
     [participant.id],
     { silent: true },
   );
-  const [score, setScore] = useState(7);
-  const [comment, setComment] = useState('');
+  const [score, setScore] = useState(existing?.score ?? 7);
+  const [comment, setComment] = useState(existing?.comment ?? '');
+  const [reason, setReason] = useState('');
+  const [touched, setTouched] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const save = useAction();
+  const editing = !!existing;
+  const commentChanged = comment.trim() !== (existing?.comment ?? '');
+  const changed = !existing || score !== existing.score || commentChanged;
+  const saveEdit = () => {
+    setTouched(true);
+    if (!existing || !changed || !reason.trim()) return;
+    void save.run(
+      () =>
+        updateEvaluation(participant.id, {
+          ...(score !== existing.score ? { score } : {}),
+          ...(commentChanged ? { comment: comment.trim() || null } : {}),
+          reason: reason.trim(),
+        }),
+      () => {
+        toast.push(`Đã sửa đánh giá của ${horseName}`, 'success');
+        onDone();
+      },
+    );
+  };
+  const onSave = editing ? saveEdit : () => setConfirming(true);
   const summary = data.data?.summary;
   const trials = data.data?.trials ?? [];
 
@@ -222,18 +328,18 @@ export function EvaluationSheet({
     <Sheet
       open
       onClose={onClose}
-      title={`Đánh giá ${horseName}`}
+      title={editing ? `Sửa đánh giá ${horseName}` : `Đánh giá ${horseName}`}
       description={sessionName}
-      dirty={comment.trim() !== '' || score !== 7}
-      onSave={() => setConfirming(true)}
+      dirty={editing ? changed || reason.trim() !== '' : comment.trim() !== '' || score !== 7}
+      onSave={onSave}
       saveLabel="Lưu"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             Hủy
           </Button>
-          <Button onClick={() => setConfirming(true)} disabled={save.pending}>
-            Lưu
+          <Button onClick={onSave} disabled={save.pending}>
+            {save.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
@@ -285,7 +391,13 @@ export function EvaluationSheet({
         <Field label="Nhận xét chuyên môn" hint="Chủ ngựa đọc được nhận xét này trong nhật ký buổi tập.">
           <Textarea rows={5} value={comment} placeholder="Xuất phát, nhịp chạy, sức bền cuối bài, điều cần chỉnh ở buổi sau…" onChange={(event) => setComment(event.target.value)} />
         </Field>
-        <Notice tone="warning">Lưu rồi thì không sửa được.</Notice>
+        {editing ? (
+          <Field label="Lý do sửa" required error={touched && !reason.trim() ? 'Nhập lý do sửa' : touched && !changed ? 'Chưa đổi điểm hay nhận xét' : undefined}>
+            <Input value={reason} maxLength={500} placeholder="Ví dụ: Chấm nhầm, xem lại video" onChange={(event) => setReason(event.target.value)} />
+          </Field>
+        ) : (
+          <Notice tone="info">Sửa được trong 7 ngày sau buổi, cần ghi lý do. Chủ ngựa không nhận thông báo khi sửa.</Notice>
+        )}
       </div>
 
       {confirming && (
@@ -316,9 +428,7 @@ export function EvaluationSheet({
             </>
           }
         >
-          <p className="text-sm text-gray-600">
-            Lưu rồi thì không sửa được điểm và nhận xét.
-          </p>
+          <p className="text-sm text-gray-600">Chủ ngựa đọc được điểm và nhận xét. Muốn đổi sau thì sửa kèm lý do trong 7 ngày.</p>
         </Modal>
       )}
     </Sheet>

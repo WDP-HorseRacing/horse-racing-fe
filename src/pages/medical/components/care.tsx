@@ -8,7 +8,7 @@ import { useAction, useService } from '../../../hooks/useService';
 import { getHorse } from '../../../api/horses';
 import { listGroomHistory } from '../../../api/stable';
 import { cancelCareSchedule, completeCareSchedule, createCareSchedule, listCareSchedules, updateCareSchedule } from '../../../api/medical';
-import type { CareSchedule, CareTaskType, Person } from '../../../api/types';
+import type { CareSchedule, CareTaskType, CareType, Person } from '../../../api/types';
 import {
   ActionMenu,
   Button,
@@ -39,9 +39,13 @@ import {
   CARE_TYPES,
   assigneeError,
   assigneeInput,
+  assigneeModesFor,
   assigneeOf,
   assigneeText,
   careDaysLeft,
+  defaultAssignee,
+  fitAssignee,
+  isVetOnlyCare,
   sameAssignee,
   useCareRights,
   type AssigneeChoice,
@@ -70,6 +74,7 @@ export function CareDue({ dueAt, status = 'SCHEDULED' }: { dueAt: string; status
  */
 export function CareAssigneeField({
   horseId,
+  type,
   groom,
   value,
   onChange,
@@ -79,6 +84,8 @@ export function CareAssigneeField({
   hideLabel = false,
 }: {
   horseId?: string;
+  /** Loại lịch: Tiêm phòng, Tẩy giun chỉ còn lựa chọn Chưa giao và Bác sĩ. */
+  type?: CareType;
   groom: Person | null;
   value: AssigneeChoice;
   onChange: (value: AssigneeChoice) => void;
@@ -99,6 +106,10 @@ export function CareAssigneeField({
   if (current?.mode === 'GROOM' && !grooms.has(current.id)) grooms.set(current.id, `${current.label} (đang được giao)`);
   if (current?.mode === 'VET' && !vets.has(current.id)) vets.set(current.id, `${current.label} (đang được giao)`);
   const people = value.mode === 'GROOM' ? grooms : value.mode === 'VET' ? vets : null;
+  const vetOnly = isVetOnlyCare(type);
+  // Lịch cũ đang giao Groom (trước luật mới) vẫn hiện đúng cách giao hiện tại.
+  const modes = assigneeModesFor(type);
+  const shown = modes.includes(value.mode) ? modes : [...modes, value.mode];
 
   const pick = (mode: AssigneeMode) => {
     const list = mode === 'GROOM' ? grooms : mode === 'VET' ? vets : null;
@@ -112,7 +123,9 @@ export function CareAssigneeField({
       error={error}
       className={className}
       hint={
-        value.mode === 'HORSE_GROOM'
+        vetOnly && value.mode !== 'VET'
+          ? 'Tiêm phòng, tẩy giun chỉ giao được cho bác sĩ.'
+          : value.mode === 'HORSE_GROOM'
           ? groom
             ? `Hiện là ${groom.fullName}. HLV đổi Groom thì lịch tự theo Groom mới.`
             : 'Ngựa chưa có Groom phụ trách. Lịch tự giao khi HLV giao Groom.'
@@ -127,7 +140,7 @@ export function CareAssigneeField({
         <Segmented<AssigneeMode>
           value={value.mode}
           onChange={pick}
-          options={(['NONE', 'HORSE_GROOM', 'GROOM', 'VET'] as const).map((mode) => ({ value: mode, label: ASSIGNEE_MODE_LABEL[mode] }))}
+          options={shown.map((mode) => ({ value: mode, label: ASSIGNEE_MODE_LABEL[mode] }))}
         />
         {people && (
           <Select value={value.userId} onChange={(event) => onChange({ ...value, userId: event.target.value })}>
@@ -171,7 +184,9 @@ export function CareFormModal({
     date.setHours(8, 0, 0, 0);
     return toLocalInput(date);
   });
-  const [assignee, setAssignee] = useState<AssigneeChoice>(() => (schedule ? assigneeOf(schedule) : { mode: 'HORSE_GROOM', userId: '' }));
+  const user = useStore((state) => state.currentUser);
+  const vetId = user?.role === 'VETERINARIAN' ? user.id : undefined;
+  const [assignee, setAssignee] = useState<AssigneeChoice>(() => (schedule ? assigneeOf(schedule) : defaultAssignee('VACCINATION', vetId)));
   const [notes, setNotes] = useState(schedule?.notes ?? '');
   const [reason, setReason] = useState('');
   const [opened] = useState(() => JSON.stringify([type, dueAt, assignee, notes]));
@@ -238,7 +253,10 @@ export function CareFormModal({
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setType(value)}
+                  onClick={() => {
+                    setType(value);
+                    setAssignee((prev) => fitAssignee(prev, value, vetId));
+                  }}
                   aria-pressed={type === value}
                   className={cn(
                     'rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 transition',
@@ -262,7 +280,7 @@ export function CareFormModal({
         {detail.loading && !detail.data ? (
           <Skeleton rows={1} />
         ) : (
-          <CareAssigneeField horseId={horse.id} groom={groom} value={assignee} onChange={setAssignee} current={current} />
+          <CareAssigneeField horseId={horse.id} type={type} groom={groom} value={assignee} onChange={setAssignee} current={current} />
         )}
         <Field label="Ghi chú" hint="Không bắt buộc">
           <Textarea rows={2} maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ví dụ: Vắc-xin cúm ngựa, mũi nhắc lại" />

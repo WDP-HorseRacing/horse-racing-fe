@@ -1,7 +1,7 @@
 // Sơ đồ chuồng (gộp cả danh mục khu và ô). Cột trái: tổng quan, các danh sách chờ xếp chỗ, ngựa cần chú ý,
 // khu cần xử lý. Cột phải: mỗi khu một thẻ lưới 3×3 ô, rê chuột vào ô để xem ngựa, bấm ô để thao tác.
 // CM: xếp/đổi khu (F1.6), quản lý khu và ô. HT của khu: xếp ô, chuyển ô, gỡ ô, giao/đổi Groom (F1.7).
-// HT chỉ thấy khu mình phụ trách (BE lọc /barns). Bấm tên khu để phóng to (?focus=).
+// HT có công tắc "Khu của tôi" (mặc định bật): tắt thì thấy thêm khu của HLV khác, chỉ xem. Bấm tên khu để phóng to (?focus=).
 // Dữ liệu ghép từ /barns, /stalls và /horses (ô có ngựa xác định qua location.stall.id).
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -14,9 +14,9 @@ import { listAllUsers } from '../../api/users';
 import type { BarnListItem, HorseListItem, Stall } from '../../api/types';
 import { useStore } from '../../store/store';
 import type { User } from '../../types/domain';
-import { canManageBarn, canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
+import { canManageBarn, computeZoneScope } from '../../lib/zone-scope';
 import { primeZoneScope } from '../../hooks/useMyScope';
-import { Avatar, Button, Card, ConfirmDialog, EmptyState, ErrorBox, PageHeader, SectionTitle, cn, useToast, type MenuAction } from '../../components/ui';
+import { Avatar, Button, Card, ConfirmDialog, EmptyState, ErrorBox, PageHeader, SectionTitle, ToggleChip, cn, useToast, type MenuAction } from '../../components/ui';
 import { StableMapSkeleton } from '../../components/skeletons';
 import { healthLabel } from '../../lib/labels';
 import { links } from '../../lib/links';
@@ -50,14 +50,13 @@ async function loadMap(user: User | null, isManager: boolean) {
     listAllHorses(),
     isManager ? listAllUsers({ role: 'HEAD_TRAINER', status: 'ACTIVE' }) : Promise.resolve([]),
   ]);
-  // HT chỉ thấy khu mình phụ trách; các vai trò khác thấy toàn câu lạc bộ.
+  // BE trả mọi khu cho mọi vai trò. HT thao tác được khu mình, khu khác chỉ xem (lọc "Khu của tôi" ở trang).
   const scope = computeZoneScope(user, barns, stalls);
   if (user && scope.trainer) primeZoneScope(user.id, barns, stalls);
   const inClub = horses.filter((horse) => !isReadOnlyHorse(horse));
   const occupants = occupantsByStall(inClub);
   const horseByStall = new Map(inClub.filter((horse) => horse.location.stall?.id).map((horse) => [horse.location.stall!.id!, horse]));
   const zones: MapZone[] = barns
-    .filter((barn) => canSeeBarn(scope, barn.id))
     .map((barn) => {
       const canManage = canManageBarn(scope, barn.id);
       const horsesOfBarn = inClub.filter((horse) => horse.location.barn?.id === barn.id);
@@ -81,7 +80,7 @@ async function loadMap(user: User | null, isManager: boolean) {
     );
   // "Chờ xếp khu" là việc của CM: HT không cần thấy.
   const noZone = scope.trainer ? [] : inClub.filter((horse) => horse.location.placementStatus === 'PENDING_BARN');
-  return { zones, noZone, stalls: stalls.filter((stall) => canSeeBarn(scope, stall.barnId)), barns, headTrainers, trainer: scope.trainer };
+  return { zones, noZone, stalls, barns, headTrainers, trainer: scope.trainer };
 }
 
 function toPlacement(horse: HorseListItem): PlacementHorse {
@@ -139,6 +138,16 @@ function MiniStat({ value, label, warn }: { value: ReactNode; label: string; war
   );
 }
 
+const MINE_KEY = 'horseracing_stable_mine';
+
+function readMineOnly() {
+  try {
+    return window.localStorage.getItem(MINE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 export default function StableMap() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -153,6 +162,17 @@ export default function StableMap() {
     () => (isOwner ? Promise.resolve(undefined) : loadMap(user, isManager)),
     [isOwner, user?.id, role, isManager],
   );
+
+  // HT: "Khu của tôi" bật sẵn, tắt thì xem thêm khu của HLV khác (chỉ xem). Nhớ lựa chọn trong trình duyệt.
+  const [mineOnly, setMineOnlyState] = useState(readMineOnly);
+  const setMineOnly = (next: boolean) => {
+    setMineOnlyState(next);
+    try {
+      window.localStorage.setItem(MINE_KEY, next ? '1' : '0');
+    } catch {
+      // Trình duyệt chặn lưu trữ: chỉ mất ghi nhớ lựa chọn.
+    }
+  };
 
   // Hộp thoại xếp chỗ (F1.6, F1.7)
   const [zoneHorse, setZoneHorse] = useState<PlacementHorse | null>(null);
@@ -277,7 +297,10 @@ export default function StableMap() {
   if (loading && !data) return <StableMapSkeleton />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được sơ đồ chuồng'} />;
 
-  const { zones, noZone, stalls, barns, headTrainers, trainer } = data;
+  const { zones: allZones, noZone, stalls: allStalls, barns, headTrainers, trainer } = data;
+  const mine = trainer && mineOnly;
+  const zones = mine ? allZones.filter((zone) => zone.canManage) : allZones;
+  const stalls = mine ? allStalls.filter((stall) => zones.some((zone) => zone.barn.id === stall.barnId)) : allStalls;
   // HT: việc cần làm chỉ tính trong khu mình phụ trách (khu cách ly của HT khác chỉ để theo dõi).
   const workZones = trainer ? zones.filter((zone) => zone.canManage) : zones;
   const waitingStall = workZones.flatMap((zone) => zone.waitingStall.map((horse) => ({ zone, horse })));
@@ -399,7 +422,7 @@ export default function StableMap() {
 
   const description = trainer
     ? myZones.length
-      ? `Bạn phụ trách ${myZones.join(', ')}${watchZones.length ? ` · theo dõi ${watchZones.join(', ')} (chỉ xem)` : ''}. Bấm tên khu để phóng to, bấm ô để thao tác.`
+      ? `Bạn phụ trách ${myZones.join(', ')}${watchZones.length ? `. ${watchZones.length} khu của HLV khác chỉ xem` : mine ? '. Tắt Khu của tôi để xem các khu khác' : ''}. Bấm tên khu để phóng to, bấm ô để thao tác.`
       : 'Bạn chưa được giao khu nào. Quản lý câu lạc bộ sẽ giao khu cho bạn.'
     : `${zones.length} khu · ${stalls.length} ô · ${totals.horses} ngựa thuộc khu. Bấm tên khu để phóng to, rê chuột vào ô để xem ngựa, bấm ô để thao tác.`;
 
@@ -409,10 +432,16 @@ export default function StableMap() {
         title="Sơ đồ chuồng"
         description={description}
         actions={
-          isManager && (
+          isManager ? (
             <Button onClick={() => setFormOpen({})}>
               <Plus size={16} /> Thêm khu
             </Button>
+          ) : (
+            trainer && (
+              <ToggleChip checked={mineOnly} onChange={setMineOnly}>
+                Khu của tôi
+              </ToggleChip>
+            )
           )
         }
       />

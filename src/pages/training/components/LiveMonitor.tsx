@@ -77,7 +77,6 @@ export function LiveMonitorCard({
   startedAt,
   live,
   limits,
-  limitsSource,
   acknowledged,
   onAcknowledge,
   actions,
@@ -90,7 +89,6 @@ export function LiveMonitorCard({
   startedAt?: string | null;
   live?: LiveSeries;
   limits: ThresholdLimits;
-  limitsSource?: 'HORSE' | 'CLUB_DEFAULT';
   acknowledged: boolean;
   onAcknowledge: () => void;
   actions?: ReactNode;
@@ -145,7 +143,7 @@ export function LiveMonitorCard({
       <LiveTrace points={live?.points ?? []} limits={limits} className="mt-3 rounded-lg" />
       <ZoneGauge bpm={latest?.heartRateBpm} limits={limits} className="mt-2" />
       <p className="mt-3 text-[11px] text-gray-500">
-        {limitsSource === 'HORSE' ? 'Ngưỡng riêng của ngựa' : 'Ngưỡng mặc định câu lạc bộ'} · tốc độ tối đa {limits.maxSpeedMps} m/s
+        Ngưỡng câu lạc bộ · tốc độ tối đa {limits.maxSpeedMps} m/s
       </p>
 
       {live?.hadCritical && !acknowledged && (

@@ -1,5 +1,5 @@
 // F4.4 — Sự cố tại chuồng.
-// Groom: khung báo sự cố (trái, dính khi cuộn) và các sự cố mình đã báo (phải). Thay cho trang Yêu cầu khám cũ của Groom.
+// Groom: khung báo sự cố (trái, dính khi cuộn) và các sự cố mình đã báo hoặc của ngựa mình phụ trách, kể cả do Groom khác báo hộ (phải).
 // HLV: sự cố của ngựa đang ở khu mình (BE lọc), chuyển bác sĩ và đóng sự cố.
 // Quản lý CLB, bác sĩ: xem mọi sự cố, Quản lý CLB lọc theo khu. Mở từ thông báo thì lọc theo ngựa (?horse=).
 import { useEffect, useState } from 'react';
@@ -69,10 +69,10 @@ export default function Incidents() {
       ) : rows.length === 0 ? (
         <EmptyState
           title={status === 'OPEN' ? 'Không có sự cố nào đang mở' : 'Chưa có sự cố nào đã đóng'}
-          hint={groom ? 'Sự cố bạn báo hiện ở đây, kèm kết quả xử lý của HLV khu.' : trainer ? 'Chỉ hiện sự cố của ngựa đang ở khu bạn phụ trách.' : undefined}
+          hint={groom ? 'Sự cố bạn báo và sự cố của ngựa bạn phụ trách hiện ở đây, kèm kết quả xử lý của HLV khu.' : trainer ? 'Chỉ hiện sự cố của ngựa đang ở khu bạn phụ trách.' : undefined}
         />
       ) : (
-        rows.map((incident) => <IncidentCard key={incident.id} incident={incident} canHandle={trainer} showReporter={!groom} onChanged={reload} onPhotoExpired={reload} />)
+        rows.map((incident) => <IncidentCard key={incident.id} incident={incident} canHandle={trainer} showReporter onChanged={reload} onPhotoExpired={reload} />)
       )}
     </TabPanel>
   );
@@ -89,7 +89,7 @@ export default function Incidents() {
             <IncidentReportForm onDone={reload} />
           </Card>
           <div className="space-y-3 lg:col-span-7">
-            <SectionTitle className="mb-0">Sự cố tôi đã báo</SectionTitle>
+            <SectionTitle className="mb-0">Sự cố ngựa tôi phụ trách và tôi đã báo</SectionTitle>
             <Tabs active={status} onChange={(key) => setStatus(key as IncidentStatus)} tabs={tabs} />
             {listBody}
           </div>

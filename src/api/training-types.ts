@@ -14,6 +14,8 @@ export type ParticipantStatus =
   | 'READY'
   | 'ONGOING'
   | 'COMPLETED'
+  /** Dừng sớm: kết thúc như COMPLETED, có `stoppedReason`. */
+  | 'STOPPED'
   | 'ABSENT'
   | 'SKIPPED'
   | 'INELIGIBLE'
@@ -242,6 +244,8 @@ export interface Participant {
   absenceReason: string | null;
   cancelReason: string | null;
   ineligibilityReason: string | null;
+  /** Lý do HLV dừng sớm, null nếu không dừng sớm. */
+  stoppedReason: string | null;
   /** Chỉ có ở danh sách lượt: ngựa đang có lệnh khóa huấn luyện, tính lúc đọc. */
   trainingLocked?: boolean;
   /** Ba field dưới chỉ có ở danh sách lượt. Ngựa, Groom đã xóa vẫn có tên. */
@@ -324,6 +328,7 @@ export interface HorseTrainingSession {
   groomName: string | null;
   absenceReason: string | null;
   cancelReason: string | null;
+  stoppedReason: string | null;
   completedAt: string | null;
   trialResults: HorseTrialResult[];
   evaluation: HorseEvaluation | null;
@@ -375,7 +380,9 @@ export interface HorseWorkload {
   horseId: string;
   from: string;
   to: string;
+  /** Chỉ lượt hoàn thành. Thời lượng và cự ly thực cộng cả lượt dừng sớm. */
   sessionsCompleted: number;
+  sessionsStopped: number;
   byIntensity: Record<TrainingIntensity, number>;
   plannedDistanceM: number;
   actualDurationSeconds: number;
@@ -388,26 +395,9 @@ export interface ThresholdLimits {
   maxSpeedMps: number;
 }
 
-export interface ThresholdProfile {
-  id: string;
-  horseId: string;
-  profileName: string;
-  ruleVersion: number;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  limits: ThresholdLimits;
-}
-
+/** Mọi ngựa dùng chung một bộ ngưỡng của câu lạc bộ (BE bỏ ngưỡng riêng từng ngựa từ 18/10). */
 export interface HorseThresholds {
-  source: 'HORSE' | 'CLUB_DEFAULT';
-  activeLimits: ThresholdLimits;
-  profiles: ThresholdProfile[];
-}
-
-export interface ThresholdInput {
-  profileName: string;
-  effectiveFrom: string;
-  effectiveTo?: string;
+  horseId: string;
   limits: ThresholdLimits;
 }
 

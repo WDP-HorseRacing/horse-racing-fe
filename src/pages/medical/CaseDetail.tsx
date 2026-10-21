@@ -19,11 +19,10 @@ import { AdjustCostModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisi
 import { usePeople, type People } from './components/people';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
-import { HIDDEN_COST_TEXT, isCostHidden } from './components/case-cost';
 import { BackLink } from '../../components/BackLink';
 
 type Dialog =
-  | { kind: 'cost' }
+  | { kind: 'cost'; record: MedicalRecord }
   | { kind: 'lock' }
   | { kind: 'release'; lock: TrainingLock }
   | { kind: 'void'; record: MedicalRecord }
@@ -92,7 +91,7 @@ export default function CaseDetail() {
   const costVisible = 'totalCost' in item;
   const visits = item.visits;
   const visitIds = new Set(visits.map((visit) => visit.id));
-  const caseInjuries = (extra.data?.injuries ?? []).filter((injury) => injury.caseId === item.id);
+  const caseInjuries = (extra.data?.injuries ?? []).filter((injury) => injury.history.some((step) => step.caseId === item.id));
   const caseLocks = (extra.data?.locks ?? []).filter((lock) => lock.caseId === item.id);
   const horseActiveLock = (extra.data?.locks ?? []).find((lock) => lock.status === 'ACTIVE');
   const linkedRequests = (extra.data?.requests ?? []).filter((request) => request.medicalRecordId && visitIds.has(request.medicalRecordId));
@@ -143,14 +142,15 @@ export default function CaseDetail() {
                 <p className="flex items-center justify-end gap-1.5 text-xs text-gray-500">
                   <Wallet size={13} className="text-gray-400" /> Chi phí điều trị
                 </p>
-                {item.status === 'CLOSED' ? (
-                  isCostHidden(item) ? (
-                    <p className="text-sm text-gray-500">{HIDDEN_COST_TEXT}</p>
-                  ) : (
-                    <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</p>
-                  )
+                {item.status === 'CANCELLED' ? (
+                  <p className="text-sm text-gray-500">Bệnh án đã hủy, không có chi phí</p>
                 ) : (
-                  <p className="text-sm text-gray-500">{isOpen ? 'Chốt khi đóng bệnh án' : 'Bệnh án đã hủy, không có chi phí'}</p>
+                  <>
+                    <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost ?? 0)}</p>
+                    <p className="text-xs text-gray-500">
+                      {isOwner ? 'Cộng các buổi khám trong thời gian bạn sở hữu' : isOpen ? 'Cộng các buổi khám tới nay' : 'Cộng các buổi khám'}
+                    </p>
+                  </>
                 )}
               </div>
             )}
@@ -165,11 +165,6 @@ export default function CaseDetail() {
                       <FolderCheck size={16} /> Đóng bệnh án
                     </Button>
                   </>
-                )}
-                {item.status === 'CLOSED' && (
-                  <Button variant="secondary" onClick={() => setDialog({ kind: 'cost' })}>
-                    <Wallet size={16} /> Điều chỉnh chi phí
-                  </Button>
                 )}
               </div>
             )}
@@ -200,6 +195,8 @@ export default function CaseDetail() {
               records={visits}
               people={people}
               onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record }) : undefined}
+              canVoid={(record) => record.vetId === user?.id}
+              onAdjustCost={isVet && !transferred && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
             />
           )}
         </div>
@@ -284,7 +281,7 @@ export default function CaseDetail() {
         </aside>
       </div>
 
-      {dialog?.kind === 'cost' && <AdjustCostModal medicalCase={item} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'cost' && <AdjustCostModal record={dialog.record} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'lock' && horse && (
         <PlaceLockModal horse={{ id: horse.id, name: horse.name }} onClose={() => setDialog(null)} onDone={done} />
       )}

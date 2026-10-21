@@ -48,7 +48,7 @@ export function TrainerTodayCard() {
         <ul className="-mx-2 space-y-1">
           {items.map((item) => {
             const running = item.participants.filter((participant) => participant.status === 'ONGOING').length;
-            const done = item.participants.filter((participant) => participant.status === 'COMPLETED').length;
+            const done = item.participants.filter((participant) => participant.status === 'COMPLETED' || participant.status === 'STOPPED').length;
             return (
               <li key={item.session.id}>
                 <Link to={links.session(item.session.id)} className={cn('flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-gray-50', item.session.status === 'IN_PROGRESS' && 'bg-emerald-50/60')}>

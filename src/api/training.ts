@@ -103,14 +103,25 @@ export const readyParticipant = (id: string) => http.post<Participant>(`/session
 /** Bắt đầu, hoàn thành, ghi kết quả chạy thử: chỉ HLV trưởng của lớp (Groom nhận 403). */
 export const startParticipant = (id: string) => http.post<Participant>(`/session-participants/${id}/start`);
 export const completeParticipant = (id: string) => http.post<Participant>(`/session-participants/${id}/complete`);
+/** Dừng sớm lượt đang chạy (lý do bắt buộc). Kết thúc như hoàn thành, lượt cuối dừng thì buổi tự đóng. */
+export const stopParticipant = (id: string, reason: string) => http.post<Participant>(`/session-participants/${id}/stop`, { reason });
 
 export const listTrialResults = (participantId: string) => http.get<TrialResult[]>(`/session-participants/${participantId}/trial-results`);
 /** `videoMediaId`: video do chính HLV tải lên (uploadTrialVideo). Chỉ ghi được khi buổi đang diễn ra. */
 export const recordTrialResult = (participantId: string, input: { attemptNo: number; elapsedMs: number; notes?: string; videoMediaId?: string }) =>
   http.post<TrialResult>(`/session-participants/${participantId}/trial-results`, input);
-/** Gắn, đổi hoặc gỡ (null) video sau buổi. Chỉ HLV trưởng của lớp, trong 7 ngày sau giờ kết thúc dự kiến, buổi chưa hủy. */
+/**
+ * Sửa kết quả chạy thử sau buổi: chỉ HLV trưởng của lớp, trong 7 ngày sau giờ kết thúc dự kiến, buổi chưa hủy.
+ * Đổi `elapsedMs` hoặc `notes` bắt buộc `reason`. Chỉ gắn, đổi, gỡ video thì không cần.
+ */
+export const updateTrialResult = (
+  participantId: string,
+  attemptNo: number,
+  input: { elapsedMs?: number; notes?: string | null; reason?: string; videoMediaId?: string | null },
+) => http.patch<TrialResult>(`/session-participants/${participantId}/trial-results/${attemptNo}`, input);
+/** Gắn, đổi hoặc gỡ (null) video sau buổi. */
 export const updateTrialVideo = (participantId: string, attemptNo: number, videoMediaId: string | null) =>
-  http.patch<TrialResult>(`/session-participants/${participantId}/trial-results/${attemptNo}`, { videoMediaId });
+  updateTrialResult(participantId, attemptNo, { videoMediaId });
 
 /** 404 khi lượt chưa có đánh giá: trả null. */
 export const getEvaluation = async (participantId: string) => {
@@ -121,9 +132,11 @@ export const getEvaluation = async (participantId: string) => {
     throw error;
   }
 };
-/** Lưu một lần, BE không cho sửa. */
 export const createEvaluation = (participantId: string, input: { score: number; comment?: string }) =>
   http.post<Evaluation>(`/session-participants/${participantId}/evaluation`, input);
+/** Sửa đánh giá trong 7 ngày sau buổi, lý do bắt buộc. Chỉ HLV trưởng phụ trách lớp. */
+export const updateEvaluation = (participantId: string, input: { score?: number; comment?: string | null; reason: string }) =>
+  http.patch<Evaluation>(`/session-participants/${participantId}/evaluation`, input);
 
 /* ===== Tab Huấn luyện của ngựa (CM, HT, bác sĩ, chủ ngựa) ===== */
 

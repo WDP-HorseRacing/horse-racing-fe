@@ -271,6 +271,11 @@ const FIELD_TEXT: Record<string, string> = {
   usageId: 'Mã lần xuất',
   microchipId: 'Số chip',
   generated: 'Số checklist đã sinh',
+  elapsedMs: 'Thời gian chạy (ms)',
+  notes: 'Ghi chú',
+  stoppedReason: 'Lý do dừng sớm',
+  cost: 'Chi phí buổi khám',
+  recoveryStatus: 'Mức hồi phục',
 };
 
 function fieldName(key: string) {

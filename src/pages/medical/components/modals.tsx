@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Lock, RotateCcw, Unlock } from 'lucide-react';
 import { useAction } from '../../../hooks/useService';
 import {
-  adjustCaseCost,
+  adjustVisitCost,
   changeHealthStatus,
   changeRequestUrgency,
   createExamRequest,
@@ -629,30 +629,31 @@ export function VoidVisitModal({
   );
 }
 
-/* ===== Điều chỉnh chi phí bệnh án đã đóng (F3.9, VET) ===== */
+/* ===== Điều chỉnh chi phí một buổi khám (F3.9, VET) ===== */
 
 export function AdjustCostModal({
-  medicalCase,
+  record,
   horseName,
   onClose,
   onDone,
 }: {
-  medicalCase: MedicalCase;
+  record: MedicalRecord;
   horseName: string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const toast = useToast();
   const action = useAction();
-  const [cost, setCost] = useState(formatMoneyInput(String(medicalCase.totalCost ?? '')));
+  const initial = formatMoneyInput(String(record.cost ?? 0));
+  const [cost, setCost] = useState(initial);
   const [reason, setReason] = useState('');
   const costValue = parseMoney(cost);
   const costOk = Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST;
   const submit = () =>
     action.run(
-      () => adjustCaseCost(medicalCase.id, costValue, reason.trim()),
+      () => adjustVisitCost(record.id, costValue, reason.trim()),
       () => {
-        toast.push(`Đã điều chỉnh chi phí bệnh án của ${horseName}`, 'success');
+        toast.push(`Đã điều chỉnh chi phí buổi khám của ${horseName}`, 'success');
         onDone();
       },
     );
@@ -660,9 +661,9 @@ export function AdjustCostModal({
     <Modal
       open
       onClose={onClose}
-      title="Điều chỉnh chi phí"
-      dirty={reason.trim() !== '' || cost !== formatMoneyInput(String(medicalCase.totalCost ?? ''))}
-      description={`${horseName} · chi phí hiện tại ${formatMoney(medicalCase.totalCost)}`}
+      title="Điều chỉnh chi phí buổi khám"
+      dirty={reason.trim() !== '' || cost !== initial}
+      description={`${horseName} · buổi khám ${formatDateTime(record.examDate)} · chi phí hiện tại ${formatMoney(record.cost ?? 0)}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -692,7 +693,7 @@ export function AdjustCostModal({
             placeholder="Ví dụ: Bổ sung hóa đơn siêu âm"
           />
         </Field>
-        <p className="text-xs text-gray-500">Chủ ngựa và quản lý nhận thông báo chi phí cũ và mới.</p>
+        <p className="text-xs text-gray-500">Quản lý và chủ ngựa của ngày khám nhận thông báo chi phí cũ và mới. Tổng chi phí bệnh án tự cộng lại.</p>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>

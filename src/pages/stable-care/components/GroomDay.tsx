@@ -1,9 +1,10 @@
 // F4.1, F4.2 — Màn Việc hôm nay của Groom (GET /grooms/me/today): mỗi ngựa đang phụ trách một thẻ gồm
 // checklist hôm nay (tick to, dễ bấm trên điện thoại), khẩu phần đang áp dụng theo bữa (nhấn bữa sắp tới),
-// lượt dắt ngựa tập hôm nay và lịch chăm sóc đến hạn. BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
+// lượt dắt ngựa tập hôm nay (kèm sân, mặt sân) và lịch chăm sóc đến hạn. BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
+// Thêm hai khối chung: lịch chăm sóc ở ngựa khác và lượt dắt hộ (HLV giao dắt ngựa Groom không phụ trách).
 import { Link } from 'react-router-dom';
 import { CalendarClock, Flag, Siren } from 'lucide-react';
-import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, HorseListItem } from '../../../api/types';
+import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, GroomTodayRun, HorseListItem } from '../../../api/types';
 import { Avatar, Button, EmptyState, cn } from '../../../components/ui';
 import { ProgressRing } from '../../../components/ui/ProgressRing';
 import { HealthPill } from '../../../components/ui/status';
@@ -16,6 +17,26 @@ import { participantStatusText } from '../../../lib/training-labels';
 import { checklistProgress } from '../care-helpers';
 import { ChecklistItems, ChecklistPill } from './Checklist';
 import { MealPlan } from './MealPlan';
+
+/** "Sân 1 · Cát": Groom biết dắt ngựa ra đâu. */
+const runPlace = (run: GroomTodayRun) => [run.location, run.surface].filter(Boolean).join(' · ');
+
+function RunLine({ run, horseName }: { run: GroomTodayRun; horseName?: string }) {
+  const place = runPlace(run);
+  return (
+    <Link to={links.today} className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-emerald-50">
+      <Flag size={14} className="shrink-0 text-emerald-700" />
+      <span className="font-mono text-xs font-semibold">{clubTime(run.scheduledStartAt)}</span>
+      <span className="min-w-0 flex-1 truncate text-gray-800">
+        {horseName ? <b className="font-semibold">{horseName}</b> : 'Dắt tập'}: {run.sessionName}
+        {place && <span className="text-gray-500"> · {place}</span>}
+      </span>
+      <span className="shrink-0 text-xs text-gray-500" title={run.stoppedReason ?? undefined}>
+        {participantStatusText[run.status]}
+      </span>
+    </Link>
+  );
+}
 
 /** Bữa sắp tới hoặc đang trong khoảng 2 giờ, theo giờ CLB. */
 function nextMeal(horse: GroomTodayHorse): FeedingMeal | undefined {
@@ -66,9 +87,26 @@ export function GroomDay({
     </section>
   );
 
+  const assisted = today.assistedRuns ?? [];
+  // Lượt dắt hộ: HLV giao Groom dắt ngựa của Groom khác, Groom vẫn có lượt dù không phụ trách ngựa nào.
+  const assistedBlock = assisted.length > 0 && (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-emerald-200/70 xl:col-span-2">
+      <h3 className="text-sm font-semibold text-gray-900">Lượt dắt hộ hôm nay</h3>
+      <p className="mt-0.5 text-xs text-gray-500">HLV giao bạn dắt ngựa bạn không phụ trách. Bấm để mở Dắt ngựa tập.</p>
+      <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {assisted.map((run) => (
+          <li key={run.participantId}>
+            <RunLine run={run} horseName={run.horseName} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+
   if (today.horses.length === 0)
-    return otherBlock ? (
+    return otherBlock || assistedBlock ? (
       <div className="space-y-4">
+        {assistedBlock}
         {otherBlock}
         <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />
       </div>
@@ -78,6 +116,7 @@ export function GroomDay({
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      {assistedBlock}
       {otherBlock}
       {today.horses.map((entry) => {
         const horse = byId.get(entry.horseId);
@@ -140,12 +179,7 @@ export function GroomDay({
               <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-sm">
                 {runs.map((run) => (
                   <li key={run.participantId}>
-                    <Link to={links.today} className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-emerald-50">
-                      <Flag size={14} className="shrink-0 text-emerald-700" />
-                      <span className="font-mono text-xs font-semibold">{clubTime(run.scheduledStartAt)}</span>
-                      <span className="min-w-0 flex-1 truncate text-gray-800">Dắt tập: {run.sessionName}</span>
-                      <span className="shrink-0 text-xs text-gray-500">{participantStatusText[run.status]}</span>
-                    </Link>
+                    <RunLine run={run} />
                   </li>
                 ))}
                 {entry.careSchedules.map((care) => (

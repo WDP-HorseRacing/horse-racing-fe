@@ -93,7 +93,7 @@ export default function OwnershipTransferDialog({
           <Textarea value={reason} maxLength={REASON_MAX} onChange={(event) => setReason(event.target.value)} className={cn(reasonError && invalidClass)} />
         </Field>
         <Notice tone="info">
-          Chủ mới sở hữu từ lúc lưu. Chi phí các bệnh án đã đóng trước đó vẫn tính cho chủ cũ. Chủ cũ chỉ còn xem thông tin cơ bản ở mục Ngựa đã bán.
+          Chủ mới sở hữu từ lúc lưu, chuyển được cả khi ngựa đang điều trị. Chi phí y tế tính theo ngày khám: buổi khám trước đó vẫn tính cho chủ cũ. Chủ cũ chỉ còn xem thông tin cơ bản ở mục Ngựa đã bán.
         </Notice>
         {formError && <ErrorBox message={formError} />}
         {stale && (

@@ -26,6 +26,8 @@ export type IntensityCounts = Record<TrainingIntensity, number>;
 export interface ReportWeek {
   weekStart: string;
   completed: number;
+  /** Lượt dừng sớm trong tuần. */
+  stopped: number;
   avgHeartRateBpm: number | null;
   avgSpeedMps: number | null;
   alertCount: number;
@@ -37,7 +39,7 @@ export interface TrainingDashboard {
   from: string;
   to: string;
   herd: { total: number; byHealthStatus: Record<HealthStatus, number>; trainingLocked: number };
-  training: { sessions: number; completed: number; absent: number; ineligible: number; completedByIntensity: IntensityCounts };
+  training: { sessions: number; completed: number; stopped: number; absent: number; ineligible: number; completedByIntensity: IntensityCounts };
   weekly: ReportWeek[];
   horses: {
     horseId: string;
@@ -67,7 +69,8 @@ export interface HorseProgress {
   horseName: string;
   from: string;
   to: string;
-  totals: { completed: number; absent: number; ineligible: number; plannedDistanceM: number; trainedMinutes: number; completedByIntensity: IntensityCounts };
+  /** trainedMinutes cộng cả lượt dừng sớm, completed và plannedDistanceM thì không. */
+  totals: { completed: number; stopped: number; absent: number; ineligible: number; plannedDistanceM: number; trainedMinutes: number; completedByIntensity: IntensityCounts };
   weekly: ReportWeek[];
   sessions: {
     participantId: string;
@@ -135,7 +138,7 @@ export interface OwnerCosts {
   medicalCost: number;
   total: number;
   prizeMoney: number;
-  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; surcharge: number; caseCount: number; medicalCost: number; total: number }[];
+  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; surcharge: number; /** Số buổi khám chưa hủy trong kỳ. */ visitCount: number; medicalCost: number; total: number }[];
 }
 
 export const getClubFinance = (period: ReportPeriod) => http.get<ClubFinance>('/reports/club/finance', { ...period });

@@ -55,6 +55,7 @@ const PARTICIPANT_TONE: Record<ParticipantStatus, 'green' | 'amber' | 'red' | 'g
   READY: 'gray',
   ONGOING: 'green',
   COMPLETED: 'green',
+  STOPPED: 'amber',
   ABSENT: 'amber',
   SKIPPED: 'gray',
   INELIGIBLE: 'amber',

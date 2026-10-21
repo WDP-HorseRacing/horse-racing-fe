@@ -2,13 +2,14 @@
 // BE chưa có API đọc một lượt: thông tin buổi tìm trong lịch tập của ngựa. Điểm đo, tổng kết, chạy thử, đánh giá đều nhận id lượt.
 // Chủ ngựa không xem được điểm đo từng giây (BE chặn), chỉ thấy 5 chỉ số tổng kết, kết quả chạy thử và nhận xét (đặc tả F2.4 xem rút gọn).
 // Groom không xem nhịp tim và tổng kết (BE trả 403): trang chỉ báo và dẫn về lịch dắt ngựa.
+// HLV của lớp sửa được thời gian chạy thử, video và đánh giá trong 7 ngày sau buổi (lý do bắt buộc khi sửa số).
 import { useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Film, Flag, HeartPulse, MessageSquareQuote, Radio, Timer, Trash2 } from 'lucide-react';
+import { Film, Flag, HeartPulse, MessageSquareQuote, Pencil, Radio, Timer, Trash2 } from 'lucide-react';
 import { getHorse } from '../../api/horses';
 import { CLUB_DEFAULT_LIMITS, getParticipantSummary, getThresholds, listMetrics } from '../../api/performance';
 import { getClass, getEvaluation, getTimeTrial, listHorseSessions, listTrialResults, updateTrialVideo } from '../../api/training';
-import type { HorseTrainingSession, TrialResult } from '../../api/types';
+import type { Evaluation, HorseTrainingSession, TrialResult } from '../../api/types';
 import { Button, ConfirmDialog, EmptyState, NotFound, Notice, Skeleton, cn, useToast } from '../../components/ui';
 import { useAction, useService } from '../../hooks/useService';
 import { useStore } from '../../store/store';
@@ -23,7 +24,8 @@ import { prefersReducedMotion } from '../../lib/motion';
 import { ParticipantPill, TrialBadge } from './components/bits';
 import { MetricChart } from './components/MetricChart';
 import { TrialVideoAttachDialog, TrialVideoButton } from './components/TrialVideo';
-import { trialVideoEditable } from './plan-helpers';
+import { resultEditable } from './plan-helpers';
+import { EvaluationSheet, TrialEditDialog } from './session/dialogs';
 import { ScoreHorseshoe } from './components/motion';
 import { useLiveMetrics } from './hooks';
 import { BackLink } from '../../components/BackLink';
@@ -52,6 +54,8 @@ export default function ParticipantDetail() {
   const toast = useToast();
   const [attaching, setAttaching] = useState<TrialResult | null>(null);
   const [removing, setRemoving] = useState<TrialResult | null>(null);
+  const [editingTrial, setEditingTrial] = useState<TrialResult | null>(null);
+  const [editingEvaluation, setEditingEvaluation] = useState<Evaluation | null>(null);
   const removeVideo = useAction();
   const data = useService(async () => {
     if (groom) return null;
@@ -67,8 +71,8 @@ export default function ParticipantDetail() {
     const trial = row?.sessionType === 'TIME_TRIAL';
     const [target, trainerId] = await Promise.all([
       trial ? getTimeTrial(row.sessionId).then((item) => item.targetTimeMs, () => null) : Promise.resolve(null),
-      // Chỉ HLV trưởng của lớp gắn video sau buổi: cần biết lớp do ai phụ trách.
-      trial && role === 'HEAD_TRAINER' ? getClass(row.classId).then((item) => item.headTrainerId, () => null) : Promise.resolve(null),
+      // Chỉ HLV trưởng của lớp sửa kết quả, video, đánh giá sau buổi: cần biết lớp do ai phụ trách.
+      row && role === 'HEAD_TRAINER' ? getClass(row.classId).then((item) => item.headTrainerId, () => null) : Promise.resolve(null),
     ]);
     return { horse, row, summary, metrics, trials, evaluation, thresholds, target, trainerId };
   }, [id, horseId]);
@@ -107,9 +111,9 @@ export default function ParticipantDetail() {
   if (data.error || !data.data) return <NotFound message={data.error} />;
   const { horse, row, summary, trials, evaluation, thresholds, target, trainerId } = data.data;
   const classTrainer = !!user && !!trainerId && trainerId === user.id;
-  const videoOpen = !!row && trialVideoEditable(row);
+  const videoOpen = !!row && resultEditable(row);
   const canEditVideo = classTrainer && videoOpen;
-  const limits = thresholds?.activeLimits ?? CLUB_DEFAULT_LIMITS;
+  const limits = thresholds?.limits ?? CLUB_DEFAULT_LIMITS;
   const duration = summary.firstRecordedAt && summary.lastRecordedAt ? (new Date(summary.lastRecordedAt).getTime() - new Date(summary.firstRecordedAt).getTime()) / 1000 : undefined;
   const best = trials.length ? Math.min(...trials.map((item) => item.elapsedMs)) : undefined;
   const alerts = summary.warningCount + summary.criticalCount;
@@ -138,13 +142,18 @@ export default function ParticipantDetail() {
               {row && <ParticipantPill status={row.participantStatus} />}
               {row?.subjectName && <span>Môn {row.subjectName}</span>}
               {row?.groomName && <span>Groom {row.groomName}</span>}
-              {row?.completedAt && <span>Hoàn thành {formatDateTime(row.completedAt)}</span>}
+              {row?.completedAt && (
+                <span>
+                  {row.participantStatus === 'STOPPED' ? 'Dừng sớm' : 'Hoàn thành'} {formatDateTime(row.completedAt)}
+                </span>
+              )}
               {duration !== undefined && (
                 <span className="inline-flex items-center gap-1 font-mono">
                   <Timer size={13} /> {formatClock(duration)}
                 </span>
               )}
             </div>
+            {row?.participantStatus === 'STOPPED' && row.stoppedReason && <p className="mt-2 text-sm text-amber-800">Lý do dừng sớm: {row.stoppedReason}</p>}
           </div>
           <div className="flex flex-col items-end gap-2">
             {ongoing && !owner && (
@@ -179,7 +188,7 @@ export default function ParticipantDetail() {
             <h3 className="flex items-center gap-2 font-semibold text-gray-900">
               <HeartPulse size={17} className="text-emerald-700" /> Nhịp tim và tốc độ theo thời gian
             </h3>
-            <span className="text-xs text-gray-500">{thresholds?.source === 'HORSE' ? 'Ngưỡng riêng của ngựa' : 'Ngưỡng mặc định câu lạc bộ'}</span>
+            <span className="text-xs text-gray-500">Ngưỡng câu lạc bộ</span>
           </div>
           {owner ? (
             <Notice tone="info">Chủ ngựa xem các chỉ số tổng kết của buổi tập. Dữ liệu nhịp tim từng giây dành cho huấn luyện viên và bác sĩ.</Notice>
@@ -202,10 +211,16 @@ export default function ParticipantDetail() {
                 <p className="mt-2 text-xs text-gray-400">
                   {row?.evaluation?.evaluatorName ? `${row.evaluation.evaluatorName} · ` : ''}
                   {formatDateTime(evaluation.createdAt)}
+                  {evaluation.updatedAt !== evaluation.createdAt && ` · sửa ${formatDateTime(evaluation.updatedAt)}`}
                 </p>
+                {canEditVideo && (
+                  <Button variant="inline" size="sm" className="mt-2" onClick={() => setEditingEvaluation(evaluation)}>
+                    <Pencil size={13} /> Sửa đánh giá
+                  </Button>
+                )}
               </div>
             ) : (
-              <EmptyState title="Chưa có đánh giá" hint={row && row.participantStatus !== 'COMPLETED' ? `Lượt đang ở trạng thái ${participantStatusText[row.participantStatus].toLowerCase()}.` : 'HLV đánh giá sau khi ngựa hoàn thành lượt.'} className="py-6" />
+              <EmptyState title="Chưa có đánh giá" hint={row && row.participantStatus !== 'COMPLETED' && row.participantStatus !== 'STOPPED' ? `Lượt đang ở trạng thái ${participantStatusText[row.participantStatus].toLowerCase()}.` : 'HLV đánh giá sau khi ngựa hoàn thành lượt.'} className="py-6" />
             )}
           </div>
 
@@ -230,6 +245,11 @@ export default function ParticipantDetail() {
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <TrialVideoButton url={trial.videoUrl} title={`${horse?.name ?? 'Ngựa'} lần chạy ${trial.attemptNo}`} onExpired={data.reload} />
                           {canEditVideo && (
+                            <Button variant="inline" size="sm" onClick={() => setEditingTrial(trial)}>
+                              <Pencil size={13} /> Sửa thời gian
+                            </Button>
+                          )}
+                          {canEditVideo && (
                             <Button variant="inline" size="sm" onClick={() => setAttaching(trial)}>
                               <Film size={13} /> {trial.videoMediaId ? 'Đổi video' : 'Gắn video'}
                             </Button>
@@ -246,13 +266,39 @@ export default function ParticipantDetail() {
                 </ul>
               )}
               {classTrainer && !videoOpen && trials.length > 0 && (
-                <p className="mt-2 text-xs text-gray-500">{row?.sessionStatus === 'CANCELLED' ? 'Buổi đã hủy, không gắn video được.' : 'Đã quá hạn gắn video (7 ngày sau buổi).'}</p>
+                <p className="mt-2 text-xs text-gray-500">{row?.sessionStatus === 'CANCELLED' ? 'Buổi đã hủy, không sửa kết quả được.' : 'Đã quá hạn sửa kết quả (7 ngày sau buổi).'}</p>
               )}
             </div>
           )}
         </aside>
       </div>
 
+      {editingTrial && (
+        <TrialEditDialog
+          participantId={id}
+          trial={editingTrial}
+          horseName={horse?.name ?? 'ngựa'}
+          targetTimeMs={target}
+          onClose={() => setEditingTrial(null)}
+          onDone={() => {
+            setEditingTrial(null);
+            data.reload();
+          }}
+        />
+      )}
+      {editingEvaluation && (
+        <EvaluationSheet
+          participant={{ id }}
+          horseName={horse?.name ?? 'ngựa'}
+          sessionName={row?.name ?? 'Buổi tập'}
+          existing={editingEvaluation}
+          onClose={() => setEditingEvaluation(null)}
+          onDone={() => {
+            setEditingEvaluation(null);
+            data.reload();
+          }}
+        />
+      )}
       {attaching && (
         <TrialVideoAttachDialog
           participantId={id}

@@ -84,9 +84,9 @@ export const INTENSITY_FILL: Record<TrainingIntensity, string> = {
   HEAVY: 'bg-emerald-700 text-white',
 };
 
-const VIDEO_EDIT_DAYS = 7;
+const RESULT_EDIT_DAYS = 7;
 
-/** BE cho gắn, đổi, gỡ video chạy thử trong 7 ngày kể từ giờ kết thúc dự kiến của buổi, buổi chưa hủy. */
-export function trialVideoEditable(row: Pick<HorseTrainingSession, 'sessionStatus' | 'scheduledEndAt'>, now = Date.now()) {
-  return row.sessionStatus !== 'CANCELLED' && now <= new Date(row.scheduledEndAt).getTime() + VIDEO_EDIT_DAYS * 24 * 60 * 60 * 1000;
+/** BE cho HLV của lớp sửa thời gian chạy thử, video, đánh giá trong 7 ngày kể từ giờ kết thúc dự kiến của buổi, buổi chưa hủy. */
+export function resultEditable(row: Pick<HorseTrainingSession, 'sessionStatus' | 'scheduledEndAt'>, now = Date.now()) {
+  return row.sessionStatus !== 'CANCELLED' && now <= new Date(row.scheduledEndAt).getTime() + RESULT_EDIT_DAYS * 24 * 60 * 60 * 1000;
 }
