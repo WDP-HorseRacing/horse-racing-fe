@@ -1,5 +1,5 @@
 // Luật nhỏ của lịch chăm sóc (F3.11) dùng chung giữa các màn hình.
-import type { CareAssigneeType, CareSchedule, CareTaskType } from '../../../api/types';
+import type { CareAssigneeType, CareSchedule, CareTaskType, CareType } from '../../../api/types';
 import { daysBetween } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { useStore } from '../../../store/store';
@@ -60,6 +60,23 @@ export function assigneeInput(choice: AssigneeChoice): { assigneeType: CareAssig
   if (choice.mode === 'HORSE_GROOM') return { assigneeType: 'GROOM', assignedTo: null };
   return { assigneeType: choice.mode, assignedTo: choice.userId || null };
 }
+
+const ALL_MODES: AssigneeMode[] = ['NONE', 'HORSE_GROOM', 'GROOM', 'VET'];
+
+/** Tiêm phòng, tẩy giun chỉ giao được bác sĩ (hoặc chưa giao). Kiểm tra móng giao Groom hoặc bác sĩ. */
+export const isVetOnlyCare = (type?: CareType) => type === 'VACCINATION' || type === 'DEWORMING';
+
+export const assigneeModesFor = (type?: CareType): AssigneeMode[] => (isVetOnlyCare(type) ? ['NONE', 'VET'] : ALL_MODES);
+
+/** Cách giao mặc định khi tạo lịch: loại chỉ bác sĩ thì giao chính bác sĩ đang tạo, còn lại giao Groom phụ trách. */
+export function defaultAssignee(type: CareType, vetId?: string): AssigneeChoice {
+  if (!isVetOnlyCare(type)) return { mode: 'HORSE_GROOM', userId: '' };
+  return vetId ? { mode: 'VET', userId: vetId } : { mode: 'NONE', userId: '' };
+}
+
+/** Đổi loại lịch mà cách giao cũ không còn hợp lệ thì về mặc định của loại mới. */
+export const fitAssignee = (choice: AssigneeChoice, type: CareType, vetId?: string): AssigneeChoice =>
+  assigneeModesFor(type).includes(choice.mode) ? choice : defaultAssignee(type, vetId);
 
 export const sameAssignee = (a: AssigneeChoice, b: AssigneeChoice) => a.mode === b.mode && (a.mode === 'NONE' || a.mode === 'HORSE_GROOM' || a.userId === b.userId);
 

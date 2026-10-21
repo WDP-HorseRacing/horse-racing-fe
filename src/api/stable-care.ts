@@ -91,7 +91,7 @@ export const getGroomToday = () => http.get<GroomToday>('/grooms/me/today');
 
 /* ===== Sự cố tại chuồng ===== */
 
-/** Quản lý CLB, bác sĩ thấy tất cả. HLV thấy ngựa đang ở khu mình. Groom thấy sự cố mình báo. Mới nhất trước. */
+/** Quản lý CLB, bác sĩ thấy tất cả. HLV thấy ngựa đang ở khu mình. Groom thấy sự cố mình báo và mọi sự cố của ngựa mình đang phụ trách. Mới nhất trước. */
 export const listIncidents = (query: { status?: IncidentStatus; horseId?: string; barnId?: string } = {}) => fetchAll<Incident>('/incidents', query);
 /** Chỉ đếm (Tổng quan). */
 export const countIncidents = async (query: { status?: IncidentStatus; barnId?: string } = {}) =>

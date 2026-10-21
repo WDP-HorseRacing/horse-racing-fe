@@ -26,7 +26,6 @@ import { links } from '../../lib/links';
 import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, addDays } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
-import { HIDDEN_COST_TEXT, isCostHidden } from '../medical/components/case-cost';
 import { FEATURES } from '../../config/features';
 import { ActiveClassesCard, GroomTrainingCard, LiveNowCard, ManagerTrainingCards, OwnerTrainingCards, TrainerTodayCard, VetAlertsCard } from './TrainingBlocks';
 
@@ -760,7 +759,7 @@ function GroomDashboard({ name }: { name: string }) {
 
         <Row>
           {doctorNotes}
-          <Panel title="Sự cố tôi báo đang mở" to={links.incidents()} toLabel="Sự cố" flush className="h-full">
+          <Panel title="Sự cố đang mở" to={links.incidents()} toLabel="Sự cố" flush className="h-full">
             {data.incidents.length === 0 ? (
               <p className="px-5 py-5 text-sm text-gray-500">Không có sự cố nào đang mở.</p>
             ) : (
@@ -899,29 +898,25 @@ function OwnerDashboard({ name }: { name: string }) {
       )}
 
       <Row>
-        <Panel title="Chi phí y tế đã chốt" to={links.myCosts} toLabel="Chi phí theo kỳ" flush className="h-full">
+        <Panel title="Chi phí y tế" to={links.myCosts} toLabel="Chi phí theo kỳ" flush className="h-full">
           <div className="px-5 py-4">
             <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(data.medicalCost)}</p>
-            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các bệnh án đã đóng trong thời gian bạn sở hữu.</p>
+            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các buổi khám trong thời gian bạn sở hữu, tính cả bệnh án đang điều trị.</p>
           </div>
-          {data.closedCases.length > 0 && (
+          {data.recentCases.length > 0 && (
             <ul className="divide-y divide-gray-100 border-t border-gray-100">
-              {data.closedCases.map((item) => (
+              {data.recentCases.map((item) => (
                 <li key={item.id}>
                   <Link to={links.case(item.id)} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm transition hover:bg-gray-50">
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-gray-900">
                         {item.horseName} · {item.initialDiagnosis}
                       </span>
-                      <span className="block text-xs text-gray-500">Đóng {formatDate(item.closedAt)}</span>
+                      <span className="block text-xs text-gray-500">{item.closedAt ? `Đóng ${formatDate(item.closedAt)}` : `Mở ${formatDate(item.openedAt)}`}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-3">
                       <CaseStatusPill status={item.status} />
-                      {isCostHidden(item) ? (
-                        <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
-                      ) : (
-                        <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
-                      )}
+                      <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
                     </span>
                   </Link>
                 </li>

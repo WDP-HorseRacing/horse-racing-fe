@@ -13,7 +13,8 @@ import type {
 } from './types';
 
 /* Khu */
-export const listBarns = () => http.get<BarnListItem[]>('/barns');
+/** `mine`: chỉ khu người gọi phụ trách. Không gửi thì mọi khu (kể cả với HT). */
+export const listBarns = (query: { mine?: boolean } = {}) => http.get<BarnListItem[]>('/barns', query.mine ? { mine: true } : {});
 export const getBarn = (id: string) => http.get<Barn>(`/barns/${id}`);
 export const createBarn = (input: { name: string; description?: string; capacity?: number; status?: BarnStatus }) =>
   http.post<Barn>('/barns', input);

@@ -199,7 +199,11 @@ export interface GroomTodayRun {
   sessionName: string;
   scheduledStartAt: string;
   scheduledEndAt: string;
+  /** Sân và mặt sân của buổi. */
+  location: string | null;
+  surface: string | null;
   status: ParticipantStatus;
+  stoppedReason: string | null;
 }
 
 export interface GroomTodayCare {
@@ -228,10 +232,17 @@ export interface GroomTodayOtherCare extends GroomTodayCare {
   horseName: string;
 }
 
+/** Lượt hôm nay Groom được HLV giao dắt ở ngựa Groom không phụ trách. */
+export interface GroomTodayAssistedRun extends GroomTodayRun {
+  horseId: string;
+  horseName: string;
+}
+
 export interface GroomToday {
   date: string;
   horses: GroomTodayHorse[];
   otherCareSchedules: GroomTodayOtherCare[];
+  assistedRuns: GroomTodayAssistedRun[];
 }
 
 /* ===== Sự cố tại chuồng ===== */

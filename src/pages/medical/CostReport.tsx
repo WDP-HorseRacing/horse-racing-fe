@@ -47,7 +47,7 @@ function CostReportPage() {
     <div className="space-y-6">
       <PageHeader
         title="Báo cáo chi phí y tế"
-        description="Tổng chi phí các bệnh án đã đóng trong khoảng ngày (theo ngày đóng), gồm cả ngựa đã chuyển nhượng hoặc đã xóa hồ sơ."
+        description="Tổng chi phí các buổi khám trong khoảng ngày (theo ngày khám), trong hay ngoài bệnh án, gồm cả ngựa đã chuyển nhượng hoặc đã xóa hồ sơ."
       />
 
       <Toolbar>
@@ -92,12 +92,12 @@ function CostReportPage() {
               </p>
               <p className="mt-2 text-3xl font-bold leading-none tracking-tight text-gray-900 tabular-nums">{formatMoney(report.data.totalCost)}</p>
               <p className="mt-3 text-sm text-gray-600">
-                {report.data.caseCount} bệnh án đã đóng · {report.data.items.length} ngựa
+                {report.data.visitCount} buổi khám · {report.data.items.length} ngựa
               </p>
               <p className="mt-1 text-xs text-gray-500">
                 {formatDate(report.data.from)} – {formatDate(report.data.to)}
               </p>
-              <p className="mt-4 text-xs text-gray-500">Bệnh án đang mở hoặc đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: bệnh án thuộc người làm chủ lúc bệnh án được đóng.</p>
+              <p className="mt-4 text-xs text-gray-500">Buổi khám đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: buổi khám thuộc người làm chủ vào ngày khám. Lọc theo khu tính theo khu hiện tại của ngựa.</p>
             </Card>
             <div className="lg:col-span-8">
               <DataTable
@@ -105,11 +105,11 @@ function CostReportPage() {
                 rowKey={(row) => row.horseId}
                 onRowClick={(row) => navigate(links.horseMedical(row.horseId))}
                 pageSize={15}
-                emptyTitle="Không có bệnh án nào được đóng trong khoảng này"
+                emptyTitle="Không có buổi khám nào trong khoảng này"
                 emptyHint="Thử mở rộng khoảng ngày hoặc bỏ lọc khu, chủ ngựa."
                 columns={[
                   { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} plain /> },
-                  { key: 'cases', header: 'Bệnh án', render: (row) => <span className="text-sm tabular-nums text-gray-700">{row.caseCount}</span> },
+                  { key: 'visits', header: 'Buổi khám', render: (row) => <span className="text-sm tabular-nums text-gray-700">{row.visitCount}</span> },
                   {
                     key: 'share',
                     header: 'Tỷ trọng',

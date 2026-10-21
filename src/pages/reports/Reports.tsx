@@ -99,7 +99,11 @@ function TrainingReport({ period, trainer }: { period: Period; trainer: boolean 
                   className="mt-5"
                   parts={INTENSITIES.map((intensity) => ({ key: intensity, label: intensityText[intensity], value: data.training.completedByIntensity[intensity], color: INTENSITY_COLORS[intensity] }))}
                 />
-                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-[1fr_1.4fr]">
+                <div className="mt-5 grid grid-cols-3 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-[1fr_1fr_1.4fr]">
+                  <div>
+                    <p className="text-xs text-gray-500">Dừng sớm</p>
+                    <p className={cn('font-mono text-xl font-bold tabular-nums', data.training.stopped ? 'text-amber-700' : 'text-gray-400')}>{data.training.stopped}</p>
+                  </div>
                   <div>
                     <p className="text-xs text-gray-500">Vắng</p>
                     <p className={cn('font-mono text-xl font-bold tabular-nums', data.training.absent ? 'text-amber-700' : 'text-gray-400')}>{data.training.absent}</p>
@@ -264,7 +268,7 @@ function FinanceReport({ period }: { period: Period }) {
                     header: 'Chủ ngựa',
                     render: (row) =>
                       row.ownerId === UNOWNED ? (
-                        <span className="text-gray-500" title="Ngày ngựa ở CLB mà không có chủ, và bệnh án đóng lúc ngựa không có chủ">
+                        <span className="text-gray-500" title="Ngày ngựa ở CLB mà không có chủ, và buổi khám lúc ngựa không có chủ">
                           Chưa có chủ <span className="text-xs">({data.unowned.billedDays} ngày tính phí)</span>
                         </span>
                       ) : (
@@ -279,7 +283,7 @@ function FinanceReport({ period }: { period: Period }) {
               />
             </section>
             <p className="text-xs leading-relaxed text-gray-500">
-              Phí nuôi tính từng ngày cho người làm chủ lúc hết ngày, ngày chuyển chủ tính cho chủ mới. Phụ phí là khoản riêng từng ngựa, tính theo ngày trong khoảng đã ghi. Y tế chỉ tính bệnh án đã đóng trong kỳ. Dòng "Chưa có chủ" gom các ngày ngựa ở CLB mà không có chủ (sau kích hoạt lại hoặc khôi phục hồ sơ) và bệnh án đóng lúc đó, nên tổng các dòng bằng khoản thu ở trên.
+              Phí nuôi tính từng ngày cho người làm chủ lúc hết ngày, ngày chuyển chủ tính cho chủ mới. Phụ phí là khoản riêng từng ngựa, tính theo ngày trong khoảng đã ghi. Y tế tính từng buổi khám theo ngày khám, kể cả bệnh án đang điều trị. Dòng "Chưa có chủ" gom các ngày ngựa ở CLB mà không có chủ (sau khi khôi phục hồ sơ) và buổi khám lúc đó, nên tổng các dòng bằng khoản thu ở trên.
             </p>
           </div>
         )

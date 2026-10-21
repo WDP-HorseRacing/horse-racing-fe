@@ -36,7 +36,7 @@ import type { HorseDetail, HorsePermissions, MedicalRecord, TrainingLock } from 
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs, type Crumb } from '../../components/Breadcrumb';
-import { ActionMenu, Button, Card, Dot, EmptyState, ErrorBox, NotFound, Reveal, SectionTitle, Skeleton, Tabs, cn } from '../../components/ui';
+import { ActionMenu, Button, Card, Dot, EmptyState, ErrorBox, NotFound, Reveal, SectionTitle, Skeleton, Tabs, ToggleChip, cn } from '../../components/ui';
 import { HorseDetailSkeleton } from '../../components/skeletons';
 import { HorseMedia } from '../horses/components/HorseMedia';
 import { CaseStatusPill, LockPill, RequestPill, healthDot } from '../../components/ui/status';
@@ -46,14 +46,14 @@ import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
 import { InjuryProgress, VisitTimeline } from './components/ExamTimeline';
 import { CareScheduleSection } from './components/care';
-import { CreateRequestModal, HealthChangeModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisitModal } from './components/modals';
+import { AdjustCostModal, CreateRequestModal, HealthChangeModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisitModal } from './components/modals';
 import { usePeople } from './components/people';
 import { CheckupDue, HealthShift } from './components/parts';
 import { healthText } from './components/utils';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
 import { FEATURES } from '../../config/features';
 import { IncidentReportDialog } from '../stable-care/components/IncidentReport';
-import { HIDDEN_COST_TEXT, isCostHidden, isOwnClosed } from './components/case-cost';
+import { isCostHidden } from './components/case-cost';
 
 type Dialog =
   | { kind: 'health' }
@@ -61,6 +61,7 @@ type Dialog =
   | { kind: 'release'; lock: TrainingLock }
   | { kind: 'request' }
   | { kind: 'void'; record: MedicalRecord }
+  | { kind: 'cost'; record: MedicalRecord }
   | null;
 
 const TABS = [
@@ -245,6 +246,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const canCare = can(user, 'care.manage') && !readOnly;
   const people = usePeople(horse.groom ? [horse.groom] : []);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [showHealed, setShowHealed] = useState(false);
   const [params, setParams] = useSearchParams();
   const requestedTab = params.get('tab');
   const tab: TabKey = TABS.some((item) => item.key === requestedTab) ? (requestedTab as TabKey) : 'timeline';
@@ -286,9 +288,10 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const lastOpenVisit = openCase ? activeVisits.find((record) => record.caseId === openCase.id) : undefined;
   const pendingRequests = (data.requests ?? []).filter((request) => request.status === 'PENDING');
   const urgentPending = pendingRequests.filter((request) => request.urgent).length;
-  // Chỉ đếm bệnh án có chi phí tính cho người đang xem (chủ ngựa không tính bệnh án của chủ trước).
-  const closedCount = data.cases.items.filter(isOwnClosed).length;
-  const hiddenCount = data.cases.items.filter((item) => item.status === 'CLOSED' && isCostHidden(item)).length;
+  // Chi phí tính theo từng buổi khám. Chủ ngựa chỉ được cộng buổi khám trong thời gian mình sở hữu.
+  const billedVisits = activeVisits.filter((record) => !isCostHidden(record)).length;
+  const hiddenVisits = activeVisits.length - billedVisits;
+  const unhealed = data.injuries.filter((injury) => injury.currentRecoveryStatus !== 'HEALED');
   const visit = () => navigate(links.visitNew({ horseId: horse.id, caseId: openCase?.id, back: here }));
 
   const menu = [
@@ -386,7 +389,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
             <Tile icon={<Wallet size={14} />} label="Chi phí y tế">
               <p className="text-xl font-bold tabular-nums text-gray-900">{formatMoney(data.cases.totalCost ?? 0)}</p>
               <p className="text-xs text-gray-500">
-                {closedCount} bệnh án đã đóng{hiddenCount > 0 ? ' trong thời gian bạn sở hữu' : ''}
+                {billedVisits} buổi khám{hiddenVisits > 0 ? ' trong thời gian bạn sở hữu' : ''}
               </p>
             </Tile>
           )
@@ -407,6 +410,8 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
                 people={people}
                 caseLabel={(record) => (record.caseId ? (caseById.get(record.caseId)?.initialDiagnosis ?? 'Bệnh án') : undefined)}
                 onVoid={isVet ? (record) => setDialog({ kind: 'void', record }) : undefined}
+                canVoid={(record) => record.vetId === user?.id}
+                onAdjustCost={isVet && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
               />
             ))}
 
@@ -428,13 +433,9 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
                           {item.finalConclusion && <p className="mt-1 line-clamp-2 text-sm text-gray-600">{item.finalConclusion}</p>}
                         </div>
                         <div className="flex items-center gap-3">
-                          {costVisible &&
-                            item.status === 'CLOSED' &&
-                            (isCostHidden(item) ? (
-                              <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
-                            ) : (
-                              <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</span>
-                            ))}
+                          {costVisible && item.status !== 'CANCELLED' && (
+                            <span className="text-sm font-semibold tabular-nums text-gray-900">{formatMoney(item.totalCost ?? 0)}</span>
+                          )}
                           <CaseStatusPill status={item.status} />
                         </div>
                       </Link>
@@ -447,8 +448,22 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
 
           {tab === 'injuries' && (
             <Card>
-              <SectionTitle icon={<Bandage size={16} />}>Diễn biến chấn thương</SectionTitle>
-              <InjuryProgress items={data.injuries} />
+              <SectionTitle
+                icon={<Bandage size={16} />}
+                action={
+                  data.injuries.length > unhealed.length && (
+                    <ToggleChip checked={showHealed} onChange={setShowHealed}>
+                      Cả vết đã lành
+                    </ToggleChip>
+                  )
+                }
+              >
+                Diễn biến chấn thương
+              </SectionTitle>
+              <InjuryProgress
+                items={showHealed ? data.injuries : unhealed}
+                empty={data.injuries.length > 0 ? 'Mọi chấn thương đã lành.' : 'Chưa ghi chấn thương nào.'}
+              />
             </Card>
           )}
 
@@ -555,10 +570,10 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
             <Card variant="flat">
               <SectionTitle icon={<Wallet size={16} />}>Tổng chi phí y tế</SectionTitle>
               <p className="text-lg font-semibold tabular-nums text-gray-900">{formatMoney(data.cases.totalCost ?? 0)}</p>
-              <p className="mt-1 text-xs text-gray-500">{closedCount} bệnh án đã đóng. Bệnh án đang mở chưa có chi phí, khám định kỳ không tính phí.</p>
+              <p className="mt-1 text-xs text-gray-500">Cộng {billedVisits} buổi khám chưa hủy, trong và ngoài bệnh án, kể cả bệnh án đang điều trị.</p>
             </Card>
           )}
-          {!costVisible && closedCount > 0 && <p className="px-1 text-xs text-gray-500">Chi phí y tế không hiển thị với vai trò của bạn.</p>}
+          {!costVisible && activeVisits.length > 0 && <p className="px-1 text-xs text-gray-500">Chi phí y tế không hiển thị với vai trò của bạn.</p>}
         </aside>
       </div>
 
@@ -566,6 +581,7 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
       {dialog?.kind === 'lock' && <PlaceLockModal horse={{ id: horse.id, name: horse.name }} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'release' && <ReleaseLockModal lock={dialog.lock} horseName={horse.name} onClose={() => setDialog(null)} onDone={done} />}
       <CreateRequestModal open={dialog?.kind === 'request'} onClose={() => setDialog(null)} horse={{ id: horse.id, name: horse.name }} onDone={medical.reload} />
+      {dialog?.kind === 'cost' && <AdjustCostModal record={dialog.record} horseName={horse.name} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'void' && (
         <VoidVisitModal
           record={dialog.record}

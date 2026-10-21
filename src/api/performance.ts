@@ -1,4 +1,4 @@
-// Flow 2 — nhịp tim, tốc độ của lượt tập, ngưỡng của ngựa, lịch sử cảnh báo, khối lượng tập.
+// Flow 2 — nhịp tim, tốc độ của lượt tập, ngưỡng của câu lạc bộ, lịch sử cảnh báo, khối lượng tập.
 import { http, request } from './http';
 import type {
   HorseAlert,
@@ -9,8 +9,6 @@ import type {
   Page,
   ParticipantSummary,
   SessionPerformanceSummary,
-  ThresholdInput,
-  ThresholdProfile,
 } from './types';
 
 /** Điểm đo của một lượt (7.200 điểm mới nhất), cũ trước. Chỉ Quản lý CLB, bác sĩ, HLV trưởng gọi được, Groom và chủ ngựa nhận 403. */
@@ -30,11 +28,10 @@ export const listHorseAlerts = (
 export const getWorkload = (horseId: string, range: { from?: string; to?: string } = {}) =>
   http.get<HorseWorkload>(`/horses/${horseId}/workload`, range);
 
+/** Ngưỡng áp cho ngựa: mọi ngựa dùng chung ngưỡng câu lạc bộ, không đặt riêng được. HT của khu, CM, bác sĩ. */
 export const getThresholds = (horseId: string) => http.get<HorseThresholds>(`/horses/${horseId}/thresholds`);
-/** Mỗi lần gọi tạo một phiên bản ngưỡng mới. Chỉ HLV của khu chứa ngựa. */
-export const setThresholds = (horseId: string, input: ThresholdInput) => http.put<ThresholdProfile>(`/horses/${horseId}/thresholds`, input);
 
-/** Mặc định CLB khi ngựa chưa có ngưỡng riêng (khớp BE). */
+/** Ngưỡng câu lạc bộ (khớp BE), dùng khi chưa tải được hoặc vai trò không gọi được API ngưỡng. */
 export const CLUB_DEFAULT_LIMITS = { heartRateWarningBpm: 220, heartRateCriticalBpm: 240, maxSpeedMps: 18 };
 
 /** Một điểm đo cảm biến gửi lên (tốc độ m/s). */

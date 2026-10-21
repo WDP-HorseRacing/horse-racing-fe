@@ -236,7 +236,7 @@ export function ReceiveDialog({ item, onClose, onDone }: { item: SupplyItem; onC
   );
 }
 
-/* ===== Xuất dùng (Quản lý CLB, HLV, bác sĩ, Groom) ===== */
+/* ===== Xuất dùng (Quản lý CLB, HLV, bác sĩ, Groom; thuốc chỉ Quản lý CLB, bác sĩ). Ghi chú bắt buộc ===== */
 
 export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClose: () => void; onDone: (item: SupplyItem) => void }) {
   const toast = useToast();
@@ -248,7 +248,7 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
   const overStock = !Number.isNaN(value) && value > item.quantityOnHand;
   const clientErrors = {
     quantity: quantityError(quantity, { label: 'Số lượng', max: MAX_STOCK }) ?? (overStock ? `Chỉ còn ${formatAmount(item.quantityOnHand, item.unit)}` : undefined),
-    note: textError(note, { label: 'Ghi chú', max: 500, required: false }),
+    note: note.trim() ? textError(note, { label: 'Ghi chú', max: 500, required: false }) : 'Phải ghi chú lần xuất',
   };
   const errors = {
     quantity: clientErrors.quantity ?? action.fieldErrors.quantity,
@@ -267,7 +267,7 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
     setTouched(true);
     if (Object.values(clientErrors).some(Boolean)) return;
     void action.run(
-      () => recordSupplyUsage(item.id, { quantity: value, ...(note.trim() ? { note: note.trim() } : {}) }),
+      () => recordSupplyUsage(item.id, { quantity: value, note: note.trim() }),
       (saved) => {
         toast.push(`Đã xuất ${formatAmount(value, saved.unit)} ${saved.name}`, 'success');
         onDone(saved);
@@ -297,8 +297,8 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
             {crossesThreshold ? '. Xuống mức sắp hết, Quản lý CLB sẽ được báo.' : ''}
           </p>
         )}
-        <Field label="Ghi chú" error={shown('note')}>
-          <Textarea rows={2} value={note} onChange={(event) => edit(setNote)(event.target.value)} placeholder="Ví dụ: Cho ô A3, hoặc Hao hụt khi kiểm kho" />
+        <Field label="Ghi chú" required error={shown('note')} hint="Lấy cho ai, việc gì. Sổ nhập xuất giữ ghi chú này.">
+          <Textarea rows={2} maxLength={500} value={note} onChange={(event) => edit(setNote)(event.target.value)} placeholder="Ví dụ: Cho ngựa ô A3, hoặc Hao hụt khi kiểm kho" />
         </Field>
         {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}
       </div>

@@ -1,6 +1,7 @@
 // F4.5 — Vật tư: kho chung của câu lạc bộ (không chia theo khu), quản lý theo lô.
 // Quản lý CLB: thêm, sửa, xóa vật tư, nhập hàng kèm đơn giá, duyệt hoặc từ chối đề xuất rồi cấp hàng (kèm đơn giá).
-// HLV, Groom: theo dõi tồn, xuất dùng, đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng.
+// HLV, Groom: theo dõi tồn, xuất dùng (trừ thuốc), đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng cả thuốc.
+// Mọi lần xuất bắt buộc ghi chú.
 // Hệ thống không tự trừ tồn theo khẩu phần hay đơn thuốc: ai lấy hàng thì bấm Xuất dùng, lô nhập trước trừ trước.
 // Tiền (đơn giá, thành tiền, giá trị tồn) chỉ Quản lý CLB thấy.
 import { useEffect, useMemo, useState } from 'react';
@@ -64,7 +65,10 @@ export default function Supplies() {
 
   const canManage = can(user, 'supply.manage');
   const canReceive = can(user, 'supply.receive');
-  const canUse = can(user, 'supply.use');
+  const canUseAny = can(user, 'supply.use');
+  const canUseMedicine = can(user, 'supply.useMedicine');
+  // Thuốc chỉ Quản lý CLB và bác sĩ xuất (BE trả 403 với HLV, Groom).
+  const canUse = (item: SupplyItem) => canUseAny && (item.category !== 'MEDICINE' || canUseMedicine);
   const showPrice = can(user, 'supply.price');
   const canRequest = can(user, 'supplyRequest.create');
   const canViewRequests = can(user, 'supplyRequest.view');
@@ -110,7 +114,7 @@ export default function Supplies() {
           canManage
             ? 'Thức ăn, thuốc và dụng cụ dùng chung của CLB.'
             : canRequest
-              ? 'Lấy hàng ra dùng thì bấm Xuất dùng. Sắp hết thì đề xuất thêm.'
+              ? `Lấy hàng ra dùng thì bấm Xuất dùng, ghi rõ lấy cho việc gì${canUseMedicine ? '' : ' (thuốc do bác sĩ xuất)'}. Sắp hết thì đề xuất thêm.`
               : 'Lấy hàng ra dùng thì bấm Xuất dùng.'
         }
         actions={
@@ -193,7 +197,7 @@ export default function Supplies() {
                       <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {canUse && (
+                      {canUse(item) && (
                         <Button variant="ghost" size="icon" title={item.quantityOnHand > 0 ? 'Xuất dùng' : 'Hết hàng'} disabled={item.quantityOnHand <= 0} onClick={() => setDialog({ kind: 'use', item })}>
                           <PackageMinus size={16} />
                         </Button>
@@ -275,7 +279,7 @@ export default function Supplies() {
           onClose={() => setOpenId(null)}
           showPrice={showPrice}
           onReceive={canReceive ? () => setDialog({ kind: 'receive', item: opened }) : undefined}
-          onUse={canUse && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
+          onUse={canUse(opened) && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
           onRequest={canRequest ? () => setDialog({ kind: 'request', item: opened }) : undefined}
           onEdit={canManage ? () => setDialog({ kind: 'item', item: opened }) : undefined}
           onChanged={afterItemChange}

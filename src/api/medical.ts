@@ -17,7 +17,6 @@ import type {
   HealthChangeResult,
   HealthHistoryItem,
   HealthStatus,
-  InjuryTimelineItem,
   MedicalCase,
   MedicalCaseDetail,
   MedicalCaseList,
@@ -25,13 +24,17 @@ import type {
   MedicalRecord,
   Page,
   StandaloneVisitInput,
+  TrackedInjury,
   TrainingLock,
   VisitInputBase,
 } from './types';
 
 /* Bảng điều khiển và khám định kỳ */
-/** `careAssignee = 'me'`: khối lịch chăm sóc chỉ còn lịch người gọi là người làm, các khối khác không đổi. */
-export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus; careAssignee?: 'me' } = {}) =>
+/**
+ * `careAssignee = 'me'`: khối lịch chăm sóc chỉ còn lịch người gọi là người làm, các khối khác không đổi.
+ * `mine`: chỉ các khu người gọi phụ trách (HT mặc định thấy mọi khu).
+ */
+export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus; careAssignee?: 'me'; mine?: boolean } = {}) =>
   http.get<MedicalDashboard>('/medical/dashboard', query);
 export const listCheckups = (query: { status?: CheckupDueStatus; barnId?: string } = {}) =>
   http.get<CheckupItem[]>('/medical/checkups', query);
@@ -45,7 +48,11 @@ export const createStandaloneVisit = (horseId: string, input: StandaloneVisitInp
   http.post<MedicalRecord>(`/horses/${horseId}/medical-records`, input);
 export const createFollowUpVisit = (caseId: string, input: VisitInputBase) =>
   http.post<MedicalRecord>(`/medical-cases/${caseId}/visits`, input);
+/** Chỉ bác sĩ ghi phiếu được hủy. */
 export const voidRecord = (id: string, reason: string) => http.post<MedicalRecord>(`/medical-records/${id}/void`, { reason });
+/** Chỉ bác sĩ. Bệnh án mở hay đóng đều sửa được. */
+export const adjustVisitCost = (id: string, cost: number, reason: string) =>
+  http.patch<MedicalRecord>(`/medical-records/${id}/cost`, { cost, reason });
 
 /* Bệnh án */
 export const listHorseCases = (horseId: string, status?: MedicalCase['status']) =>
@@ -53,8 +60,6 @@ export const listHorseCases = (horseId: string, status?: MedicalCase['status']) 
 export const getCase = (id: string) => http.get<MedicalCaseDetail>(`/medical-cases/${id}`);
 export const getClosePreview = (id: string) => http.get<ClosePreview>(`/medical-cases/${id}/close-preview`);
 export const closeCase = (id: string, input: CloseCaseInput) => http.post<MedicalCase>(`/medical-cases/${id}/close`, input);
-export const adjustCaseCost = (id: string, totalCost: number, reason: string) =>
-  http.patch<MedicalCase>(`/medical-cases/${id}/cost`, { totalCost, reason });
 export const getCostReport = (query: { from: string; to: string; barnId?: string; ownerId?: string }) =>
   http.get<CostReport>('/medical/cost-report', query);
 
@@ -72,7 +77,9 @@ export const dismissExamRequest = (id: string, reason: string) => http.post<Exam
 export const changeHealthStatus = (horseId: string, healthStatus: HealthStatus, reason: string) =>
   http.patch<HealthChangeResult>(`/horses/${horseId}/health-status`, { healthStatus, reason });
 export const getHealthHistory = (horseId: string) => http.get<HealthHistoryItem[]>(`/horses/${horseId}/health-history`);
-export const getInjuries = (horseId: string) => http.get<InjuryTimelineItem[]>(`/horses/${horseId}/injuries`);
+/** Mỗi phần tử là một vết, theo lần khám sớm nhất. `unhealedOnly`: chỉ vết chưa lành. */
+export const getInjuries = (horseId: string, query: { unhealedOnly?: boolean } = {}) =>
+  http.get<TrackedInjury[]>(`/horses/${horseId}/injuries`, query.unhealedOnly ? { unhealedOnly: true } : {});
 export const getCareInstructions = (horseId: string) => http.get<CareInstructions>(`/horses/${horseId}/care-instructions`);
 
 /* Khóa huấn luyện */

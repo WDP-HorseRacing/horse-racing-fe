@@ -170,7 +170,7 @@ export async function loadManager() {
     Promise.all(
       months.map((month) =>
         getCostReport({ from: month.from, to: month.to })
-          .then((report) => ({ key: month.key, label: month.label, total: report.totalCost, count: report.caseCount }))
+          .then((report) => ({ key: month.key, label: month.label, total: report.totalCost, count: report.visitCount }))
           .catch(() => ({ key: month.key, label: month.label, total: 0, count: 0 })),
       ),
     ),
@@ -197,7 +197,7 @@ export async function loadManager() {
 /* ===== Huấn luyện viên trưởng ===== */
 
 export async function loadTrainer(userId: string) {
-  const [horses, barns, stalls, medical, stable] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard(), loadStableSummary(false)]);
+  const [horses, barns, stalls, medical, stable] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard({ mine: true }), loadStableSummary(false)]);
   const mine = horses.filter(inClub);
   const ids = new Set(mine.map((horse) => horse.id));
   const care = dashboardCare(medical);
@@ -264,7 +264,7 @@ export async function loadGroom() {
     Promise.all(horses.map((horse) => listCareSchedules(horse.id).then((items) => items.map((schedule) => ({ schedule, horseName: horse.name }))).catch(() => []))),
     Promise.all(horses.map((horse) => getCareInstructions(horse.id).then((result) => ({ horse, current: result.current })).catch(() => ({ horse, current: null })))),
     listExamRequests({ status: 'PENDING', limit: 100 }).catch(() => undefined),
-    // Flow 4: việc hôm nay (checklist, khẩu phần, lượt dắt tập) và sự cố mình báo còn mở. Lỗi thì màn vẫn hiện phần cũ.
+    // Flow 4: việc hôm nay (checklist, khẩu phần, lượt dắt tập) và sự cố còn mở của ngựa mình hoặc mình báo. Lỗi thì màn vẫn hiện phần cũ.
     FEATURES.stableCare ? getGroomToday().catch(() => null) : Promise.resolve(null),
     FEATURES.stableCare ? listIncidents({ status: 'OPEN' }).catch(() => []) : Promise.resolve([]),
   ]);
@@ -289,7 +289,7 @@ export async function loadOwner() {
   const [cases, care, costs] = await Promise.all([
     Promise.all(horses.map((horse) => listHorseCases(horse.id).then((result) => ({ horse, ...result })).catch(() => ({ horse, items: [] as MedicalCase[], totalCost: undefined })))),
     Promise.all(active.map((horse) => listCareSchedules(horse.id).then((items) => items.map((schedule) => ({ schedule, horseName: horse.name }))).catch(() => []))),
-    // 30 ngày gần nhất (mặc định của BE): phí nuôi + y tế đã chốt.
+    // 30 ngày gần nhất (mặc định của BE): phí nuôi, phụ phí, y tế theo ngày khám.
     getOwnerCosts({}).catch(() => null),
   ]);
   const schedules = care.flat().filter((item) => item.schedule.status === 'SCHEDULED');
@@ -298,7 +298,11 @@ export async function loadOwner() {
     horses,
     active,
     openCases: allCases.filter((item) => item.status === 'OPEN'),
-    closedCases: allCases.filter((item) => item.status === 'CLOSED').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '')),
+    // Bệnh án gần nhất (đang điều trị hoặc đã đóng), có chi phí ngay từ buổi khám đầu.
+    recentCases: allCases
+      .filter((item) => item.status !== 'CANCELLED')
+      .sort((a, b) => (b.closedAt ?? b.openedAt).localeCompare(a.closedAt ?? a.openedAt))
+      .slice(0, 6),
     medicalCost: cases.reduce((sum, entry) => sum + (entry.totalCost ?? 0), 0),
     costs,
     schedules,

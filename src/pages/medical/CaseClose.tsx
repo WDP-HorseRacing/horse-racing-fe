@@ -1,22 +1,26 @@
-// F3.9 — Trang đóng bệnh án và chốt chi phí (VET).
-// Cột trái: kết luận cuối, tổng chi phí, quyết định với khóa huấn luyện còn hiệu lực.
+// F3.9 — Trang đóng bệnh án (VET).
+// Chi phí đã ghi ở từng buổi khám, trang này chỉ hiện tổng. Còn vết chấn thương chưa lành thì BE chặn đóng:
+// trang liệt kê vết và dẫn sang ghi buổi tái khám đánh dấu Đã lành.
+// Cột trái: kết luận cuối, chi phí, quyết định với khóa huấn luyện còn hiệu lực.
 // Cột phải: tóm tắt bệnh án, yêu cầu khám còn chờ của ngựa, nút đóng.
 import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { FileCheck2, Lock, Wallet } from 'lucide-react';
+import { Bandage, FileCheck2, Lock, Plus, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
 import { closeCase, getCase, getClosePreview, getInjuries, listHorseExamRequests } from '../../api/medical';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { CharCount, ErrorBox, Field, Input, Notice, NotFound, PageHeader, Skeleton, Textarea, Button, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { CharCount, ErrorBox, Field, Notice, NotFound, PageHeader, Skeleton, Textarea, Button, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { bodyRegionLabel, injuryTypeLabel } from '../../lib/api-labels';
+import { RecoveryTag } from './components/ExamTimeline';
 import { healthLabel } from '../../lib/labels';
 import { formatDate, formatMoney } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { usePeople } from './components/people';
 import { RequestMeta, RequestText } from './components/parts';
-import { MAX_COST, dateToIso, formatMoneyInput, parseMoney, todayKey } from './components/utils';
+import { dateToIso, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { DatePicker } from '../../components/ui/DatePicker';
 
@@ -40,11 +44,10 @@ export default function CaseClose() {
       listHorseExamRequests(item.horseId).then((rows) => rows.filter((row) => row.status === 'PENDING')).catch(() => []),
       getInjuries(item.horseId).catch(() => []),
     ]);
-    return { item, horse, preview, pending, injuries: injuries.filter((injury) => injury.caseId === id) };
+    return { item, horse, preview, pending, injuries: injuries.filter((injury) => injury.history.some((step) => step.caseId === id)) };
   }, [id]);
 
   const [conclusion, setConclusion] = useState('');
-  const [cost, setCost] = useState('');
   const [decision, setDecision] = useState<'RELEASE' | 'KEEP' | ''>('');
   const [keepDate, setKeepDate] = useState('');
   const [attempted, setAttempted] = useState(false);
@@ -68,13 +71,13 @@ export default function CaseClose() {
     );
   }
 
-  const costValue = parseMoney(cost);
-  const costOk = cost.trim() !== '' && Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST;
   const lock = preview.activeLock;
+  const unhealed = injuries.filter((injury) => injury.currentRecoveryStatus !== 'HEALED');
+  // Đếm của BE là chuẩn, danh sách lấy từ diễn biến chấn thương.
+  const blocked = preview.unhealedInjuryCount > 0;
+  const followUp = links.visitNew({ horseId: horse.id, caseId: item.id, back: links.caseClose(item.id) });
   const errors: Record<string, string> = {};
   if (!conclusion.trim()) errors.conclusion = 'Nhập kết luận cuối';
-  if (!cost.trim()) errors.cost = 'Nhập tổng chi phí (miễn phí thì nhập 0)';
-  else if (!costOk) errors.cost = 'Chi phí là số nguyên từ 0 đến 10 tỷ đồng';
   if (lock && !decision) errors.decision = 'Chọn gỡ hoặc giữ khóa huấn luyện';
   if (lock && decision === 'KEEP' && !keepDate) errors.keepDate = 'Chọn ngày dự kiến gỡ khóa';
   const show = (key: string) => (attempted ? errors[key] : undefined);
@@ -82,6 +85,7 @@ export default function CaseClose() {
 
   const submit = () => {
     setAttempted(true);
+    if (blocked) return;
     if (Object.keys(errors).length > 0) {
       scrollToFirstError(formRef.current ?? document);
       return;
@@ -90,7 +94,6 @@ export default function CaseClose() {
       () =>
         closeCase(item.id, {
           finalConclusion: conclusion.trim(),
-          totalCost: costValue,
           ...(lock ? { lockDecision: decision as 'RELEASE' | 'KEEP' } : {}),
           ...(lock && decision === 'KEEP' ? { lockExpectedEnd: dateToIso(keepDate) } : {}),
         }),
@@ -111,6 +114,27 @@ export default function CaseClose() {
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:col-span-8">
+          {blocked && (
+            <Notice tone="danger" icon={<Bandage size={16} />}>
+              <p className="font-medium">Còn {preview.unhealedInjuryCount} chấn thương chưa lành, chưa đóng được bệnh án.</p>
+              <p className="mt-0.5">Ghi một buổi tái khám đánh dấu Đã lành cho từng vết dưới đây rồi quay lại đóng.</p>
+              {unhealed.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {unhealed.map((injury) => (
+                    <li key={injury.id} className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{bodyRegionLabel[injury.bodyRegion]}</span>
+                      <span>· {injuryTypeLabel[injury.injuryType]}</span>
+                      <RecoveryTag status={injury.currentRecoveryStatus} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button size="sm" className="mt-3" onClick={() => navigate(followUp)}>
+                <Plus size={14} /> Ghi buổi tái khám
+              </Button>
+            </Notice>
+          )}
+
           {preview.healthWarning && (
             <Notice tone="warning">
               Ngựa vẫn đang <span className="font-semibold">{healthLabel[preview.healthStatus]}</span>. Ngựa khỏi rồi thì nhớ đổi lại sức khỏe.
@@ -131,15 +155,10 @@ export default function CaseClose() {
           </FormSection>
 
           <FormSection icon={<Wallet size={16} />} title="Chi phí điều trị">
-            <Field label="Tổng chi phí cả bệnh án (đồng)" required name="cost" error={show('cost')} hint={costOk ? `= ${formatMoney(costValue)}` : undefined} className="sm:max-w-sm">
-              <Input
-                inputMode="numeric"
-                value={cost}
-                onChange={(event) => setCost(formatMoneyInput(event.target.value))}
-                placeholder="Ví dụ: 12.500.000"
-                className={cn('text-base tabular-nums', show('cost') && invalidClass)}
-              />
-            </Field>
+            <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost ?? 0)}</p>
+            <p className="text-sm text-gray-500">
+              Cộng chi phí {visits.length} buổi khám của bệnh án. Chi phí ghi ở từng buổi khám, sai số thì điều chỉnh ở buổi đó trong trang bệnh án.
+            </p>
           </FormSection>
 
           {lock && (
@@ -198,7 +217,10 @@ export default function CaseClose() {
               </div>
               <div className="flex justify-between gap-3">
                 <dt className="text-gray-500">Chấn thương đã ghi</dt>
-                <dd className="text-gray-900">{new Set(injuries.map((injury) => `${injury.bodyRegion}:${injury.injuryType}`)).size}</dd>
+                <dd className="text-gray-900">
+                  {injuries.length}
+                  {unhealed.length > 0 && <span className="text-red-600"> · {unhealed.length} chưa lành</span>}
+                </dd>
               </div>
             </dl>
           </HorseCard>
@@ -223,13 +245,13 @@ export default function CaseClose() {
           <SaveCard>
             <ul className="space-y-1.5">
               <Outcome>Bệnh án chuyển sang Đã đóng, không thêm buổi khám, không mở lại</Outcome>
-              <Outcome>Chủ ngựa và quản lý nhận thông báo kèm chi phí{costOk ? ` ${formatMoney(costValue)}` : ''}</Outcome>
+              <Outcome>Chủ ngựa và quản lý nhận thông báo kèm chi phí {formatMoney(item.totalCost ?? 0)}</Outcome>
               {lock && decision === 'RELEASE' && <Outcome>Gỡ khóa huấn luyện</Outcome>}
               {lock && decision === 'KEEP' && <Outcome tone="warning">Giữ khóa{keepDate ? ` tới khoảng ${formatDate(keepDate)}` : ''}</Outcome>}
             </ul>
             {action.error && <ErrorBox message={action.error} />}
             <div className="space-y-2 border-t border-gray-100 pt-4">
-              <Button className="h-11 w-full" onClick={submit} disabled={action.pending}>
+              <Button className="h-11 w-full" onClick={submit} disabled={action.pending || blocked}>
                 {action.pending ? 'Đang lưu…' : 'Đóng bệnh án'}
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => navigate(back)} disabled={action.pending}>

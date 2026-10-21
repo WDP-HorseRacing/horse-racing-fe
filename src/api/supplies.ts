@@ -20,7 +20,7 @@ export const deleteSupplyItem = (id: string) => http.del<void>(`/supplies/items/
 export const receiveSupply = (id: string, input: { quantity: number; unitPrice: number; note?: string }) =>
   http.post<SupplyItem>(`/supplies/items/${id}/receipts`, input);
 /** Lấy hàng ra dùng (Quản lý CLB, HLV, bác sĩ, Groom), trừ tồn ngay, lô cũ trừ trước. Lấy quá tồn thì 409. */
-export const recordSupplyUsage = (id: string, input: { quantity: number; note?: string }) => http.post<SupplyItem>(`/supplies/items/${id}/usages`, input);
+export const recordSupplyUsage = (id: string, input: { quantity: number; note: string }) => http.post<SupplyItem>(`/supplies/items/${id}/usages`, input);
 /**
  * Hủy lần xuất ghi nhầm: cộng trả đúng số đã trừ vào từng lô. Người xuất tự hủy trong 24 giờ, Quản lý CLB bất kỳ lúc nào (khác: 403).
  * Đã hủy: 409. Trả vật tư sau khi cộng trả.

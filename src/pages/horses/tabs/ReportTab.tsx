@@ -60,6 +60,8 @@ export default function ReportTab({ horse, owner }: { horse: HorseDetail; owner:
                         <dd className="text-right tabular-nums text-gray-900">{formatMeters(p.totals.plannedDistanceM)}</dd>
                         <dt className="text-gray-500">Thời gian tập</dt>
                         <dd className="text-right tabular-nums text-gray-900">{p.totals.trainedMinutes} phút</dd>
+                        <dt className="text-gray-500">Dừng sớm</dt>
+                        <dd className={cn('text-right tabular-nums', p.totals.stopped ? 'text-amber-700' : 'text-gray-400')}>{p.totals.stopped}</dd>
                         <dt className="text-gray-500">Vắng</dt>
                         <dd className={cn('text-right tabular-nums', p.totals.absent ? 'text-amber-700' : 'text-gray-400')}>{p.totals.absent}</dd>
                         <dt className="text-gray-500">Không đủ điều kiện</dt>

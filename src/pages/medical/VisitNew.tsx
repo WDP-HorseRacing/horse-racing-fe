@@ -3,13 +3,15 @@
 //     kết luận Có vấn đề thì mở bệnh án ngay trong cùng thao tác).
 //  b) Tái khám trong bệnh án đang mở — POST /medical-cases/:caseId/visits.
 // Ngựa đã có bệnh án mở thì backend chặn buổi ngoài bệnh án (409), nên trang tự chuyển sang (b).
+// Chấn thương theo từng vết: vết đang theo dõi chỉ ghi mức hồi phục mới (injuryUpdates), vết mới gửi kèm vị trí (newInjuries).
+// Chi phí ghi theo từng buổi khám, bỏ trống là 0.
 // Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, back.
 import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bandage, Check, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bandage, Check, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
 import { getHorse } from '../../api/horses';
-import { createFollowUpVisit, createStandaloneVisit, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
+import { createFollowUpVisit, createStandaloneVisit, getInjuries, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
 import type { BodyRegion, HealthStatus, InjuryType, MeasurementType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
@@ -36,14 +38,15 @@ import { UrgentPill } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
 import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, measurementSpec, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
 import { positionOfRegion, type InjuryPosition } from '../../lib/injury-position';
-import { addDays, formatDate, formatDateTime } from '../../lib/format';
+import { addDays, formatDate, formatDateTime, formatMoney } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { now } from '../../lib/clock';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { PlaceLockModal } from './components/modals';
 import { usePeople } from './components/people';
 import { HealthPicker, RequestMeta, RequestText } from './components/parts';
-import { isSevere, localToIso, toLocalInput, todayKey } from './components/utils';
+import { MAX_COST, formatMoneyInput, isSevere, localToIso, parseMoney, toLocalInput, todayKey } from './components/utils';
+import { RecoveryTag } from './components/ExamTimeline';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { DatePicker, DateTimePicker } from '../../components/ui/DatePicker';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
@@ -61,6 +64,7 @@ interface PrescriptionRow {
   startDate: string;
   endDate: string;
 }
+/** Vết chấn thương mới phát hiện ở buổi này. */
 interface InjuryRow {
   key: number;
   bodyRegion: BodyRegion | '';
@@ -69,6 +73,11 @@ interface InjuryRow {
   notes: string;
   /** Buổi khám ghi lại: giữ tọa độ cũ nếu vẫn cùng vùng (có thể do mobile chấm trên mô hình 3D). */
   kept?: { region: BodyRegion; position: InjuryPosition };
+}
+/** Mức mới của một vết đang theo dõi. Rỗng là buổi này không khám chỗ đó, giữ nguyên mức cũ. */
+interface InjuryUpdate {
+  status: RecoveryStatus | '';
+  notes: string;
 }
 
 let rowKey = 0;
@@ -81,6 +90,8 @@ interface VisitOptions {
   requestIds?: string[];
   conclusion?: VisitConclusion;
   replaces?: MedicalRecord;
+  /** Vết chưa lành của ngựa lúc ghi lại buổi đã hủy: vết còn trong đây thì ghi thành cập nhật, không còn thì ghi như vết mới. */
+  replacesTracked?: Set<string>;
   back?: string;
 }
 
@@ -89,7 +100,12 @@ export default function VisitNew() {
   const user = useStore((state) => state.currentUser);
   const [params] = useSearchParams();
   const replacesId = params.get('replaces') ?? undefined;
-  const replaced = useService(() => (replacesId ? getRecord(replacesId) : Promise.resolve(undefined)), [replacesId]);
+  const replaced = useService(async () => {
+    if (!replacesId) return undefined;
+    const record = await getRecord(replacesId);
+    const tracked = await getInjuries(record.horseId, { unhealedOnly: true }).catch(() => []);
+    return { record, tracked: new Set(tracked.map((injury) => injury.id)) };
+  }, [replacesId]);
 
   if (!can(user, 'exam.record')) return <NotFound message="Chỉ bác sĩ thú y ghi được buổi khám." />;
   if (replaced.loading) return <Skeleton rows={6} />;
@@ -98,19 +114,20 @@ export default function VisitNew() {
   const kind = params.get('kind');
   const conclusion = params.get('conclusion');
   const options: VisitOptions = {
-    horseId: params.get('horseId') ?? replaced.data?.horseId ?? undefined,
+    horseId: params.get('horseId') ?? replaced.data?.record.horseId ?? undefined,
     caseId: params.get('caseId') ?? undefined,
     kind: kind === 'ROUTINE' || kind === 'REQUEST' ? kind : undefined,
     requestIds: params.get('requestIds')?.split(',').filter(Boolean),
     conclusion: conclusion === 'ISSUE' || conclusion === 'NORMAL' ? conclusion : undefined,
-    replaces: replaced.data,
+    replaces: replaced.data?.record,
+    replacesTracked: replaced.data?.tracked,
     back: safeInternalPath(params.get('back')),
   };
   return <VisitForm key={params.toString()} {...options} />;
 }
 
 function VisitForm(props: VisitOptions) {
-  const { horseId: fixedHorseId, caseId: fixedCaseId, replaces, back } = props;
+  const { horseId: fixedHorseId, caseId: fixedCaseId, replaces, replacesTracked, back } = props;
   const navigate = useNavigate();
   const toast = useToast();
   const action = useAction();
@@ -120,17 +137,19 @@ function VisitForm(props: VisitOptions) {
 
   const context = useService(async () => {
     if (!horseId) return null;
-    const [horse, open, requests, records] = await Promise.all([
+    const [horse, open, requests, records, tracked] = await Promise.all([
       getHorse(horseId),
       listHorseCases(horseId, 'OPEN'),
       listHorseExamRequests(horseId),
       listHorseRecords(horseId).catch(() => [] as MedicalRecord[]),
+      getInjuries(horseId, { unhealedOnly: true }).catch(() => []),
     ]);
     return {
       horse,
       openCase: open.items[0] ?? null,
       pending: requests.filter((row) => row.status === 'PENDING'),
       recent: records.filter((record) => !record.voidedAt).slice(0, 3),
+      tracked,
     };
   }, [horseId]);
 
@@ -160,15 +179,25 @@ function VisitForm(props: VisitOptions) {
   );
   const [injuries, setInjuries] = useState<InjuryRow[]>(
     () =>
-      replaces?.injuries.map((item) => ({
-        key: nextKey(),
-        bodyRegion: item.bodyRegion,
-        injuryType: item.injuryType,
-        recoveryStatus: item.recoveryStatus,
-        notes: item.notes ?? '',
-        kept: item.position ? { region: item.bodyRegion, position: item.position } : undefined,
-      })) ?? [],
+      replaces?.injuries
+        .filter((item) => !replacesTracked?.has(item.injuryId))
+        .map((item) => ({
+          key: nextKey(),
+          bodyRegion: item.bodyRegion,
+          injuryType: item.injuryType,
+          recoveryStatus: item.recoveryStatus,
+          notes: item.notes ?? '',
+          kept: item.position ? { region: item.bodyRegion, position: item.position } : undefined,
+        })) ?? [],
   );
+  const [updates, setUpdates] = useState<Record<string, InjuryUpdate>>(() =>
+    Object.fromEntries(
+      (replaces?.injuries ?? [])
+        .filter((item) => replacesTracked?.has(item.injuryId))
+        .map((item) => [item.injuryId, { status: item.recoveryStatus, notes: item.notes ?? '' }]),
+    ),
+  );
+  const [cost, setCost] = useState(() => (replaces?.cost ? formatMoneyInput(String(replaces.cost)) : ''));
   const [attempted, setAttempted] = useState(false);
   const [saved, setSaved] = useState<MedicalRecord | null>(null);
 
@@ -185,6 +214,14 @@ function VisitForm(props: VisitOptions) {
   const pendingRows = ctx?.pending ?? [];
   const selectedIds = selected.filter((id) => pendingRows.some((row) => row.id === id));
   const healthChanged = !!horse && !!healthAfter && healthAfter !== horse.healthStatus;
+  // Vết đang theo dõi chỉ cập nhật được trong bệnh án (tái khám) hoặc buổi mở bệnh án.
+  const tracked = allowCaseFields ? (ctx?.tracked ?? []) : [];
+  const chosenUpdates = tracked.filter((injury) => updates[injury.id]?.status);
+  const healing = chosenUpdates.filter((injury) => updates[injury.id].status === 'HEALED').length;
+  // Buổi khám không mở bệnh án: thuốc phải có ngày kết thúc (không có bệnh án để đóng).
+  const standaloneNormal = !followUp && !issue;
+  const costValue = parseMoney(cost);
+  const costOk = !cost.trim() || (Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST);
 
   const title = replaces ? 'Ghi lại buổi khám thay thế' : followUp ? 'Ghi buổi tái khám' : issue ? 'Ghi buổi khám và mở bệnh án' : 'Ghi buổi khám';
   useCrumbs(
@@ -228,17 +265,13 @@ function VisitForm(props: VisitOptions) {
   prescriptions.forEach((row) => {
     if (!row.medicine.trim() || !row.dosage.trim() || !row.frequency.trim() || !row.startDate) errors[`rx.${row.key}`] = 'Nhập đủ tên thuốc, liều, tần suất và ngày bắt đầu';
     else if (row.endDate && row.endDate < row.startDate) errors[`rx.${row.key}`] = 'Ngày kết thúc sớm hơn ngày bắt đầu';
+    else if (standaloneNormal && !row.endDate) errors[`rx.${row.key}`] = 'Đơn thuốc của buổi khám không mở bệnh án phải có ngày kết thúc';
   });
+  if (!costOk) errors.cost = 'Chi phí là số nguyên từ 0 đến 10 tỷ đồng';
   if (allowCaseFields) {
-    const pairs = new Set<string>();
+    // Hai vết mới cùng vùng, cùng loại vẫn ghi được (vd hai vết rách ở cùng chân).
     injuries.forEach((row) => {
-      if (!row.bodyRegion || !row.injuryType) {
-        errors[`injury.${row.key}`] = 'Chọn vùng cơ thể và loại chấn thương';
-        return;
-      }
-      const pair = `${row.bodyRegion}:${row.injuryType}`;
-      if (pairs.has(pair)) errors[`injury.${row.key}`] = 'Trùng vùng và loại với một dòng phía trên';
-      pairs.add(pair);
+      if (!row.bodyRegion || !row.injuryType) errors[`injury.${row.key}`] = 'Chọn vùng cơ thể và loại chấn thương';
     });
     if (nextVisitAt && nextVisitAt.slice(0, 10) < todayKey()) errors.nextVisitAt = 'Ngày hẹn đã qua';
   }
@@ -266,9 +299,16 @@ function VisitForm(props: VisitOptions) {
         ...(row.endDate ? { endDate: row.endDate } : {}),
       }));
     }
+    if (cost.trim()) base.cost = costValue;
     if (allowCaseFields) {
+      if (chosenUpdates.length) {
+        base.injuryUpdates = chosenUpdates.map((injury) => {
+          const update = updates[injury.id];
+          return { injuryId: injury.id, recoveryStatus: update.status as RecoveryStatus, ...(update.notes.trim() ? { notes: update.notes.trim() } : {}) };
+        });
+      }
       if (injuries.length) {
-        base.injuries = injuries.map((row) => ({
+        base.newInjuries = injuries.map((row) => ({
           bodyRegion: row.bodyRegion as BodyRegion,
           position: row.kept && row.kept.region === row.bodyRegion ? row.kept.position : positionOfRegion(row.bodyRegion as BodyRegion),
           injuryType: row.injuryType as InjuryType,
@@ -608,13 +648,43 @@ function VisitForm(props: VisitOptions) {
                   aside={
                     injuries.length < 20 && (
                       <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
-                        <Plus size={14} /> Thêm chấn thương
+                        <Plus size={14} /> Thêm chấn thương mới
                       </Button>
                     )
                   }
                 >
+                  {tracked.length > 0 && (
+                    <div className="space-y-2.5">
+                      <p className="text-xs font-medium text-gray-500">Chấn thương đang theo dõi · chọn mức mới cho chỗ đã khám, chỗ không khám thì để Giữ nguyên</p>
+                      {tracked.map((injury) => {
+                        const update = updates[injury.id] ?? { status: '', notes: '' };
+                        const set = (patch: Partial<InjuryUpdate>) => setUpdates({ ...updates, [injury.id]: { ...update, ...patch } });
+                        return (
+                          <div key={injury.id} className={cn('rounded-xl p-3 ring-1', update.status ? 'bg-emerald-50/40 ring-emerald-200' : 'bg-gray-50/80 ring-transparent')}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                                <span className="font-semibold text-gray-900">{bodyRegionLabel[injury.bodyRegion]}</span>
+                                <span className="text-gray-600">· {injuryTypeLabel[injury.injuryType]}</span>
+                                <RecoveryTag status={injury.currentRecoveryStatus} />
+                                <span className="text-xs text-gray-500">từ {formatDate(injury.firstExamDate)}</span>
+                              </p>
+                              <Segmented
+                                value={update.status || 'KEEP'}
+                                onChange={(value) => set({ status: value === 'KEEP' ? '' : (value as RecoveryStatus) })}
+                                className="flex-wrap"
+                                options={[{ value: 'KEEP', label: 'Giữ nguyên' }, ...RECOVERY.map((value) => ({ value, label: recoveryLabel[value] }))]}
+                              />
+                            </div>
+                            {update.status && (
+                              <Input className="mt-2" placeholder="Ghi chú (vd Bớt sưng)" maxLength={500} value={update.notes} onChange={(event) => set({ notes: event.target.value })} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {injuries.length === 0 ? (
-                    <p className="text-sm text-gray-500">Chưa ghi chấn thương.</p>
+                    tracked.length === 0 && <p className="text-sm text-gray-500">Chưa ghi chấn thương.</p>
                   ) : (
                     <div className="space-y-2.5">
                       {injuries.map((row) => {
@@ -664,6 +734,24 @@ function VisitForm(props: VisitOptions) {
                   </Field>
                 </FormSection>
               )}
+
+              <FormSection icon={<Wallet size={16} />} title="Chi phí buổi khám">
+                <Field
+                  label="Chi phí (đồng)"
+                  name="cost"
+                  error={show('cost')}
+                  hint={cost.trim() && costOk ? `= ${formatMoney(costValue)}` : 'Bỏ trống là 0 đồng. Ghi sai thì điều chỉnh sau ở buổi khám này.'}
+                  className="sm:max-w-sm"
+                >
+                  <Input
+                    inputMode="numeric"
+                    value={cost}
+                    onChange={(event) => setCost(formatMoneyInput(event.target.value))}
+                    placeholder="Ví dụ: 1.500.000"
+                    className={cn('tabular-nums', show('cost') && invalidClass)}
+                  />
+                </Field>
+              </FormSection>
 
               <FormSection icon={<NotebookPen size={16} />} title="Ghi chú chăm sóc cho Groom">
                 <Field counter={<CharCount value={careInstructions} max={2000} />}>
@@ -730,6 +818,9 @@ function VisitForm(props: VisitOptions) {
                 )}
                 {parsed.length > 0 && <Outcome>{parsed.length} chỉ số ghi vào bảng chỉ số cơ thể</Outcome>}
                 {prescriptions.length > 0 && <Outcome>{prescriptions.length} thuốc trong đơn</Outcome>}
+                {chosenUpdates.length > 0 && <Outcome>Cập nhật {chosenUpdates.length} chấn thương{healing > 0 ? `, ${healing} đã lành` : ''}</Outcome>}
+                {allowCaseFields && injuries.length > 0 && <Outcome tone="warning">Ghi {injuries.length} chấn thương mới</Outcome>}
+                <Outcome>Chi phí buổi khám {formatMoney(cost.trim() && costOk ? costValue : 0)}</Outcome>
               </ul>
             )}
 

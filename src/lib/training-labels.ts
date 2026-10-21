@@ -40,6 +40,7 @@ export const participantStatusText: Record<ParticipantStatus, string> = {
   READY: 'Sẵn sàng',
   ONGOING: 'Đang chạy',
   COMPLETED: 'Hoàn thành',
+  STOPPED: 'Dừng sớm',
   ABSENT: 'Vắng',
   SKIPPED: 'Bỏ qua',
   INELIGIBLE: 'Không đủ điều kiện',
@@ -47,7 +48,7 @@ export const participantStatusText: Record<ParticipantStatus, string> = {
   CANCELLED: 'Đã hủy',
 };
 
-/** Các bước của một lượt tập, theo thứ tự. */
+/** Các bước của một lượt tập, theo thứ tự. Lượt dừng sớm (STOPPED) nằm ở bước Hoàn thành. */
 export const PARTICIPANT_FLOW: ParticipantStatus[] = ['PLANNED', 'PRESENT', 'READY', 'ONGOING', 'COMPLETED'];
 /** Lượt không tập: gom vào dải riêng dưới đường đua. */
 export const PARTICIPANT_OUT: ParticipantStatus[] = ['ABSENT', 'SKIPPED', 'INELIGIBLE', 'CANCELLED_BY_LOCK', 'CANCELLED'];

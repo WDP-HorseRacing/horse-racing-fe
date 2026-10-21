@@ -1,11 +1,9 @@
-// Chi phí bệnh án theo giai đoạn sở hữu: bệnh án thuộc người làm chủ lúc bệnh án được đóng.
-// Chủ ngựa xem bệnh án đóng trong thời gian chủ khác sở hữu thì backend ẩn chi phí (costHidden).
-import type { MedicalCase } from '../../../api/types';
+// Chi phí y tế tính theo từng buổi khám, cho người làm chủ vào ngày khám.
+// Chủ ngựa xem buổi khám thuộc giai đoạn chủ khác sở hữu thì backend ẩn số (costHidden ở buổi khám).
+// Tổng chi phí của bệnh án đã là phần của người đang xem nên không cần ẩn.
+import type { MedicalRecord } from '../../../api/types';
 
-export const HIDDEN_COST_TEXT = 'Chi phí thuộc chủ trước';
+export const HIDDEN_COST_TEXT = 'Chi phí thuộc chủ khác';
 
-/** Chi phí bệnh án thuộc chủ khác nên bị ẩn với người đang xem. */
-export const isCostHidden = (item: Pick<MedicalCase, 'costHidden'>) => item.costHidden === true;
-
-/** Bệnh án đã đóng và chi phí được tính cho người đang xem. */
-export const isOwnClosed = (item: Pick<MedicalCase, 'status' | 'costHidden'>) => item.status === 'CLOSED' && !isCostHidden(item);
+/** Chi phí buổi khám thuộc chủ khác nên bị ẩn với người đang xem. */
+export const isCostHidden = (record: Pick<MedicalRecord, 'costHidden'>) => record.costHidden === true;

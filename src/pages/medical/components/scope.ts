@@ -1,4 +1,4 @@
-// Lọc bảng điều khiển y tế ở FE. BE đã giới hạn Head Trainer theo khu mình, ở đây chỉ còn bộ lọc sức khỏe.
+// Lọc bảng điều khiển y tế ở FE: chỉ còn bộ lọc sức khỏe. Phạm vi khu của Head Trainer gửi lên BE bằng mine.
 import type { HealthStatus, MedicalDashboard } from '../../../api/types';
 
 /** Lọc theo một trạng thái sức khỏe ở FE: số đếm giữ nguyên (để biểu đồ vẫn đủ), các khối chỉ giữ ngựa khớp. */
@@ -12,5 +12,7 @@ export function filterHealth(dashboard: MedicalDashboard, health?: HealthStatus 
     careSchedules: dashboard.careSchedules.filter((item) => ids.has(item.horseId)),
     openCases: dashboard.openCases.filter((item) => ids.has(item.horseId)),
     pendingRequests: dashboard.pendingRequests.filter((item) => ids.has(item.horseId)),
+    horsesWithoutCase: dashboard.horsesWithoutCase.filter((item) => ids.has(item.horseId)),
+    todayPrescriptions: dashboard.todayPrescriptions.filter((item) => ids.has(item.horseId)),
   };
 }

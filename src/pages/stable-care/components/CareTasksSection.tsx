@@ -1,4 +1,4 @@
-// F4.3 — Việc chăm sóc riêng của ngựa: HLV khu gắn và gỡ, Quản lý CLB, Groom xem. Hai kiểu:
+// F4.3 — Việc chăm sóc riêng của ngựa: HLV khu và bác sĩ gắn, gỡ (bác sĩ đổi thì HLV khu được báo), Quản lý CLB, Groom xem. Hai kiểu:
 // - Gắn thêm (vd "Ngâm chân nước đá 10/10 đến 17/10"): loại việc không áp mọi ngựa, cộng vào checklist mỗi ngày trong khoảng.
 // - Miễn việc chung (vd không tắm 5 ngày vì ngựa sốt): loại việc đang áp mọi ngựa, bỏ khỏi checklist trong khoảng, lý do bắt buộc.
 // Gắn từ hôm nay thì checklist hôm nay đổi ngay. Gỡ: chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc sớm.
@@ -20,7 +20,20 @@ function taskState(task: HorseCareTask, today: string): 'running' | 'upcoming' |
   return task.fromDate > today ? 'upcoming' : 'running';
 }
 
-export function CareTasksSection({ horse, canManage, onChanged, className }: { horse: { id: string; name: string }; canManage: boolean; onChanged?: () => void; className?: string }) {
+export function CareTasksSection({
+  horse,
+  canManage,
+  notifyTrainer = false,
+  onChanged,
+  className,
+}: {
+  horse: { id: string; name: string };
+  canManage: boolean;
+  /** Bác sĩ thao tác: nhắc rằng HLV khu nhận thông báo. */
+  notifyTrainer?: boolean;
+  onChanged?: () => void;
+  className?: string;
+}) {
   const toast = useToast();
   const today = clubToday();
   const tasks = useService(() => listHorseCareTasks(horse.id), [horse.id]);
@@ -50,7 +63,7 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
             <Pill tone={state === 'running' ? 'green' : state === 'upcoming' ? 'amber' : 'gray'}>{state === 'running' ? 'Đang áp dụng' : state === 'upcoming' ? 'Sắp tới' : 'Đã kết thúc'}</Pill>
           </p>
           <p className="text-xs text-gray-500">
-            {task.fromDate === task.toDate ? `Ngày ${formatDateShort(task.fromDate)}` : `${formatDateShort(task.fromDate)} đến ${formatDateShort(task.toDate)}`} · HLV {task.creator.fullName}
+            {task.fromDate === task.toDate ? `Ngày ${formatDateShort(task.fromDate)}` : `${formatDateShort(task.fromDate)} đến ${formatDateShort(task.toDate)}`} · {task.creator.fullName}
           </p>
           {task.note && <p className="mt-0.5 text-xs text-gray-600">{exempt ? `Lý do: ${task.note}` : task.note}</p>}
         </div>
@@ -68,6 +81,7 @@ export function CareTasksSection({ horse, canManage, onChanged, className }: { h
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="font-semibold text-gray-900">Việc riêng của ngựa</h3>
+          {notifyTrainer && canManage && <p className="text-xs text-gray-500">Bạn gắn, miễn hay gỡ việc thì HLV khu nhận thông báo.</p>}
         </div>
         {canManage && (
           <Button variant="inline" size="sm" onClick={() => setAttaching(true)}>

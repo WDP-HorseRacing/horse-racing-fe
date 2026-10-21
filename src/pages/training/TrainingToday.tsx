@@ -190,7 +190,7 @@ export default function TrainingToday() {
                 {trainer ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {[...PARTICIPANT_FLOW, 'OUT' as const].map((status) => {
-                      const count = status === 'OUT' ? item.participants.filter((participant) => PARTICIPANT_OUT.includes(participant.status)).length : item.participants.filter((participant) => participant.status === status).length;
+                      const count = status === 'OUT' ? item.participants.filter((participant) => PARTICIPANT_OUT.includes(participant.status)).length : item.participants.filter((participant) => participant.status === status || (status === 'COMPLETED' && participant.status === 'STOPPED')).length;
                       if (!count) return null;
                       return (
                         <span key={status} className={cn('rounded-lg px-2 py-1 text-xs ring-1', status === 'ONGOING' ? 'bg-emerald-50 font-semibold text-emerald-800 ring-emerald-200' : status === 'OUT' ? 'bg-amber-50 text-amber-800 ring-amber-200' : 'bg-gray-50 text-gray-700 ring-gray-100')}>
@@ -214,6 +214,7 @@ export default function TrainingToday() {
                               {participant.status === 'ONGOING' && <Elapsed since={participant.startedAt} />}
                               {participant.status === 'INELIGIBLE' && <span>{ineligibleReasonText(participant.ineligibilityReason)}</span>}
                               {participant.status === 'ABSENT' && <span>{participant.absenceReason}</span>}
+                              {participant.status === 'STOPPED' && participant.stoppedReason && <span>{participant.stoppedReason}</span>}
                               {participant.status === 'SKIPPED' && <span>Hết giờ, chưa bắt đầu</span>}
                               {participant.status === 'READY' && <span>Chờ HLV trưởng bắt đầu</span>}
                             </div>

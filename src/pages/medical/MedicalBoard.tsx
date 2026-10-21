@@ -2,10 +2,11 @@
 // Bố cục: 4 số liệu → "Hàng đợi khám" (gộp yêu cầu khám, hẹn tái khám tới hạn, khám định kỳ cần chú ý; việc gấp
 // lên đầu, mỗi dòng một nút Khám) → cột phải: sức khỏe đàn (bấm để lọc), đang điều trị, chăm sóc đến hạn →
 // sơ đồ đàn theo khu thu gọn ở cuối. Bộ lọc khu và sức khỏe áp cho mọi khối (sức khỏe lọc ở FE để số đếm đủ).
-// Head Trainer chỉ thấy ngựa thuộc khu mình phụ trách (BE lọc theo khu của HT).
+// Head Trainer có công tắc "Khu của tôi" (mặc định bật, gửi mine=true): tắt thì xem mọi khu.
+// Thêm hai khối: ngựa Chấn thương, Cách ly chưa có bệnh án và thuốc cần cho hôm nay.
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, CalendarClock, ChevronDown, ClipboardList, FolderOpen, Map as MapIcon, Stethoscope, Syringe, X } from 'lucide-react';
+import { ArrowRight, CalendarClock, ChevronDown, ClipboardList, FilePlus2, FolderOpen, HeartPulse, Map as MapIcon, Pill as PillIcon, ShieldAlert, Stethoscope, Syringe, X } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getMedicalDashboard } from '../../api/medical';
 import { listBarns, listStalls } from '../../api/stable';
@@ -19,10 +20,11 @@ import { canSeeBarn, computeZoneScope } from '../../lib/zone-scope';
 import { primeZoneScope } from '../../hooks/useMyScope';
 import { filterHealth } from './components/scope';
 import { QUEUE_LABEL, buildQueue, matchesFilter, type QueueFilter, type QueueItem, type QueueKind } from './components/queue';
-import { healthDot } from '../../components/ui/status';
+import { HealthPill, healthDot } from '../../components/ui/status';
+import { HealthChangeModal } from './components/modals';
 import { healthLabel } from '../../lib/labels';
 import { careTypeLabel } from '../../lib/api-labels';
-import { daysBetween, formatDateShort } from '../../lib/format';
+import { daysBetween, formatDate, formatDateShort } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { links, type VisitParams } from '../../lib/links';
 import { CareDue } from './components/care';
@@ -37,6 +39,7 @@ import { IncidentPhotoButton } from '../stable-care/components/IncidentPhotoButt
 type HerdHorse = MedicalDashboard['herd']['horses'][number];
 const HEALTH_KEYS: HealthStatus[] = ['ELIGIBLE', 'UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'];
 const MAP_KEY = 'horseracing_medical_map_open';
+const MINE_KEY = 'horseracing_medical_mine';
 const QUEUE_PAGE = 10;
 
 const KIND_CHIP: Record<QueueKind, string> = {
@@ -54,6 +57,17 @@ function readMapOpen() {
     return false;
   }
 }
+
+/** "Khu của tôi" của HT: mặc định bật. */
+function readMine() {
+  try {
+    return window.localStorage.getItem(MINE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+type NoCaseHorse = MedicalDashboard['horsesWithoutCase'][number];
 
 function HorseToken({ horse, onOpen }: { horse: HerdHorse; onOpen: (id: string) => void }) {
   return (
@@ -173,37 +187,53 @@ export default function MedicalBoard() {
     }
   };
   const trainer = user?.role === 'HEAD_TRAINER';
+  const [mineState, setMineState] = useState(readMine);
+  const mine = trainer && mineState;
+  const setMine = (next: boolean) => {
+    setMineState(next);
+    setBarnId('');
+    try {
+      window.localStorage.setItem(MINE_KEY, next ? '1' : '0');
+    } catch {
+      // Trình duyệt chặn lưu trữ: chỉ mất ghi nhớ lựa chọn.
+    }
+  };
+  const [healthFor, setHealthFor] = useState<NoCaseHorse | null>(null);
   const barns = useService(
     () =>
       Promise.all([listBarns(), listStalls()]).then(([items, stalls]) => {
         const scope = computeZoneScope(user, items, stalls);
         if (user && scope.trainer) primeZoneScope(user.id, items, stalls);
-        // HT: BE chỉ trả khu mình phụ trách, lọc lại theo phạm vi cho chắc.
-        return { items: items.filter((barn) => canSeeBarn(scope, barn.id)), stalls, scope };
+        return { all: items, mineOnly: items.filter((barn) => canSeeBarn(scope, barn.id)), stalls, scope };
       }),
     [user?.id, user?.role],
   );
+  // HT bật Khu của tôi: chỉ khu mình. Tắt (hoặc vai trò khác): mọi khu BE trả.
+  const barnItems = barns.data ? (mine ? barns.data.mineOnly : barns.data.all) : undefined;
   // Gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE: đổi tab sức khỏe không phải gọi lại API. (BE nay cũng đếm 4 ô theo khu, không theo bộ lọc sức khỏe.)
   // "Lịch của tôi": khối chăm sóc đến hạn chỉ còn lịch người xem là người làm, các khối khác không đổi.
   const [careMine, setCareMine] = useState(false);
-  const board = useService(() => getMedicalDashboard({ barnId: barnId || undefined, ...(careMine ? { careAssignee: 'me' as const } : {}) }), [barnId, careMine]);
+  const board = useService(
+    () => getMedicalDashboard({ barnId: barnId || undefined, ...(careMine ? { careAssignee: 'me' as const } : {}), ...(mine ? { mine: true } : {}) }),
+    [barnId, careMine, mine],
+  );
   const people = usePeople();
   const exam = (visit: VisitParams = {}) => navigate(links.visitNew({ ...visit, back: links.medicalBoard }));
 
-  // BE đã giới hạn HT theo khu mình (mọi khối và số đếm). `scoped` dùng cho biểu đồ, `data` thêm bộ lọc sức khỏe cho các danh sách.
+  // `scoped` (đã theo khu, mine) dùng cho biểu đồ, `data` thêm bộ lọc sức khỏe cho các danh sách.
   const scoped = board.data;
   const data = useMemo(() => (scoped ? filterHealth(scoped, health) : undefined), [scoped, health]);
 
   // Sơ đồ đàn: mỗi khu một lưới 3×3 ô như Sơ đồ chuồng. Ô có ngựa không khớp bộ lọc sức khỏe hiện mờ.
   const herd = useMemo(() => {
-    if (!data || !barns.data) return null;
+    if (!data || !barns.data || !barnItems) return null;
     const caseByHorse = new Map(data.openCases.map((item) => [item.horseId, item.initialDiagnosis]));
     const occupants = new Map<string, StallOccupant>(
       data.herd.horses
         .filter((horse) => horse.stallId)
         .map((horse) => [horse.stallId!, { id: horse.horseId, name: horse.horseName, healthStatus: horse.healthStatus, openCase: caseByHorse.get(horse.horseId) }]),
     );
-    const zones = barns.data.items
+    const zones = barnItems
       .filter((barn) => !barnId || barn.id === barnId)
       .sort((a, b) => a.name.localeCompare(b.name, 'vi', { numeric: true }))
       .map((barn) => ({
@@ -211,8 +241,8 @@ export default function MedicalBoard() {
         cells: buildCells(barn.id, barns.data!.stalls, occupants),
         waiting: data.herd.horses.filter((horse) => horse.barnId === barn.id && !horse.stallId),
       }));
-    return { zones, noBarn: trainer ? [] : data.herd.horses.filter((horse) => !horse.barnId) };
-  }, [data, barns.data, barnId, trainer]);
+    return { zones, noBarn: mine ? [] : data.herd.horses.filter((horse) => !horse.barnId) };
+  }, [data, barns.data, barnItems, barnId, mine]);
 
   const today = todayKey();
   const queue = useMemo(() => (data ? buildQueue(data, today, links.case) : []), [data, today]);
@@ -240,15 +270,20 @@ export default function MedicalBoard() {
       <PageHeader
         title="Bảng điều khiển y tế"
         description={
-          trainer
+          mine
             ? 'Việc khám và chăm sóc của ngựa trong khu bạn phụ trách, việc gấp lên đầu.'
             : 'Việc cần khám hôm nay, ngựa đang điều trị và lịch chăm sóc của toàn đàn, việc gấp lên đầu.'
         }
         actions={
           <>
+            {trainer && (
+              <ToggleChip checked={mineState} onChange={setMine}>
+                Khu của tôi
+              </ToggleChip>
+            )}
             <FilterSelect value={barnId} onChange={setBarnId} label="Khu chuồng">
-              <option value="">{trainer ? 'Mọi khu của bạn' : 'Mọi khu'}</option>
-              {barns.data?.items.map((barn) => (
+              <option value="">{mine ? 'Mọi khu của bạn' : 'Mọi khu'}</option>
+              {barnItems?.map((barn) => (
                 <option key={barn.id} value={barn.id}>
                   {barn.name}
                 </option>
@@ -312,72 +347,114 @@ export default function MedicalBoard() {
       {board.error && <ErrorBox message={board.error} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
-        {/* ===== Hàng đợi khám ===== */}
-        <Card className="p-0 sm:p-0 lg:col-span-8">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-3 pt-4 sm:px-5">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900">
-                Hàng đợi khám <span className="ml-1 text-sm font-normal text-gray-400">{queue.length}</span>
-              </h3>
-              <p className="text-xs text-gray-500">Khẩn → tái khám tới hẹn → định kỳ quá hạn → yêu cầu thường → định kỳ sắp đến</p>
+        <div className="min-w-0 space-y-5 lg:col-span-8">
+          {/* ===== Hàng đợi khám ===== */}
+          <Card className="p-0 sm:p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-3 pt-4 sm:px-5">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">
+                  Hàng đợi khám <span className="ml-1 text-sm font-normal text-gray-400">{queue.length}</span>
+                </h3>
+                <p className="text-xs text-gray-500">Khẩn → tái khám tới hẹn → định kỳ quá hạn → yêu cầu thường → định kỳ sắp đến</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc hàng đợi">
+                {(
+                  [
+                    ['ALL', 'Tất cả'],
+                    ['URGENT', 'Khẩn'],
+                    ['FOLLOW_UP', 'Tái khám'],
+                    ['CHECKUP', 'Định kỳ'],
+                    ['REQUEST', 'Yêu cầu'],
+                  ] as [QueueFilter, string][]
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={queueFilter === key}
+                    onClick={() => {
+                      setQueueFilter(key);
+                      setShowAll(false);
+                    }}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-semibold transition',
+                      queueFilter === key ? 'bg-emerald-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                    )}
+                  >
+                    {label} <span className="ml-0.5 tabular-nums opacity-70">{filterCount(key)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc hàng đợi">
-              {(
-                [
-                  ['ALL', 'Tất cả'],
-                  ['URGENT', 'Khẩn'],
-                  ['FOLLOW_UP', 'Tái khám'],
-                  ['CHECKUP', 'Định kỳ'],
-                  ['REQUEST', 'Yêu cầu'],
-                ] as [QueueFilter, string][]
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={queueFilter === key}
-                  onClick={() => {
-                    setQueueFilter(key);
-                    setShowAll(false);
-                  }}
-                  className={cn(
-                    'rounded-full px-3 py-1 text-xs font-semibold transition',
-                    queueFilter === key ? 'bg-emerald-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
-                  )}
-                >
-                  {label} <span className="ml-0.5 tabular-nums opacity-70">{filterCount(key)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          {shown.length === 0 ? (
-            <div className="border-t border-gray-100 p-5">
-              <EmptyState
-                title={queue.length === 0 ? 'Không có ngựa nào cần khám lúc này' : 'Không có mục nào trong nhóm này'}
-                hint={queue.length === 0 ? 'Yêu cầu khám từ Groom, cảnh báo chỉ số, hẹn tái khám và khám định kỳ đến hạn sẽ hiện ở đây.' : 'Chọn "Tất cả" để xem toàn bộ hàng đợi.'}
-              />
-            </div>
-          ) : (
-            <ul className="divide-y divide-gray-100 border-t border-gray-100">
-              {visibleRows.map((item) => (
-                <QueueRow
-                  key={item.key}
-                  item={item}
-                  place={placeOf.get(item.horseId)}
-                  people={people}
-                  canExam={isVet}
-                  onExam={exam}
-                  onOpen={openHorse}
+            {shown.length === 0 ? (
+              <div className="border-t border-gray-100 p-5">
+                <EmptyState
+                  title={queue.length === 0 ? 'Không có ngựa nào cần khám lúc này' : 'Không có mục nào trong nhóm này'}
+                  hint={queue.length === 0 ? 'Yêu cầu khám từ Groom, cảnh báo chỉ số, hẹn tái khám và khám định kỳ đến hạn sẽ hiện ở đây.' : 'Chọn "Tất cả" để xem toàn bộ hàng đợi.'}
                 />
-              ))}
-            </ul>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                {visibleRows.map((item) => (
+                  <QueueRow
+                    key={item.key}
+                    item={item}
+                    place={placeOf.get(item.horseId)}
+                    people={people}
+                    canExam={isVet}
+                    onExam={exam}
+                    onOpen={openHorse}
+                  />
+                ))}
+              </ul>
+            )}
+            {shown.length > QUEUE_PAGE && (
+              <button type="button" onClick={() => setShowAll(!showAll)} className="w-full border-t border-gray-100 py-2.5 text-sm font-medium text-emerald-700 hover:bg-gray-50">
+                {showAll ? 'Thu gọn' : `Xem thêm ${shown.length - QUEUE_PAGE} mục`}
+              </button>
+            )}
+          </Card>
+
+          {/* ===== Chấn thương, cách ly mà chưa có bệnh án: thường do đổi trạng thái tay, cần lập phiếu khám hoặc đổi lại ===== */}
+          {data.horsesWithoutCase.length > 0 && (
+            <Card className="p-0 sm:p-0 shadow-[inset_3px_0_0_0_#f59e0b]!">
+              <div className="px-4 pb-3 pt-4 sm:px-5">
+                <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                  <ShieldAlert size={17} className="text-amber-600" /> Chấn thương, cách ly chưa có bệnh án
+                  <span className="text-sm font-normal text-gray-400">{data.horsesWithoutCase.length}</span>
+                </h3>
+                <p className="text-xs text-gray-500">Ngựa đang không được tập nhưng chưa có bệnh án theo dõi. Lập phiếu khám, hoặc đổi lại sức khỏe nếu đặt nhầm hay đã ổn.</p>
+              </div>
+              <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                {data.horsesWithoutCase.map((row) => (
+                  <li key={row.horseId} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+                    <button type="button" onClick={() => openHorse(row.horseId)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <Avatar name={row.horseName} size={36} className="rounded-xl" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-gray-900 hover:underline">{row.horseName}</span>
+                        <span className="block truncate text-xs text-gray-500">
+                          {[row.barnName, row.stallCode].filter(Boolean).join(' · ') || 'Chưa xếp khu'}
+                          {row.since && ` · từ ${formatDate(row.since)}`}
+                        </span>
+                      </span>
+                    </button>
+                    <HealthPill status={row.healthStatus} />
+                    {isVet && (
+                      <span className="flex gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => setHealthFor(row)}>
+                          <HeartPulse size={14} /> Đổi sức khỏe
+                        </Button>
+                        <Button size="sm" onClick={() => exam({ horseId: row.horseId, conclusion: 'ISSUE' })}>
+                          <FilePlus2 size={14} /> Lập phiếu khám
+                        </Button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
           )}
-          {shown.length > QUEUE_PAGE && (
-            <button type="button" onClick={() => setShowAll(!showAll)} className="w-full border-t border-gray-100 py-2.5 text-sm font-medium text-emerald-700 hover:bg-gray-50">
-              {showAll ? 'Thu gọn' : `Xem thêm ${shown.length - QUEUE_PAGE} mục`}
-            </button>
-          )}
-        </Card>
+        </div>
 
         {/* ===== Cột phải ===== */}
         <div className="space-y-5 lg:col-span-4">
@@ -435,6 +512,31 @@ export default function MedicalBoard() {
                     </li>
                   );
                 })}
+              </ul>
+            )}
+          </SideCard>
+
+          <SideCard icon={<PillIcon size={15} />} title="Thuốc cần cho hôm nay" count={data.todayPrescriptions.length}>
+            {data.todayPrescriptions.length === 0 ? (
+              <p className="text-sm text-gray-500">Không có đơn thuốc nào đang dùng hôm nay{health || barnId ? ' trong bộ lọc này' : ''}.</p>
+            ) : (
+              <ul className="-mx-2 space-y-0.5">
+                {data.todayPrescriptions.map((row) => (
+                  <li key={row.prescriptionId}>
+                    <Link to={row.caseId ? links.case(row.caseId) : links.horseMedical(row.horseId)} className="block rounded-xl px-2 py-1.5 transition hover:bg-gray-50">
+                      <span className="flex items-baseline justify-between gap-2 text-sm">
+                        <span className="min-w-0 truncate">
+                          <span className="font-semibold text-gray-900">{row.horseName}</span>
+                          <span className="text-gray-700"> · {row.medicine}</span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-gray-400">{row.endDate ? `tới ${formatDateShort(row.endDate)}` : 'tới khi đóng bệnh án'}</span>
+                      </span>
+                      <span className="block truncate text-xs text-gray-500">
+                        {row.dosage} · {row.frequency}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
               </ul>
             )}
           </SideCard>
@@ -511,7 +613,7 @@ export default function MedicalBoard() {
                     variant="nested"
                     barn={zone.barn}
                     cells={zone.cells}
-                    mine={barns.data?.scope.myBarnIds.has(zone.barn.id)}
+                    mine={trainer ? barns.data?.scope.myBarnIds.has(zone.barn.id) : undefined}
                     isolation={barns.data?.scope.isolationBarnIds.has(zone.barn.id)}
                     cellLink={(cell) => (cell.occupant ? links.horseMedical(cell.occupant.id) : undefined)}
                     footer={
@@ -541,6 +643,18 @@ export default function MedicalBoard() {
           </div>
         )}
       </Card>
+
+      {healthFor && (
+        <HealthChangeModal
+          open
+          onClose={() => setHealthFor(null)}
+          horse={{ id: healthFor.horseId, name: healthFor.horseName, healthStatus: healthFor.healthStatus }}
+          onDone={() => {
+            setHealthFor(null);
+            board.reload();
+          }}
+        />
+      )}
     </div>
   );
 }
