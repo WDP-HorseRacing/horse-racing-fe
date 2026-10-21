@@ -296,8 +296,8 @@ export function AdminUsers() {
             </Select>
           </Field>
           <Notice tone="info">
-            Hệ thống không cho đổi vai trò khi tài khoản còn là chủ của ngựa đang ở câu lạc bộ, còn là Groom của ngựa nào, hoặc
-            còn đứng tên HLV trưởng của một khu, hoặc còn lịch chăm sóc chưa làm được bác sĩ giao đích danh. Hãy chuyển trách nhiệm cho người khác trước (lịch chăm sóc thì nhờ bác sĩ giao lại).
+            Hệ thống không cho đổi vai trò khi tài khoản còn là chủ của ngựa đang ở câu lạc bộ, còn là Groom của ngựa nào, còn lượt tập
+            được giao dắt chưa diễn ra, còn đứng tên HLV trưởng của một khu, hoặc còn lịch chăm sóc chưa làm được bác sĩ giao đích danh. Hãy chuyển trách nhiệm cho người khác trước (lượt dắt nhờ HLV trưởng giao lại, lịch chăm sóc nhờ bác sĩ giao lại).
           </Notice>
         </div>
       </Modal>
@@ -329,7 +329,7 @@ export function AdminUsers() {
           </>
         }
         consequences={[
-          'Không khóa được khi tài khoản còn phụ trách: Groom còn ngựa được giao, chủ còn ngựa ở câu lạc bộ, HLV trưởng còn khu, giáo án hoặc lớp đang mở (bàn giao trước).',
+          'Không khóa được khi tài khoản còn phụ trách: Groom còn ngựa được giao hoặc còn lượt tập được giao dắt chưa diễn ra, chủ còn ngựa ở câu lạc bộ, HLV trưởng còn khu, giáo án hoặc lớp đang mở (bàn giao trước).',
         ]}
         confirmLabel="Xác nhận khóa"
         pending={action.pending}

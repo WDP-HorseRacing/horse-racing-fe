@@ -25,7 +25,7 @@ type Dialog =
   | { kind: 'cost'; record: MedicalRecord }
   | { kind: 'lock' }
   | { kind: 'release'; lock: TrainingLock }
-  | { kind: 'void'; record: MedicalRecord }
+  | { kind: 'void'; record: MedicalRecord; requestIds: string[] }
   | null;
 
 function LockBlock({ lock, people, onRelease }: { lock: TrainingLock; people: People; onRelease?: () => void }) {
@@ -97,6 +97,8 @@ export default function CaseDetail() {
   const linkedRequests = (extra.data?.requests ?? []).filter((request) => request.medicalRecordId && visitIds.has(request.medicalRecordId));
   const horseName = horse?.name ?? 'Ngựa';
   const transferred = !!horse && leftClub(horse.lifecycleStatus);
+  // Lấy trước khi hủy: BE bỏ liên kết yêu cầu với buổi khám sau khi hủy.
+  const requestIdsOf = (recordId: string) => linkedRequests.filter((request) => request.medicalRecordId === recordId).map((request) => request.id);
 
   const reload = () => {
     detail.reload();
@@ -194,9 +196,10 @@ export default function CaseDetail() {
             <VisitTimeline
               records={visits}
               people={people}
-              onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record }) : undefined}
-              canVoid={(record) => record.vetId === user?.id}
-              onAdjustCost={isVet && !transferred && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
+              ownRecord={(record) => record.vetId === user?.id}
+              onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record, requestIds: requestIdsOf(record.id) }) : undefined}
+              onEdit={isVet && !transferred ? (record) => navigate(links.visitNew({ edit: record.id, back: links.case(item.id) })) : undefined}
+              onAdjustCost={isVet && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
             />
           )}
         </div>
@@ -290,13 +293,26 @@ export default function CaseDetail() {
         <VoidVisitModal
           record={dialog.record}
           horseName={horseName}
+          people={people}
+          requestIds={dialog.requestIds}
           caseInfo={{
             status: item.status,
             otherActiveVisits: visits.filter((visit) => !visit.voidedAt && visit.id !== dialog.record.id).length,
           }}
           onClose={() => setDialog(null)}
           onVoided={reload}
-          onReRecord={(record) => navigate(links.visitNew({ horseId: item.horseId, caseId: isOpen ? item.id : undefined, replaces: record.id, back: links.case(item.id) }))}
+          onReRecord={(record, requestIds) =>
+            navigate(
+              links.visitNew({
+                horseId: item.horseId,
+                caseId: isOpen ? item.id : undefined,
+                kind: requestIds.length ? 'REQUEST' : undefined,
+                requestIds: requestIds.length ? requestIds : undefined,
+                replaces: record.id,
+                back: links.case(item.id),
+              }),
+            )
+          }
         />
       )}
     </div>

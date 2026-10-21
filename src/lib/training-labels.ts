@@ -44,7 +44,7 @@ export const participantStatusText: Record<ParticipantStatus, string> = {
   ABSENT: 'Vắng',
   SKIPPED: 'Bỏ qua',
   INELIGIBLE: 'Không đủ điều kiện',
-  CANCELLED_BY_LOCK: 'Hủy do khóa huấn luyện',
+  CANCELLED_BY_LOCK: 'Hủy do khóa tập',
   CANCELLED: 'Đã hủy',
 };
 

@@ -60,7 +60,7 @@ type Dialog =
   | { kind: 'lock' }
   | { kind: 'release'; lock: TrainingLock }
   | { kind: 'request' }
-  | { kind: 'void'; record: MedicalRecord }
+  | { kind: 'void'; record: MedicalRecord; requestIds: string[] }
   | { kind: 'cost'; record: MedicalRecord }
   | null;
 
@@ -409,9 +409,20 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
                 records={data.records}
                 people={people}
                 caseLabel={(record) => (record.caseId ? (caseById.get(record.caseId)?.initialDiagnosis ?? 'Bệnh án') : undefined)}
-                onVoid={isVet ? (record) => setDialog({ kind: 'void', record }) : undefined}
-                canVoid={(record) => record.vetId === user?.id}
-                onAdjustCost={isVet && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
+                ownRecord={(record) => record.vetId === user?.id}
+                onVoid={
+                  isVet
+                    ? (record) =>
+                        // Lấy trước khi hủy: BE bỏ liên kết yêu cầu với buổi khám sau khi hủy.
+                        setDialog({
+                          kind: 'void',
+                          record,
+                          requestIds: (data.requests ?? []).filter((request) => request.medicalRecordId === record.id).map((request) => request.id),
+                        })
+                    : undefined
+                }
+                onEdit={isVet ? (record) => navigate(links.visitNew({ edit: record.id, back: here })) : undefined}
+                onAdjustCost={can(user, 'exam.record') && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
               />
             ))}
 
@@ -586,6 +597,8 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
         <VoidVisitModal
           record={dialog.record}
           horseName={horse.name}
+          people={people}
+          requestIds={dialog.requestIds}
           caseInfo={
             dialog.record.caseId && caseById.get(dialog.record.caseId)
               ? {
@@ -596,11 +609,13 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
           }
           onClose={() => setDialog(null)}
           onVoided={reload}
-          onReRecord={(record) =>
+          onReRecord={(record, requestIds) =>
             navigate(
               links.visitNew({
                 horseId: horse.id,
                 caseId: record.caseId && caseById.get(record.caseId)?.status === 'OPEN' ? record.caseId : undefined,
+                kind: requestIds.length ? 'REQUEST' : undefined,
+                requestIds: requestIds.length ? requestIds : undefined,
                 replaces: record.id,
                 back: here,
               }),

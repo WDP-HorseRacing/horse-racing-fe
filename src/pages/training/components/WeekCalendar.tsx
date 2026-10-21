@@ -1,7 +1,8 @@
 // Lịch tuần kiểu Google Calendar cho lớp huấn luyện: 7 cột ngày (tuần của lớp), hàng giờ theo giờ CLB.
 // Bấm ô trống để thêm buổi (làm tròn 30 phút), bấm một buổi để mở, kéo buổi sửa được sang ô khác để đổi ngày giờ
 // (giữ thời lượng, làm tròn 15 phút). Kéo bằng sự kiện con trỏ nên chạy được cả chuột lẫn màn cảm ứng.
-// Ngày ngoài khoảng của lớp gạch chéo, không thêm buổi được. Điện thoại cuộn ngang, cột giờ đứng yên.
+// Ngày ngoài khoảng của lớp gạch chéo, không thêm buổi được. Giờ đã qua tô xám: không thêm buổi, kéo buổi vào đó thì trả về chỗ cũ.
+// Điện thoại cuộn ngang, cột giờ đứng yên.
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Flag } from 'lucide-react';
 import type { TrainingSession } from '../../../api/types';
@@ -73,6 +74,7 @@ export function WeekCalendar({
   onAdd,
   onOpen,
   onMove,
+  onBlocked,
 }: {
   /** Ngày đầu của tuần lớp ('YYYY-MM-DD'). */
   weekStart: string;
@@ -85,6 +87,8 @@ export function WeekCalendar({
   onOpen: (session: TrainingSession) => void;
   /** Thả buổi ở chỗ mới: thời điểm bắt đầu mới (ISO). */
   onMove: (session: TrainingSession, startAt: string) => void;
+  /** Bấm hoặc thả vào giờ đã qua: câu báo cho người dùng. */
+  onBlocked?: (message: string) => void;
 }) {
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDateKey(weekStart, index)), [weekStart]);
   const today = clubToday();
@@ -111,6 +115,10 @@ export function WeekCalendar({
 
   const top = (minutes: number) => ((minutes - fromHour * 60) / 60) * HOUR_PX;
   const inRange = (day: string) => day >= range.from && day <= range.to;
+  // Không xếp buổi ở quá khứ (BE chặn): ngày đã qua và phần giờ đã qua của hôm nay.
+  const nowMinutes = toMinutes(clubTime(new Date().toISOString()));
+  const isPast = (day: string, minutes: number) => day < today || (day === today && minutes <= nowMinutes);
+  const addable = (day: string) => inRange(day) && day >= today;
 
   /** Ô (ngày, phút) dưới con trỏ, theo khung lưới. */
   const cellAt = (clientX: number, clientY: number) => {
@@ -126,8 +134,12 @@ export function WeekCalendar({
   const clickEmpty = (event: React.MouseEvent<HTMLDivElement>, day: number) => {
     if (!canAdd || !inRange(days[day])) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const minutes = snap(fromHour * 60 + ((event.clientY - rect.top) / HOUR_PX) * 60 - ADD_STEP / 2, ADD_STEP);
-    onAdd(days[day], toClock(Math.min(23 * 60 + 30, Math.max(0, minutes))));
+    const minutes = Math.min(23 * 60 + 30, Math.max(0, snap(fromHour * 60 + ((event.clientY - rect.top) / HOUR_PX) * 60 - ADD_STEP / 2, ADD_STEP)));
+    if (isPast(days[day], minutes)) {
+      onBlocked?.('Không thêm buổi vào giờ đã qua');
+      return;
+    }
+    onAdd(days[day], toClock(minutes));
   };
 
   const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, item: Placed) => {
@@ -162,6 +174,10 @@ export function WeekCalendar({
       return;
     }
     if (current.day === item.day && current.start === item.start) return;
+    if (isPast(days[current.day], current.start)) {
+      onBlocked?.('Không dời buổi vào giờ đã qua, buổi giữ chỗ cũ');
+      return;
+    }
     onMove(item.session, clubInstant(days[current.day], toClock(current.start)));
   };
 
@@ -193,18 +209,21 @@ export function WeekCalendar({
           {days.map((day, index) => (
             <div
               key={day}
-              role={canAdd && inRange(day) ? 'button' : undefined}
-              aria-label={canAdd && inRange(day) ? `Thêm buổi ngày ${day.slice(8, 10)}/${day.slice(5, 7)}` : undefined}
+              role={canAdd && addable(day) ? 'button' : undefined}
+              aria-label={canAdd && addable(day) ? `Thêm buổi ngày ${day.slice(8, 10)}/${day.slice(5, 7)}` : undefined}
               onClick={(event) => {
                 if (event.target === event.currentTarget) clickEmpty(event, index);
               }}
               className={cn(
                 'relative border-l border-gray-200',
-                !inRange(day) ? 'calendar-off cursor-not-allowed' : canAdd ? 'cursor-cell hover:bg-emerald-50/30' : '',
+                !inRange(day) ? 'calendar-off cursor-not-allowed' : day < today ? 'bg-gray-50 cursor-not-allowed' : canAdd ? 'cursor-cell hover:bg-emerald-50/30' : '',
                 day === today && 'bg-emerald-50/40',
               )}
               style={{ backgroundImage: inRange(day) ? `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, #f1f5f9 ${HOUR_PX - 1}px, #f1f5f9 ${HOUR_PX}px)` : undefined }}
             >
+              {day === today && inRange(day) && nowMinutes > fromHour * 60 && (
+                <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 bg-gray-100/70" style={{ height: top(Math.min(nowMinutes, toHour * 60)) }} />
+              )}
               {day === today && <NowLine fromHour={fromHour} />}
             </div>
           ))}

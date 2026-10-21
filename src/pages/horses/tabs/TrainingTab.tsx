@@ -16,7 +16,7 @@ import { links } from '../../../lib/links';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { addDateKey, clubTime, clubToday } from '../../../lib/club-time';
 import { formatMeters, formatMinutes, formatRaceTime } from '../../../lib/training-format';
-import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText, participantStatusText } from '../../../lib/training-labels';
+import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText, participantStatusText, PARTICIPANT_OUT } from '../../../lib/training-labels';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../../training/components/bits';
@@ -48,7 +48,10 @@ export default function TrainingTab({ horse }: { horse: HorseDetail; permissions
 
   const active = (overview.data?.classes ?? []).filter((item) => item.enrollmentStatus === 'ACTIVE');
   const past = (overview.data?.classes ?? []).filter((item) => item.enrollmentStatus !== 'ACTIVE');
-  const next = overview.data?.upcoming[0];
+  // Sắp tới có cả lượt đã hủy do khóa tập, không đủ điều kiện: buổi kế tiếp là lượt còn mở đầu tiên.
+  const upcoming = overview.data?.upcoming ?? [];
+  const next = upcoming.find((item) => !PARTICIPANT_OUT.includes(item.participantStatus));
+  const others = upcoming.filter((item) => item !== next);
 
   return (
     <div ref={scope} className="space-y-4 pt-4">
@@ -95,19 +98,26 @@ export default function TrainingTab({ horse }: { horse: HorseDetail; permissions
                   </div>
                 </div>
               )}
-              {(overview.data?.upcoming.length ?? 0) > 1 && (
+              {others.length > 0 && (
                 <ul className="space-y-1">
-                  {overview.data!.upcoming.slice(1).map((item) => (
-                    <li key={item.participantId} className="flex items-center gap-3 rounded-lg bg-white/70 px-3 py-2 text-sm">
-                      <span className="w-24 shrink-0 font-mono text-xs text-gray-500">
-                        {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-gray-800">{item.name}</span>
-                      <TrialBadge type={item.sessionType} />
-                      {item.surface && <span className="text-xs text-gray-500">{item.surface}</span>}
-                      {item.participantStatus !== 'PLANNED' && <ParticipantPill status={item.participantStatus} />}
-                    </li>
-                  ))}
+                  {others.map((item) => {
+                    const out = PARTICIPANT_OUT.includes(item.participantStatus);
+                    const reason = out ? (item.cancelReason ?? item.absenceReason) : null;
+                    return (
+                      <li key={item.participantId} className={cn('rounded-lg px-3 py-2 text-sm', out ? 'bg-amber-50/70 ring-1 ring-amber-100' : 'bg-white/70')}>
+                        <div className="flex items-center gap-3">
+                          <span className="w-24 shrink-0 font-mono text-xs text-gray-500">
+                            {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
+                          </span>
+                          <span className={cn('min-w-0 flex-1 truncate', out ? 'text-gray-500 line-through decoration-gray-300' : 'text-gray-800')}>{item.name}</span>
+                          <TrialBadge type={item.sessionType} />
+                          {item.surface && !out && <span className="text-xs text-gray-500">{item.surface}</span>}
+                          {item.participantStatus !== 'PLANNED' && <ParticipantPill status={item.participantStatus} />}
+                        </div>
+                        {reason && <p className="mt-1 pl-27 text-xs text-amber-800">{reason}</p>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {past.length > 0 && (

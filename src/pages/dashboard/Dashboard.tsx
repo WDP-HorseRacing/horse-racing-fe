@@ -27,6 +27,7 @@ import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, ad
 import { now } from '../../lib/clock';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
 import { FEATURES } from '../../config/features';
+import { leftClub } from '../../lib/horse-rules';
 import { ActiveClassesCard, GroomTrainingCard, LiveNowCard, ManagerTrainingCards, OwnerTrainingCards, TrainerTodayCard, VetAlertsCard } from './TrainingBlocks';
 
 /* ===== Mảnh ghép dùng chung ===== */
@@ -224,11 +225,12 @@ function HorseRows({ horses, empty, note }: { horses: HorseListItem[]; empty: st
   );
 }
 
-/** Thứ tự ưu tiên hiển thị: không tập được → cần theo dõi → chờ xếp chỗ → còn lại. */
+/** Thứ tự ưu tiên hiển thị: không tập được → cần theo dõi → chờ xếp chỗ, chờ Groom → còn lại → đã rời CLB (như BE). */
 function priority(horse: HorseListItem) {
+  if (leftClub(horse.lifecycleStatus)) return 4;
   if (cannotTrain(horse)) return 0;
   if (horse.healthStatus === 'UNDER_OBSERVATION' && horse.lifecycleStatus === 'ACTIVE') return 1;
-  if (horse.location.placementStatus === 'PENDING_BARN' || horse.location.placementStatus === 'PENDING_STALL') return 2;
+  if (['PENDING_BARN', 'PENDING_STALL', 'PENDING_GROOM'].includes(horse.location.placementStatus)) return 2;
   return 3;
 }
 const byPriority = (a: HorseListItem, b: HorseListItem) => priority(a) - priority(b) || a.name.localeCompare(b.name, 'vi');
@@ -257,6 +259,7 @@ function ManagerDashboard({ name }: { name: string }) {
   const { horses, barns, stalls, medical } = data;
   const pendingBarn = horses.filter((horse) => horse.location.placementStatus === 'PENDING_BARN');
   const pendingStall = horses.filter((horse) => horse.location.placementStatus === 'PENDING_STALL');
+  const pendingGroom = horses.filter((horse) => horse.location.placementStatus === 'PENDING_GROOM');
   const urgent = medical.pendingRequests.filter((item) => item.urgent);
   const overdueAlert = medical.checkups.filter((item) => item.daysLeft < -7);
   const blocked = horses.filter(cannotTrain);
@@ -327,6 +330,18 @@ function ManagerDashboard({ name }: { name: string }) {
           },
         ]
       : []),
+    ...(pendingGroom.length > 0
+      ? [
+          {
+            key: 'pending-groom',
+            level: 'info' as const,
+            title: `${pendingGroom.length} ngựa có ô, chờ HLV giao Groom`,
+            detail: pendingGroom.map((horse) => horse.name).join(', '),
+            to: links.stable,
+            cta: 'Sơ đồ chuồng',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -345,7 +360,7 @@ function ManagerDashboard({ name }: { name: string }) {
             </>
           }>
         <Stat value={horses.length} label="Ngựa ở câu lạc bộ" hint={`${blocked.length} không tập được`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-        <Stat value={pendingBarn.length + pendingStall.length} label="Chờ xếp chỗ" hint="chờ xếp khu hoặc chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
+        <Stat value={pendingBarn.length + pendingStall.length + pendingGroom.length} label="Chờ xếp chỗ" hint="chờ xếp khu, xếp ô hoặc giao Groom" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
         <Stat value={urgent.length} label="Yêu cầu khám khẩn" hint={`${medical.pendingRequests.length} yêu cầu đang chờ`} icon={<AlertOctagon size={18} />} tone="danger" onClick={() => navigate(links.requests)} />
         <Stat value={overdueAlert.length} label="Quá hạn khám > 7 ngày" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
       </DashboardHero>
@@ -405,6 +420,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   const { horses, barns, stalls, medical, ids } = data;
   const pendingStall = horses.filter((horse) => horse.location.placementStatus === 'PENDING_STALL');
+  const pendingGroom = horses.filter((horse) => horse.location.placementStatus === 'PENDING_GROOM');
   const requests = medical.pendingRequests.filter((item) => ids.has(item.horseId));
   const blocked = horses.filter(cannotTrain);
   const watch = horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus === 'UNDER_OBSERVATION');
@@ -437,6 +453,14 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
       detail: horse.location.barn?.name,
       to: horse.location.barn?.id ? `${links.stable}?zone=${horse.location.barn.id}` : links.stable,
       cta: 'Xếp ô',
+    })),
+    ...pendingGroom.map((horse) => ({
+      key: `groom-${horse.id}`,
+      level: 'warn' as const,
+      title: `${horse.name} chờ giao Groom`,
+      detail: [horse.location.barn?.name, horse.location.stall ? `ô ${horse.location.stall.code}` : null].filter(Boolean).join(' · '),
+      to: horse.location.barn?.id ? `${links.stable}?zone=${horse.location.barn.id}` : links.stable,
+      cta: 'Giao Groom',
     })),
     ...blocked.map((horse) => ({
       key: `blk-${horse.id}`,
@@ -472,7 +496,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
             </>
           }>
           <Stat value={horses.length} label="Ngựa trong khu" hint={`${watch.length} cần theo dõi`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-          <Stat value={pendingStall.length} label="Chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
+          <Stat value={pendingStall.length + pendingGroom.length} label="Chờ xếp ô, giao Groom" hint={pendingGroom.length ? `${pendingStall.length} chờ ô · ${pendingGroom.length} chờ Groom` : undefined} icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
           <Stat value={requests.length} label="Yêu cầu khám đang chờ" hint={`${requests.filter((item) => item.urgent).length} khẩn`} icon={<ClipboardCheck size={18} />} tone="warning" onClick={() => navigate(links.requests)} />
           <Stat value={blocked.length} label="Ngựa không tập được" icon={<AlertOctagon size={18} />} tone="danger" />
       </DashboardHero>

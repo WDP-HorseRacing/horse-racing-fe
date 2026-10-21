@@ -1,4 +1,5 @@
-// Trang Báo cáo theo kỳ. Tab Huấn luyện (Quản lý CLB, HLV, bác sĩ): GET /reports/dashboard, chỉ ngựa đang hoạt động.
+// Trang Báo cáo theo kỳ. Tab Huấn luyện (Quản lý CLB, HLV, bác sĩ): GET /reports/dashboard. Đàn chỉ ngựa đang hoạt động,
+// số lượt và bảng từng ngựa gồm cả ngựa đã rời CLB có lượt tập trong kỳ (hiện nhãn vòng đời).
 // Tab Tài chính (chỉ Quản lý CLB): GET /reports/club/finance, bấm một chủ ngựa để xem chi phí của chủ đó.
 // HLV mặc định xem các khu mình phụ trách (mine=true), đổi được sang toàn CLB hoặc một khu (luật phạm vi đã chốt).
 import { useState } from 'react';
@@ -12,7 +13,8 @@ import { PeriodBar } from '../../components/PeriodBar';
 import { ColumnChart } from '../../components/charts/ColumnChart';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { Card, DataTable, ErrorBox, FilterSelect, NotFound, PageHeader, Skeleton, TabPanel, Tabs, cn } from '../../components/ui';
-import { HealthPill } from '../../components/ui/status';
+import { HealthPill, LifecyclePill } from '../../components/ui/status';
+import { leftClub } from '../../lib/horse-rules';
 import { usePeriod, type Period } from '../../hooks/usePeriod';
 import { useService } from '../../hooks/useService';
 import { formatDate, formatMoney } from '../../lib/format';
@@ -141,7 +143,7 @@ function TrainingReport({ period, trainer }: { period: Period; trainer: boolean 
                 rowKey={(row) => row.horseId}
                 onRowClick={(row) => navigate(links.horse(row.horseId, 'report'))}
                 pageSize={15}
-                emptyTitle="Không có ngựa đang hoạt động trong phạm vi này"
+                emptyTitle="Không có ngựa nào trong phạm vi này"
                 columns={[
                   {
                     key: 'horse',
@@ -150,11 +152,15 @@ function TrainingReport({ period, trainer }: { period: Period; trainer: boolean 
                       <span>
                         <span className="font-semibold text-gray-900">{row.horseName}</span>
                         {row.trainingLocked && <Lock size={12} className="ml-1.5 inline text-red-600" aria-label="Đang khóa tập" />}
-                        <span className="block text-xs text-gray-500">{row.barnName ?? 'Chưa xếp khu'}</span>
+                        <span className="block text-xs text-gray-500">{leftClub(row.lifecycleStatus) ? 'Đã rời câu lạc bộ' : (row.barnName ?? 'Chưa xếp khu')}</span>
                       </span>
                     ),
                   },
-                  { key: 'health', header: 'Sức khỏe', render: (row) => <HealthPill status={row.healthStatus} /> },
+                  {
+                    key: 'health',
+                    header: 'Sức khỏe',
+                    render: (row) => (row.lifecycleStatus === 'ACTIVE' ? <HealthPill status={row.healthStatus} /> : <LifecyclePill status={row.lifecycleStatus} />),
+                  },
                   { key: 'done', header: 'Lượt xong', className: 'text-right', render: (row) => <span className="tabular-nums">{row.completed}</span> },
                   {
                     key: 'hr',

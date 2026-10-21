@@ -1,4 +1,5 @@
-import type { LifecycleStatus } from '../../../api/types';
+import type { LifecyclePreview, LifecycleStatus } from '../../../api/types';
+import { healthLabel } from '../../../lib/labels';
 
 /** Thao tác vòng đời trên hồ sơ: đổi trạng thái, xóa mềm, khôi phục. */
 export type LifecycleAction = LifecycleStatus | 'DELETE' | 'RESTORE';
@@ -16,8 +17,8 @@ export const lifecycleActionHint: Record<LifecycleAction, string> = {
   RETIRED: 'Ngựa vẫn ở câu lạc bộ, vẫn được chăm sóc và chữa bệnh. Ngựa không học lớp, không đăng ký đua.',
   TRANSFERRED: 'Ngựa rời câu lạc bộ. Hồ sơ chuyển sang chỉ đọc, kết thúc sở hữu của chủ hiện tại.',
   DECEASED:
-    'Ngựa rời câu lạc bộ vĩnh viễn. Hồ sơ chuyển sang chỉ đọc và không đổi lại được. Ngựa còn bệnh án đang mở thì bác sĩ cần đóng bệnh án trước.',
-  ACTIVE: 'Đưa ngựa trở lại hoạt động đầy đủ.',
+    'Ngựa rời câu lạc bộ vĩnh viễn. Hồ sơ chuyển sang chỉ đọc và không đổi lại được. Ngày mất là hôm nay. Ngựa còn bệnh án đang mở thì bác sĩ đóng bệnh án và chọn Ngựa đã mất.',
+  ACTIVE: 'Đưa ngựa trở lại hoạt động. Ngựa về từ chuyển nhượng vào Cách ly và Chờ xếp khu, chờ bác sĩ khám.',
   DELETE: 'Xóa hồ sơ tạo nhầm. Chỉ xóa được khi hồ sơ chưa có dữ liệu.',
   RESTORE: 'Đưa hồ sơ đã xóa trở lại danh sách. Ngựa luôn vào danh sách Chờ xếp khu.',
 };
@@ -52,4 +53,32 @@ export function lifecycleActionsFor(status: LifecycleStatus, deleted: boolean): 
   if (status === 'RETIRED') return ['ACTIVE', 'TRANSFERRED', 'DECEASED'];
   if (status === 'TRANSFERRED') return ['ACTIVE'];
   return [];
+}
+
+/** Dòng hệ quả của bảng xem trước đổi vòng đời. Đóng bệnh án kèm ngựa mất dùng lại. */
+export function lifecycleConsequences(data: LifecyclePreview): string[] {
+  const cause = data.to === 'DECEASED' ? 'ngựa mất' : 'chuyển nhượng';
+  const lines: string[] = [];
+  if (data.classesWithdrawn) lines.push(`Rút khỏi ${data.classesWithdrawn} lớp đang học (buổi đã học giữ lịch sử)`);
+  if (data.raceRegistrationsWithdrawn) lines.push(`Rút ${data.raceRegistrationsWithdrawn} đăng ký thi đấu chưa diễn ra`);
+  if (data.stallReleased) lines.push(`Trả ô ${data.stallReleased} về trống`);
+  if (data.barnCleared) lines.push(`Rời ${data.barnCleared}`);
+  if (data.groomEnded) lines.push(`Kết thúc phân công Groom ${data.groomEnded} (Groom nhận thông báo)`);
+  if (data.trainingLockReleased) lines.push(`Tự gỡ lệnh khóa huấn luyện với ghi chú "Gỡ do ${cause}"`);
+  if (data.examRequestsDismissed) lines.push(`Bỏ qua ${data.examRequestsDismissed} yêu cầu khám đang chờ (lý do "Do ${cause}")`);
+  if (data.careSchedulesCancelled) lines.push(`Hủy ${data.careSchedulesCancelled} lịch chăm sóc và lịch hẹn khám đã lên`);
+  if (data.feedingPlansArchived) lines.push(`Chuyển ${data.feedingPlansArchived} khẩu phần đang áp dụng sang lưu trữ`);
+  if (data.draftFeedingPlansDeleted) lines.push(`Xóa ${data.draftFeedingPlansDeleted} khẩu phần nháp`);
+  if (data.careTasksEnded) lines.push(`Kết thúc ${data.careTasksEnded} việc chăm sóc riêng đang làm`);
+  if (data.careTasksDeleted) lines.push(`Xóa ${data.careTasksDeleted} việc chăm sóc riêng chưa bắt đầu`);
+  if (data.checklistCancelled) lines.push('Hủy checklist chăm sóc hôm nay, Groom không còn phải tick');
+  if (data.incidentsClosed) lines.push(`Tự đóng ${data.incidentsClosed} sự cố tại chuồng đang mở (kết quả "Ngựa đã ${data.to === 'DECEASED' ? 'mất' : 'chuyển nhượng'}")`);
+  if (data.healthResetTo) lines.push(`Sức khỏe đặt về "${healthLabel[data.healthResetTo]}"`);
+  if (data.pendingBarnAfter) lines.push('Ngựa vào danh sách Chờ xếp khu');
+  if (data.ownerCleared) lines.push(`Kết thúc sở hữu của ${data.ownerCleared}, hồ sơ không còn chủ. Chủ cũ chỉ xem thông tin cơ bản ở mục Ngựa đã bán`);
+  if (data.to === 'TRANSFERRED') lines.push('Hồ sơ chuyển sang chỉ đọc');
+  if (data.ownerRequired) lines.push('Chọn chủ sở hữu mới, giai đoạn sở hữu mới bắt đầu từ lúc lưu');
+  if (data.to === 'DECEASED') lines.push('Ngày mất là hôm nay. Hồ sơ chuyển sang chỉ đọc vĩnh viễn, giữ tên chủ, ngựa vẫn hiện trong phả hệ');
+  if (data.to === 'RETIRED' && lines.length === 0) lines.push('Giữ khu, ô, Groom và toàn bộ dữ liệu y tế');
+  return lines;
 }

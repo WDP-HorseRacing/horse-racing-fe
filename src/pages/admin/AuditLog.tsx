@@ -44,7 +44,6 @@ function actorText(item: Pick<AuditLog, 'actor' | 'action' | 'entityId' | 'featu
 /** Loại đối tượng hay gặp, để lọc. Các loại khác vẫn hiện trong danh sách. */
 const ENTITY_FILTERS = [
   'HORSE',
-  'HORSE_OWNERSHIP',
   'HORSE_MEASUREMENT',
   'BARN',
   'STALL_ASSIGNMENT',

@@ -6,12 +6,12 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ExternalLink, Plus } from 'lucide-react';
-import { addSession, addSessions, cancelSession, createTimeTrial, getTimeTrial, updateSession, updateTimeTrial } from '../../../api/training';
+import { addSession, addSessions, cancelSession, updateSession } from '../../../api/training';
 import type { SessionInput, TrainingSession, TrainingSubject } from '../../../api/types';
 import { Button, cn, useToast } from '../../../components/ui';
 import { useAction } from '../../../hooks/useService';
 import { formatDate } from '../../../lib/format';
-import { addDateKey, addMinutes, clubDateKey, clubInstant, clubToday, diffDateKeys } from '../../../lib/club-time';
+import { addDateKey, addMinutes, clubDateKey, clubInstant, clubTime, clubToday, diffDateKeys } from '../../../lib/club-time';
 import { links } from '../../../lib/links';
 import { windowOpensAt } from '../../../lib/training-window';
 import { ProgressFill } from '../components/motion';
@@ -91,16 +91,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     setEditing({ initial: draftFromSubject(subject, start, addMinutes(start, subject.durationMinutes)) });
   };
 
-  const openEdit = async (session: TrainingSession) => {
-    const subject = session.subjectId ? subjectById(session.subjectId) : undefined;
-    let targetTimeMs: number | undefined;
-    if (session.sessionType === 'TIME_TRIAL') {
-      try {
-        targetTimeMs = (await getTimeTrial(session.id)).targetTimeMs ?? undefined;
-      } catch {
-        targetTimeMs = subject?.targetTimeMs ?? undefined;
-      }
-    }
+  const openEdit = (session: TrainingSession) => {
     save.clearError();
     setEditing({
       session,
@@ -112,15 +103,23 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
         surface: session.surface ?? '',
         location: session.location ?? '',
         notes: session.notes ?? '',
-        targetTimeMs,
+        targetTimeMs: session.targetTimeMs ?? undefined,
         scheduledStartAt: session.scheduledStartAt,
         scheduledEndAt: session.scheduledEndAt,
       },
     });
   };
 
+  // Nút Thêm buổi: ngày sớm nhất còn xếp được trong tuần (không ở quá khứ). Hôm nay thì lấy giờ tròn kế tiếp.
+  const addFromButton = () => {
+    const today = clubToday();
+    const firstDay = [today, weekStart, item.startDate].sort().at(-1)!;
+    const hour = Number(clubTime(new Date().toISOString()).slice(0, 2)) + 1;
+    openAdd(firstDay, firstDay === today && hour > 6 ? `${String(Math.min(hour, 23)).padStart(2, '0')}:00` : '06:00');
+  };
+
   const openSession = (session: TrainingSession) => {
-    if (canEdit && editable(session)) void openEdit(session);
+    if (canEdit && editable(session)) openEdit(session);
     else navigate(links.session(session.id));
   };
 
@@ -131,7 +130,6 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     const body: SessionInput = {
       name: draft.name.trim(),
       subjectId: subject.id,
-      sessionType: subject.sessionType,
       intensity: draft.intensity,
       plannedDistanceM: draft.plannedDistanceM,
       scheduledStartAt: draft.scheduledStartAt,
@@ -143,13 +141,9 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     };
     const existing = editing.session;
     if (existing) {
+      // Loại buổi theo môn. Môn thường thì BE tự bỏ mục tiêu, không gửi.
       void save.run(
-        async () => {
-          const wasTrial = existing.sessionType === 'TIME_TRIAL';
-          const saved = await updateSession(existing.id, body);
-          if (trial && wasTrial) await updateTimeTrial(saved.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs ?? null });
-          if (trial && !wasTrial) await createTimeTrial(saved.id, { distanceM: draft.plannedDistanceM, targetTimeMs: draft.targetTimeMs });
-        },
+        () => updateSession(existing.id, trial ? { ...body, targetTimeMs: draft.targetTimeMs ?? null } : body),
         () => {
           toast.push('Đã lưu buổi tập', 'success');
           setEditing(null);
@@ -158,8 +152,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
       );
       return;
     }
-    // Buổi chạy thử: BE tạo cấu hình chạy thử trong cùng request.
-    const first = trial ? { ...body, targetTimeMs: draft.targetTimeMs ?? null } : body;
+    const first: SessionInput = { ...body, sessionType: subject.sessionType, ...(trial ? { targetTimeMs: draft.targetTimeMs ?? null } : {}) };
     const extra = repeat ? repeatWeeks(clubDateKey(draft.scheduledStartAt)) : 0;
     const all = Array.from({ length: extra + 1 }, (_, index) => ({
       ...first,
@@ -192,7 +185,10 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
         reload();
       },
     ).then((result) => {
-      if (result === undefined) revert();
+      if (result === undefined) {
+        revert();
+        reload();
+      }
     });
   };
 
@@ -201,9 +197,6 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
   const scheduledMinutes = progress?.scheduledMinutes ?? 0;
   const minTotal = progress?.minTotalMinutes ?? classPlan?.minTotalMinutes ?? 0;
 
-  // Buổi chạy thử đã có cấu hình chạy thử thì không đổi về buổi thường được (BE chặn): chỉ cho chọn môn chạy thử.
-  const editSubjectsFor = (dateKey: string) =>
-    editing?.session?.sessionType === 'TIME_TRIAL' ? subjectsFor(dateKey).filter((subject) => subject.sessionType === 'TIME_TRIAL') : subjectsFor(dateKey);
 
   return (
     <div className="space-y-4">
@@ -232,7 +225,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
           </Button>
         )}
         {canEdit && (
-          <Button size="sm" className="ml-auto" onClick={() => openAdd(clubToday() >= weekStart && clubToday() <= weekEnd ? clubToday() : weekStart < item.startDate ? item.startDate : weekStart, '06:00')}>
+          <Button size="sm" className="ml-auto" onClick={addFromButton}>
             <Plus size={14} /> Thêm buổi
           </Button>
         )}
@@ -269,6 +262,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             onAdd={openAdd}
             onOpen={openSession}
             onMove={moveSession}
+            onBlocked={(message) => toast.push(message, 'error')}
           />
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
             <span className="inline-flex items-center gap-1.5">
@@ -334,11 +328,12 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
           description={editing.session ? `${editing.session.name}, ${formatDate(editing.session.scheduledStartAt)}` : 'Buổi lưu xong có hiệu lực ngay, Groom và chủ ngựa thấy lịch.'}
           initial={editing.initial}
           subjects={subjects}
-          subjectsFor={editSubjectsFor}
+          subjectsFor={subjectsFor}
           repeatWeeks={editing.session ? undefined : repeatWeeks}
           range={range}
           pending={save.pending}
           error={save.error}
+          fieldErrors={save.fieldErrors}
           submitLabel={editing.session ? 'Lưu' : 'Thêm buổi'}
           removeLabel="Hủy buổi"
           onRemove={
@@ -388,7 +383,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
                 setCancelling(null);
                 reload();
               },
-            )
+            ).then((result) => result === undefined && reload())
           }
         />
       )}

@@ -1,5 +1,5 @@
 // Hộp thoại của Sân tập: ghi thời gian chạy thử (kèm video), hoàn thành lượt, đánh giá sau buổi, đổi Groom dắt.
-// Sau buổi (7 ngày): sửa thời gian chạy thử và sửa đánh giá, đều bắt buộc lý do.
+// Sau buổi (không giới hạn thời gian, trừ buổi đã hủy): sửa thời gian chạy thử và sửa đánh giá, đều bắt buộc lý do.
 import { useState } from 'react';
 import { Flag } from 'lucide-react';
 import { assignParticipantGroom, completeParticipant, createEvaluation, listTrialResults, recordTrialResult, updateEvaluation, updateTrialResult } from '../../../api/training';
@@ -269,7 +269,7 @@ export function CompleteDialog({ participant, horseName, onClose, onDone }: { pa
   );
 }
 
-/* ===== Đánh giá sau buổi (HLV). Có `existing` là sửa đánh giá đã lưu (7 ngày sau buổi, lý do bắt buộc) ===== */
+/* ===== Đánh giá sau buổi (HLV). Có `existing` là sửa đánh giá đã lưu (lý do bắt buộc) ===== */
 
 export function EvaluationSheet({
   participant,
@@ -396,7 +396,7 @@ export function EvaluationSheet({
             <Input value={reason} maxLength={500} placeholder="Ví dụ: Chấm nhầm, xem lại video" onChange={(event) => setReason(event.target.value)} />
           </Field>
         ) : (
-          <Notice tone="info">Sửa được trong 7 ngày sau buổi, cần ghi lý do. Chủ ngựa không nhận thông báo khi sửa.</Notice>
+          <Notice tone="info">Sửa được sau buổi bất kỳ lúc nào, cần ghi lý do. Chủ ngựa không nhận thông báo khi sửa.</Notice>
         )}
       </div>
 
@@ -414,9 +414,17 @@ export function EvaluationSheet({
                 disabled={save.pending}
                 onClick={() =>
                   void save.run(
-                    () => createEvaluation(participant.id, { score, comment: comment.trim() || undefined }),
-                    () => {
-                      toast.push(`Đã lưu đánh giá ${score} điểm cho ${horseName}`, 'success');
+                    async () => {
+                      try {
+                        return await createEvaluation(participant.id, { score, comment: comment.trim() || undefined });
+                      } catch (error) {
+                        // Gửi trùng (bấm hai lần, hai tab): BE trả 409, đánh giá đã lưu ở lần trước.
+                        if (error instanceof Error && /đã có đánh giá/i.test(error.message)) return null;
+                        throw error;
+                      }
+                    },
+                    (saved) => {
+                      toast.push(saved ? `Đã lưu đánh giá ${score} điểm cho ${horseName}` : `${horseName} đã có đánh giá, đã tải lại để xem`, saved ? 'success' : 'info');
                       setConfirming(false);
                       onDone();
                     },
@@ -428,7 +436,8 @@ export function EvaluationSheet({
             </>
           }
         >
-          <p className="text-sm text-gray-600">Chủ ngựa đọc được điểm và nhận xét. Muốn đổi sau thì sửa kèm lý do trong 7 ngày.</p>
+          <p className="text-sm text-gray-600">Chủ ngựa đọc được điểm và nhận xét. Muốn đổi sau thì sửa kèm lý do.</p>
+          {save.error && <div className="mt-3"><ErrorBox message={save.error} /></div>}
         </Modal>
       )}
     </Sheet>

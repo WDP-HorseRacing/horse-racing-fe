@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowDownToLine, PackageMinus, PackagePlus, Plus } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
-import { deleteSupplyItem, listSupplyItems, listSupplyRequests, reviewSupplyRequest } from '../../api/supplies';
+import { cancelSupplyRequest, deleteSupplyItem, listSupplyItems, listSupplyRequests, reviewSupplyRequest } from '../../api/supplies';
 import type { NotificationItem, SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -38,6 +38,7 @@ import { useStore } from '../../store/store';
 import { stockTone } from './care-helpers';
 import { SupplyItemSheet } from './components/SupplyItemSheet';
 import { FulfillRequestDialog, ReceiveDialog, RejectRequestDialog, SupplyItemDialog, SupplyRequestDialog, UsageDialog } from './components/supply-dialogs';
+import { ReasonDialog } from '../training/components/ReasonDialog';
 
 type Dialog =
   | { kind: 'item'; item?: SupplyItem }
@@ -46,9 +47,10 @@ type Dialog =
   | { kind: 'request'; item?: SupplyItem; request?: SupplyRequest }
   | { kind: 'delete'; item: SupplyItem }
   | { kind: 'reject'; request: SupplyRequest }
-  | { kind: 'fulfill'; request: SupplyRequest };
+  | { kind: 'fulfill'; request: SupplyRequest }
+  | { kind: 'cancel'; request: SupplyRequest };
 
-const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red' };
+const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red', CANCELLED: 'gray' };
 
 export default function Supplies() {
   const user = useStore((state) => state.currentUser);
@@ -62,6 +64,7 @@ export default function Supplies() {
   const [requestsVersion, setRequestsVersion] = useState(0);
   const reloadRequests = () => setRequestsVersion((version) => version + 1);
   const remove = useAction();
+  const cancelRequest = useAction();
 
   const canManage = can(user, 'supply.manage');
   const canReceive = can(user, 'supply.receive');
@@ -327,6 +330,32 @@ export default function Supplies() {
       >
         {remove.error && <ErrorBox message={remove.error} />}
       </ConfirmDialog>
+      {dialog?.kind === 'cancel' && (
+        <ReasonDialog
+          title={`Hủy đề xuất ${dialog.request.item.name}`}
+          message={<>Đề xuất của <b>{dialog.request.requester.fullName}</b> đã duyệt nhưng chưa cấp. Người gửi nhận thông báo kèm lý do, muốn thì gửi đề xuất mới.</>}
+          label="Lý do hủy"
+          suggestions={['Nhà cung cấp hết hàng', 'Đã mua loại khác thay thế', 'Duyệt nhầm']}
+          confirmLabel="Hủy đề xuất"
+          pending={cancelRequest.pending}
+          error={cancelRequest.error}
+          onClose={() => {
+            cancelRequest.clearError();
+            setDialog(null);
+          }}
+          onConfirm={(reason) =>
+            dialog.kind === 'cancel' &&
+            void cancelRequest.run(
+              () => cancelSupplyRequest(dialog.request.id, reason),
+              () => {
+                toast.push(`Đã hủy đề xuất ${dialog.request.item.name}`, 'success');
+                setDialog(null);
+                reloadRequests();
+              },
+            )
+          }
+        />
+      )}
       {dialog?.kind === 'fulfill' && (
         <FulfillRequestDialog
           request={dialog.request}
@@ -357,7 +386,7 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
         value={status}
         onChange={setStatus}
         options={[
-          ...(manager ? (['PENDING', 'APPROVED', 'FULFILLED', 'REJECTED'] as const) : []).map((value) => ({ value, label: supplyRequestStatusText[value] })),
+          ...(manager ? (['PENDING', 'APPROVED', 'FULFILLED', 'REJECTED', 'CANCELLED'] as const) : []).map((value) => ({ value, label: supplyRequestStatusText[value] })),
           { value: 'ALL' as const, label: 'Tất cả' },
         ]}
       />
@@ -374,7 +403,8 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900">
-                  {request.item.name} <span className="font-mono text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>
+                  {request.item.name}{' '}
+                  {request.status === 'FULFILLED' && request.quantity !== null && <span className="font-mono text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>}
                 </p>
                 <p className="text-xs text-gray-500" title={formatDateTime(request.createdAt)}>
                   {manager ? `${request.requester.fullName} · ` : ''}
@@ -394,10 +424,19 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
             {request.status === 'APPROVED' && request.reviewer && <p className="mt-2 text-xs text-gray-500">{request.reviewer.fullName} đã duyệt, chờ cấp</p>}
             {request.status === 'FULFILLED' && (
               <p className="mt-2 text-xs text-gray-500">
-                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
+                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'}
+                {request.quantity !== null ? ` ${formatAmount(request.quantity, request.item.unit)}` : ''} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
               </p>
             )}
-            {(manager || request.status === 'PENDING') && request.status !== 'REJECTED' && request.status !== 'FULFILLED' && (
+            {request.status === 'CANCELLED' && (
+              <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700 ring-1 ring-gray-100">
+                Đã hủy{request.cancellationReason ? `: ${request.cancellationReason}` : ''}
+                <span className="block text-xs text-gray-500" title={request.cancelledAt ? formatDateTime(request.cancelledAt) : undefined}>
+                  {[request.canceller?.fullName, request.cancelledAt ? formatDateTime(request.cancelledAt) : null].filter(Boolean).join(' · ')}
+                </span>
+              </p>
+            )}
+            {(manager || request.status === 'PENDING') && (request.status === 'PENDING' || request.status === 'APPROVED') && (
               <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-3">
                 {manager && request.status === 'PENDING' && (
                   <>
@@ -422,9 +461,14 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
                   </>
                 )}
                 {manager && request.status === 'APPROVED' && (
-                  <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
-                    Cấp hàng
-                  </Button>
+                  <>
+                    <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'cancel', request })}>
+                      Hủy đề xuất
+                    </Button>
+                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
+                      Cấp hàng
+                    </Button>
+                  </>
                 )}
                 {!manager && request.status === 'PENDING' && (
                   <Button variant="secondary" size="sm" onClick={() => onDialog({ kind: 'request', request })}>

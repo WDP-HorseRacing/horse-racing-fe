@@ -36,8 +36,13 @@ export function daysBetween(from: Date | string, to: Date | string): number {
   return Math.round((b - a) / DAY_MS);
 }
 
+/** Ngày lịch 'YYYY-MM-DD' của BE: tách chuỗi, không đổi sang Date (tránh lệch ngày theo múi giờ máy). */
+const DATE_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 export function formatDate(value?: string | Date | null): string {
   if (!value) return '—';
+  const key = typeof value === 'string' ? DATE_KEY.exec(value) : null;
+  if (key) return `${key[3]}/${key[2]}/${key[1]}`;
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
@@ -45,6 +50,8 @@ export function formatDate(value?: string | Date | null): string {
 
 export function formatDateShort(value?: string | Date | null): string {
   if (!value) return '—';
+  const key = typeof value === 'string' ? DATE_KEY.exec(value) : null;
+  if (key) return `${key[3]}/${key[2]}`;
   const date = typeof value === 'string' ? new Date(value) : value;
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
 }

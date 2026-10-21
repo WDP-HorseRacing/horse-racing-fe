@@ -20,6 +20,7 @@ const DOT: Record<ChecklistStatus, string> = {
   IN_PROGRESS: 'bg-amber-400 ring-amber-400',
   PENDING: 'bg-gray-300 ring-gray-300',
   INCOMPLETE: 'bg-red-500 ring-red-500',
+  CANCELLED: 'bg-white ring-gray-300',
 };
 
 export function ChecklistSection({ horse, canTick, hasGroom, version = 0, className }: { horse: { id: string }; canTick: boolean; hasGroom: boolean; version?: number; className?: string }) {
@@ -82,7 +83,7 @@ export function ChecklistSection({ horse, canTick, hasGroom, version = 0, classN
             <>
               <ChecklistItems
                 checklist={current}
-                editable={canTick && selected === today && current.status !== 'INCOMPLETE'}
+                editable={canTick && selected === today && current.status !== 'INCOMPLETE' && current.status !== 'CANCELLED'}
                 onChanged={(next) => setLocal({ source: data.data, map: { ...ticked, [next.id]: next } })}
               />
               <p className="mt-2 text-xs text-gray-500">

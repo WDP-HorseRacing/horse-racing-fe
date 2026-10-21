@@ -34,6 +34,8 @@ interface MapZone {
   cells: ZoneCell[];
   horseByStall: Map<string, HorseListItem>;
   waitingStall: HorseListItem[];
+  /** Đã có ô, chưa có Groom phụ trách. */
+  waitingGroom: HorseListItem[];
   horseCount: number;
   /** Người xem là HT phụ trách khu này. */
   canManage: boolean;
@@ -66,6 +68,7 @@ async function loadMap(user: User | null, isManager: boolean) {
         cells: buildCells(barn.id, stalls, occupants),
         horseByStall,
         waitingStall: horsesOfBarn.filter((horse) => horse.location.placementStatus === 'PENDING_STALL'),
+        waitingGroom: horsesOfBarn.filter((horse) => horse.location.placementStatus === 'PENDING_GROOM'),
         horseCount: horsesOfBarn.length,
         canManage,
         isolation: scope.isolationBarnIds.has(barn.id),
@@ -304,6 +307,7 @@ export default function StableMap() {
   // HT: việc cần làm chỉ tính trong khu mình phụ trách (khu cách ly của HT khác chỉ để theo dõi).
   const workZones = trainer ? zones.filter((zone) => zone.canManage) : zones;
   const waitingStall = workZones.flatMap((zone) => zone.waitingStall.map((horse) => ({ zone, horse })));
+  const waitingGroom = workZones.flatMap((zone) => zone.waitingGroom.map((horse) => ({ zone, horse })));
   const attention = workZones.flatMap((zone) =>
     zone.cells.flatMap((cell) => {
       const horse = zone.horseByStall.get(cell.stall.id);
@@ -538,6 +542,31 @@ export default function StableMap() {
                   </ul>
                 )}
               </Card>
+
+              {waitingGroom.length > 0 && (
+                <Card tone="warning" className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+                  <SectionTitle action={<Count value={waitingGroom.length} />} className="mb-1">
+                    Chờ giao Groom
+                  </SectionTitle>
+                  <ul className="divide-y divide-gray-100">
+                    {waitingGroom.map(({ zone, horse }) => (
+                      <PersonRow
+                        key={horse.id}
+                        horse={horse}
+                        note={[zone.barn.name, horse.location.stall?.code ? `ô ${horse.location.stall.code}` : null].filter(Boolean).join(' · ')}
+                        onOpen={() => openHorse(horse)}
+                        action={
+                          zone.canManage && (
+                            <Button size="sm" variant="secondary" onClick={() => setGroomHorse(toPlacement(horse))}>
+                              Giao Groom
+                            </Button>
+                          )
+                        }
+                      />
+                    ))}
+                  </ul>
+                </Card>
+              )}
 
               {attention.length > 0 && (
                 <Card className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">

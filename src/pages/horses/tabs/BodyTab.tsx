@@ -1,7 +1,8 @@
 // F1.5 — chỉ số cơ thể: 4 biểu đồ cùng một màu, dải bình thường xám, chỉ bản ghi bất thường mới có màu.
 // Người được ghi (HLV trưởng của khu, bác sĩ, Groom được giao) sửa thẳng con số hiện tại trên từng thẻ, rồi bấm Lưu
 // một lần cho cả lần đo: mỗi số đã đổi thành một lần đo mới (backend hỏi xác nhận khi ngoài khoảng bình thường, mã 422).
-// Lần đo cũ không bị sửa, vẫn nằm trong biểu đồ và lịch sử. Ghi sai thì bác sĩ xóa kèm lý do. Bản ghi từ buổi khám chỉ xử lý được ở hồ sơ y tế.
+// Thời điểm đo là lúc lưu (không nhập lùi). Lần đo cũ không bị sửa, vẫn nằm trong biểu đồ và lịch sử.
+// Ghi sai thì bác sĩ xóa kèm lý do rồi nhập lại. Bản ghi từ buổi khám chỉ xử lý được ở hồ sơ y tế.
 import { useState } from 'react';
 import { Minus, RotateCcw, Stethoscope, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import { useService } from '../../../hooks/useService';
@@ -13,10 +14,8 @@ import { Button, Card, ConfirmDialog, DataTable, Dot, ErrorBox, Segmented, Skele
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
 import { measurementSpec } from '../../../lib/api-labels';
 import { TEMP_ALERT_C } from '../../../lib/horse-rules';
-import { addDays, formatDateShort, formatDateTime, formatTime } from '../../../lib/format';
-import { now } from '../../../lib/clock';
+import { formatDateShort, formatDateTime, formatTime } from '../../../lib/format';
 import { ReasonDialog } from '../../stable/components/PlacementDialogs';
-import { DateTimePicker } from '../../../components/ui/DatePicker';
 import { measurementDelta } from './body-delta';
 
 const TYPES: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
@@ -39,11 +38,6 @@ const SPAN: Record<MeasurementType, string> = {
   BODY_CONDITION: 'lg:col-span-7',
 };
 
-function toLocalInput(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function formatValue(type: MeasurementType, value: number) {
   return type === 'TEMPERATURE' ? value.toLocaleString('vi-VN', { minimumFractionDigits: 1, maximumFractionDigits: 2 }) : value.toLocaleString('vi-VN');
 }
@@ -54,8 +48,8 @@ const dayTime = (value: string | number) => `${formatDateShort(new Date(value))}
 
 function alertToast(created: CreatedMeasurement[]) {
   const alerts = created.flatMap((item) => item.alerts);
-  if (alerts.some((item) => item.alert === 'FEVER')) return 'Đã lưu. Thân nhiệt vượt ngưỡng sốt, đã báo khẩn bác sĩ, HLV trưởng của khu và tạo yêu cầu khám khẩn';
-  if (alerts.some((item) => item.alert === 'WEIGHT_DROP')) return 'Đã lưu. Cân nặng giảm hơn 5% trong 14 ngày, đã báo bác sĩ, HLV trưởng và tạo yêu cầu khám';
+  if (alerts.some((item) => item.alert === 'FEVER')) return 'Đã lưu. Thân nhiệt vượt ngưỡng sốt, đã báo khẩn bác sĩ, HLV trưởng của khu và chủ ngựa';
+  if (alerts.some((item) => item.alert === 'WEIGHT_DROP')) return 'Đã lưu. Cân nặng giảm hơn 5% trong 14 ngày, đã báo bác sĩ, HLV trưởng và chủ ngựa';
   return undefined;
 }
 
@@ -79,7 +73,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
 
   // Số đã sửa trên các thẻ (chưa sửa thì ô hiện số mới nhất). Lưu một lần cho cả lần đo.
   const [edits, setEdits] = useState<Partial<Record<MeasurementType, string>>>({});
-  const [measuredAt, setMeasuredAt] = useState(() => toLocalInput(now()));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string>();
   const [confirmMessage, setConfirmMessage] = useState<string>();
@@ -105,16 +98,10 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   // Đổi tab trong hồ sơ (?tab=) cũng làm mất số đang nhập: chặn cả khi đổi query.
   const leaveConfirm = useLeaveConfirm(dirty, 'Chỉ số vừa nhập chưa được lưu. Rời đi sẽ mất các số này.', { includeSearch: true });
 
-  const dateValue = measuredAt ? new Date(measuredAt).getTime() : 0;
-  const dateError =
-    dateValue && (dateValue > now().getTime() + 60_000 || dateValue < addDays(now(), -7).getTime())
-      ? 'Không ghi thời điểm ở tương lai, nhập lùi tối đa 7 ngày'
-      : undefined;
-  const canSave = dirty && !invalid && !dateError && !!measuredAt && !pending;
+  const canSave = dirty && !invalid && !pending;
 
   const resetDraft = () => {
     setEdits({});
-    setMeasuredAt(toLocalInput(now()));
     setFormError(undefined);
   };
 
@@ -124,7 +111,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
     try {
       const created = await addMeasurements(horseId, {
         values: entered,
-        measuredAt: new Date(measuredAt).toISOString(),
         confirmAbnormal,
       });
       setConfirmMessage(undefined);
@@ -213,7 +199,6 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   if (list.loading && !list.data) return <Skeleton rows={5} />;
   if (list.error) return <ErrorBox message={list.error} />;
 
-  const minInput = toLocalInput(addDays(now(), -7));
   const filtered = filter === 'ALL' ? rows : rows.filter((row) => row.type === filter);
 
   return (
@@ -221,14 +206,10 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-sm text-gray-500">
           Dải xám là khoảng bình thường.
-          {canRecord && <span className="block">Nhập số mới trên thẻ rồi bấm Lưu, số cũ vẫn giữ trong lịch sử.</span>}
+          {canRecord && <span className="block">Nhập số mới trên thẻ rồi bấm Lưu, giờ đo là lúc lưu. Nhập sai thì bác sĩ xóa kèm lý do rồi nhập lại.</span>}
         </p>
         {canRecord && (
           <div className="flex flex-wrap items-end gap-2">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-500">Thời điểm đo</span>
-              <DateTimePicker value={measuredAt} min={minInput} max={toLocalInput(now())} onChange={setMeasuredAt} />
-            </label>
             {dirty && (
               <Button variant="secondary" onClick={resetDraft} disabled={pending}>
                 Hủy
@@ -240,7 +221,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
           </div>
         )}
       </div>
-      {canRecord && (dateError || formError) && <ErrorBox message={dateError ?? formError ?? ''} />}
+      {canRecord && formError && <ErrorBox message={formError} />}
 
       <div className="grid gap-4 lg:grid-cols-12">
         {TYPES.map((type) => {

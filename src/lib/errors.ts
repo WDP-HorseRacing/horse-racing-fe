@@ -64,7 +64,6 @@ export function fieldFromMessage(message: string | undefined): string | undefine
   if (!message) return undefined;
   const text = message.toLowerCase();
   if (text.includes('số chip') || text.includes('microchip')) return 'microchipId';
-  if (text.includes('ngày mất')) return 'dateOfDeath';
   if (text.includes('ngày sinh') || text.includes('sinh trước')) return 'dateOfBirth';
   if (text.includes('ngựa cha') || /\bsire\b/.test(text)) return 'sireId';
   if (text.includes('ngựa mẹ') || /\bdam\b/.test(text)) return 'damId';

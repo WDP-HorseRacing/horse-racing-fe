@@ -65,6 +65,8 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
   const errors = {
     name: clientErrors.name ?? action.fieldErrors.name,
     unit: clientErrors.unit ?? action.fieldErrors.unit,
+    // Vật tư đã có nhập xuất kho thì BE không cho đổi loại, đơn vị (409 gắn ô): báo ngay dưới ô.
+    category: action.fieldErrors.category,
     threshold: clientErrors.threshold ?? action.fieldErrors.reorderThreshold,
     stock: clientErrors.stock ?? action.fieldErrors.quantityOnHand,
     openingPrice: clientErrors.openingPrice ?? action.fieldErrors.openingUnitPrice,
@@ -100,7 +102,7 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
       open
       onClose={onClose}
       title={item ? `Sửa vật tư: ${item.name}` : 'Thêm vật tư'}
-      description={item ? 'Số tồn đổi qua Nhập hàng hoặc Xuất dùng.' : undefined}
+      description={item ? 'Số tồn đổi qua Nhập hàng hoặc Xuất dùng. Vật tư đã nhập, xuất kho thì không đổi được loại, đơn vị.' : undefined}
       footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label={saveLabel} />}
       dirty={dirty}
       onSave={submit}
@@ -110,12 +112,13 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
         <Field label="Tên vật tư" required error={shown('name')} className="sm:col-span-6">
           <Input value={name} onChange={(event) => edit(setName)(event.target.value)} maxLength={180} placeholder="Ví dụ: Yến mạch, Cỏ khô Timothy, Vitamin E" />
         </Field>
-        <Field label="Loại" required className="sm:col-span-4">
+        <Field label="Loại" required error={shown('category')} className="sm:col-span-4">
           <Select
             value={category}
             onChange={(event) => {
               const next = event.target.value as SupplyCategory;
               setCategory(next);
+              if (action.error) action.clearError();
               // Đơn vị đang chọn không có trong loại mới thì bỏ, bắt chọn lại.
               if (unit && !SUPPLY_UNITS[next].includes(unit)) setUnit('');
             }}
@@ -326,23 +329,20 @@ export function SupplyRequestDialog({
   const toast = useToast();
   const action = useAction();
   const fixed = request?.item ?? item;
-  const initial = { itemId: fixed?.id ?? '', quantity: quantityText(request?.quantity), note: request?.note ?? '' };
+  const initial = { itemId: fixed?.id ?? '', note: request?.note ?? '' };
   const [itemId, setItemId] = useState(initial.itemId);
-  const [quantity, setQuantity] = useState(initial.quantity);
   const [note, setNote] = useState(initial.note);
   const [touched, setTouched] = useState(false);
   const picked = fixed ?? items?.find((entry) => entry.id === itemId);
-  const quantityErr = quantityError(quantity, { label: 'Số lượng', max: MAX_STOCK });
-  const noteError = textError(note, { label: 'Ghi chú', max: 500, required: false });
-  const dirty = itemId !== initial.itemId || quantity !== initial.quantity || note !== initial.note;
+  // Không ghi số lượng: nhu cầu ghi bằng chữ, Quản lý cấp theo số thực nhận.
+  const noteError = textError(note, { label: 'Nhu cầu', max: 500 }) ?? action.fieldErrors.note;
+  const dirty = itemId !== initial.itemId || note !== initial.note;
 
   const submit = () => {
     setTouched(true);
-    if (!itemId || quantityErr || noteError) return;
-    const amount = parseQuantity(quantity);
+    if (!itemId || noteError) return;
     void action.run(
-      // Sửa: không gửi null (BE trả 400). Ghi chú xóa trắng thì gửi chuỗi rỗng.
-      () => (request ? editSupplyRequest(request.id, { quantity: amount, note: note.trim() }) : createSupplyRequest({ itemId, quantity: amount, ...(note.trim() ? { note: note.trim() } : {}) })),
+      () => (request ? editSupplyRequest(request.id, { note: note.trim() }) : createSupplyRequest({ itemId, note: note.trim() })),
       () => {
         toast.push(request ? 'Đã sửa đề xuất' : 'Đã gửi đề xuất', 'success');
         onDone();
@@ -381,11 +381,14 @@ export function SupplyRequestDialog({
             Còn <span className="font-semibold text-gray-900">{formatAmount(picked.quantityOnHand, picked.unit)}</span>. Báo sắp hết ở {formatAmount(picked.reorderThreshold, picked.unit)}.
           </p>
         )}
-        <Field label={`Số lượng cần thêm${picked ? ` (${picked.unit})` : ''}`} required error={touched ? quantityErr : undefined}>
-          <QuantityInput value={quantity} onChange={setQuantity} placeholder="Ví dụ: 50" />
-        </Field>
-        <Field label="Ghi chú" error={touched ? noteError : undefined}>
-          <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Đủ dùng cho khu D trong 2 tuần" />
+        <Field label="Nhu cầu" required error={touched ? noteError : undefined} hint="Ghi khoảng bao nhiêu, dùng cho việc gì. Quản lý cấp theo số thực nhận.">
+          <Textarea
+            rows={3}
+            value={note}
+            maxLength={500}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder={`Ví dụ: Cần thêm khoảng 20 ${picked?.unit ?? 'bao'} cho tuần sau`}
+          />
         </Field>
         {action.error && <ErrorBox message={action.error} />}
       </div>
@@ -418,7 +421,7 @@ export function RejectRequestDialog({ request, onClose, onDone }: { request: Sup
       open
       onClose={onClose}
       title={`Từ chối đề xuất ${request.item.name}`}
-      description={`${request.requester.fullName} xin ${formatAmount(request.quantity, request.item.unit)}.`}
+      description={request.note ? `${request.requester.fullName}: ${request.note}` : `Đề xuất của ${request.requester.fullName}.`}
       footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Từ chối" danger />}
       dirty={reason.trim() !== ''}
       onSave={submit}
@@ -441,21 +444,34 @@ export function RejectRequestDialog({ request, onClose, onDone }: { request: Sup
 export function FulfillRequestDialog({ request, onClose, onDone }: { request: SupplyRequest; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const action = useAction();
+  const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [touched, setTouched] = useState(false);
   const { item } = request;
-  const clientError = moneyError(price, { label: 'Đơn giá' });
-  const error = clientError ?? action.fieldErrors.unitPrice;
-  const total = clientError ? undefined : Math.round(request.quantity * parseMoney(price));
-  const after = Math.round((item.quantityOnHand + request.quantity) * 100) / 100;
+  const clientErrors = {
+    quantity: quantityError(quantity, { label: 'Số lượng thực nhận', max: MAX_STOCK }),
+    unitPrice: moneyError(price, { label: 'Đơn giá' }),
+  };
+  const errors = {
+    quantity: clientErrors.quantity ?? action.fieldErrors.quantity,
+    unitPrice: clientErrors.unitPrice ?? action.fieldErrors.unitPrice,
+  };
+  const shown = (key: keyof typeof errors) => (touched || action.fieldErrors[key] ? errors[key] : undefined);
+  const edit = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    if (action.error) action.clearError();
+  };
+  const amount = clientErrors.quantity ? undefined : parseQuantity(quantity);
+  const total = amount === undefined || clientErrors.unitPrice ? undefined : Math.round(amount * parseMoney(price));
+  const after = amount === undefined ? undefined : Math.round((item.quantityOnHand + amount) * 100) / 100;
 
   const submit = () => {
     setTouched(true);
-    if (clientError) return;
+    if (amount === undefined || clientErrors.unitPrice) return;
     void action.run(
-      () => fulfillSupplyRequest(request.id, parseMoney(price)),
+      () => fulfillSupplyRequest(request.id, { quantity: amount, unitPrice: parseMoney(price) }),
       () => {
-        toast.push(`Đã cấp ${formatAmount(request.quantity, item.unit)} ${item.name}`, 'success');
+        toast.push(`Đã cấp ${formatAmount(amount, item.unit)} ${item.name}`, 'success');
         onDone();
         onClose();
       },
@@ -467,28 +483,40 @@ export function FulfillRequestDialog({ request, onClose, onDone }: { request: Su
       open
       onClose={onClose}
       title={`Cấp hàng: ${item.name}`}
-      description={`${request.requester.fullName} xin ${formatAmount(request.quantity, item.unit)}. Kho sẽ tăng từ ${formatAmount(item.quantityOnHand, item.unit)} lên ${formatAmount(after, item.unit)}.`}
+      description={`Đề xuất của ${request.requester.fullName}. Kho đang còn ${formatAmount(item.quantityOnHand, item.unit)}.`}
       footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Cấp hàng" />}
-      dirty={price !== ''}
+      dirty={quantity !== '' || price !== ''}
       onSave={submit}
       saveLabel="Cấp hàng"
     >
-      <div className="space-y-3">
-        <Field label="Đơn giá" required error={touched ? error : undefined}>
-          <MoneyInput
-            value={price}
-            onChange={(value) => {
-              setPrice(value);
-              if (action.error) action.clearError();
-            }}
-            suffix={`đ/${item.unit}`}
-            autoFocus
-            placeholder="Ví dụ: 20.000"
-          />
-        </Field>
-        {total !== undefined && (
+      <div className="space-y-4">
+        {request.note && (
+          <p className="whitespace-pre-line rounded-xl bg-emerald-50/60 px-3 py-2 text-sm text-gray-700 ring-1 ring-emerald-100">
+            <span className="block text-xs text-gray-500">Nhu cầu</span>
+            {request.note}
+          </p>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={`Số lượng thực nhận (${item.unit})`} required error={shown('quantity')} hint="Số hàng thật sự về kho">
+            <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 40" />
+          </Field>
+          <Field label="Đơn giá" required error={shown('unitPrice')}>
+            <MoneyInput value={price} onChange={edit(setPrice)} suffix={`đ/${item.unit}`} placeholder="Ví dụ: 20.000" />
+          </Field>
+        </div>
+        {(total !== undefined || after !== undefined) && (
           <p className="text-sm text-gray-600">
-            Thành tiền <span className="font-semibold text-gray-900 tabular-nums">{formatMoney(total)}</span>
+            {total !== undefined && (
+              <>
+                Thành tiền <span className="font-semibold text-gray-900 tabular-nums">{formatMoney(total)}</span>
+              </>
+            )}
+            {total !== undefined && after !== undefined && ' · '}
+            {after !== undefined && (
+              <>
+                Tồn sau khi cấp <span className="font-semibold text-gray-900 tabular-nums">{formatAmount(after, item.unit)}</span>
+              </>
+            )}
           </p>
         )}
         {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}

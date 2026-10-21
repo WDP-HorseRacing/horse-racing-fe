@@ -138,7 +138,7 @@ export default function ClassHorsesTab({
                 setLeaving(null);
                 reload();
               },
-            )
+            ).then((result) => result === undefined && reload())
           }
         />
       )}

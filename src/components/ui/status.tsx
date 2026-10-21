@@ -254,7 +254,7 @@ export const stallBorder: Record<HealthStatus, string> = {
 
 /* ===== Dữ liệu từ backend ===== */
 
-/** Tình trạng xếp chỗ: chỉ nổi bật khi còn chờ xếp khu / chờ xếp ô. */
+/** Tình trạng xếp chỗ: chỉ nổi bật khi còn chờ xếp khu, chờ xếp ô, chờ giao Groom. */
 export function PlacementStatusPill({ status }: { status: ApiPlacementStatus }) {
   if (status === 'PLACED' || status === 'NOT_APPLICABLE') {
     return <span className="text-xs text-gray-500">{placementStatusLabel[status]}</span>;

@@ -29,7 +29,9 @@ export function HorseCard({ horse, age, index = 0 }: { horse: HorseListItem; age
   const place =
     placementStatus === 'PLACED'
       ? barn?.name
-      : placementStatus === 'NOT_APPLICABLE'
+      : placementStatus === 'PENDING_GROOM'
+        ? `${barn?.name ?? ''}${stall ? ` · ô ${stall.code}` : ''} · chờ giao Groom`
+        : placementStatus === 'NOT_APPLICABLE'
         ? placementStatusLabel.NOT_APPLICABLE
         : `${barn?.name ? `${barn.name} · ` : ''}${placementStatusLabel[placementStatus].toLowerCase()}`;
 
