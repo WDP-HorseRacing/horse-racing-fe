@@ -439,7 +439,7 @@ export function PlaceLockModal({
           <DatePicker value={date} min={todayKey()} onChange={setDate} />
         </Field>
         <p className="text-xs text-gray-500">
-          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HLV khu và Quản lý CLB nhận thông báo. Lượt tập đã xếp không bị hủy.
+          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HLV khu và Quản lý CLB nhận thông báo. Các lượt tập sắp tới của ngựa chuyển Hủy do khóa tập, gỡ khóa thì tự mở lại.
         </p>
         {action.error && <ErrorBox message={action.error} />}
       </div>
