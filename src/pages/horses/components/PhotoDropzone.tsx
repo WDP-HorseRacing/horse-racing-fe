@@ -74,7 +74,7 @@ export function PhotoDropzone({
 
         {!preview && !disabled && (
           <span className="absolute inset-x-0 top-5 flex flex-col items-center gap-1.5 text-center">
-            <span className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3.5 py-2 text-sm font-semibold text-emerald-900 shadow-[0_12px_28px_-16px_rgba(6,78,59,0.7)] ring-1 ring-emerald-900/10 transition group-hover:bg-white">
+            <span className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3.5 py-2 text-sm font-semibold text-emerald-900 shadow-raised ring-1 ring-emerald-900/10 transition group-hover:bg-white">
               <ImagePlus size={15} /> Bấm hoặc kéo ảnh vào đây
             </span>
             <span className="text-[11px] font-medium text-emerald-950/60">JPG, PNG hoặc WebP, tối đa 10 MB</span>

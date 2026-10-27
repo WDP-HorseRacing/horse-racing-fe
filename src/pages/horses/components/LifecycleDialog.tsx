@@ -1,11 +1,12 @@
 // F1.8 — đổi vòng đời, xóa và khôi phục hồ sơ: bắt buộc lý do, hiện bảng hệ quả (do backend tính) trước khi xác nhận.
 // Ghi nhận ngựa mất lấy hôm nay làm ngày mất, và bị chặn khi ngựa còn bệnh án đang mở (bác sĩ đóng trước).
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Ban, CircleCheck, ListChecks } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { changeLifecycle, deleteHorse, previewDeletion, previewLifecycle, previewRestore, restoreHorse } from '../../../api/horses';
-import { Button, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { links } from '../../../lib/links';
 import { formatMoney } from '../../../lib/format';
 import { OwnerSelect } from './OwnerSelect';
@@ -85,26 +86,38 @@ export default function LifecycleDialog({
   const [ownerId, setOwnerId] = useState('');
   const preview = useService(() => (action ? loadPreview(horse.id, action) : Promise.resolve(undefined)), [horse.id, action]);
 
+  const data = preview.data;
+  const deceased = action === 'DECEASED';
+  const ownerRequired = !!data?.ownerRequired;
+  const errors = useMemo(
+    () => ({
+      reason: !reason.trim() ? (deceased ? 'Nhập nguyên nhân' : 'Nhập lý do') : undefined,
+      ownerId: ownerRequired && !ownerId ? 'Chọn chủ sở hữu mới' : undefined,
+    }),
+    [reason, deceased, ownerRequired, ownerId],
+  );
+  const f = useFormErrors(errors, { fieldErrors: run.fieldErrors, field: run.field, error: run.error });
+  const { reset } = f;
+
   useEffect(() => {
     setReason('');
     setOwnerId('');
     run.clearError();
+    reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [action]);
 
-  const data = preview.data;
-  const deceased = action === 'DECEASED';
-  const reasonError = run.fieldErrors.reason;
-  const ownerError = run.fieldErrors.ownerId;
-  const formError = run.error && !run.fieldErrors.reason && !ownerError ? run.error : undefined;
-  const ownerRequired = !!data?.ownerRequired;
+  const reasonError = f.show('reason');
+  const ownerError = f.show('ownerId');
+  const serverOnField = !!run.fieldErrors.reason || !!run.fieldErrors.ownerId || run.field === 'reason' || run.field === 'ownerId';
+  const formError = run.error && !serverOnField ? run.error : undefined;
   // Bị chặn vì còn bệnh án: dẫn sang hồ sơ y tế để báo bác sĩ đóng bệnh án.
   const blockedByCase = !!data && !data.allowed && (action === 'TRANSFERRED' || deceased) && /bệnh án/i.test(data.blockedReason ?? '');
 
-  const canSubmit = !!data?.allowed && !!reason.trim() && !run.pending && (!ownerRequired || !!ownerId);
+  const canSubmit = !!data?.allowed && !run.pending;
 
   const submit = async () => {
-    if (!action || !canSubmit) return;
+    if (!action || !canSubmit || !f.attempt()) return;
     const why = reason.trim();
     const done = await run.run(async () => {
       if (action === 'DELETE') await deleteHorse(horse.id, why);
@@ -127,13 +140,12 @@ export default function LifecycleDialog({
       title={action ? `${lifecycleActionLabel[action]}: ${horse.name}` : ''}
       description={action ? lifecycleActionHint[action] : undefined}
       dirty={reason.trim() !== '' || ownerId !== ''}
+      busy={run.pending}
       onSave={() => void submit()}
       saveLabel={action ? lifecycleActionConfirm[action] : 'Lưu'}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
           <Button variant={action && destructiveActions.has(action) ? 'danger' : 'primary'} onClick={submit} disabled={!canSubmit}>
             {run.pending ? 'Đang xử lý…' : action ? lifecycleActionConfirm[action] : 'Xác nhận'}
           </Button>
@@ -196,13 +208,14 @@ export default function LifecycleDialog({
           )}
 
           {data.allowed && ownerRequired && (
-            <Field label="Chủ sở hữu mới" name="ownerId" required error={ownerError} hint="Ngựa đã bán ra ngoài nên không còn chủ. Hệ thống không tự gán lại chủ cũ.">
+            <Field label="Chủ sở hữu mới" name="ownerId" required error={ownerError} onBlur={f.blur('ownerId')} hint="Ngựa đã bán ra ngoài nên không còn chủ.">
               <OwnerSelect
                 value={ownerId}
                 invalid={!!ownerError}
                 onChange={(id) => {
                   setOwnerId(id);
-                  if (ownerError) run.clearError();
+                  f.touch('ownerId');
+                  if (run.fieldErrors.ownerId || run.field === 'ownerId') run.clearError();
                 }}
               />
             </Field>
@@ -214,9 +227,20 @@ export default function LifecycleDialog({
               name="reason"
               required
               error={reasonError}
+              onBlur={f.blur('reason')}
+              counter={<CharCount value={reason} max={500} />}
               hint={deceased ? 'Ví dụ: đau bụng cấp không qua khỏi.' : undefined}
             >
-              <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus />
+              <Textarea
+                value={reason}
+                maxLength={500}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  if (run.fieldErrors.reason || run.field === 'reason') run.clearError();
+                }}
+                className={cn(reasonError && invalidClass)}
+                autoFocus
+              />
             </Field>
           )}
           {formError && <ErrorBox message={formError} />}

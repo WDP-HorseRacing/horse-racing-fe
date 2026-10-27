@@ -1,16 +1,19 @@
-// F2.2, F2.3 — Mở lớp (HLV trưởng): chỉ cần giáo án, mã, tên, ngày bắt đầu (kèm mô tả, sở trường, sĩ số nếu muốn).
-// Lớp chép giáo án lúc tạo, đang chạy ngay và chưa có buổi nào. Tạo xong mở tab Lịch buổi để xếp buổi trên lịch tuần.
-// Bên phải là tóm tắt: các giai đoạn kèm khoảng ngày tính từ ngày bắt đầu, số buổi tối thiểu mỗi tuần, tổng thời lượng tối thiểu.
+// F2.2, F2.3 — Mở lớp (HLV trưởng), hai bước: "Thông tin lớp" (giáo án, mã, tên, ngày bắt đầu, kèm mô tả, sở trường, sĩ số)
+// rồi "Thời khóa biểu" (mỗi giai đoạn xếp một tuần mẫu bằng kéo thả môn, lúc tạo lớp nhân ra mọi tuần của giai đoạn).
+// BE không nhận buổi kèm lúc tạo lớp nên FE gọi tạo lớp rồi lưu buổi theo lô; FE kiểm trước luật của BE nên gần như
+// không lỗi, còn lỗi giữa chừng thì vẫn mở trang lớp kèm câu báo số buổi đã lưu. Có thể tạo lớp, xếp lịch sau.
+// Bên phải bước 1 là tóm tắt: các giai đoạn kèm khoảng ngày, số buổi tối thiểu mỗi tuần, tổng thời lượng tối thiểu.
 // FE kiểm trước mã lớp trùng với lớp của mình (BE vẫn kiểm lại, lỗi trùng với lớp HLV khác gắn vào ô mã lớp).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarCheck, Info } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, Check, ChevronRight, Info } from 'lucide-react';
 import { createClass, listClasses, listPlans } from '../../../api/training';
 import type { RaceAptitude, TrainingClass, TrainingPlan } from '../../../api/types';
-import { Button, CharCount, ErrorBox, Field, Input, NotFound, Notice, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../../components/ui';
+import { Button, CharCount, ConfirmDialog, ErrorBox, Field, Input, NotFound, Notice, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { useAction, useService } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useLeaveConfirm } from '../../../hooks/useLeaveConfirm';
 import { useMyScope } from '../../../hooks/useMyScope';
 import { can } from '../../../auth/permissions';
@@ -20,10 +23,20 @@ import { BackLink } from '../../../components/BackLink';
 import { links } from '../../../lib/links';
 import { distanceLabel } from '../../../lib/labels';
 import { formatDate } from '../../../lib/format';
-import { addDateKey, classEndDate, clubToday } from '../../../lib/club-time';
+import { classEndDate, clubToday } from '../../../lib/club-time';
+import { now } from '../../../lib/clock';
 import { PhaseLoad, WeekRibbon } from '../components/bits';
 import { formatTotalMinutes, planPhases, planSessionCount, weekLoad } from '../plan-helpers';
 import { Stepper } from '../components/Stepper';
+import { buildSubmission, expandedInput, phaseRanges, type Templates } from '../class-template';
+import { loadTrainerBusy, saveSessionsInChunks } from '../save-sessions';
+import { ClassScheduleStep } from './ClassScheduleStep';
+import type { ScheduleIssue } from './ClassSessionsTab';
+
+/** Giới hạn của BE (mô tả BE không giới hạn, FE đặt 500). */
+const CODE_MAX = 32;
+const NAME_MAX = 160;
+const DESCRIPTION_MAX = 500;
 
 interface Setup {
   planId: string;
@@ -92,71 +105,123 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
   }));
   const [codeEdited, setCodeEdited] = useState(false);
   const [nameEdited, setNameEdited] = useState(false);
-  const [touched, setTouched] = useState(false);
   const [codeServerError, setCodeServerError] = useState<string>();
   const [done, setDone] = useState(false);
+  const [step, setStep] = useState<'info' | 'schedule'>('info');
+  const [templates, setTemplates] = useState<Templates>({});
+  const [pendingPlan, setPendingPlan] = useState<string>();
+  const [saving, setSaving] = useState<{ saved: number; total: number } | null>(null);
   const create = useAction();
+  const userId = useStore((state) => state.currentUser?.id);
+  // Lịch các lớp khác của HLV: tải khi vào bước thời khóa biểu lần đầu.
+  const [wantBusy, setWantBusy] = useState(false);
+  const busy = useService(() => (wantBusy ? loadTrainerBusy(userId) : Promise.resolve([])), [wantBusy, userId]);
   const formRef = useRef<HTMLDivElement>(null);
 
   const plan = plans.find((item) => item.id === setup.planId) ?? presetPlan;
   const startDate = setup.startDate || today;
   const endDate = classEndDate(startDate, plan.totalWeeks);
   // Khoảng ngày của từng giai đoạn tính từ ngày bắt đầu lớp (giống BE: tuần 1 bắt đầu đúng ngày bắt đầu).
-  const phaseRanges = plan.phases.map((phase) => {
-    const from = addDateKey(startDate, (phase.startWeek - 1) * 7);
-    return { phase, from, to: addDateKey(from, phase.weeks * 7 - 1) };
-  });
+  const ranges = phaseRanges(plan, startDate);
+  const subjectMap = useMemo(() => new Map(plan.phases.flatMap((phase) => phase.subjects.map((entry) => [entry.subject.id, entry.subject] as const))), [plan]);
+  const slotCount = Object.values(templates).reduce((sum, list) => sum + list.length, 0);
+  const submission = useMemo(() => buildSubmission(plan, startDate, templates, subjectMap, busy.data ?? [], now()), [plan, startDate, templates, subjectMap, busy.data]);
 
-  const dirty = !done && (setup.description !== '' || nameEdited || codeEdited);
-  const leaveModal = useLeaveConfirm(dirty, 'Lớp chưa được tạo. Rời trang thì thông tin đang nhập sẽ mất.');
+  const dirty = !done && (setup.description !== '' || nameEdited || codeEdited || slotCount > 0);
+  const leaveModal = useLeaveConfirm(dirty, 'Lớp chưa được tạo. Rời trang thì thông tin và thời khóa biểu đang soạn sẽ mất.');
 
-  const set = <K extends keyof Setup>(key: K, value: Setup[K]) => setSetup((current) => ({ ...current, [key]: value }));
+  const set = <K extends keyof Setup>(key: K, value: Setup[K]) => {
+    setSetup((current) => ({ ...current, [key]: value }));
+    cleared(key);
+  };
   const codeKey = setup.code.trim().toUpperCase();
   const owner = codeOwner.get(codeKey);
   const errors: Partial<Record<keyof Setup, string>> = {};
   if (!codeKey) errors.code = 'Nhập mã lớp';
-  else if (codeKey.length > 32) errors.code = 'Mã lớp tối đa 32 ký tự';
+  else if (codeKey.length > CODE_MAX) errors.code = `Mã lớp tối đa ${CODE_MAX} ký tự`;
   else if (owner) errors.code = `Mã lớp đã có ở lớp ${owner.name}`;
   else if (codeServerError) errors.code = codeServerError;
-  if (!setup.name.trim()) errors.name = 'Nhập tên lớp';
+  const nameText = setup.name.trim();
+  if (!nameText) errors.name = 'Nhập tên lớp';
+  else if (nameText.length > NAME_MAX) errors.name = `Tên lớp tối đa ${NAME_MAX} ký tự`;
   if (!setup.startDate) errors.startDate = 'Chọn ngày bắt đầu';
   else if (setup.startDate < today) errors.startDate = 'Ngày bắt đầu không được ở quá khứ';
-  else if (create.fieldErrors.startDate) errors.startDate = create.fieldErrors.startDate;
-  // Mã trùng thì báo ngay, không chờ bấm Tạo lớp.
-  const showError = (key: keyof Setup) => (touched || (key === 'code' && (owner || codeServerError)) || (key === 'startDate' && create.fieldErrors.startDate) ? errors[key] : undefined);
+  if (setup.description.trim().length > DESCRIPTION_MAX) errors.description = `Mô tả tối đa ${DESCRIPTION_MAX} ký tự`;
+  // Lỗi BE theo ô (tên, ngày bắt đầu…). Lỗi trùng mã giữ riêng ở codeServerError tới khi sửa mã.
+  const serverErrors = Object.fromEntries(
+    (['name', 'startDate', 'description', 'raceAptitude', 'maxHorses'] as const).flatMap((key) => (create.fieldErrors[key] ? [[key, create.fieldErrors[key]]] : [])),
+  ) as Record<string, string>;
+  const serverKeys = Object.keys(serverErrors).join(',');
+  const f = useFormErrors(errors, { fieldErrors: serverErrors });
+  // Mã trùng thì báo ngay, không chờ rời ô hay bấm Tạo lớp.
+  const showError = (key: keyof Setup) => f.show(key) ?? (key === 'code' && (owner || codeServerError) ? errors.code : undefined);
+  /** Sửa ô đang có lỗi BE thì bỏ lỗi đó. */
+  const cleared = (key: keyof Setup) => {
+    if (serverErrors[key]) create.clearError();
+  };
 
-  const pickPlan = (id: string) => {
+  const applyPlan = (id: string) => {
     const next = plans.find((item) => item.id === id);
     setSetup((current) => ({ ...current, planId: id, name: nameEdited ? current.name : (next?.name ?? current.name) }));
   };
+  // Đổi giáo án khi đã xếp tuần mẫu: hỏi trước vì môn và giai đoạn đổi theo, tuần mẫu bị xóa.
+  const pickPlan = (id: string) => (slotCount > 0 && id !== setup.planId ? setPendingPlan(id) : applyPlan(id));
   const pickStart = (value: string) => {
+    cleared('startDate');
     setSetup((current) => ({ ...current, startDate: value, code: codeEdited || !value ? current.code : suggestCode(barnName, value, taken) }));
   };
 
-  const submit = () => {
-    setTouched(true);
-    if (Object.keys(errors).length > 0) {
-      if (formRef.current) scrollToFirstError(formRef.current);
+  const toSchedule = () => {
+    if (!f.attempt(formRef.current ?? undefined)) return;
+    setWantBusy(true);
+    setStep('schedule');
+    window.scrollTo({ top: 0 });
+  };
+
+  /** Tạo lớp, rồi (nếu có tuần mẫu) lưu các buổi theo lô. */
+  const submit = (withSchedule: boolean) => {
+    if (!f.attempt(formRef.current ?? undefined)) {
+      setStep('info');
       return;
     }
-    void create.run(
-      () =>
-        createClass({
-          code: codeKey,
-          name: setup.name.trim(),
-          description: setup.description.trim() || undefined,
-          raceAptitude: setup.raceAptitude || undefined,
-          maxHorses: setup.maxHorses,
-          planId: setup.planId,
-          startDate: setup.startDate,
-        }),
-      (created) => {
-        flushSync(() => setDone(true));
-        toast.push(`Đã mở lớp ${created.code}. Xếp buổi trên lịch tuần.`, 'success');
-        // Thay trang tạo lớp trong lịch sử: Quay lại ở trang lớp về danh sách, không về form vừa gửi.
-        navigate(links.class(created.id), { replace: true });
-      },
-    );
+    const fresh = withSchedule ? buildSubmission(plan, startDate, templates, subjectMap, busy.data ?? [], now()) : undefined;
+    if (fresh && fresh.errors.size > 0) {
+      toast.push(`Còn ${fresh.errors.size} buổi trong tuần mẫu cần sửa trước khi tạo lớp`, 'error');
+      return;
+    }
+    void create
+      .run(
+        async () => {
+          const created = await createClass({
+            code: codeKey,
+            name: setup.name.trim(),
+            description: setup.description.trim() || undefined,
+            raceAptitude: setup.raceAptitude || undefined,
+            maxHorses: setup.maxHorses,
+            planId: setup.planId,
+            startDate: setup.startDate,
+          });
+          const accepted = fresh?.accepted ?? [];
+          if (!accepted.length) return { created, saved: 0, issue: undefined };
+          setSaving({ saved: 0, total: accepted.length });
+          const result = await saveSessionsInChunks(
+            created.id,
+            accepted.map((item) => expandedInput(item, subjectMap.get(item.slot.subjectId)!)),
+            (saved, total) => setSaving({ saved, total }),
+          );
+          const failed = result.failure?.item ? accepted.find((item) => item.startAt === result.failure!.item!.scheduledStartAt) : undefined;
+          const issue: ScheduleIssue | undefined = result.failure ? { saved: result.saved, total: accepted.length, message: result.failure.message, week: failed?.week } : undefined;
+          return { created, saved: result.saved, issue };
+        },
+        ({ created, saved, issue }) => {
+          setSaving(null);
+          flushSync(() => setDone(true));
+          if (!issue) toast.push(saved ? `Đã mở lớp ${created.code} với ${saved} buổi` : `Đã mở lớp ${created.code}. Xếp buổi trên lịch tuần.`, 'success');
+          // Thay trang tạo lớp trong lịch sử: Quay lại ở trang lớp về danh sách, không về form vừa gửi.
+          navigate(links.class(created.id), { replace: true, state: issue ? { scheduleIssue: issue } : null });
+        },
+      )
+      .then((result) => result === undefined && setSaving(null));
   };
 
   // Mã lớp trùng với lớp của HLV khác (FE không thấy): BE trả 409 kèm lỗi ô `code`, gắn vào ô mã lớp.
@@ -166,9 +231,80 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
     setSeenError(codeError);
     if (codeError) setCodeServerError(codeError);
   }
+  // Lỗi ở ô của bước thông tin (mã trùng, ngày bắt đầu…) khi đang ở bước thời khóa biểu: quay về bước đó.
+  const infoError = !!(codeServerError || serverKeys);
+  const [seenInfoError, setSeenInfoError] = useState(false);
+  if (infoError !== seenInfoError) {
+    setSeenInfoError(infoError);
+    if (infoError) setStep('info');
+  }
   useEffect(() => {
-    if (codeServerError && formRef.current) scrollToFirstError(formRef.current);
-  }, [codeServerError]);
+    if (step === 'info' && (codeServerError || serverKeys) && formRef.current) scrollToFirstError(formRef.current);
+  }, [codeServerError, serverKeys, step]);
+
+  const createLabel = saving
+    ? `Đang lưu buổi ${saving.saved}/${saving.total}…`
+    : create.pending
+      ? 'Đang tạo…'
+      : submission.accepted.length
+        ? `Tạo lớp và ${submission.accepted.length} buổi`
+        : 'Tạo lớp, xếp lịch sau';
+  const steps = (
+    <ol className="flex flex-wrap items-center gap-2 text-sm">
+      {(
+        [
+          ['info', 'Thông tin lớp'],
+          ['schedule', 'Thời khóa biểu'],
+        ] as const
+      ).map(([key, label], index) => (
+        <li key={key} className="flex items-center gap-2">
+          {index > 0 && <ChevronRight size={14} className="text-gray-300" />}
+          <button
+            type="button"
+            onClick={() => (key === 'info' ? setStep('info') : toSchedule())}
+            aria-current={step === key ? 'step' : undefined}
+            className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-medium transition', step === key ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-600/30' : 'text-gray-500 hover:text-gray-800')}
+          >
+            {key === 'info' && step === 'schedule' && <Check size={14} className="text-emerald-700" />}
+            {label}
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+
+  if (step === 'schedule') {
+    return (
+      <div className="space-y-4">
+        {leaveModal}
+        <PageHeader
+          back={<BackLink fallback={links.classes} />}
+          title={`Thời khóa biểu lớp ${codeKey}`}
+          description={`${plan.name}, ${formatDate(startDate)} đến ${formatDate(endDate)}. Xếp một tuần mẫu cho mỗi giai đoạn, lúc tạo lớp sẽ lặp lại cho mọi tuần của giai đoạn.`}
+          actions={
+            <Button variant="secondary" onClick={() => setStep('info')} disabled={create.pending}>
+              <ArrowLeft size={15} /> Quay lại thông tin lớp
+            </Button>
+          }
+        />
+        {steps}
+        {create.error && !create.fieldErrors.code && !serverKeys && <ErrorBox message={create.error} />}
+        {busy.loading && <p className="text-xs text-gray-500">Đang kiểm lịch các lớp khác của bạn…</p>}
+        <ClassScheduleStep
+          plan={plan}
+          startDate={startDate}
+          templates={templates}
+          onChange={setTemplates}
+          submission={submission}
+          actions={
+            <Button onClick={() => submit(true)} disabled={create.pending || submission.errors.size > 0 || busy.loading}>
+              {createLabel}
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 pb-4">
@@ -176,14 +312,20 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
       <PageHeader
         back={<BackLink fallback={links.classes} />}
         title="Mở lớp huấn luyện"
-        description="Chọn giáo án và ngày bắt đầu. Tạo xong thì xếp buổi trên lịch tuần của lớp."
+        description="Chọn giáo án và ngày bắt đầu, rồi lập thời khóa biểu cho từng giai đoạn."
         actions={
-          <Button onClick={submit} disabled={create.pending}>
-            {create.pending ? 'Đang tạo…' : 'Tạo lớp'}
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => submit(false)} disabled={create.pending}>
+              {create.pending ? 'Đang tạo…' : 'Tạo lớp, xếp lịch sau'}
+            </Button>
+            <Button onClick={toSchedule} disabled={create.pending}>
+              Tiếp theo: Lập thời khóa biểu <ChevronRight size={15} />
+            </Button>
+          </>
         }
       />
-      {create.error && !create.fieldErrors.code && !create.fieldErrors.startDate && <ErrorBox message={create.error} />}
+      {steps}
+      {create.error && !create.fieldErrors.code && !serverKeys && <ErrorBox message={create.error} />}
 
       <div ref={formRef} className="grid items-start gap-5 lg:grid-cols-12 [&>*]:min-w-0">
         <section className="space-y-5 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80 lg:col-span-7">
@@ -198,10 +340,10 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
             </Select>
           </Field>
           <div className="grid gap-4 sm:grid-cols-5">
-            <Field label="Mã lớp" required name="code" error={showError('code')} hint="Tự viết hoa, không trùng lớp khác" className="sm:col-span-2">
+            <Field label="Mã lớp" required name="code" error={showError('code')} onBlur={f.blur('code')} hint="Tự viết hoa, không trùng lớp khác" className="sm:col-span-2">
               <Input
                 value={setup.code}
-                maxLength={40}
+                maxLength={CODE_MAX}
                 className={cn('font-mono uppercase', showError('code') && invalidClass)}
                 onChange={(event) => {
                   setCodeEdited(true);
@@ -210,9 +352,10 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
                 }}
               />
             </Field>
-            <Field label="Tên lớp" required name="name" error={showError('name')} className="sm:col-span-3">
+            <Field label="Tên lớp" required name="name" error={showError('name')} onBlur={f.blur('name')} counter={<CharCount value={setup.name} max={NAME_MAX} />} className="sm:col-span-3">
               <Input
                 value={setup.name}
+                maxLength={NAME_MAX}
                 className={showError('name') ? invalidClass : ''}
                 onChange={(event) => {
                   setNameEdited(true);
@@ -222,7 +365,7 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
             </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-[1.2fr_1fr]">
-            <Field label="Ngày bắt đầu" required name="startDate" error={showError('startDate')}>
+            <Field label="Ngày bắt đầu" required name="startDate" error={showError('startDate')} onBlur={f.blur('startDate')}>
               <DatePicker value={setup.startDate} onChange={pickStart} min={today} clearable={false} invalid={!!showError('startDate')} />
             </Field>
             <Field label="Sĩ số tối đa">
@@ -239,37 +382,37 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
               ))}
             </Select>
           </Field>
-          <Field label="Mô tả" counter={<CharCount value={setup.description} max={500} />}>
-            <Textarea rows={2} maxLength={500} value={setup.description} onChange={(event) => set('description', event.target.value)} />
+          <Field label="Mô tả" name="description" error={showError('description')} onBlur={f.blur('description')} counter={<CharCount value={setup.description} max={DESCRIPTION_MAX} />}>
+            <Textarea rows={2} maxLength={DESCRIPTION_MAX} value={setup.description} onChange={(event) => set('description', event.target.value)} />
           </Field>
         </section>
 
         <aside className="lg:sticky lg:top-4 lg:col-span-5">
-          <div className="turf-soft space-y-4 rounded-2xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10">
+          <div className="space-y-4 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80">
             <div>
               <p className="text-sm text-gray-600">{plan.name}</p>
-              <p className="mt-1 font-mono text-sm font-semibold text-gray-900">
+              <p className="mt-1 tabular-nums text-sm font-semibold text-gray-900">
                 {formatDate(startDate)} đến {formatDate(endDate)}
               </p>
             </div>
             <div className="grid grid-cols-[1fr_1.3fr] gap-2.5">
-              <div className="rounded-xl bg-white/80 p-3 ring-1 ring-emerald-900/10">
+              <div className="rounded-xl bg-gray-50/80 p-3 ring-1 ring-gray-200/70">
                 <p className="text-xs text-gray-500">Số tuần</p>
-                <p className="font-mono text-2xl font-bold">{plan.totalWeeks}</p>
+                <p className="tabular-nums text-2xl font-bold">{plan.totalWeeks}</p>
               </div>
-              <div className="rounded-xl bg-white/80 p-3 ring-1 ring-emerald-900/10">
+              <div className="rounded-xl bg-gray-50/80 p-3 ring-1 ring-gray-200/70">
                 <p className="text-xs text-gray-500">Tối thiểu cả lớp</p>
-                <p className="font-mono text-xl font-bold">{formatTotalMinutes(plan.minTotalMinutes)}</p>
+                <p className="tabular-nums text-xl font-bold">{formatTotalMinutes(plan.minTotalMinutes)}</p>
                 <p className="text-[11px] text-gray-500">{planSessionCount(plan)} buổi</p>
               </div>
             </div>
             <WeekRibbon phases={planPhases(plan)} size="md" />
             <ol className="space-y-2">
-              {phaseRanges.map(({ phase, from, to }) => (
-                <li key={phase.position} className="rounded-xl bg-white/80 p-3 ring-1 ring-emerald-900/10">
+              {ranges.map(({ phase, from, to }) => (
+                <li key={phase.position} className="rounded-xl bg-gray-50/80 p-3 ring-1 ring-gray-200/70">
                   <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
                     <span className="text-sm font-semibold text-gray-900">Giai đoạn {phase.position}</span>
-                    <span className="font-mono text-xs tabular-nums text-gray-500">
+                    <span className="tabular-nums text-xs  text-gray-500">
                       {formatDate(from)} đến {formatDate(to)}
                     </span>
                   </div>
@@ -280,10 +423,22 @@ function CreateForm({ plans, classes }: { plans: TrainingPlan[]; classes: Traini
             </ol>
           </div>
           <Notice tone="info" icon={<Info size={16} />} className="mt-3">
-            Lớp chạy ngay khi tạo. Buổi tập xếp trên lịch tuần, chỉ dùng môn của giai đoạn chứa ngày đó.
+            Lớp bắt đầu ngay khi tạo. Bước sau xếp tuần mẫu cho từng giai đoạn.
           </Notice>
         </aside>
       </div>
+      <ConfirmDialog
+        open={!!pendingPlan}
+        title="Đổi giáo án"
+        message="Thời khóa biểu đã xếp theo giáo án cũ sẽ bị xóa vì môn và giai đoạn khác nhau."
+        confirmLabel="Đổi giáo án"
+        onClose={() => setPendingPlan(undefined)}
+        onConfirm={() => {
+          if (pendingPlan) applyPlan(pendingPlan);
+          setTemplates({});
+          setPendingPlan(undefined);
+        }}
+      />
     </div>
   );
 }

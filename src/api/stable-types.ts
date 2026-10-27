@@ -213,14 +213,6 @@ export interface GroomTodayRun {
   stoppedReason: string | null;
 }
 
-export interface GroomTodayCare {
-  id: string;
-  type: CareType;
-  dueAt: string;
-  overdue: boolean;
-  notes: string | null;
-}
-
 export interface GroomTodayHorse {
   horseId: string;
   horseName: string;
@@ -230,13 +222,6 @@ export interface GroomTodayHorse {
   checklist: DailyChecklist | null;
   feedingPlan: FeedingPlan | null;
   trainingRuns: GroomTodayRun[];
-  careSchedules: GroomTodayCare[];
-}
-
-/** Lịch chăm sóc giao đích danh cho Groom ở ngựa Groom không phụ trách (vd Groom chuyên làm móng). */
-export interface GroomTodayOtherCare extends GroomTodayCare {
-  horseId: string;
-  horseName: string;
 }
 
 /** Lượt hôm nay Groom được HLV giao dắt ở ngựa Groom không phụ trách. */
@@ -257,7 +242,6 @@ export interface GroomTodayVetAppointment {
 export interface GroomToday {
   date: string;
   horses: GroomTodayHorse[];
-  otherCareSchedules: GroomTodayOtherCare[];
   assistedRuns: GroomTodayAssistedRun[];
   /** Theo giờ hẹn. */
   horseVetAppointments: GroomTodayVetAppointment[];
@@ -290,6 +274,8 @@ export interface Incident {
   resolver: UserBrief | null;
   /** Hệ thống tự đóng khi ngựa chuyển nhượng hoặc đã mất. Lúc đó `resolver` là null. */
   resolvedBySystem: boolean;
+  /** Nguồn đóng sự cố: HLV khu đóng tay, bác sĩ xử lý yêu cầu khám xong tự đóng, hoặc đổi vòng đời. */
+  resolutionSource: 'HEAD_TRAINER' | 'EXAM' | 'LIFECYCLE' | null;
   resolvedAt: string | null;
   examRequest: IncidentExamRequest | null;
   createdAt: string;

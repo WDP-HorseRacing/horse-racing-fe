@@ -1,17 +1,27 @@
 // Thêm hoặc sửa một môn học (Club Manager). Kiểm tra giống BE trước khi gửi:
 // tên 1 đến 160 ký tự và không trùng, cự ly 0 đến 20.000 m, thời lượng 15 đến 480 phút, môn chạy thử cự ly lớn hơn 0,
 // môn thường không có thời gian mục tiêu. Thời lượng là độ dài một buổi: lịch lớp tự tính giờ kết thúc theo số này.
-import { useState } from 'react';
+// Lỗi của từng ô hiện khi rời ô hoặc bấm lưu; lỗi BE (tên trùng do người khác vừa tạo) mất khi sửa ô đó.
+import { useMemo, useRef, useState } from 'react';
 import { Flag, Footprints } from 'lucide-react';
 import { createSubject, updateSubject } from '../../../api/training';
 import type { TrainingIntensity, TrainingSessionType, TrainingSubject, TrainingSubjectInput } from '../../../api/types';
-import { Button, CharCount, ErrorBox, Field, Input, Segmented, Sheet, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, ErrorBox, Field, Input, Segmented, Sheet, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { useAction } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { SURFACE_SUGGESTIONS } from '../../../lib/training-labels';
 import { fieldFromMessage } from '../../../lib/errors';
 import { Stepper } from '../components/Stepper';
 import { IntensityBars } from '../components/bits';
 import { RaceTimeInput } from '../components/RaceTimeInput';
+
+/** Giới hạn của BE (mô tả BE không giới hạn, FE đặt 2000). */
+const NAME_MAX = 160;
+const SURFACE_MAX = 80;
+const DESCRIPTION_MAX = 2000;
+
+const SUBJECT_FIELDS = ['name', 'plannedDistanceM', 'durationMinutes', 'targetTimeMs', 'surface', 'description'] as const;
+type SubjectField = (typeof SUBJECT_FIELDS)[number];
 
 interface Draft {
   name: string;
@@ -22,7 +32,8 @@ interface Draft {
   durationMinutes: number;
   surface: string;
   targetTimeMs?: number;
-  targetRaw: string;
+  /** Câu lỗi khi ô thời gian mục tiêu gõ sai (vd 1:75). */
+  targetIssue?: string;
 }
 
 function initial(subject?: TrainingSubject): Draft {
@@ -35,7 +46,6 @@ function initial(subject?: TrainingSubject): Draft {
     durationMinutes: subject?.durationMinutes ?? 60,
     surface: subject?.surface ?? '',
     targetTimeMs: subject?.targetTimeMs ?? undefined,
-    targetRaw: '',
   };
 }
 
@@ -53,32 +63,47 @@ export default function SubjectSheet({
   const toast = useToast();
   const [draft, setDraft] = useState<Draft>(() => initial(subject));
   const [opened] = useState(() => JSON.stringify(draft));
-  const [touched, setTouched] = useState(false);
   const save = useAction();
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const bodyRef = useRef<HTMLDivElement>(null);
   const trial = draft.sessionType === 'TIME_TRIAL';
 
-  const errors: Partial<Record<'name' | 'plannedDistanceM' | 'durationMinutes' | 'targetTimeMs' | 'surface', string>> = {};
   const name = draft.name.trim();
-  if (!name) errors.name = 'Nhập tên môn';
-  else if (name.length > 160) errors.name = 'Tên tối đa 160 ký tự';
-  else if (existingNames.some((item) => item.trim().toLowerCase() === name.toLowerCase())) errors.name = 'Tên môn đã có trong danh mục';
-  if (!Number.isInteger(draft.plannedDistanceM) || draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) errors.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
-  else if (trial && draft.plannedDistanceM === 0) errors.plannedDistanceM = 'Môn chạy thử phải có cự ly lớn hơn 0';
-  if (!Number.isInteger(draft.durationMinutes) || draft.durationMinutes < 15 || draft.durationMinutes > 480) errors.durationMinutes = 'Thời lượng từ 15 đến 480 phút';
-  if (trial && draft.targetRaw.trim() && !draft.targetTimeMs) errors.targetTimeMs = 'Phút từ 0 đến 59, giây từ 0 đến 59,99';
-  if (draft.surface.trim().length > 80) errors.surface = 'Mặt sân tối đa 80 ký tự';
+  const errors = useMemo(() => {
+    const result: Partial<Record<SubjectField, string>> = {};
+    if (!name) result.name = 'Nhập tên môn';
+    else if (name.length > NAME_MAX) result.name = `Tên tối đa ${NAME_MAX} ký tự`;
+    else if (existingNames.some((item) => item.trim().toLowerCase() === name.toLowerCase())) result.name = 'Tên môn đã có trong danh mục';
+    if (!Number.isInteger(draft.plannedDistanceM) || draft.plannedDistanceM < 0 || draft.plannedDistanceM > 20000) result.plannedDistanceM = 'Cự ly từ 0 đến 20.000 m';
+    else if (trial && draft.plannedDistanceM === 0) result.plannedDistanceM = 'Môn chạy thử phải có cự ly lớn hơn 0';
+    if (!Number.isInteger(draft.durationMinutes) || draft.durationMinutes < 15 || draft.durationMinutes > 480) result.durationMinutes = 'Thời lượng từ 15 đến 480 phút';
+    if (trial && draft.targetIssue) result.targetTimeMs = draft.targetIssue;
+    if (draft.surface.trim().length > SURFACE_MAX) result.surface = `Mặt sân tối đa ${SURFACE_MAX} ký tự`;
+    if (draft.description.trim().length > DESCRIPTION_MAX) result.description = `Mô tả tối đa ${DESCRIPTION_MAX} ký tự`;
+    return result;
+  }, [name, existingNames, draft, trial]);
 
   // Lỗi BE (ví dụ tên trùng do người khác vừa tạo) gắn vào đúng ô.
   const serverField = save.field ?? fieldFromSubjectMessage(save.error);
-  const fieldError = (key: keyof typeof errors) => (touched ? errors[key] : undefined) ?? (serverField === key ? save.error : undefined);
+  // Chỉ giữ lỗi của các ô có trên form; lỗi khác hiện ở khung lỗi chung.
+  const serverErrors = useMemo(() => {
+    const result: Record<string, string> = {};
+    for (const key of SUBJECT_FIELDS) {
+      const message = save.fieldErrors[key] ?? (serverField === key ? save.error : undefined);
+      if (message) result[key] = message;
+    }
+    return result;
+  }, [save.fieldErrors, serverField, save.error]);
+  const f = useFormErrors(errors, { fieldErrors: serverErrors });
+  const fieldShown = Object.keys(serverErrors).length > 0;
+
+  /** Sửa một ô: bỏ lỗi BE đang gắn vào ô đó. */
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+    if (serverErrors[key]) save.clearError();
+  };
 
   const submit = () => {
-    setTouched(true);
-    if (Object.keys(errors).length > 0) {
-      window.setTimeout(() => scrollToFirstError(), 0);
-      return;
-    }
+    if (!f.attempt(bodyRef.current ?? undefined)) return;
     const input: TrainingSubjectInput = {
       name,
       description: draft.description.trim() || (subject ? null : undefined),
@@ -104,24 +129,23 @@ export default function SubjectSheet({
       onClose={onClose}
       title={subject ? 'Sửa môn học' : 'Thêm môn học'}
       dirty={JSON.stringify(draft) !== opened}
+      busy={save.pending}
       onSave={submit}
       saveLabel={subject ? 'Lưu' : 'Thêm'}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button onClick={submit} disabled={save.pending}>
             {save.pending ? 'Đang lưu…' : subject ? 'Lưu' : 'Thêm'}
           </Button>
         </>
       }
     >
-      <div className="space-y-5">
-        {save.error && !serverField && <ErrorBox message={save.error} />}
+      <div ref={bodyRef} className="space-y-5">
+        {save.error && !fieldShown && <ErrorBox message={save.error} />}
 
-        <Field label="Tên môn" required name="name" error={fieldError('name')} counter={<CharCount value={draft.name} max={160} />}>
-          <Input value={draft.name} maxLength={160} autoFocus placeholder="Ví dụ: Phi nước đại 1.600 m" onChange={(event) => set('name', event.target.value)} className={fieldError('name') ? invalidClass : ''} />
+        <Field label="Tên môn" required name="name" error={f.show('name')} onBlur={f.blur('name')} counter={<CharCount value={draft.name} max={NAME_MAX} />}>
+          <Input value={draft.name} maxLength={NAME_MAX} autoFocus placeholder="Ví dụ: Phi nước đại 1.600 m" onChange={(event) => set('name', event.target.value)} className={f.show('name') ? invalidClass : ''} />
         </Field>
 
         <Field label="Loại buổi">
@@ -151,7 +175,7 @@ export default function SubjectSheet({
           </div>
         </Field>
 
-        <Field label="Cường độ" hint="Ngựa đang cần theo dõi chỉ tập buổi Nhẹ. Mỗi ngựa tối đa 1 buổi Nặng một ngày.">
+        <Field label="Cường độ" hint="Ngựa cần theo dõi chỉ tập buổi Nhẹ.">
           <Segmented<TrainingIntensity>
             value={draft.intensity}
             onChange={(value) => set('intensity', value)}
@@ -160,25 +184,28 @@ export default function SubjectSheet({
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Cự ly dự kiến" required name="plannedDistanceM" error={fieldError('plannedDistanceM')}>
+          <Field label="Cự ly dự kiến" required name="plannedDistanceM" error={f.show('plannedDistanceM')} onBlur={f.blur('plannedDistanceM')}>
             <Stepper value={draft.plannedDistanceM} onChange={(value) => set('plannedDistanceM', value)} min={0} max={20000} step={100} suffix="m" label="cự ly" />
           </Field>
-          <Field label="Thời lượng một buổi" required name="durationMinutes" error={fieldError('durationMinutes')}>
+          <Field label="Thời lượng một buổi" required name="durationMinutes" error={f.show('durationMinutes')} onBlur={f.blur('durationMinutes')}>
             <Stepper value={draft.durationMinutes} onChange={(value) => set('durationMinutes', value)} min={15} max={480} step={15} suffix="phút" label="thời lượng" />
           </Field>
           {trial && (
-            <Field label="Thời gian mục tiêu" name="targetTimeMs" error={fieldError('targetTimeMs')} hint="Ví dụ 1 phút 15,4 giây">
+            <Field label="Thời gian mục tiêu" name="targetTimeMs" error={f.show('targetTimeMs')} onBlur={f.blur('targetTimeMs')} hint="Ví dụ 1 phút 15,4 giây">
               <RaceTimeInput
                 value={draft.targetTimeMs}
-                invalid={!!fieldError('targetTimeMs')}
-                onChange={(ms, raw) => setDraft((current) => ({ ...current, targetTimeMs: ms, targetRaw: raw }))}
+                invalid={!!f.show('targetTimeMs')}
+                onChange={(ms, issue) => {
+                  setDraft((current) => ({ ...current, targetTimeMs: ms, targetIssue: issue }));
+                  if (serverErrors.targetTimeMs) save.clearError();
+                }}
               />
             </Field>
           )}
         </div>
 
-        <Field label="Mặt sân" name="surface" error={fieldError('surface')}>
-          <Input value={draft.surface} maxLength={80} placeholder="Ví dụ: Cỏ" onChange={(event) => set('surface', event.target.value)} />
+        <Field label="Mặt sân" name="surface" error={f.show('surface')} onBlur={f.blur('surface')}>
+          <Input value={draft.surface} maxLength={SURFACE_MAX} placeholder="Ví dụ: Cỏ" onChange={(event) => set('surface', event.target.value)} className={f.show('surface') ? invalidClass : ''} />
           <span className="mt-2 flex flex-wrap gap-1.5">
             {SURFACE_SUGGESTIONS.map((surface) => (
               <button
@@ -196,8 +223,15 @@ export default function SubjectSheet({
           </span>
         </Field>
 
-        <Field label="Mô tả bài tập">
-          <Textarea rows={3} value={draft.description} placeholder="Khởi động, số vòng, lưu ý cho Groom…" onChange={(event) => set('description', event.target.value)} />
+        <Field label="Mô tả bài tập" name="description" error={f.show('description')} onBlur={f.blur('description')} counter={<CharCount value={draft.description} max={DESCRIPTION_MAX} />}>
+          <Textarea
+            rows={3}
+            maxLength={DESCRIPTION_MAX}
+            value={draft.description}
+            placeholder="Khởi động, số vòng, lưu ý cho Groom…"
+            onChange={(event) => set('description', event.target.value)}
+            className={f.show('description') ? invalidClass : ''}
+          />
         </Field>
       </div>
     </Sheet>

@@ -134,7 +134,7 @@ export function OptionMenu({
             (searchable ? (event.currentTarget as HTMLElement).querySelector('input') : list.current)?.focus();
           }}
           onKeyDown={onKey}
-          className="anim-pop z-[60] w-[var(--radix-popover-trigger-width)] min-w-44 overflow-hidden rounded-xl bg-white shadow-[0_18px_40px_-18px_rgba(6,78,59,0.4)] ring-1 ring-gray-200"
+          className="anim-pop z-[60] w-[var(--radix-popover-trigger-width)] min-w-44 overflow-hidden rounded-xl bg-white shadow-float ring-1 ring-gray-200"
         >
           {searchable && (
             <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2">

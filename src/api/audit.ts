@@ -31,6 +31,7 @@ export type AuditQuery = {
   action?: AuditAction;
   entityType?: string;
   entityId?: string;
+  feature?: string;
   from?: string;
   to?: string;
 };

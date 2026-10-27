@@ -1,5 +1,5 @@
-// F3.10 — Báo cáo chi phí y tế (chỉ Club Manager): tổng chi phí các bệnh án đã đóng
-// có ngày đóng trong khoảng [từ, đến], lọc theo khu và chủ ngựa hiện tại.
+// F3.10 — Chi phí y tế (chỉ Club Manager), hiện ở Báo cáo › Tài chính › Y tế: tổng chi phí các buổi khám chưa hủy
+// có ngày khám trong kỳ [từ, đến], trong hay ngoài bệnh án, lọc theo khu lúc khám và người làm chủ vào ngày khám.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
@@ -7,58 +7,24 @@ import { useService } from '../../hooks/useService';
 import { getCostReport } from '../../api/medical';
 import { listBarns } from '../../api/stable';
 import { listAllUsers } from '../../api/users';
-import { Card, DataTable, ErrorBox, FilterSelect, Meter, NotFound, PageHeader, Skeleton, Toolbar } from '../../components/ui';
-import { can } from '../../auth/permissions';
-import { useStore } from '../../store/store';
-import { formatDate, formatMoney, toDateKey } from '../../lib/format';
+import { Card, DataTable, ErrorBox, FilterSelect, Meter, Skeleton, Toolbar, cn } from '../../components/ui';
+import { formatDate, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
-import { now } from '../../lib/clock';
 import { HorseChip } from './components/parts';
-import { DatePicker } from '../../components/ui/DatePicker';
 
-function monthStart(): string {
-  const date = now();
-  return toDateKey(new Date(date.getFullYear(), date.getMonth(), 1));
-}
-
-export default function CostReport() {
-  const user = useStore((state) => state.currentUser);
-  // Mở thẳng link khi không phải Quản lý CLB: báo không có quyền, không gọi API (BE trả 403).
-  if (!can(user, 'medical.cost.report')) return <NotFound message="Báo cáo chi phí y tế dành cho Quản lý câu lạc bộ." />;
-  return <CostReportPage />;
-}
-
-function CostReportPage() {
+/** Kỳ do trang chứa quyết định (thanh chọn kỳ của Báo cáo). */
+export function MedicalCostView({ from, to }: { from: string; to: string }) {
   const navigate = useNavigate();
-  const [from, setFrom] = useState(monthStart);
-  const [to, setTo] = useState(() => toDateKey(now()));
   const [barnId, setBarnId] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const barns = useService(() => listBarns(), []);
   const owners = useService(() => listAllUsers({ role: 'HORSE_OWNER' }), []);
-  const invalid = !from || !to || from > to;
-  const report = useService(
-    () => (invalid ? Promise.resolve(null) : getCostReport({ from, to, barnId: barnId || undefined, ownerId: ownerId || undefined })),
-    [from, to, barnId, ownerId, invalid],
-  );
+  const report = useService(() => getCostReport({ from, to, barnId: barnId || undefined, ownerId: ownerId || undefined }), [from, to, barnId, ownerId]);
   const top = useMemo(() => Math.max(1, ...(report.data?.items ?? []).map((item) => item.totalCost)), [report.data]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Báo cáo chi phí y tế"
-        description="Tổng chi phí các buổi khám trong khoảng ngày (theo ngày khám), trong hay ngoài bệnh án, gồm cả ngựa đã chuyển nhượng hoặc đã xóa hồ sơ."
-      />
-
+    <div className="space-y-4">
       <Toolbar>
-        <label className="flex items-center gap-2 text-sm text-gray-500">
-          Từ
-          <DatePicker value={from} max={to || undefined} onChange={setFrom} size="sm" className="w-40" />
-        </label>
-        <label className="flex items-center gap-2 text-sm text-gray-500">
-          đến
-          <DatePicker value={to} min={from || undefined} onChange={setTo} size="sm" className="w-40" />
-        </label>
         <FilterSelect value={barnId} onChange={setBarnId} label="Khu của ngựa lúc khám">
           <option value="">Mọi khu</option>
           {barns.data?.map((barn) => (
@@ -77,18 +43,16 @@ function CostReportPage() {
         </FilterSelect>
       </Toolbar>
 
-      {invalid ? (
-        <ErrorBox message="Ngày bắt đầu phải trước ngày kết thúc" />
-      ) : report.loading && !report.data ? (
+      {report.loading && !report.data ? (
         <Skeleton rows={5} />
       ) : report.error ? (
         <ErrorBox message={report.error} />
       ) : (
         report.data && (
-          <div className="grid items-start gap-5 lg:grid-cols-12">
+          <div className={cn('grid items-start gap-5 transition-opacity lg:grid-cols-12', report.loading && 'opacity-60')}>
             <Card className="lg:col-span-4">
               <p className="flex items-center gap-2 text-sm text-gray-500">
-                <Wallet size={15} className="text-gray-400" /> Tổng chi phí
+                <Wallet size={15} className="text-gray-400" /> Tổng chi phí y tế
               </p>
               <p className="mt-2 text-3xl font-bold leading-none tracking-tight text-gray-900 tabular-nums">{formatMoney(report.data.totalCost)}</p>
               <p className="mt-3 text-sm text-gray-600">
@@ -97,7 +61,9 @@ function CostReportPage() {
               <p className="mt-1 text-xs text-gray-500">
                 {formatDate(report.data.from)} – {formatDate(report.data.to)}
               </p>
-              <p className="mt-4 text-xs text-gray-500">Buổi khám đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: buổi khám thuộc người làm chủ vào ngày khám. Lọc theo khu tính theo khu ngựa ở lúc khám, nên ngựa đã đổi khu vẫn tính đúng chỗ cũ.</p>
+              <p className="mt-4 text-xs text-gray-500">
+                Tính theo ngày khám, trong hay ngoài bệnh án, gồm cả ngựa đã chuyển nhượng hoặc đã xóa hồ sơ. Buổi khám đã hủy không tính. Lọc theo chủ ngựa tính theo giai đoạn sở hữu: buổi khám thuộc người làm chủ vào ngày khám. Lọc theo khu tính theo khu ngựa ở lúc khám, nên ngựa đã đổi khu vẫn tính đúng chỗ cũ.
+              </p>
             </Card>
             <div className="lg:col-span-8">
               <DataTable
@@ -105,8 +71,8 @@ function CostReportPage() {
                 rowKey={(row) => row.horseId}
                 onRowClick={(row) => navigate(links.horseMedical(row.horseId))}
                 pageSize={15}
-                emptyTitle="Không có buổi khám nào trong khoảng này"
-                emptyHint="Thử mở rộng khoảng ngày hoặc bỏ lọc khu, chủ ngựa."
+                emptyTitle="Không có buổi khám nào trong kỳ này"
+                emptyHint="Thử mở rộng kỳ hoặc bỏ lọc khu, chủ ngựa."
                 columns={[
                   { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} plain /> },
                   { key: 'visits', header: 'Buổi khám', render: (row) => <span className="text-sm tabular-nums text-gray-700">{row.visitCount}</span> },

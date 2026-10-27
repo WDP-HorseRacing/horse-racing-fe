@@ -10,7 +10,7 @@ import { FormSection } from './form-page';
 import type { People } from './people';
 import { RequestMeta, RequestText } from './parts';
 import { todayKey } from './utils';
-import { METRICS, nextRowKey, type MetricValues, type PrescriptionRow } from './visit-form-utils';
+import { METRICS, METRIC_PATTERN, nextRowKey, rxKey, type MetricValues, type PrescriptionField, type PrescriptionRow } from './visit-form-utils';
 
 /* ===== Số đo ===== */
 
@@ -19,25 +19,31 @@ export function MetricFields({
   values,
   errors,
   onChange,
+  onBlur,
 }: {
   types?: MeasurementType[];
   values: MetricValues;
-  errors: Partial<Record<MeasurementType, string>>;
+  /** Lỗi đang hiện của từng ô (đã lọc theo blur / bấm lưu). */
+  errors: Partial<Record<MeasurementType, string | undefined>>;
   onChange: (type: MeasurementType, value: string) => void;
+  /** Rời một ô số đo. */
+  onBlur?: (type: MeasurementType) => void;
 }) {
   return (
     <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
       {types.map((type) => {
         const spec = measurementSpec[type];
         return (
-          <Field key={type} label={`${spec.name} (${spec.unit})`} name={`metric.${type}`} error={errors[type]}>
+          <Field key={type} label={`${spec.name} (${spec.unit})`} name={`metric.${type}`} error={errors[type]} onBlur={onBlur ? () => onBlur(type) : undefined}>
             <Input
               inputMode="decimal"
+              maxLength={10}
               value={values[type]}
               onChange={(event) => onChange(type, event.target.value)}
               onBlur={() => {
-                const val = values[type].trim().replace(',', '.');
-                if (val && !isNaN(Number(val))) onChange(type, Number(val).toFixed(2).replace(/\.00$/, ''));
+                // Chuẩn hóa số hợp lệ (37.50 → 37.5); số sai dạng để nguyên cho người dùng thấy lỗi.
+                const text = values[type].trim();
+                if (METRIC_PATTERN.test(text)) onChange(type, String(Number(text.replace(',', '.'))));
               }}
               placeholder={`${spec.min}–${spec.max}`}
               className={cn('tabular-nums', errors[type] && invalidClass)}
@@ -55,11 +61,14 @@ export function PrescriptionSection({
   rows,
   onChange,
   show,
+  blur,
 }: {
   rows: PrescriptionRow[];
   onChange: (rows: PrescriptionRow[]) => void;
-  /** Lỗi của dòng (sau lần bấm lưu đầu tiên). */
+  /** Lỗi đang hiện của một ô trong dòng thuốc (khóa rxKey). */
   show: (key: string) => string | undefined;
+  /** Handler rời ô của useFormErrors. */
+  blur: (key: string) => () => void;
 }) {
   return (
     <FormSection
@@ -79,36 +88,33 @@ export function PrescriptionSection({
         <div className="space-y-2.5">
           {rows.map((row) => {
             const update = (patch: Partial<PrescriptionRow>) => onChange(rows.map((item) => (item.key === row.key ? { ...item, ...patch } : item)));
-            const rowError = show(`rx.${row.key}`);
+            const err = (field: PrescriptionField) => show(rxKey(row.key, field));
+            const rowInvalid = (['medicine', 'dosage', 'frequency', 'startDate', 'endDate'] as const).some((field) => err(field));
+            const text = (field: 'medicine' | 'dosage' | 'frequency', label: string, placeholder: string, span: string) => (
+              <Field label={label} required name={rxKey(row.key, field)} error={err(field)} onBlur={blur(rxKey(row.key, field))} className={span}>
+                <Input placeholder={placeholder} maxLength={160} value={row[field]} onChange={(event) => update({ [field]: event.target.value })} className={cn(err(field) && invalidClass)} />
+              </Field>
+            );
             return (
-              <div key={row.key} data-field={`rx.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-4', rowError && 'ring-1 ring-red-200')}>
+              <div key={row.key} className={cn('rounded-xl bg-gray-50/80 p-4', rowInvalid && 'ring-1 ring-red-200')}>
                 <div className="grid gap-x-4 gap-y-3 sm:grid-cols-12">
-                  <div className="sm:col-span-5">
-                    <label className="mb-1.5 block text-xs font-medium text-gray-700">Tên thuốc</label>
-                    <Input placeholder="Ví dụ: Amoxicillin" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
-                  </div>
-                  <div className="sm:col-span-4">
-                    <label className="mb-1.5 block text-xs font-medium text-gray-700">Liều lượng</label>
-                    <Input placeholder="Ví dụ: 2 viên, 50ml, ..." maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
-                  </div>
-                  <div className="sm:col-span-3">
-                    <label className="mb-1.5 block text-xs font-medium text-gray-700">Tần suất</label>
-                    <Input placeholder="Ví dụ: 2 lần/ngày" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
-                  </div>
-                  <div className="flex items-end gap-3 sm:col-span-12">
-                    <div className="flex-1">
-                      <label className="mb-1.5 block text-xs font-medium text-gray-700">Thời gian dùng thuốc</label>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <DatePicker className="w-[140px]" value={row.startDate} onChange={(value) => update({ startDate: value })} />
-                        <span className="text-sm font-medium text-gray-400">→</span>
-                        <DatePicker className="w-[140px]" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
-                      </div>
+                  {text('medicine', 'Tên thuốc', 'Ví dụ: Amoxicillin', 'sm:col-span-5')}
+                  {text('dosage', 'Liều lượng', 'Ví dụ: 2 viên, 50ml', 'sm:col-span-4')}
+                  {text('frequency', 'Tần suất', 'Ví dụ: 2 lần/ngày', 'sm:col-span-3')}
+                  <div className="flex items-start gap-3 sm:col-span-12">
+                    <div className="flex flex-1 flex-wrap items-start gap-x-3 gap-y-2">
+                      <Field label="Ngày bắt đầu" required name={rxKey(row.key, 'startDate')} error={err('startDate')} onBlur={blur(rxKey(row.key, 'startDate'))}>
+                        <DatePicker className="w-[150px]" value={row.startDate} onChange={(value) => update({ startDate: value })} invalid={!!err('startDate')} />
+                      </Field>
+                      <Field label="Ngày kết thúc" name={rxKey(row.key, 'endDate')} error={err('endDate')} onBlur={blur(rxKey(row.key, 'endDate'))}>
+                        <DatePicker className="w-[150px]" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} invalid={!!err('endDate')} />
+                      </Field>
                     </div>
                     <Button
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="mb-0.5 shrink-0 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      className="mt-7 shrink-0 text-gray-400 hover:bg-red-50 hover:text-red-600"
                       title="Bỏ thuốc này"
                       onClick={() => onChange(rows.filter((item) => item.key !== row.key))}
                     >
@@ -116,7 +122,6 @@ export function PrescriptionSection({
                     </Button>
                   </div>
                 </div>
-                {rowError && <p className="mt-3 text-xs font-medium text-red-600">{rowError}</p>}
               </div>
             );
           })}
@@ -135,6 +140,7 @@ export function RequestChooser({
   people,
   error,
   emptyText = 'Ngựa không có yêu cầu khám đang chờ.',
+  title = 'Yêu cầu khám được xử lý',
 }: {
   rows: ExamRequest[];
   selected: string[];
@@ -142,11 +148,12 @@ export function RequestChooser({
   people: People;
   error?: string;
   emptyText?: string;
+  title?: string;
 }) {
   return (
     <FormSection
       icon={<ClipboardList size={16} />}
-      title="Yêu cầu khám được xử lý"
+      title={title}
       aside={rows.length > 0 ? <span className="text-xs text-gray-500">Đã chọn {selected.length}/{rows.length}</span> : undefined}
     >
       <div data-field="requests" data-invalid={error ? 'true' : undefined} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -161,7 +168,7 @@ export function RequestChooser({
                 className={cn(
                   'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-300',
                   checked
-                    ? 'bg-emerald-50/50 shadow-[0_8px_30px_rgb(16,185,129,0.12)] ring-2 ring-emerald-500'
+                    ? 'bg-emerald-50/50 shadow-float ring-2 ring-emerald-500'
                     : 'ring-1 ring-gray-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-gray-200/50',
                   row.urgent && !checked && 'shadow-[inset_4px_0_0_0_#ef4444]',
                 )}

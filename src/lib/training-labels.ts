@@ -78,13 +78,15 @@ const INELIGIBLE_REASON: Record<string, string> = {
   ACTIVE_TRAINING_LOCK: 'Đang bị khóa huấn luyện',
 };
 
+/** Lý do BE ghi dạng mã nối dấu phẩy (có thể bị cắt ở 64 ký tự). Mã lạ hiện câu chung, không hiện mã thô. */
 export function ineligibleReasonText(reason: string | null | undefined): string | undefined {
   if (!reason) return undefined;
-  return reason
+  const texts = reason
     .split(/[,|]/)
-    .map((part) => INELIGIBLE_REASON[part.trim()] ?? part.trim())
+    .map((part) => part.trim())
     .filter(Boolean)
-    .join(', ');
+    .map((part) => INELIGIBLE_REASON[part] ?? 'Không đủ điều kiện tập');
+  return [...new Set(texts)].join(', ') || 'Không đủ điều kiện tập';
 }
 
 /** Gợi ý mặt sân. BE nhận chuỗi tự do, tối đa 80 ký tự. */

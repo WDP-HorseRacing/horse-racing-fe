@@ -44,6 +44,8 @@ export function notificationTarget(item: Pick<NotificationItem, 'category' | 're
     // Phụ phí mới (HLV khu, chủ ngựa): mở tab Phụ phí của ngựa.
     case 'SURCHARGE':
       return links.horse(horseId, 'surcharge');
+    case 'TRAINING_CLASS':
+      return links.horse(horseId, 'training');
     default:
       return links.horse(horseId);
   }

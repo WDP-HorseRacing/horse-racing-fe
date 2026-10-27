@@ -28,6 +28,7 @@ import {
   useToast,
 } from '../../../components/ui';
 import { useAction, useService } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useLeaveConfirm } from '../../../hooks/useLeaveConfirm';
 import { can } from '../../../auth/permissions';
 import { useStore } from '../../../store/store';
@@ -49,6 +50,9 @@ const MAX_PHASE_WEEKS = 52;
 const MAX_TOTAL_WEEKS = 104;
 const MAX_SUBJECTS_PER_PHASE = 7;
 const MAX_SESSIONS_PER_WEEK = 14;
+const NAME_MAX = 160;
+/** Mô tả BE không giới hạn, FE đặt mức hợp lý. */
+const DESCRIPTION_MAX = 2000;
 
 interface Row {
   uid: string;
@@ -115,8 +119,10 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
   const [activeUid, setActiveUid] = useState(() => phases[0]?.uid);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | TrainingIntensity | 'TRIAL'>('ALL');
-  const [touched, setTouched] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Giai đoạn đang chờ xác nhận bỏ (đã có môn).
+  const [removingPhase, setRemovingPhase] = useState<Phase | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
   const [dropUid, setDropUid] = useState<string>();
   const [saved, setSaved] = useState(false);
   const routeRef = useRef<HTMLDivElement>(null);
@@ -177,16 +183,26 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
   });
 
   // Kiểm trước khi lưu (câu báo giống BE). Số buổi mỗi tuần đã kẹp 1 đến 14 ở ô nhập.
-  const errors: { name?: string; route?: string; phases: Record<string, string>; rows: Record<string, string> } = { phases: {}, rows: {} };
+  // Khóa lỗi: 'name', 'description', 'route' (cả lộ trình) và `phase:<uid>` (giai đoạn chưa có môn).
+  const errors: Record<string, string> = {};
   if (!name.trim()) errors.name = 'Nhập tên giáo án';
-  else if (name.trim().length > 160) errors.name = 'Tên tối đa 160 ký tự';
+  else if (name.trim().length > NAME_MAX) errors.name = `Tên tối đa ${NAME_MAX} ký tự`;
+  if (description.trim().length > DESCRIPTION_MAX) errors.description = `Mô tả tối đa ${DESCRIPTION_MAX} ký tự`;
   if (phases.length === 0) errors.route = 'Thêm ít nhất một giai đoạn';
   else if (phases.length > MAX_PHASES) errors.route = `Giáo án tối đa ${MAX_PHASES} giai đoạn`;
   else if (totalWeeks > MAX_TOTAL_WEEKS) errors.route = `Tổng số tuần của giáo án không quá ${MAX_TOTAL_WEEKS}`;
   phases.forEach((phase, index) => {
-    if (phase.rows.length === 0) errors.phases[phase.uid] = `Giai đoạn ${index + 1} chưa có môn nào`;
+    if (phase.rows.length === 0) errors[`phase:${phase.uid}`] = `Giai đoạn ${index + 1} chưa có môn nào`;
   });
-  const invalid = !!errors.name || !!errors.route || Object.keys(errors.phases).length > 0 || Object.keys(errors.rows).length > 0;
+  const serverErrors = useMemo(
+    () => Object.fromEntries((['name', 'description'] as const).flatMap((key) => (save.fieldErrors[key] ? [[key, save.fieldErrors[key]]] : []))) as Record<string, string>,
+    [save.fieldErrors],
+  );
+  const f = useFormErrors(errors, { fieldErrors: serverErrors });
+  /** Sửa ô đang có lỗi BE thì bỏ lỗi đó. */
+  const cleared = (key: string) => {
+    if (serverErrors[key]) save.clearError();
+  };
 
   const updatePhase = (uid: string, change: (phase: Phase) => Phase) => setPhases((current) => current.map((phase) => (phase.uid === uid ? change(phase) : phase)));
 
@@ -239,9 +255,15 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
     if (subject) add(subject, phaseUid);
   };
 
+  /** Bỏ một môn khỏi giai đoạn; giai đoạn hết môn thì báo ngay. */
+  const removeRow = (phase: Phase, rowUid: string) => {
+    updatePhase(phase.uid, (item) => ({ ...item, rows: item.rows.filter((other) => other.uid !== rowUid) }));
+    if (phase.rows.length === 1) f.touch(`phase:${phase.uid}`);
+  };
+  const removePhase = (uid: string) => setPhases((current) => current.filter((item) => item.uid !== uid));
+
   const submit = () => {
-    setTouched(true);
-    if (invalid) return;
+    if (!f.attempt(formRef.current ?? undefined)) return;
     const input: TrainingPlanInput = {
       name: name.trim(),
       description: description.trim() || null,
@@ -285,10 +307,10 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
         }
       />
 
-      {save.error && <ErrorBox message={save.error} />}
+      {save.error && !Object.keys(serverErrors).length && <ErrorBox message={save.error} />}
       {plan && classes.length > 0 && (
         <Notice tone="info" icon={<Info size={16} />}>
-          Đang có {classes.length} lớp dùng giáo án này. Lớp đã mở giữ bản giáo án lúc mở lớp, thay đổi chỉ áp cho lớp mở sau.
+          Đang có {classes.length} lớp dùng giáo án này. Thay đổi chỉ áp cho lớp mở sau.
         </Notice>
       )}
 
@@ -331,10 +353,10 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-gray-500">
                           <IntensityBars intensity={subject.intensity} />
-                          <span className="font-mono">{formatMeters(subject.plannedDistanceM)}</span>
-                          <span className="font-mono">{subject.durationMinutes} phút</span>
+                          <span className="tabular-nums">{formatMeters(subject.plannedDistanceM)}</span>
+                          <span className="tabular-nums">{subject.durationMinutes} phút</span>
                           {subject.surface && <span>{subject.surface}</span>}
-                          {subject.targetTimeMs && <span className="font-mono">{formatRaceTime(subject.targetTimeMs)}</span>}
+                          {subject.targetTimeMs && <span className="tabular-nums">{formatRaceTime(subject.targetTimeMs)}</span>}
                         </div>
                       </div>
                       <Button
@@ -356,13 +378,31 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
         </aside>
 
         {/* Lộ trình */}
-        <section className="space-y-4 lg:col-span-7">
+        <section ref={formRef} className="space-y-4 lg:col-span-7">
           <div className="grid gap-4 rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 sm:grid-cols-2">
-            <Field label="Tên giáo án" required error={touched ? errors.name : undefined} counter={<CharCount value={name} max={160} />} className="sm:col-span-2">
-              <Input value={name} maxLength={160} placeholder="Ví dụ: Tăng tốc 4 tuần" onChange={(event) => setName(event.target.value)} className={touched && errors.name ? invalidClass : ''} />
+            <Field label="Tên giáo án" required name="name" error={f.show('name')} onBlur={f.blur('name')} counter={<CharCount value={name} max={NAME_MAX} />} className="sm:col-span-2">
+              <Input
+                value={name}
+                maxLength={NAME_MAX}
+                placeholder="Ví dụ: Tăng tốc 4 tuần"
+                onChange={(event) => {
+                  setName(event.target.value);
+                  cleared('name');
+                }}
+                className={f.show('name') ? invalidClass : ''}
+              />
             </Field>
-            <Field label="Mục tiêu, mô tả" className="sm:col-span-2">
-              <Textarea rows={2} value={description} placeholder="Giáo án nhắm tới điều gì" onChange={(event) => setDescription(event.target.value)} />
+            <Field label="Mục tiêu, mô tả" name="description" error={f.show('description')} onBlur={f.blur('description')} counter={<CharCount value={description} max={DESCRIPTION_MAX} />} className="sm:col-span-2">
+              <Textarea
+                rows={2}
+                maxLength={DESCRIPTION_MAX}
+                value={description}
+                placeholder="Giáo án nhắm tới điều gì"
+                onChange={(event) => {
+                  setDescription(event.target.value);
+                  cleared('description');
+                }}
+              />
             </Field>
           </div>
 
@@ -371,7 +411,7 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
               <div>
                 <p className="text-sm text-gray-600">Lộ trình</p>
                 <p className="text-2xl font-bold tracking-tight text-gray-900">
-                  <span className={cn('font-mono tabular-nums', totalWeeks > MAX_TOTAL_WEEKS && 'text-red-700')}>{totalWeeks}</span> tuần{' '}
+                  <span className={cn('tabular-nums', totalWeeks > MAX_TOTAL_WEEKS && 'text-red-700')}>{totalWeeks}</span> tuần{' '}
                   <span className="text-base font-medium text-gray-500">
                     {phases.length} giai đoạn, tối thiểu {totalSessions} buổi, {formatTotalMinutes(totalMinutes)}
                   </span>
@@ -382,12 +422,12 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                   {sessionsByIntensity.map((item) => (
                     <span key={item.intensity} className="inline-flex items-center gap-1.5">
                       <IntensityBars intensity={item.intensity} showLabel={false} />
-                      {intensityText[item.intensity]} <b className="font-mono">{item.count}</b> buổi
+                      {intensityText[item.intensity]} <b className="tabular-nums">{item.count}</b> buổi
                     </span>
                   ))}
                   {trialSessions > 0 && (
                     <span>
-                      Chạy thử <b className="font-mono">{trialSessions}</b> buổi
+                      Chạy thử <b className="tabular-nums">{trialSessions}</b> buổi
                     </span>
                   )}
                 </div>
@@ -396,16 +436,17 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
             <WeekRibbon phases={ribbon} size="lg" />
           </div>
 
-          <div ref={routeRef} className={cn('space-y-3 rounded-2xl', touched && errors.route && 'ring-2 ring-red-300 ring-offset-4 ring-offset-[#f5f6f4]')}>
+          <div ref={routeRef} data-invalid={f.show('route') ? 'true' : undefined} className={cn('space-y-3 rounded-2xl', f.show('route') && 'ring-2 ring-red-300 ring-offset-4 ring-offset-[#f5f6f4]')}>
             {phases.map((phase, index) => {
               const startWeek = phases.slice(0, index).reduce((sum, item) => sum + item.weeks, 0) + 1;
               const isActive = phase.uid === active?.uid;
-              const phaseError = (touched ? errors.phases[phase.uid] : undefined) ?? serverErrorAt(save.fieldErrors, index);
+              const phaseError = f.show(`phase:${phase.uid}`) ?? serverErrorAt(save.fieldErrors, index);
               return (
                 <article
                   key={phase.uid}
                   data-flip-id={phase.uid}
                   data-phase-card
+                  data-invalid={phaseError ? 'true' : undefined}
                   onClick={() => setActiveUid(phase.uid)}
                   onDragOver={(event) => {
                     event.preventDefault();
@@ -423,15 +464,18 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                   )}
                 >
                   <header className="flex flex-wrap items-center gap-3">
-                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-mono text-sm font-bold', isActive ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800')}>{index + 1}</span>
+                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl tabular-nums text-sm font-bold', isActive ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800')}>{index + 1}</span>
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-gray-900">Giai đoạn {index + 1}</p>
-                      <p className="font-mono text-xs tabular-nums text-gray-500">
+                      <p className="tabular-nums text-xs  text-gray-500">
                         Tuần {startWeek}
                         {phase.weeks > 1 && ` đến ${startWeek + phase.weeks - 1}`}
                       </p>
                     </div>
-                    <Stepper size="sm" value={phase.weeks} min={1} max={MAX_PHASE_WEEKS} suffix="tuần" label={`số tuần của giai đoạn ${index + 1}`} onChange={(weeks) => updatePhase(phase.uid, (item) => ({ ...item, weeks }))} />
+                    {/* Rời ô số tuần mới báo tổng số tuần vượt giới hạn, không báo khi đang gõ. */}
+                    <span onBlur={() => f.touch('route')}>
+                      <Stepper size="sm" value={phase.weeks} min={1} max={MAX_PHASE_WEEKS} suffix="tuần" label={`số tuần của giai đoạn ${index + 1}`} onChange={(weeks) => updatePhase(phase.uid, (item) => ({ ...item, weeks }))} />
+                    </span>
                     <div className="flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
                       <Button variant="ghost" size="icon" title="Lên trên" disabled={index === 0} onClick={() => movePhase(phase.uid, -1)}>
                         <ArrowUp size={15} />
@@ -442,7 +486,7 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                       <Button variant="ghost" size="icon" title="Nhân bản giai đoạn" disabled={phases.length >= MAX_PHASES} onClick={() => addPhase(phase)}>
                         <Copy size={15} />
                       </Button>
-                      <Button variant="ghost" size="icon" title="Bỏ giai đoạn" disabled={phases.length === 1} onClick={() => setPhases((current) => current.filter((item) => item.uid !== phase.uid))}>
+                      <Button variant="ghost" size="icon" title="Bỏ giai đoạn" disabled={phases.length === 1} onClick={() => (phase.rows.length > 0 ? setRemovingPhase(phase) : removePhase(phase.uid))}>
                         <X size={15} />
                       </Button>
                     </div>
@@ -457,7 +501,7 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                       {phase.rows.map((row, rowIndex) => {
                         const subject = subjectById.get(row.subjectId);
                         if (!subject) return null;
-                        const rowError = (touched ? errors.rows[row.uid] : undefined) ?? serverErrorAt(save.fieldErrors, index, rowIndex);
+                        const rowError = serverErrorAt(save.fieldErrors, index, rowIndex);
                         return (
                           <li key={row.uid} data-flip-id={row.uid} className={cn('rounded-xl bg-gray-50/70 p-3 ring-1', rowError ? 'ring-red-200' : 'ring-gray-100')}>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -468,8 +512,8 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                                 </div>
                                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs text-gray-500">
                                   <IntensityBars intensity={subject.intensity} />
-                                  <span className="font-mono">{formatMeters(subject.plannedDistanceM)}</span>
-                                  <span className="font-mono">{subject.durationMinutes} phút</span>
+                                  <span className="tabular-nums">{formatMeters(subject.plannedDistanceM)}</span>
+                                  <span className="tabular-nums">{subject.durationMinutes} phút</span>
                                   {subject.surface && <span>{subject.surface}</span>}
                                 </div>
                               </div>
@@ -489,7 +533,7 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                                 variant="ghost"
                                 size="icon"
                                 title="Bỏ môn khỏi giai đoạn"
-                                onClick={() => updatePhase(phase.uid, (item) => ({ ...item, rows: item.rows.filter((other) => other.uid !== row.uid) }))}
+                                onClick={() => removeRow(phase, row.uid)}
                               >
                                 <X size={15} />
                               </Button>
@@ -504,7 +548,7 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
                   {phase.rows.length > 0 && (
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
                       <PhaseLoad load={loads[index]} />
-                      <span className="font-mono text-xs tabular-nums text-gray-500">Cả giai đoạn {formatTotalMinutes(phase.weeks * loads[index].minutes)}</span>
+                      <span className="tabular-nums text-xs  text-gray-500">Cả giai đoạn {formatTotalMinutes(phase.weeks * loads[index].minutes)}</span>
                     </div>
                   )}
                   {phaseError && <p className="mt-2 text-sm font-medium text-red-600">{phaseError}</p>}
@@ -520,10 +564,21 @@ function Editor({ subjects, plan, classes }: { subjects: TrainingSubject[]; plan
               <Layers size={16} /> Thêm giai đoạn
             </button>
           </div>
-          {touched && errors.route && <p className="text-sm font-medium text-red-600">{errors.route}</p>}
+          {f.show('route') && <p className="text-sm font-medium text-red-600">{f.show('route')}</p>}
         </section>
       </div>
 
+      <ConfirmDialog
+        open={!!removingPhase}
+        title="Bỏ giai đoạn"
+        message={removingPhase ? `Bỏ giai đoạn ${phases.indexOf(removingPhase) + 1} cùng ${removingPhase.rows.length} môn trong đó?` : ''}
+        confirmLabel="Bỏ giai đoạn"
+        onClose={() => setRemovingPhase(null)}
+        onConfirm={() => {
+          if (removingPhase) removePhase(removingPhase.uid);
+          setRemovingPhase(null);
+        }}
+      />
       {plan && (
         <ConfirmDialog
           open={confirmDelete}

@@ -62,32 +62,44 @@ export function Count({ value }: { value: number }) {
   return <span className="rounded-md bg-gray-100 px-1.5 text-xs font-semibold text-gray-600 tabular-nums">{value}</span>;
 }
 
-/** Bốn nút chọn trạng thái sức khỏe: viền xám, đang chọn → viền đậm + chấm màu tương ứng. */
+/**
+ * Bốn nút chọn trạng thái sức khỏe: viền xám, đang chọn → viền đậm + chấm màu tương ứng.
+ * `allowed` giới hạn lựa chọn theo kết luận: nút ngoài danh sách xám, không bấm được, kèm dòng `note` giải thích.
+ */
 export function HealthPicker({
   value,
   onChange,
   current,
   error,
+  allowed,
+  note,
 }: {
   value: HealthStatus | '';
   onChange: (value: HealthStatus) => void;
   current?: HealthStatus;
   error?: string;
+  allowed?: HealthStatus[];
+  note?: string;
 }) {
+  const limited = !!allowed && allowed.length < HEALTH_ORDER.length;
   return (
     <div>
       <div className="grid grid-cols-2 gap-2">
         {HEALTH_ORDER.map((status) => {
           const active = value === status;
+          const disabled = !!allowed && !allowed.includes(status);
           return (
             <button
               key={status}
               type="button"
               aria-pressed={active}
+              disabled={disabled}
               onClick={() => onChange(status)}
               className={cn(
-                'rounded-lg bg-white px-3 py-2.5 text-left transition active:scale-[0.99]',
-                active ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300',
+                'rounded-lg px-3 py-2.5 text-left transition',
+                disabled
+                  ? 'cursor-not-allowed bg-gray-50 opacity-50 ring-1 ring-gray-100'
+                  : cn('bg-white active:scale-[0.99]', active ? 'ring-2 ring-gray-900' : 'ring-1 ring-gray-200 hover:ring-gray-300'),
               )}
             >
               <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">
@@ -100,6 +112,7 @@ export function HealthPicker({
           );
         })}
       </div>
+      {limited && note && <p className="mt-1.5 text-xs text-gray-500">{note}</p>}
       {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
     </div>
   );

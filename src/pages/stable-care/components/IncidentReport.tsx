@@ -5,7 +5,8 @@
 import { useEffect, useState } from 'react';
 import { reportIncident } from '../../../api/stable-care';
 import type { HorseListItem, Incident } from '../../../api/types';
-import { Button, Dot, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { Button, ConfirmDialog, type ToastAction, Dot, ErrorBox, Field, Modal, Notice, Select, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction } from '../../../hooks/useService';
 import { healthLabel } from '../../../lib/labels';
 import { INCIDENT_HINTS, textError } from '../../../lib/stable-labels';
@@ -16,12 +17,18 @@ const MAX_DESCRIPTION = 2000;
 
 export function IncidentReportForm({
   horse,
+  initialHorseId,
+  toastAction,
   onDone,
   onCancel,
   onDirtyChange,
 }: {
   /** Mở từ một ngựa: điền sẵn, không cho đổi. */
   horse?: { id: string; name: string };
+  /** Chọn sẵn ngựa nhưng vẫn cho đổi (vd trang Sự cố đang lọc theo ngựa). */
+  initialHorseId?: string;
+  /** Nút trên thông báo đã gửi, vd "Xem sự cố". */
+  toastAction?: (incident: Incident) => ToastAction;
   onDone?: (incident: Incident) => void;
   onCancel?: () => void;
   /** Báo cho hộp chứa biết đã nhập dở, để hỏi trước khi đóng. */
@@ -31,16 +38,21 @@ export function IncidentReportForm({
   const action = useAction();
   const options = useMedicalHorses('all', !horse);
   const mine = useMedicalHorses('myHorses', !horse);
-  const [horseId, setHorseId] = useState(horse?.id ?? '');
+  const [horseId, setHorseId] = useState(horse?.id ?? initialHorseId ?? '');
   const [description, setDescription] = useState('');
   const [urgent, setUrgent] = useState(false);
   const [photo, setPhoto] = useState<PhotoUploadState>({ uploading: false });
   const [resetKey, setResetKey] = useState(0);
-  const [touched, setTouched] = useState(false);
+  // Ảnh tải lỗi mà vẫn bấm Gửi: hỏi trước khi gửi không kèm ảnh.
+  const [askNoPhoto, setAskNoPhoto] = useState(false);
   const text = description.trim();
-  const dirty = text !== '' || urgent || !!photo.mediaId || photo.uploading || (!horse && horseId !== '');
+  const dirty = text !== '' || urgent || !!photo.mediaId || photo.uploading || (!horse && horseId !== (initialHorseId ?? ''));
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
-  const descriptionError = touched ? textError(description, { label: 'Mô tả', max: MAX_DESCRIPTION }) : undefined;
+  const errors: Partial<Record<'horseId' | 'description', string>> = {
+    horseId: horseId ? undefined : 'Chọn ngựa',
+    description: textError(description, { label: 'Mô tả', max: MAX_DESCRIPTION }),
+  };
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
 
   const addHint = (hint: string) =>
     setDescription((current) => {
@@ -50,17 +62,25 @@ export function IncidentReportForm({
     });
 
   const submit = () => {
-    setTouched(true);
-    if (!horseId || textError(description, { label: 'Mô tả', max: MAX_DESCRIPTION }) || photo.uploading) return;
+    if (!f.attempt() || photo.uploading) return;
+    if (photo.failed && !photo.mediaId) {
+      setAskNoPhoto(true);
+      return;
+    }
+    send();
+  };
+
+  const send = () => {
+    setAskNoPhoto(false);
     void action.run(
       () => reportIncident({ horseId, description: text, urgent, ...(photo.mediaId ? { photoMediaId: photo.mediaId } : {}) }),
       (incident) => {
-        toast.push(`Đã báo sự cố ${incident.horseName}`, 'success');
+        toast.push(`Đã báo sự cố ${incident.horseName}`, 'success', toastAction?.(incident));
         setDescription('');
         setUrgent(false);
         setPhoto({ uploading: false });
         setResetKey((key) => key + 1);
-        setTouched(false);
+        f.reset();
         if (!horse) setHorseId('');
         onDone?.(incident);
       },
@@ -90,10 +110,20 @@ export function IncidentReportForm({
         <Field
           label="Ngựa"
           required
-          error={touched && !horseId ? 'Chọn ngựa' : undefined}
+          name="horseId"
+          error={f.show('horseId')}
+          onBlur={f.blur('horseId')}
           hint={reportingForOther ? 'Bạn không phụ trách ngựa này: Groom phụ trách và HLV khu sẽ được báo.' : 'Báo được cho mọi ngựa đang ở câu lạc bộ, kể cả ngựa người khác phụ trách.'}
         >
-          <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
+          <Select
+            value={horseId}
+            onChange={(event) => {
+              setHorseId(event.target.value);
+              if (action.error) action.clearError();
+            }}
+            onBlur={f.blur('horseId')}
+            className={cn(f.show('horseId') && invalidClass)}
+          >
             <option value="">Chọn ngựa…</option>
             {/* Ô chọn tự làm không có nhóm: dùng dòng tắt làm tiêu đề nhóm. */}
             {mineIds.size > 0 && (
@@ -116,7 +146,9 @@ export function IncidentReportForm({
         <Field
           label="Tình trạng"
           required
-          error={descriptionError}
+          name="description"
+          error={f.show('description')}
+          onBlur={f.blur('description')}
           counter={
             <span className={cn('tabular-nums', text.length > MAX_DESCRIPTION && 'font-medium text-red-600')}>
               {text.length}/{MAX_DESCRIPTION}
@@ -126,8 +158,12 @@ export function IncidentReportForm({
           <Textarea
             rows={4}
             value={description}
-            maxLength={MAX_DESCRIPTION + 200}
-            onChange={(event) => setDescription(event.target.value)}
+            maxLength={MAX_DESCRIPTION}
+            onChange={(event) => {
+              setDescription(event.target.value);
+              if (action.error) action.clearError();
+            }}
+            className={cn(f.show('description') && invalidClass)}
             placeholder="Ví dụ: Bỏ ăn bữa sáng, móng trước trái bị xước nhẹ, không chảy máu"
           />
         </Field>
@@ -172,7 +208,7 @@ export function IncidentReportForm({
         </p>
       </div>
 
-      {action.error && <ErrorBox message={action.error} />}
+      {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
@@ -183,21 +219,47 @@ export function IncidentReportForm({
           {action.pending ? 'Đang gửi…' : photo.uploading ? 'Đang tải ảnh…' : 'Gửi'}
         </Button>
       </div>
+      <ConfirmDialog
+        open={askNoPhoto}
+        danger={urgent}
+        title="Ảnh chưa tải lên được"
+        message="Gửi báo cáo mà không kèm ảnh? Bạn cũng có thể quay lại chọn ảnh khác."
+        confirmLabel="Gửi không ảnh"
+        pending={action.pending}
+        onClose={() => setAskNoPhoto(false)}
+        onConfirm={send}
+      />
     </div>
   );
 }
 
-export function IncidentReportDialog({ open, onClose, horse, onDone }: { open: boolean; onClose: () => void; horse?: { id: string; name: string }; onDone?: () => void }) {
+export function IncidentReportDialog({
+  open,
+  onClose,
+  horse,
+  initialHorseId,
+  toastAction,
+  onDone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  horse?: { id: string; name: string };
+  initialHorseId?: string;
+  toastAction?: (incident: Incident) => ToastAction;
+  onDone?: (incident: Incident) => void;
+}) {
   const [dirty, setDirty] = useState(false);
   if (!open) return null;
   return (
     <Modal open onClose={onClose} title={horse ? `Báo sự cố: ${horse.name}` : 'Báo sự cố'} description="Cần bác sĩ tới ngay thì chọn Khẩn." dirty={dirty}>
       <IncidentReportForm
         horse={horse}
+        initialHorseId={initialHorseId}
+        toastAction={toastAction}
         onCancel={onClose}
         onDirtyChange={setDirty}
-        onDone={() => {
-          onDone?.();
+        onDone={(incident) => {
+          onDone?.(incident);
           onClose();
         }}
       />

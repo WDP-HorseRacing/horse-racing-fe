@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Check, Pencil, Plus, X } from 'lucide-react';
 import { createTaskType, listTaskTypes, updateTaskType } from '../../../api/stable-care';
 import type { ChecklistTaskType } from '../../../api/types';
-import { Button, ErrorBox, Input, Pill, Sheet, Skeleton, ToggleChip, cn, useToast } from '../../../components/ui';
+import { Button, ErrorBox, Field, Input, Pill, Sheet, Skeleton, ToggleChip, cn, invalidClass, useToast } from '../../../components/ui';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction, useService } from '../../../hooks/useService';
 import { textError } from '../../../lib/stable-labels';
 
@@ -16,22 +17,24 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
   const action = useAction();
   const [name, setName] = useState('');
   const [all, setAll] = useState(true);
-  const [touched, setTouched] = useState(false);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  // Lỗi tên khi đổi tên một dòng, hiện ngay dưới ô đổi tên.
+  const [renameError, setRenameError] = useState<string>();
   // Loại việc vừa đổi: lỗi của BE (vd 409 còn ngựa được gắn thêm hoặc miễn) hiện ngay dòng đó.
   const [changedId, setChangedId] = useState<string | null>(null);
-  const nameError = textError(name, { label: 'Tên loại việc', max: MAX_NAME });
+  const errors: Partial<Record<'name', string>> = { name: textError(name, { label: 'Tên loại việc', max: MAX_NAME }) };
+  // Lỗi BE chỉ gắn vào ô Thêm khi lỗi đến từ thao tác Thêm, không phải từ đổi một dòng.
+  const f = useFormErrors(errors, changedId ? undefined : { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
 
   const add = () => {
     setChangedId(null);
-    setTouched(true);
-    if (nameError) return;
+    if (!f.attempt()) return;
     void action.run(
       () => createTaskType({ name: name.trim(), appliesToAll: all }),
       (created) => {
         toast.push(`Đã thêm loại việc ${created.name}`, 'success');
         setName('');
-        setTouched(false);
+        f.reset();
         types.reload();
       },
     );
@@ -52,10 +55,8 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
   const rename = (type: ChecklistTaskType) => {
     if (!editing) return;
     const error = textError(editing.name, { label: 'Tên loại việc', max: MAX_NAME });
-    if (error) {
-      toast.push(error, 'error');
-      return;
-    }
+    setRenameError(error);
+    if (error) return;
     if (editing.name.trim() === type.name) {
       setEditing(null);
       return;
@@ -64,14 +65,24 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Sheet open onClose={onClose} title="Loại việc chăm sóc" description="Checklist đã có hôm nay giữ nguyên. Không dùng nữa thì bấm Ngưng dùng." dirty={name.trim() !== '' || !!editing} onSave={editing ? undefined : add} saveLabel="Thêm">
+    <Sheet open onClose={onClose} title="Loại việc chăm sóc" description="Thay đổi áp dụng từ ngày mai. Không dùng nữa thì bấm Ngưng dùng." dirty={name.trim() !== '' || !!editing} busy={action.pending} onSave={editing ? undefined : add} saveLabel="Thêm">
       <section className="rounded-2xl bg-emerald-50/60 p-4 ring-1 ring-emerald-100">
         <p className="mb-2 text-sm font-semibold text-gray-900">Thêm loại việc</p>
         <div className="flex flex-wrap items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <Input value={name} onChange={(event) => setName(event.target.value)} maxLength={MAX_NAME + 20} placeholder="Ví dụ: Chải lông, Kiểm tra móng hằng ngày" onKeyDown={(event) => event.key === 'Enter' && add()} />
-            {touched && nameError && <p className="mt-1 text-xs font-medium text-red-600">{nameError}</p>}
-          </div>
+          <Field name="name" error={f.show('name')} onBlur={f.blur('name')} className="min-w-0 flex-1">
+            <Input
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                if (action.error && !changedId) action.clearError();
+              }}
+              maxLength={MAX_NAME}
+              aria-label="Tên loại việc"
+              placeholder="Ví dụ: Chải lông, Kiểm tra móng hằng ngày"
+              onKeyDown={(event) => event.key === 'Enter' && add()}
+              className={cn(f.show('name') && invalidClass)}
+            />
+          </Field>
           <ToggleChip checked={all} onChange={setAll}>
             Cho mọi ngựa
           </ToggleChip>
@@ -82,7 +93,7 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
         <p className="mt-2 text-xs text-gray-500">{all ? 'Ngựa nào cũng có việc này mỗi ngày. HLV khu miễn được cho từng ngựa (vd ngựa sốt không tắm).' : 'HLV khu tự thêm cho từng ngựa.'}</p>
       </section>
 
-      {action.error && !changedId && (
+      {action.error && !changedId && !Object.keys(action.fieldErrors).length && (
         <div className="mt-3">
           <ErrorBox message={action.error} />
         </div>
@@ -104,18 +115,26 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
                     <Input
                       autoFocus
                       value={editing.name}
-                      maxLength={MAX_NAME + 20}
-                      onChange={(event) => setEditing({ id: type.id, name: event.target.value })}
+                      maxLength={MAX_NAME}
+                      aria-label="Tên mới"
+                      onChange={(event) => {
+                        setEditing({ id: type.id, name: event.target.value });
+                        setRenameError(undefined);
+                        if (action.error && changedId === type.id) action.clearError();
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') rename(type);
                         if (event.key === 'Escape') setEditing(null);
                       }}
-                      className="h-9 min-w-0 flex-1"
+                      className={cn('h-9 min-w-0 flex-1', renameError && invalidClass)}
                     />
                     <Button variant="ghost" size="icon" title="Lưu" onClick={() => rename(type)} disabled={action.pending}>
                       <Check size={15} />
                     </Button>
-                    <Button variant="ghost" size="icon" title="Hủy" onClick={() => setEditing(null)}>
+                    <Button variant="ghost" size="icon" title="Hủy" onClick={() => {
+                        setEditing(null);
+                        setRenameError(undefined);
+                      }}>
                       <X size={15} />
                     </Button>
                   </>
@@ -123,7 +142,10 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
                   <>
                     <span className={cn('min-w-0 flex-1 truncate font-medium', type.active ? 'text-gray-900' : 'text-gray-400 line-through')}>{type.name}</span>
                     {!type.active && <Pill tone="gray">Ngưng dùng</Pill>}
-                    <Button variant="ghost" size="icon" title="Đổi tên" onClick={() => setEditing({ id: type.id, name: type.name })}>
+                    <Button variant="ghost" size="icon" title="Đổi tên" onClick={() => {
+                        setEditing({ id: type.id, name: type.name });
+                        setRenameError(undefined);
+                      }}>
                       <Pencil size={14} />
                     </Button>
                   </>
@@ -145,7 +167,12 @@ export function TaskTypesSheet({ onClose }: { onClose: () => void }) {
                   {type.active ? 'Ngưng dùng' : 'Dùng lại'}
                 </Button>
               </div>
-              {action.error && changedId === type.id && <p className="mt-2 text-xs font-medium text-red-700">{action.error}</p>}
+              {editing?.id === type.id && renameError && (
+                <p role="alert" className="mt-1 text-xs font-medium text-red-600">
+                  {renameError}
+                </p>
+              )}
+              {action.error && changedId === type.id && <p role="alert" className="mt-2 text-xs font-medium text-red-700">{action.error}</p>}
             </li>
           ))}
         </ul>

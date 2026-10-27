@@ -104,7 +104,7 @@ function FocusSlot({
   const locked = detail?.locked ?? occupant.locked;
   const openCase = detail?.openCase ?? occupant.openCase;
   const card = (
-    <span className={cn(shell, 'group border-gray-200 bg-white shadow-[0_1px_2px_rgba(20,30,25,0.04)] hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_22px_40px_-26px_rgba(6,78,59,0.55)]')}>
+    <span className={cn(shell, 'group border-gray-200 bg-white shadow-card hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-raised')}>
       <span className="relative block">
         <CellPhoto src={occupant.photoUrl} name={occupant.name} />
         <span className="absolute left-2.5 top-2.5">{tag}</span>
@@ -194,7 +194,7 @@ export function ZoneFocus({
     <section className="relative" aria-label={`Khu ${barn.name} phóng to`}>
       <motion.div
         layoutId={layoutId}
-        className="absolute inset-0 rounded-3xl bg-white shadow-[0_30px_70px_-40px_rgba(6,78,59,0.55)] ring-1 ring-gray-200/80"
+        className="absolute inset-0 rounded-2xl bg-white shadow-card ring-1 ring-gray-200/80"
         transition={{ type: 'spring', bounce: 0.12, duration: 0.5 }}
         aria-hidden
       />
@@ -228,7 +228,7 @@ export function ZoneFocus({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-3.5 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_-14px_rgba(4,120,87,0.9)] transition hover:bg-emerald-600"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-3.5 py-2 text-sm font-semibold text-white shadow-raised transition hover:bg-emerald-600"
               >
                 <Minimize2 size={15} /> Thu nhỏ <kbd className="rounded bg-white/15 px-1 font-mono text-[10px] text-white/80">Esc</kbd>
               </button>

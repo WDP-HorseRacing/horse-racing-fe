@@ -52,7 +52,7 @@ export function TrainerTodayCard() {
             return (
               <li key={item.session.id}>
                 <Link to={links.session(item.session.id)} className={cn('flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-gray-50', item.session.status === 'IN_PROGRESS' && 'bg-emerald-50/60')}>
-                  <span className="w-12 font-mono text-sm font-semibold text-gray-900">{clubTime(item.session.scheduledStartAt)}</span>
+                  <span className="w-12 tabular-nums text-sm font-semibold text-gray-900">{clubTime(item.session.scheduledStartAt)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 truncate text-sm font-semibold text-gray-900">
                       {item.session.name} <TrialBadge type={item.session.sessionType} />
@@ -111,7 +111,7 @@ export function ActiveClassesCard() {
                     <span className="truncate font-semibold text-gray-900">
                       <span className="font-mono text-gray-500">{item.code}</span> {item.name}
                     </span>
-                    <span className="shrink-0 font-mono text-xs text-gray-500">
+                    <span className="shrink-0 tabular-nums text-xs text-gray-500">
                       {done}/{counted.length} buổi
                     </span>
                   </div>
@@ -147,7 +147,7 @@ export function GroomTrainingCard() {
           {rows.map(({ item, participant }) => (
             <li key={participant.id}>
               <Link to={links.today} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
-                <span className="w-12 font-mono text-sm font-semibold">{clubTime(item.session.scheduledStartAt)}</span>
+                <span className="w-12 tabular-nums text-sm font-semibold">{clubTime(item.session.scheduledStartAt)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{participant.horseName || 'Ngựa'}</span>
                   <span className="block truncate text-xs text-gray-500">{item.session.name}</span>
@@ -315,7 +315,7 @@ export function OwnerTrainingCards() {
             {data.data!.upcoming.map(({ horse, horseId, item }) => (
               <li key={item.participantId}>
                 <Link to={links.horse(horseId, 'training')} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
-                  <span className="w-20 font-mono text-xs text-gray-600">
+                  <span className="w-20 tabular-nums text-xs text-gray-600">
                     {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -347,7 +347,7 @@ export function OwnerTrainingCards() {
                     <span className="truncate text-sm font-semibold text-gray-900">
                       {horse} · {item.name}
                     </span>
-                    <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono text-xs font-semibold text-white">{item.evaluation!.score}/10</span>
+                    <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-white">{item.evaluation!.score}/10</span>
                   </div>
                   {item.evaluation!.comment && <p className="mt-1 line-clamp-2 text-xs text-gray-600">“{item.evaluation!.comment}”</p>}
                 </Link>

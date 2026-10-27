@@ -81,20 +81,20 @@ export function MetricChart({ points, limits, height = 280 }: { points: MetricPo
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + innerW} y1={y(tick)} y2={y(tick)} className={tick === limits.heartRateCriticalBpm ? 'stroke-red-300' : tick === limits.heartRateWarningBpm ? 'stroke-amber-300' : 'stroke-gray-100'} strokeDasharray={tick === limits.heartRateCriticalBpm || tick === limits.heartRateWarningBpm ? '4 4' : undefined} />
-            <text x={pad.left - 6} y={y(tick) + 3} textAnchor="end" className="fill-gray-400 font-mono text-[10px]">
+            <text x={pad.left - 6} y={y(tick) + 3} textAnchor="end" className="fill-gray-400 tabular-nums text-[10px]">
               {Math.round(tick)}
             </text>
           </g>
         ))}
         {timeTicks.map((tick) => (
-          <text key={tick} x={x(tick)} y={height - 8} textAnchor="middle" className="fill-gray-400 font-mono text-[10px]">
+          <text key={tick} x={x(tick)} y={height - 8} textAnchor="middle" className="fill-gray-400 tabular-nums text-[10px]">
             {formatClock((tick - start) / 1000)}
           </text>
         ))}
         <text x={width - 4} y={pad.top + 8} textAnchor="end" className="fill-gray-400 text-[10px]">
           m/s
         </text>
-        <text x={width - 4} y={ys(limits.maxSpeedMps) + 3} textAnchor="end" className="fill-gray-400 font-mono text-[10px]">
+        <text x={width - 4} y={ys(limits.maxSpeedMps) + 3} textAnchor="end" className="fill-gray-400 tabular-nums text-[10px]">
           {limits.maxSpeedMps}
         </text>
         <path data-draw d={speedPath} fill="none" className="stroke-gray-400" strokeWidth={1.2} strokeDasharray="0" opacity={0.7} />
@@ -123,9 +123,9 @@ export function MetricChart({ points, limits, height = 280 }: { points: MetricPo
           className="pointer-events-none absolute top-2 rounded-xl bg-white/95 px-3 py-2 text-xs shadow-float ring-1 ring-gray-200"
           style={{ left: Math.min(width - 170, Math.max(0, x(new Date(hovered.recordedAt).getTime()) + 10)) }}
         >
-          <p className="font-mono text-gray-500">giây {formatClock((new Date(hovered.recordedAt).getTime() - start) / 1000)}</p>
-          <p className="font-mono text-sm font-semibold text-gray-900">{hovered.heartRateBpm} bpm</p>
-          <p className="font-mono text-gray-600">
+          <p className="tabular-nums text-gray-500">giây {formatClock((new Date(hovered.recordedAt).getTime() - start) / 1000)}</p>
+          <p className="tabular-nums text-sm font-semibold text-gray-900">{hovered.heartRateBpm} bpm</p>
+          <p className="tabular-nums text-gray-600">
             {hovered.speedMps.toFixed(1)} m/s · {toKmh(hovered.speedMps).toFixed(1)} km/h
           </p>
           <p className={cn('font-medium', hovered.alertLevel === 'CRITICAL' ? 'text-red-700' : hovered.alertLevel === 'WARNING' ? 'text-amber-700' : 'text-gray-500')}>{alertLevelText[hovered.alertLevel]}</p>

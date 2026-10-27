@@ -35,7 +35,7 @@ export function MealPlan({ plan, highlight, compact = false, className }: { plan
                   <li key={item.supplyItemId} className="text-sm">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="min-w-0 truncate text-gray-800">{item.name}</span>
-                      <span className="shrink-0 font-mono text-xs font-semibold tabular-nums text-gray-900">
+                      <span className="shrink-0 tabular-nums text-xs font-semibold  text-gray-900">
                         {formatQuantity(item.quantity)} {item.unit}
                       </span>
                     </span>

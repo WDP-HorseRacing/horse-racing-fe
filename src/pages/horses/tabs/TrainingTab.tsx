@@ -91,7 +91,7 @@ export default function TrainingTab({ horse }: { horse: HorseDetail; permissions
                     <p className="truncate font-semibold">{next.name}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-sm font-semibold">{formatDate(next.scheduledStartAt).slice(0, 5)} {clubTime(next.scheduledStartAt)}</p>
+                    <p className="tabular-nums text-sm font-semibold">{formatDate(next.scheduledStartAt).slice(0, 5)} {clubTime(next.scheduledStartAt)}</p>
                     <p className="text-xs text-emerald-100">
                       {next.participantStatus === 'PLANNED' || next.participantStatus === 'ONGOING' ? countdown(next.scheduledStartAt) : participantStatusText[next.participantStatus]}
                     </p>
@@ -106,7 +106,7 @@ export default function TrainingTab({ horse }: { horse: HorseDetail; permissions
                     return (
                       <li key={item.participantId} className={cn('rounded-lg px-3 py-2 text-sm', out ? 'bg-amber-50/70 ring-1 ring-amber-100' : 'bg-white/70')}>
                         <div className="flex items-center gap-3">
-                          <span className="w-24 shrink-0 font-mono text-xs text-gray-500">
+                          <span className="w-24 shrink-0 tabular-nums text-xs text-gray-500">
                             {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
                           </span>
                           <span className={cn('min-w-0 flex-1 truncate', out ? 'text-gray-500 line-through decoration-gray-300' : 'text-gray-800')}>{item.name}</span>
@@ -180,17 +180,17 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
         <div className="space-y-4">
           <div className="flex items-end gap-6">
             <div>
-              <p className="font-mono text-4xl font-bold tabular-nums text-gray-900">{load.sessionsCompleted}</p>
+              <p className="tabular-nums text-2xl font-semibold  text-gray-900">{load.sessionsCompleted}</p>
               <p className="text-xs text-gray-500">lượt hoàn thành</p>
             </div>
             {load.sessionsStopped > 0 && (
               <div>
-                <p className="font-mono text-xl font-semibold tabular-nums text-amber-800">{load.sessionsStopped}</p>
+                <p className="tabular-nums text-xl font-semibold  text-amber-800">{load.sessionsStopped}</p>
                 <p className="text-xs text-gray-500">dừng sớm</p>
               </div>
             )}
             <div>
-              <p className="font-mono text-xl font-semibold tabular-nums">{formatMinutes(load.actualDurationSeconds)}</p>
+              <p className="tabular-nums text-xl font-semibold ">{formatMinutes(load.actualDurationSeconds)}</p>
               <p className="text-xs text-gray-500">thời gian tập thực</p>
             </div>
           </div>
@@ -211,7 +211,7 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
             <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-gray-600">
               {INTENSITIES.map((intensity) => (
                 <span key={intensity} className="inline-flex items-center gap-1">
-                  <IntensityBars intensity={intensity} showLabel={false} /> {intensityText[intensity]} <b className="font-mono">{load.byIntensity[intensity]}</b>
+                  <IntensityBars intensity={intensity} showLabel={false} /> {intensityText[intensity]} <b className="tabular-nums">{load.byIntensity[intensity]}</b>
                 </span>
               ))}
             </div>
@@ -220,14 +220,14 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
             <div>
               <div className="mb-1 flex justify-between text-xs text-gray-600">
                 <span>Cự ly dự kiến</span>
-                <span className="font-mono">{formatMeters(load.plannedDistanceM)}</span>
+                <span className="tabular-nums">{formatMeters(load.plannedDistanceM)}</span>
               </div>
               <ProgressFill ratio={load.plannedDistanceM / maxDistance} tone="gray" />
             </div>
             <div>
               <div className="mb-1 flex justify-between text-xs text-gray-600">
                 <span>Cự ly thực (từ cảm biến)</span>
-                <span className="font-mono">{formatMeters(load.actualDistanceM)}</span>
+                <span className="tabular-nums">{formatMeters(load.actualDistanceM)}</span>
               </div>
               <ProgressFill ratio={load.actualDistanceM / maxDistance} delay={0.15} />
             </div>
@@ -317,17 +317,17 @@ function ThresholdCard({ horseId, className = '' }: { horseId: string; className
           <dl className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-amber-50 p-2.5 ring-1 ring-amber-100">
               <dt className="text-[11px] text-amber-800">Cảnh báo</dt>
-              <dd className="font-mono text-lg font-bold">{current.limits.heartRateWarningBpm}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateWarningBpm}</dd>
               <dd className="text-[10px] text-gray-500">bpm</dd>
             </div>
             <div className="rounded-xl bg-red-50 p-2.5 ring-1 ring-red-100">
               <dt className="text-[11px] text-red-700">Nguy hiểm</dt>
-              <dd className="font-mono text-lg font-bold">{current.limits.heartRateCriticalBpm}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateCriticalBpm}</dd>
               <dd className="text-[10px] text-gray-500">bpm</dd>
             </div>
             <div className="rounded-xl bg-gray-50 p-2.5 ring-1 ring-gray-100">
               <dt className="text-[11px] text-gray-600">Tốc độ tối đa</dt>
-              <dd className="font-mono text-lg font-bold">{current.limits.maxSpeedMps}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.maxSpeedMps}</dd>
               <dd className="text-[10px] text-gray-500">m/s</dd>
             </div>
           </dl>
@@ -380,7 +380,7 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                 <Link to={links.participant(item.participantId, horseId)} className="group block">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-mono text-xs text-gray-500">
+                      <p className="tabular-nums text-xs text-gray-500">
                         {formatDate(item.scheduledStartAt)} {clubTime(item.scheduledStartAt)} · {item.className}
                       </p>
                       <p className="flex items-center gap-2 font-semibold text-gray-900 group-hover:text-emerald-800">
@@ -389,12 +389,12 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                     </div>
                     <div className="flex items-center gap-2">
                       {best !== undefined && (
-                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-amber-800">
+                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-amber-800">
                           <Flag size={11} className="mr-1 inline" />
                           {formatRaceTime(best)}
                         </span>
                       )}
-                      {item.evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono text-xs font-semibold text-white">{item.evaluation.score}/10</span>}
+                      {item.evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-white">{item.evaluation.score}/10</span>}
                       <ParticipantPill status={item.participantStatus} />
                     </div>
                   </div>
@@ -478,7 +478,7 @@ function AlertsCard({ horseId, className = '' }: { horseId: string; className?: 
               <Link to={links.participant(group.participantId, horseId)} className={cn('block rounded-xl px-3.5 py-2.5 ring-1 transition hover:ring-2', group.critical ? 'bg-red-50/70 ring-red-200 hover:ring-red-300' : 'bg-amber-50/70 ring-amber-200 hover:ring-amber-300')}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate font-semibold text-gray-900">{group.sessionName ?? 'Buổi đã xóa'}</p>
-                  <span className={cn('font-mono text-sm font-bold', group.critical ? 'text-red-700' : 'text-amber-800')}>{group.peak} bpm</span>
+                  <span className={cn('tabular-nums text-sm font-bold', group.critical ? 'text-red-700' : 'text-amber-800')}>{group.peak} bpm</span>
                 </div>
                 <p className="text-xs text-gray-600">
                   {formatDateTime(group.first)} · {group.count} điểm vượt ngưỡng{group.critical ? `, ${group.critical} nguy hiểm` : ''}

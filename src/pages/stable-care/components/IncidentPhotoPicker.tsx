@@ -10,6 +10,8 @@ import { errorMessage } from '../../../lib/errors';
 export interface PhotoUploadState {
   uploading: boolean;
   mediaId?: string;
+  /** Đã chọn ảnh nhưng kiểm hoặc tải lên lỗi: gửi lúc này sẽ không kèm ảnh. */
+  failed?: boolean;
 }
 
 const ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -60,7 +62,7 @@ export function IncidentPhotoPicker({ onChange, disabled, resetKey }: { onChange
       setPreview(undefined);
       setStatus('error');
       setError(errorMessage(caught));
-      onChange({ uploading: false });
+      onChange({ uploading: false, failed: true });
       return;
     }
     setPreview(URL.createObjectURL(next));
@@ -77,7 +79,7 @@ export function IncidentPhotoPicker({ onChange, disabled, resetKey }: { onChange
       if (controller.signal.aborted) return;
       setStatus('error');
       setError(errorMessage(caught));
-      onChange({ uploading: false });
+      onChange({ uploading: false, failed: true });
     }
   };
 

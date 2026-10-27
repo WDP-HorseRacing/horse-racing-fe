@@ -179,7 +179,7 @@ export default function StableMap() {
 
   // Hộp thoại xếp chỗ (F1.6, F1.7)
   const [zoneHorse, setZoneHorse] = useState<PlacementHorse | null>(null);
-  const [stallTarget, setStallTarget] = useState<{ horse: PlacementHorse; preset?: string } | null>(null);
+  const [stallTarget, setStallTarget] = useState<{ horse: PlacementHorse; preset?: { id: string; code: string } } | null>(null);
   const [groomHorse, setGroomHorse] = useState<PlacementHorse | null>(null);
   const [removeHorse, setRemoveHorse] = useState<PlacementHorse | null>(null);
   // Hộp thoại quản lý khu và ô (CM)
@@ -191,6 +191,7 @@ export default function StableMap() {
   const [deletingZone, setDeletingZone] = useState<MapZone | null>(null);
   const [maintStall, setMaintStall] = useState<Stall | null>(null);
   const [deletingStall, setDeletingStall] = useState<Stall | null>(null);
+  const [endingMaint, setEndingMaint] = useState<Stall | null>(null);
 
   // Mở từ Tổng quan với ?zone=<id>: cuộn tới khu đó và nhấn mạnh viền trong giây lát.
   const zoneParam = params.get('zone');
@@ -369,7 +370,7 @@ export default function StableMap() {
     if (stall.status === 'OCCUPIED') return [];
     const items: MenuAction[] = [];
     if (stall.status === 'AVAILABLE' && zone.canManage) {
-      zone.waitingStall.forEach((item) => items.push({ label: `Xếp ${item.name} vào ô này`, onSelect: () => setStallTarget({ horse: toPlacement(item), preset: stall.id }) }));
+      zone.waitingStall.forEach((item) => items.push({ label: `Xếp ${item.name} vào ô này`, onSelect: () => setStallTarget({ horse: toPlacement(item), preset: { id: stall.id, code: stall.code } }) }));
     }
     if (isManager) {
       // Đưa một ô trống ra khỏi danh sách ô trống sẽ làm khu thiếu chỗ nếu đã hết chỗ nhận.
@@ -378,18 +379,23 @@ export default function StableMap() {
       if (stall.status === 'MAINTENANCE') {
         items.push({
           label: 'Kết thúc bảo trì',
-          onSelect: async () => {
-            const done = await action.run(() => updateStall(stall.id, { status: 'AVAILABLE' }));
-            if (done) {
-              toast.push(`Ô ${stall.code} trở lại trống`, 'success');
-              reload();
-            }
+          onSelect: () => {
+            action.clearError();
+            setEndingMaint(stall);
           },
         });
       } else {
         items.push({ label: short ? `Chuyển sang bảo trì (${shortReason})` : 'Chuyển sang bảo trì', disabled: short, onSelect: () => setMaintStall(stall) });
       }
-      items.push({ label: short ? `Xóa ô (${shortReason})` : 'Xóa ô', danger: true, disabled: short, onSelect: () => setDeletingStall(stall) });
+      items.push({
+        label: short ? `Xóa ô (${shortReason})` : 'Xóa ô',
+        danger: true,
+        disabled: short,
+        onSelect: () => {
+          action.clearError();
+          setDeletingStall(stall);
+        },
+      });
     }
     return items;
   };
@@ -450,7 +456,7 @@ export default function StableMap() {
         }
       />
 
-      {action.error && !deletingZone && <ErrorBox message={action.error} />}
+      {action.error && !deletingZone && !deletingStall && !endingMaint && <ErrorBox message={action.error} />}
 
       <LayoutGroup>
         {focused ? (
@@ -474,8 +480,8 @@ export default function StableMap() {
         ) : (
           <div className="grid items-start gap-5 lg:grid-cols-12">
             {/* ===== Cột trái ===== */}
-            <aside className="space-y-4 rounded-3xl bg-emerald-50/40 p-4 ring-1 ring-emerald-900/5 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
-              <Card className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+            <aside className="space-y-4 rounded-2xl bg-emerald-50/40 p-4 ring-1 ring-emerald-900/5 lg:sticky lg:top-6 lg:col-span-4 xl:col-span-3">
+              <Card className="border-none p-4 shadow-card">
                 <SectionTitle icon={<Warehouse size={16} />} className="mb-3">
                   {trainer ? 'Khu của bạn' : 'Tổng quan chuồng'}
                 </SectionTitle>
@@ -488,7 +494,7 @@ export default function StableMap() {
               </Card>
 
               {!trainer && (
-                <Card tone={noZone.length ? 'warning' : 'default'} className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+                <Card tone={noZone.length ? 'warning' : 'default'} className="border-none p-4 shadow-raised">
                   <SectionTitle icon={<Building2 size={16} />} action={<Count value={noZone.length} />} className="mb-1">
                     Chờ xếp khu
                   </SectionTitle>
@@ -516,7 +522,7 @@ export default function StableMap() {
                 </Card>
               )}
 
-              <Card tone={waitingStall.length ? 'warning' : 'default'} className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+              <Card tone={waitingStall.length ? 'warning' : 'default'} className="border-none p-4 shadow-raised">
                 <SectionTitle action={<Count value={waitingStall.length} />} className="mb-1">
                   Chờ xếp ô
                 </SectionTitle>
@@ -544,7 +550,7 @@ export default function StableMap() {
               </Card>
 
               {waitingGroom.length > 0 && (
-                <Card tone="warning" className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+                <Card tone="warning" className="border-none p-4 shadow-card">
                   <SectionTitle action={<Count value={waitingGroom.length} />} className="mb-1">
                     Chờ giao Groom
                   </SectionTitle>
@@ -569,7 +575,7 @@ export default function StableMap() {
               )}
 
               {attention.length > 0 && (
-                <Card className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+                <Card className="border-none p-4 shadow-card">
                   <SectionTitle icon={<AlertTriangle size={16} />} action={<Count value={attention.length} />} className="mb-1">
                     Cần chú ý
                   </SectionTitle>
@@ -591,7 +597,7 @@ export default function StableMap() {
               )}
 
               {isManager && pendingZones.length > 0 && (
-                <Card variant="flat" className="border-none p-4 shadow-[0_4px_20px_-10px_rgba(4,120,87,0.1)]">
+                <Card variant="flat" className="border-none p-4 shadow-card">
                   <SectionTitle className="mb-1">Khu cần xử lý</SectionTitle>
                   <ul className="divide-y divide-gray-100">
                     {pendingZones.map((zone) => {
@@ -670,7 +676,8 @@ export default function StableMap() {
       <AssignZoneDialog horse={zoneHorse} onClose={() => setZoneHorse(null)} onDone={reload} />
       <AssignStallDialog
         horse={stallTarget?.horse ?? null}
-        presetStallId={stallTarget?.preset}
+        presetStallId={stallTarget?.preset?.id}
+        presetStallCode={stallTarget?.preset?.code}
         onClose={() => setStallTarget(null)}
         onDone={reload}
         onAssignGroom={(horse) => setGroomHorse(horse)}
@@ -685,7 +692,14 @@ export default function StableMap() {
       />
       <RemoveStallDialog horse={removeHorse} onClose={() => setRemoveHorse(null)} onDone={reload} />
 
-      <ZoneFormDialog open={!!formOpen} zone={formOpen?.zone} headTrainers={headTrainers} onClose={() => setFormOpen(null)} onDone={reload} />
+      <ZoneFormDialog
+        open={!!formOpen}
+        zone={formOpen?.zone}
+        stallCount={formOpen?.zone ? (allZones.find((item) => item.barn.id === formOpen.zone?.id)?.stalls.length ?? 0) : 0}
+        headTrainers={headTrainers}
+        onClose={() => setFormOpen(null)}
+        onDone={reload}
+      />
       <HeadTrainerDialog zone={trainerZone} headTrainers={headTrainers} barns={barns} onClose={() => setTrainerZone(null)} onDone={reload} />
       <UnassignTrainerDialog zone={unassignZone?.barn ?? null} horseCount={unassignZone?.horseCount ?? 0} onClose={() => setUnassignZone(null)} onDone={reload} />
       <ZoneStatusDialog zone={statusZone} onClose={() => setStatusZone(null)} onDone={reload} />
@@ -705,7 +719,7 @@ export default function StableMap() {
       <ConfirmDialog
         open={!!deletingZone}
         title={`Xóa ${deletingZone?.barn.name ?? ''}`}
-        message={deletingZone && zoneDeleteBlockers(deletingZone).length > 0 ? 'Không xóa được khu này:' : 'Khu sẽ bị xóa mềm (vẫn giữ trong nhật ký).'}
+        message={deletingZone && zoneDeleteBlockers(deletingZone).length > 0 ? 'Không xóa được khu này:' : 'Khu sẽ bị xóa khỏi sơ đồ, lịch sử vẫn được giữ.'}
         consequences={deletingZone ? zoneDeleteBlockers(deletingZone) : []}
         confirmLabel="Xóa khu"
         disabled={!!deletingZone && zoneDeleteBlockers(deletingZone).length > 0}
@@ -732,10 +746,13 @@ export default function StableMap() {
       <ConfirmDialog
         open={!!deletingStall}
         title={`Xóa ô ${deletingStall?.code ?? ''}`}
-        message="Ô bị xóa mềm và không còn trong sơ đồ chuồng."
+        message="Ô sẽ bị xóa khỏi sơ đồ chuồng."
         confirmLabel="Xóa ô"
         pending={action.pending}
-        onClose={() => setDeletingStall(null)}
+        onClose={() => {
+          setDeletingStall(null);
+          action.clearError();
+        }}
         onConfirm={async () => {
           if (!deletingStall) return;
           const target = deletingStall;
@@ -743,13 +760,40 @@ export default function StableMap() {
             await deleteStall(target.id);
             return true;
           });
-          setDeletingStall(null);
+          // Lỗi thì giữ hộp thoại mở và hiện lỗi bên trong.
           if (done) {
+            setDeletingStall(null);
             toast.push(`Đã xóa ô ${target.code}`, 'success');
             reload();
           }
         }}
-      />
+      >
+        {action.error && <ErrorBox message={action.error} />}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={!!endingMaint}
+        title={`Kết thúc bảo trì ô ${endingMaint?.code ?? ''}`}
+        message="Ô trở lại trống và nhận ngựa được ngay."
+        confirmLabel="Kết thúc bảo trì"
+        danger={false}
+        pending={action.pending}
+        onClose={() => {
+          setEndingMaint(null);
+          action.clearError();
+        }}
+        onConfirm={async () => {
+          if (!endingMaint) return;
+          const target = endingMaint;
+          const done = await action.run(() => updateStall(target.id, { status: 'AVAILABLE' }));
+          if (done) {
+            setEndingMaint(null);
+            toast.push(`Ô ${target.code} trở lại trống`, 'success');
+            reload();
+          }
+        }}
+      >
+        {action.error && <ErrorBox message={action.error} />}
+      </ConfirmDialog>
     </div>
   );
 }

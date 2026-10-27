@@ -58,8 +58,12 @@ function draftNote(type: MeasurementType, raw: string): { tone: 'error' | 'warn'
   const spec = measurementSpec[type];
   const normal = `Bình thường ${spec.min}–${spec.max} ${unitText(type)}`;
   if (!raw.trim()) return { tone: 'hint', text: normal };
-  const value = Number(raw.replace(',', '.'));
-  if (Number.isNaN(value)) return { tone: 'error', text: 'Nhập một con số' };
+  const text = raw.trim();
+  // Chỉ nhận số thập phân thường (không nhận 1e3, 0x1F4); backend lưu tối đa 2 chữ số sau dấu phẩy.
+  if (!/^\d+([.,]\d+)?$/.test(text)) return { tone: 'error', text: 'Nhập một con số' };
+  if (!/^\d+([.,]\d{1,2})?$/.test(text)) return { tone: 'error', text: 'Tối đa 2 chữ số sau dấu phẩy' };
+  const value = Number(text.replace(',', '.'));
+  if (type === 'BODY_CONDITION' && !Number.isInteger(value)) return { tone: 'error', text: 'Điểm thể trạng là số nguyên' };
   if (value < spec.hardMin || value > spec.hardMax) return { tone: 'error', text: `Chỉ nhận ${spec.hardMin}–${spec.hardMax} ${unitText(type)}` };
   if (type === 'TEMPERATURE' && value > TEMP_ALERT_C) return { tone: 'danger', text: `Trên ngưỡng sốt ${TEMP_ALERT_C} °C, sẽ báo khẩn bác sĩ` };
   if (value < spec.min || value > spec.max) return { tone: 'warn', text: 'Ngoài khoảng bình thường, sẽ đánh dấu bất thường' };
@@ -78,6 +82,9 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   const [confirmMessage, setConfirmMessage] = useState<string>();
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [deleteError, setDeleteError] = useState<string>();
+  // Lỗi khoảng giá trị chỉ hiện khi rời ô hoặc bấm Lưu, không hiện từ chữ số đầu tiên.
+  const [blurred, setBlurred] = useState<Partial<Record<MeasurementType, boolean>>>({});
+  const [attempted, setAttempted] = useState(false);
 
   const rows: Row[] = list.data ?? [];
 
@@ -98,11 +105,19 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
   // Đổi tab trong hồ sơ (?tab=) cũng làm mất số đang nhập: chặn cả khi đổi query.
   const leaveConfirm = useLeaveConfirm(dirty, 'Chỉ số vừa nhập chưa được lưu. Rời đi sẽ mất các số này.', { includeSearch: true });
 
-  const canSave = dirty && !invalid && !pending;
-
   const resetDraft = () => {
     setEdits({});
     setFormError(undefined);
+    setBlurred({});
+    setAttempted(false);
+  };
+
+  /** Bấm Lưu: số sai thì hiện lỗi trên thẻ, không gửi. */
+  const submit = () => {
+    if (pending || !dirty) return;
+    setAttempted(true);
+    if (invalid) return;
+    void save(false);
   };
 
   const save = async (confirmAbnormal: boolean) => {
@@ -206,7 +221,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
       <div className="flex flex-wrap items-end justify-between gap-3">
         <p className="text-sm text-gray-500">
           Dải xám là khoảng bình thường.
-          {canRecord && <span className="block">Nhập số mới trên thẻ rồi bấm Lưu, giờ đo là lúc lưu. Nhập sai thì bác sĩ xóa kèm lý do rồi nhập lại.</span>}
+          {canRecord && <span className="block">Giờ đo là lúc bấm Lưu.</span>}
         </p>
         {canRecord && (
           <div className="flex flex-wrap items-end gap-2">
@@ -215,7 +230,7 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                 Hủy
               </Button>
             )}
-            <Button onClick={() => save(false)} disabled={!canSave}>
+            <Button onClick={submit} disabled={pending || !dirty}>
               {pending ? 'Đang lưu…' : 'Lưu'}
             </Button>
           </div>
@@ -237,7 +252,8 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
             .sort((a, b) => a.x - b.x);
           const edited = changed(type);
           const display = edits[type] ?? (record ? formatValue(type, record.value) : '');
-          const note = draftNote(type, edited ? (edits[type] ?? '') : '');
+          const checked = draftNote(type, edited ? (edits[type] ?? '') : '');
+          const note = checked.tone !== 'hint' && !blurred[type] && !attempted ? draftNote(type, '') : checked;
           const tone = edited ? (note.tone === 'error' || note.tone === 'danger' ? 'danger' : note.tone === 'warn' ? 'warn' : null) : severity;
           const DeltaIcon = delta?.direction === 'up' ? TrendingUp : delta?.direction === 'down' ? TrendingDown : Minus;
           return (
@@ -261,8 +277,9 @@ export default function BodyTab({ horseId, canRecord, canDelete }: { horseId: st
                           size={Math.max(3, display.length + 1)}
                           onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}
                           onFocus={(event) => event.target.select()}
+                          onBlur={() => setBlurred((current) => ({ ...current, [type]: true }))}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter' && canSave) void save(false);
+                            if (event.key === 'Enter') submit();
                             if (event.key === 'Escape') setEdits(({ [type]: _dropped, ...rest }) => rest);
                           }}
                           className={cn(

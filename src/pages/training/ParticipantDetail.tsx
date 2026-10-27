@@ -138,7 +138,7 @@ export default function ParticipantDetail() {
     <div ref={scope} className="space-y-5">
       <BackLink fallback={horse ? links.horse(horse.id, 'training') : owner ? links.horses : links.classes} />
 
-      <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
+      <section className="turf-soft rounded-2xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-gray-500">{row ? `${row.className} · ${formatDate(row.scheduledStartAt)} ${clubTime(row.scheduledStartAt)}` : 'Lượt tập'}</p>
@@ -156,7 +156,7 @@ export default function ParticipantDetail() {
                 </span>
               )}
               {duration !== undefined && (
-                <span className="inline-flex items-center gap-1 font-mono">
+                <span className="inline-flex items-center gap-1 tabular-nums">
                   <Timer size={13} /> {formatClock(duration)}
                 </span>
               )}
@@ -180,7 +180,7 @@ export default function ParticipantDetail() {
           {figures.map((item) => (
             <div key={item.label} data-fig className={cn('rounded-2xl p-3.5 ring-1', item.tone === 'red' ? 'bg-red-50 ring-red-200' : item.tone === 'amber' ? 'bg-amber-50 ring-amber-200' : 'bg-white/80 ring-emerald-900/10')}>
               <p className="text-xs text-gray-500">{item.label}</p>
-              <p className={cn('mt-0.5 font-mono text-2xl font-bold tabular-nums', item.tone === 'red' ? 'text-red-700' : item.tone === 'amber' ? 'text-amber-800' : 'text-gray-900')}>
+              <p className={cn('mt-0.5 tabular-nums text-2xl font-bold ', item.tone === 'red' ? 'text-red-700' : item.tone === 'amber' ? 'text-amber-800' : 'text-gray-900')}>
                 {item.value}
                 {item.unit && <span className="ml-1 text-xs font-normal text-gray-500">{item.unit}</span>}
               </p>
@@ -245,9 +245,9 @@ export default function ParticipantDetail() {
                     <li key={trial.id} className={cn('rounded-xl px-3 py-2 ring-1', trial.elapsedMs === best ? 'bg-emerald-50 ring-emerald-200' : 'bg-gray-50 ring-gray-100')}>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-500">Lần {trial.attemptNo}</span>
-                        <span className="font-mono text-lg font-bold">{formatRaceTime(trial.elapsedMs)}</span>
+                        <span className="tabular-nums text-lg font-bold">{formatRaceTime(trial.elapsedMs)}</span>
                       </div>
-                      {target && <p className={cn('text-right font-mono text-xs', trial.elapsedMs <= target ? 'text-emerald-700' : 'text-amber-700')}>{formatDelta(trial.elapsedMs - target)} so với mục tiêu {formatRaceTime(target)}</p>}
+                      {target && <p className={cn('text-right tabular-nums text-xs', trial.elapsedMs <= target ? 'text-emerald-700' : 'text-amber-700')}>{formatDelta(trial.elapsedMs - target)} so với mục tiêu {formatRaceTime(target)}</p>}
                       {trial.notes && <p className="mt-0.5 text-xs text-gray-600">{trial.notes}</p>}
                       {(trial.videoUrl || canEditVideo) && (
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

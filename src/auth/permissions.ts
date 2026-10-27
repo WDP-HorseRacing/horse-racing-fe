@@ -77,7 +77,7 @@ export const CAPABILITIES: Capability[] = [
   { key: 'careInstructions.view', code: 'F3.10', group: 'Y tế', feature: 'Xem ghi chú chăm sóc của bác sĩ', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
   { key: 'care.view', code: 'F3.11', group: 'Y tế', feature: 'Xem lịch tiêm phòng, tẩy giun, kiểm tra móng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
   { key: 'care.manage', code: 'F3.11', group: 'Y tế', feature: 'Tạo, dời, hủy lịch chăm sóc', roles: { VETERINARIAN: A } },
-  { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc được giao', roles: { VETERINARIAN: A, GROOM: G } },
+  { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc', roles: { VETERINARIAN: A } },
 
   // ===== Flow 4 — chăm sóc chuồng trại và dinh dưỡng (theo bảng phân quyền III.8 của BE) =====
   { key: 'checklist.view', code: 'F4.1', group: 'Chăm sóc chuồng', feature: 'Xem checklist chăm sóc hằng ngày', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, GROOM: G } },

@@ -159,11 +159,11 @@ export function PhaseLoad({ load, className = '' }: { load: WeekLoad; className?
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5 text-xs', className)} data-phase-load>
       <span className="rounded-md bg-gray-100 px-2 py-1 font-medium text-gray-800">
-        Tối thiểu <b className="font-mono">{load.sessions}</b> buổi mỗi tuần
+        Tối thiểu <b className="tabular-nums">{load.sessions}</b> buổi mỗi tuần
       </span>
       {load.heavy > 0 && <span className={cn('rounded-md px-2 py-1 font-medium', INTENSITY_FILL.HEAVY)}>{load.heavy} Nặng</span>}
       {load.light > 0 && <span className={cn('rounded-md px-2 py-1 font-medium', INTENSITY_FILL.LIGHT)}>{load.light} Nhẹ</span>}
-      <span className="rounded-md bg-gray-100 px-2 py-1 font-mono text-gray-700">{formatTotalMinutes(load.minutes)}/tuần</span>
+      <span className="rounded-md bg-gray-100 px-2 py-1 tabular-nums text-gray-700">{formatTotalMinutes(load.minutes)}/tuần</span>
     </div>
   );
 }

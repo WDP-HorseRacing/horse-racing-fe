@@ -6,7 +6,7 @@ import { Check, Lock, LogOut, UserPlus } from 'lucide-react';
 import { enrollHorse, leaveEnrollment, listEnrollableHorses } from '../../../api/training';
 import { getEligibility } from '../../../api/horses';
 import type { Eligibility, EnrollableHorse, Enrollment, HorseListItem } from '../../../api/types';
-import { Avatar, Button, EmptyState, ErrorBox, Meter, Notice, Sheet, Skeleton, cn, useToast } from '../../../components/ui';
+import { Avatar, Button, CancelButton, EmptyState, ErrorBox, Meter, Notice, Sheet, Skeleton, cn, useToast } from '../../../components/ui';
 import { HealthPill } from '../../../components/ui/status';
 import { useAction, useService } from '../../../hooks/useService';
 import { formatDate } from '../../../lib/format';
@@ -53,6 +53,10 @@ export default function ClassHorsesTab({
         invalidateTrainingCache('horses');
         reload();
       }}
+      onPartial={() => {
+        invalidateTrainingCache('horses');
+        reload();
+      }}
     />
   );
   if (sheetOnly) return sheet || null;
@@ -63,7 +67,7 @@ export default function ClassHorsesTab({
         <div className="min-w-56 flex-1">
           <div className="mb-1.5 flex justify-between text-sm">
             <span className="text-gray-600">Sĩ số</span>
-            <span className="font-mono font-semibold">
+            <span className="tabular-nums font-semibold">
               {active.length}/{item.maxHorses}
             </span>
           </div>
@@ -154,13 +158,25 @@ interface Candidate {
   locked?: boolean;
 }
 
-function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose: () => void; onDone: () => void }) {
+function EnrollSheet({
+  bundle,
+  onClose,
+  onDone,
+  onPartial,
+}: {
+  bundle: ClassBundle;
+  onClose: () => void;
+  onDone: () => void;
+  /** Một phần ghi danh được, một phần lỗi: tải lại lớp, sheet vẫn mở để xem lỗi. */
+  onPartial: () => void;
+}) {
   const toast = useToast();
   const { item, enrollments, sessions } = bundle;
   const { index } = useHorseIndex();
   const [selected, setSelected] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [failures, setFailures] = useState<string[]>([]);
+  const [pickError, setPickError] = useState<string>();
 
   const enrolled = enrollments.filter((enrollment) => enrollment.status === 'ACTIVE').length;
   // BE đã lọc sẵn: chỉ ngựa trong khu của bạn, chưa ghi danh, không trùng giờ với lớp khác, không vượt giới hạn tập trong ngày.
@@ -180,32 +196,48 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
       const locked = !!eligibility?.trainingReasons.includes('ACTIVE_TRAINING_LOCK');
       const health = info?.healthStatus;
       let warning: string | undefined;
-      if (locked) warning = 'Đang khóa huấn luyện: các lượt tập sẽ bị hủy do khóa';
-      else if (health === 'INJURED' || health === 'QUARANTINED') warning = 'Không đủ điều kiện tập: lượt tập thành Không đủ điều kiện';
+      if (locked) warning = 'Đang khóa huấn luyện: các lượt tập sẽ bị hủy';
+      else if (health === 'INJURED' || health === 'QUARANTINED') warning = 'Không đủ điều kiện tập: ngựa chưa tập được';
       else if (health === 'UNDER_OBSERVATION') warning = heavyAhead ? `Đang cần theo dõi: chỉ tập buổi Nhẹ, không tập ${heavyAhead} buổi Nặng sắp tới` : 'Đang cần theo dõi: chỉ tập buổi Nhẹ';
       return { horse, info, eligibility, warning, locked };
     })
     .sort((a, b) => a.horse.horseName.localeCompare(b.horse.horseName, 'vi'));
 
-  const toggle = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : current.length >= seats ? current : [...current, id]));
+  const toggle = (id: string) => {
+    setPickError(undefined);
+    setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : current.length >= seats ? current : [...current, id]));
+  };
 
   const submit = async () => {
+    if (selected.length === 0) {
+      setPickError('Chọn ít nhất một ngựa');
+      return;
+    }
     setPending(true);
     setFailures([]);
     const errors: string[] = [];
-    let ok = 0;
+    const done: string[] = [];
     for (const id of selected) {
       try {
         await enrollHorse(item.id, id);
-        ok += 1;
+        done.push(id);
       } catch (error) {
         errors.push(`${candidates.find((candidate) => candidate.horse.horseId === id)?.horse.horseName ?? 'Ngựa'}: ${errorMessage(error)}`);
       }
     }
     setPending(false);
-    if (ok) toast.push(`Đã ghi danh ${ok} ngựa${errors.length ? `, ${errors.length} ngựa lỗi` : ''}`, errors.length ? 'info' : 'success');
-    if (errors.length) setFailures(errors);
-    else onDone();
+    if (done.length) toast.push(`Đã ghi danh ${done.length} ngựa${errors.length ? `, ${errors.length} ngựa lỗi` : ''}`, errors.length ? 'info' : 'success');
+    if (!errors.length) {
+      onDone();
+      return;
+    }
+    setFailures(errors);
+    // Ngựa đã ghi danh xong: bỏ chọn và tải lại danh sách, chỉ còn chọn những con lỗi để thử lại.
+    if (done.length) {
+      setSelected((current) => current.filter((id) => !done.includes(id)));
+      list.reload();
+      onPartial();
+    }
   };
 
   return (
@@ -215,14 +247,13 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
       title="Ghi danh ngựa"
       description={`Còn ${Math.max(0, seats)} chỗ trong lớp.`}
       dirty={selected.length > 0}
+      busy={pending}
       onSave={() => void submit()}
       saveLabel="Ghi danh"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button disabled={selected.length === 0 || pending} onClick={() => void submit()}>
+          <CancelButton />
+          <Button disabled={pending} onClick={() => void submit()}>
             <UserPlus size={15} /> {pending ? 'Đang ghi danh…' : `Ghi danh ${selected.length || ''} ngựa`}
           </Button>
         </>
@@ -232,13 +263,18 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
         <div>
           <div className="mb-1.5 flex justify-between text-sm">
             <span className="text-gray-600">Sĩ số sau khi ghi danh</span>
-            <span className="font-mono font-semibold">
+            <span className="tabular-nums font-semibold">
               {enrolled + selected.length}/{item.maxHorses}
             </span>
           </div>
           <Meter value={enrolled + selected.length} max={item.maxHorses} tone={enrolled + selected.length >= item.maxHorses ? 'amber' : 'green'} />
         </div>
         {failures.length > 0 && <ErrorBox message={failures.join('. ')} />}
+        {pickError && (
+          <p role="alert" className="text-sm font-medium text-red-600">
+            {pickError}
+          </p>
+        )}
         {list.error && <ErrorBox message={list.error} />}
         {list.loading && !list.data ? (
           <Skeleton rows={4} />
@@ -288,7 +324,7 @@ function EnrollSheet({ bundle, onClose, onDone }: { bundle: ClassBundle; onClose
             })}
           </ul>
         )}
-        <Notice tone="info">Danh sách đã bỏ ngựa trùng giờ với lớp khác và ngựa vượt giới hạn tập trong ngày. Ngựa ghi danh xong có lượt ở các buổi sắp tới của lớp.</Notice>
+        <Notice tone="info">Ngựa ghi danh xong có lượt ở các buổi sắp tới của lớp.</Notice>
       </div>
     </Sheet>
   );

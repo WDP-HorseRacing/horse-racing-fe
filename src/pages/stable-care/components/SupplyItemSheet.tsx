@@ -139,15 +139,15 @@ export function SupplyItemSheet({
         </>
       }
     >
-      <section className="rounded-2xl bg-gradient-to-br from-emerald-50 to-white p-4 ring-1 ring-emerald-100">
+      <section className="rounded-2xl bg-emerald-50/60 p-4 ring-1 ring-emerald-100">
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs text-gray-500">Còn</p>
-            <p className="font-mono text-3xl font-bold tabular-nums text-gray-900">
+            <p className="tabular-nums text-3xl font-bold  text-gray-900">
               {formatQuantity(item.quantityOnHand)} <span className="text-base font-medium text-gray-500">{item.unit}</span>
             </p>
           </div>
-          {item.lowStock && <Pill tone="red">Sắp hết</Pill>}
+          {item.lowStock && <Pill tone="amber">Sắp hết</Pill>}
         </div>
         <Meter className="mt-3" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
         <p className="mt-2 text-xs text-gray-500">Báo thiếu khi còn {formatAmount(item.reorderThreshold, item.unit)} hoặc ít hơn.</p>
@@ -201,7 +201,7 @@ export function SupplyItemSheet({
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <p className={cn('text-sm font-medium text-gray-900', row.cancelled && 'text-gray-400 line-through decoration-gray-400')}>
                     {row.type === 'RESTOCK' && row.requestId ? 'Cấp hàng' : movementTypeText[row.type]}{' '}
-                    <span className={cn('font-mono tabular-nums', row.delta > 0 ? 'text-emerald-700' : row.delta < 0 ? 'text-amber-700' : 'text-gray-500')}>
+                    <span className={cn('tabular-nums', row.delta > 0 ? 'text-emerald-700' : row.delta < 0 ? 'text-amber-700' : 'text-gray-500')}>
                       {row.delta > 0 ? '+' : row.delta < 0 ? '−' : '±'}
                       {formatQuantity(Math.abs(row.delta))}
                     </span>
@@ -243,10 +243,11 @@ export function SupplyItemSheet({
           title="Hủy lần xuất"
           message={
             <>
-              Cộng trả <b>{formatAmount(Math.abs(cancelling.delta), item.unit)}</b> vào đúng các lô đã trừ. Lần xuất bị gạch trong sổ và không tính vào giá trị đã dùng. Muốn sửa số lượng thì hủy rồi xuất lại số đúng.
+              Số đã xuất (<b>{formatAmount(Math.abs(cancelling.delta), item.unit)}</b>) được cộng trả lại kho. Muốn sửa số lượng thì hủy rồi xuất lại.
             </>
           }
           label="Lý do hủy"
+          maxLength={500}
           suggestions={['Ghi nhầm số lượng', 'Ghi nhầm vật tư', 'Bấm trùng hai lần']}
           confirmLabel="Hủy lần xuất"
           pending={cancel.pending}
@@ -280,7 +281,7 @@ function LotRow({ lot, unit, next, showPrice }: { lot: SupplyLot; unit: string; 
           <span className="font-medium">Nhập {formatDate(lot.createdAt)}</span>
           {next && <span className="ml-2 text-xs text-emerald-700">dùng trước</span>}
         </p>
-        <p className="font-mono text-sm tabular-nums text-gray-900">
+        <p className="tabular-nums text-sm  text-gray-900">
           {formatQuantity(lot.remaining)}
           <span className="text-xs text-gray-500">
             {' '}

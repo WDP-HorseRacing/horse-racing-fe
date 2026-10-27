@@ -3,7 +3,7 @@
 // Hồ sơ và cờ quyền tải song song; ảnh tải riêng để không chặn trang. Nút nào hiện là do cờ quyền quyết định.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Trash2, Undo2, UserX } from 'lucide-react';
+import { ArrowRight, ChevronDown, HeartOff, HeartPulse, Lock, MapPinned, Pencil, Siren, Trash2, Undo2, UserX } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getHorse, getPastHorse, getPermissions, getPhotoUrl, updateHorse } from '../../api/horses';
 import { uploadHorsePhoto } from '../../api/media';
@@ -36,6 +36,7 @@ import { destructiveActions, lifecycleActionLabel, lifecycleActionsFor, type Lif
 import { horseAgeText } from '../../lib/horse-rules';
 import { AssignZoneDialog } from '../stable/components/PlacementDialogs';
 import { BackLink } from '../../components/BackLink';
+import { IncidentReportDialog } from '../stable-care/components/IncidentReport';
 
 /** Một ô thông tin trong lưới bento của hero. `waiting` = đang chờ xử lý (chữ và viền hổ phách). */
 function Fact({ label, value, waiting, mono, to, className = '' }: { label: string; value?: ReactNode; waiting?: string; mono?: boolean; to?: string; className?: string }) {
@@ -86,6 +87,7 @@ export default function HorseDetail() {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [barnOpen, setBarnOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [avatarPending, setAvatarPending] = useState(false);
   // Ảnh vừa chọn hiện ngay trong lúc tải lên.
   const [preview, setPreview] = useState<string>();
@@ -132,6 +134,8 @@ export default function HorseDetail() {
   const canEdit = permissions.canEditProfile || permissions.canEditRaceAptitude;
   const { barn, stall, placementStatus } = horse.location;
   const inClub = placementStatus !== 'NOT_APPLICABLE' && !horse.isDeleted;
+  // Báo sự cố tại chuồng (F4.4): Groom báo được cho mọi ngựa đang ở câu lạc bộ.
+  const canReport = FEATURES.stableCare && can(user, 'incident.report') && inClub && horse.lifecycleStatus === 'ACTIVE';
   const blocked = !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE' && (!horse.eligibility.trainingEligible || !horse.eligibility.racingEligible);
 
   const pickAvatar = async (file: File) => {
@@ -163,7 +167,7 @@ export default function HorseDetail() {
       <BackLink fallback={links.horses} />
 
       {/* Hero hồ sơ: ảnh lớn bên trái, thông tin bên phải */}
-      <section data-reveal className="grid gap-5 rounded-3xl bg-white p-3 shadow-[0_28px_60px_-40px_rgba(6,78,59,0.5)] ring-1 ring-gray-200/80 sm:p-4 lg:grid-cols-12">
+      <section data-reveal className="grid gap-5 rounded-2xl bg-white p-3 shadow-card ring-1 ring-gray-200/80 sm:p-4 lg:grid-cols-12">
         <HorseMedia
           src={photoSrc}
           name={horse.name}
@@ -223,6 +227,11 @@ export default function HorseDetail() {
             {canOpenMedical && !horse.isDeleted && (
               <Button onClick={() => navigate(links.horseMedical(horse.id))}>
                 <HeartPulse size={15} /> {permissions.canViewMedicalTab ? 'Hồ sơ y tế' : 'Chăm sóc'}
+              </Button>
+            )}
+            {canReport && (
+              <Button variant="secondary" onClick={() => setReporting(true)}>
+                <Siren size={15} /> Báo sự cố
               </Button>
             )}
             {canEdit && (
@@ -349,6 +358,12 @@ export default function HorseDetail() {
         }
         onClose={() => setBarnOpen(false)}
         onDone={reload}
+      />
+      <IncidentReportDialog
+        open={reporting}
+        horse={{ id: horse.id, name: horse.name }}
+        onClose={() => setReporting(false)}
+        toastAction={() => ({ label: 'Xem sự cố', onClick: () => navigate(links.incidents(horse.id)) })}
       />
     </Reveal>
   );

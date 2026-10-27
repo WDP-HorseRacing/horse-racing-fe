@@ -13,6 +13,7 @@ import type {
   HorseTrainingSession,
   Page,
   Participant,
+  ParticipantStatus,
   SessionInput,
   TrainingClass,
   TrainingClassStatus,
@@ -62,9 +63,9 @@ export const getClassProgress = (classId: string) => http.get<ClassProgress>(`/c
 export const listEnrollments = (classId: string) => http.get<Enrollment[]>(`/classes/${classId}/enrollments`);
 /** Ngựa ghi danh được (HLV của lớp): đã loại ngựa đã ghi danh, trùng giờ, vượt giới hạn tập trong ngày. Lớp không chạy thì 409. */
 export const listEnrollableHorses = (classId: string) => http.get<EnrollableHorse[]>(`/classes/${classId}/enrollable-horses`);
-export const enrollHorse = (classId: string, horseId: string, enrolledAt?: string) =>
-  http.post<Enrollment>(`/classes/${classId}/enrollments`, enrolledAt ? { horseId, enrolledAt } : { horseId });
-export const leaveEnrollment = (id: string, input: { leftAt?: string; reason?: string }) =>
+export const enrollHorse = (classId: string, horseId: string) =>
+  http.post<Enrollment>(`/classes/${classId}/enrollments`, { horseId });
+export const leaveEnrollment = (id: string, input: { reason?: string }) =>
   http.patch<Enrollment>(`/enrollments/${id}/leave`, input);
 
 /* ===== Buổi tập ===== */
@@ -136,8 +137,10 @@ export const updateEvaluation = (participantId: string, input: { score?: number;
 /* ===== Tab Huấn luyện của ngựa (CM, HT, bác sĩ, chủ ngựa) ===== */
 
 export const listHorseClasses = (horseId: string) => http.get<HorseTrainingClass[]>(`/horses/${horseId}/training/classes`);
-export const listHorseSessions = (horseId: string, query: { when?: 'upcoming' | 'history'; classId?: string; page?: number; limit?: number } = {}) =>
-  http.get<Page<HorseTrainingSession>>(`/horses/${horseId}/training/sessions`, query);
+export const listHorseSessions = (
+  horseId: string,
+  query: { when?: 'upcoming' | 'history'; classId?: string; status?: ParticipantStatus | ParticipantStatus[]; page?: number; limit?: number } = {},
+) => http.get<Page<HorseTrainingSession>>(`/horses/${horseId}/training/sessions`, query);
 
 /* ===== Bàn giao HLV trưởng (CM) ===== */
 

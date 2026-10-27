@@ -2,7 +2,6 @@
 // sức khỏe, khóa huấn luyện, lịch chăm sóc, báo cáo chi phí.
 import { http } from './http';
 import type {
-  CareAssigneeType,
   CareInstructions,
   CareSchedule,
   CareStatus,
@@ -70,6 +69,8 @@ export const listHorseCases = (horseId: string, status?: MedicalCase['status']) 
 export const getCase = (id: string) => http.get<MedicalCaseDetail>(`/medical-cases/${id}`);
 export const getClosePreview = (id: string) => http.get<ClosePreview>(`/medical-cases/${id}/close-preview`);
 export const closeCase = (id: string, input: CloseCaseInput) => http.post<MedicalCase>(`/medical-cases/${id}/close`, input);
+export const updateCaseConclusion = (id: string, input: { finalConclusion: string; reason: string }) =>
+  http.patch<MedicalCaseDetail>(`/medical-cases/${id}/conclusion`, input);
 export const getCostReport = (query: { from: string; to: string; barnId?: string; ownerId?: string }) =>
   http.get<CostReport>('/medical/cost-report', query);
 
@@ -100,18 +101,16 @@ export const releaseLock = (id: string, conclusion: string) => http.post<Trainin
 
 /* Lịch chăm sóc (tiêm phòng, tẩy giun, kiểm tra móng) */
 export const listCareSchedules = (horseId: string) => http.get<CareSchedule[]>(`/horses/${horseId}/care-schedules`);
-/** Giao: bỏ trống là chưa giao; `GROOM` không kèm người là Groom phụ trách; `GROOM`/`VET` kèm `assignedTo` là người cụ thể. */
-export const createCareSchedule = (
-  horseId: string,
-  input: { type: CareTaskType; dueAt: string; assigneeType?: CareAssigneeType; assignedTo?: string; notes?: string },
-) => http.post<CareSchedule>(`/horses/${horseId}/care-schedules`, input);
-/** Đổi cách giao: gửi `assigneeType` (null để bỏ giao) kèm `assignedTo` nếu chọn người. */
-export const updateCareSchedule = (
-  id: string,
-  input: { dueAt?: string; assigneeType?: CareAssigneeType | null; assignedTo?: string | null; notes?: string | null; reason?: string },
-) => http.patch<CareSchedule>(`/care-schedules/${id}`, input);
+/** `assignedTo` là bác sĩ đang hoạt động được giao; bỏ trống là chưa giao ai. */
+export const createCareSchedule = (horseId: string, input: { type: CareTaskType; dueAt: string; assignedTo?: string; notes?: string }) =>
+  http.post<CareSchedule>(`/horses/${horseId}/care-schedules`, input);
+/** Đổi bác sĩ được giao: gửi `assignedTo` (null để bỏ giao). Không gửi thì giữ nguyên. */
+export const updateCareSchedule = (id: string, input: { dueAt?: string; assignedTo?: string | null; notes?: string | null; reason?: string }) =>
+  http.patch<CareSchedule>(`/care-schedules/${id}`, input);
+/** Chỉ bác sĩ. Có `nextDueAt` thì tạo luôn lịch lần tới cùng loại, giữ bác sĩ được giao. */
 export const completeCareSchedule = (id: string, nextDueAt?: string) =>
   http.post<{ completed: CareSchedule; next: CareSchedule | null }>(`/care-schedules/${id}/complete`, nextDueAt ? { nextDueAt } : {});
 export const cancelCareSchedule = (id: string, reason: string) => http.post<CareSchedule>(`/care-schedules/${id}/cancel`, { reason });
+export const reopenCareSchedule = (id: string, reason: string) => http.post<CareSchedule>(`/care-schedules/${id}/reopen`, { reason });
 
 export type { CareStatus };

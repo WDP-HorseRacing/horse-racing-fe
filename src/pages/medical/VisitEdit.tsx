@@ -5,15 +5,18 @@
 // Số đo chỉ sửa loại đã đo trong buổi. Chấn thương chỉ sửa vết có trong buổi, vùng và loại chỉ ở vết phát hiện tại buổi này.
 // Bệnh án đã đóng: không hẹn tái khám, không thêm yêu cầu khám, không đổi mức hồi phục.
 import { useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Bandage, FolderOpen, HeartPulse, RotateCcw, Stethoscope, Trash2 } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
+import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { getHorse, listMeasurements } from '../../api/horses';
 import { getCase, getInjuries, getRecord, listHorseExamRequests, updateVisit } from '../../api/medical';
 import type { BodyRegion, ExamRequest, HealthStatus, HorseDetail, InjuryType, MeasurementType, MedicalCaseDetail, MedicalRecord, RecoveryStatus, TrackedInjury, VisitInjuryEdit, VisitUpdateInput } from '../../api/types';
 import { useStore } from '../../store/store';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Button, CharCount, ErrorBox, Field, Input, NotFound, Notice, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { Button, CharCount, ErrorBox, Field, Input, NotFound, Notice, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, useToast } from '../../components/ui';
 import { CaseStatusPill } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
 import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
@@ -24,12 +27,13 @@ import { leftClub, leftClubText } from '../../lib/horse-rules';
 import { DateTimePicker } from '../../components/ui/DatePicker';
 import { usePeople } from './components/people';
 import { HealthPicker } from './components/parts';
-import { localToIso, toLocalInput, todayKey } from './components/utils';
+import { healthChoices, localToIso, toLocalInput, todayKey } from './components/utils';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { CareNotesSection, MetricFields, PrescriptionSection, RequestChooser } from './components/visit-form';
 import {
   METRICS,
   emptyMetrics,
+  mapServerFieldErrors,
   parseMetrics,
   prescriptionErrors,
   prescriptionInputs,
@@ -171,7 +175,9 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
   const [selected, setSelected] = useState<string[]>(() => attached.map((row) => row.id));
   const [injuries, setInjuries] = useState<InjuryRow[]>(initial.injuries);
   const [reason, setReason] = useState('');
-  const [attempted, setAttempted] = useState(false);
+  // Bấm lưu khi chưa sửa gì: báo "Chưa có thay đổi" thay vì gửi PATCH rỗng.
+  const [noChangeTried, setNoChangeTried] = useState(false);
+  const [finished, setFinished] = useState(false);
 
   useCrumbs([{ label: horse.name, to: links.horseMedical(horse.id) }, { label: 'Sửa buổi khám' }], [{ label: 'Y tế', to: links.medicalBoard }]);
 
@@ -183,6 +189,7 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
   const careChanged = careInstructions.trim() !== (record.careInstructions ?? '').trim();
   const initialDiagnosisChanged = opening && initialDiagnosis.trim() !== (medicalCase?.initialDiagnosis ?? '').trim();
   const healthChanged = healthAfter !== record.resultingStatus;
+  const health = healthChoices(followUp ? 'FOLLOW_UP' : opening ? 'ISSUE' : 'NORMAL', record.resultingStatus);
   const { parsed, errors: metricErrors, abnormal } = parseMetrics(metrics, measuredTypes);
   const changedMetrics = parsed.filter((item) => item.value !== measured[item.type]);
   const rxChanged = JSON.stringify(prescriptionInputs(prescriptions)) !== initial.prescriptions;
@@ -220,23 +227,28 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
   if (!reason.trim()) errors.reason = 'Nhập lý do sửa';
   if (initialDiagnosisChanged && !initialDiagnosis.trim()) errors.initialDiagnosis = 'Nhập chẩn đoán ban đầu';
   measuredTypes.forEach((type) => {
-    if (!metrics[type].trim()) metricErrors[type] = 'Số đo đã ghi không bỏ trống được, chỉ sửa số';
+    const message = metrics[type].trim() ? metricErrors[type] : 'Số đo đã ghi không bỏ trống được, chỉ sửa số';
+    if (message) errors[`metric.${type}`] = message;
   });
   Object.assign(errors, prescriptionErrors(prescriptions, !inCase));
+  if (!health.allowed.includes(healthAfter)) errors.healthAfter = 'Chọn sức khỏe hợp lệ với kết luận của buổi khám';
   if (record.kind === 'REQUEST' && selected.length === 0) errors.requests = 'Buổi theo yêu cầu phải giữ ít nhất một yêu cầu khám';
   if (nextChanged && nextVisitAt && nextVisitAt.slice(0, 10) < todayKey()) errors.nextVisitAt = 'Ngày hẹn đã qua';
-  const hasErrors = Object.keys(errors).length > 0 || Object.keys(metricErrors).length > 0;
-  const show = (key: string) => (attempted ? errors[key] : undefined);
+  const f = useFormErrors<string>(errors, { fieldErrors: mapServerFieldErrors(action.fieldErrors, prescriptions), field: action.field, error: action.error });
+  const show = f.show;
+  const edited = () => {
+    if (action.field && action.field !== 'confirmAbnormal') action.clearError();
+  };
+  const leaveConfirmModal = useLeaveConfirm(!finished && (changed || !!reason.trim()), 'Phần sửa buổi khám chưa được lưu. Rời trang thì mất phần đã sửa.');
 
   const needsConfirm = action.field === 'confirmAbnormal';
 
   const submit = (confirm = false) => {
-    setAttempted(true);
-    if (!changed) return;
-    if (hasErrors) {
-      scrollToFirstError(formRef.current ?? document);
+    if (!changed) {
+      setNoChangeTried(true);
       return;
     }
+    if (!f.attempt(formRef.current ?? document)) return;
     const input: VisitUpdateInput = { reason: reason.trim() };
     if (diagnosisChanged) input.diagnosis = diagnosis.trim() || null;
     if (careChanged) input.careInstructions = careInstructions.trim() || null;
@@ -254,6 +266,7 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
     action.run(
       () => updateVisit(record.id, input),
       (result) => {
+        flushSync(() => setFinished(true));
         if (result.healthOutcome === 'KEPT_LATER_CHANGE' && result.laterHealthChange) {
           const later = result.laterHealthChange;
           toast.push(
@@ -279,7 +292,7 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
       <PageHeader
         back={<BackLink to={back}>Quay lại</BackLink>}
         title="Sửa buổi khám"
-        description={`${visitKindLabel[record.kind]} lúc ${formatDateTime(record.examDate)}. Thời điểm khám, kết luận và chi phí không sửa ở đây.`}
+        description={`${visitKindLabel[record.kind]} lúc ${formatDateTime(record.examDate)}, không sửa được thời điểm, kết luận và chi phí.`}
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
@@ -306,9 +319,18 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
                 required
                 name="initialDiagnosis"
                 error={show('initialDiagnosis')}
+                onBlur={f.blur('initialDiagnosis')}
                 counter={<CharCount value={initialDiagnosis} max={2000} />}
               >
-                <Input value={initialDiagnosis} maxLength={2000} onChange={(event) => setInitialDiagnosis(event.target.value)} className={cn(show('initialDiagnosis') && invalidClass)} />
+                <Input
+                  value={initialDiagnosis}
+                  maxLength={2000}
+                  onChange={(event) => {
+                    setInitialDiagnosis(event.target.value);
+                    edited();
+                  }}
+                  className={cn(show('initialDiagnosis') && invalidClass)}
+                />
               </Field>
             )}
           </FormSection>
@@ -329,14 +351,15 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
               <MetricFields
                 types={measuredTypes}
                 values={metrics}
-                errors={metricErrors}
+                errors={Object.fromEntries(measuredTypes.map((type) => [type, show(`metric.${type}`)]))}
+                onBlur={(type) => f.touch(`metric.${type}`)}
                 onChange={(type, value) => {
                   setMetrics((current) => ({ ...current, [type]: value }));
                   if (needsConfirm) action.clearError();
                 }}
               />
             ) : (
-              <p className="text-sm text-gray-500">Buổi khám này không ghi số đo. Số đo mới ghi ở tab Chỉ số cơ thể của ngựa.</p>
+              <p className="text-sm text-gray-500">Buổi khám này không ghi số đo.</p>
             )}
             <Field label="Chẩn đoán và hướng điều trị" counter={<CharCount value={diagnosis} max={4000} />}>
               <Textarea value={diagnosis} maxLength={4000} onChange={(event) => setDiagnosis(event.target.value)} rows={5} className="min-h-32" />
@@ -344,7 +367,19 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
           </FormSection>
 
           <FormSection icon={<HeartPulse size={16} />} title="Sức khỏe sau khám">
-            <HealthPicker value={healthAfter} onChange={setHealthAfter} current={record.resultingStatus} />
+            <div data-field="healthAfter" data-invalid={show('healthAfter') ? 'true' : undefined}>
+              <HealthPicker
+                value={healthAfter}
+                onChange={(value) => {
+                  setHealthAfter(value);
+                  f.touch('healthAfter');
+                }}
+                current={record.resultingStatus}
+                allowed={health.allowed}
+                note={health.note}
+                error={show('healthAfter')}
+              />
+            </div>
             {healthChanged && laterChangeLikely && (
               <Notice tone="info">
                 Sức khỏe hiện tại của ngựa là {healthLabel[horse.healthStatus]}, đã đổi sau buổi khám này. Sửa ở đây chỉ đổi kết quả của buổi khám, sức khỏe ngựa giữ nguyên.
@@ -352,15 +387,23 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
             )}
           </FormSection>
 
-          <PrescriptionSection rows={prescriptions} onChange={setPrescriptions} show={show} />
+          <PrescriptionSection
+            rows={prescriptions}
+            onChange={(rows) => {
+              setPrescriptions(rows);
+              edited();
+            }}
+            show={show}
+            blur={f.blur}
+          />
 
           {(inCase || injuries.length > 0) && (
             <FormSection icon={<Bandage size={16} />} title={inCase ? 'Chấn thương và hẹn tái khám' : 'Chấn thương'}>
               {injuries.length === 0 ? (
-                <p className="text-sm text-gray-500">Buổi khám này không ghi chấn thương. Vết mới ghi ở buổi tái khám.</p>
+                <p className="text-sm text-gray-500">Buổi khám này không ghi chấn thương.</p>
               ) : (
                 <div className="space-y-2.5">
-                  <p className="text-xs font-medium text-gray-500">Vùng và loại chỉ đổi được ở vết phát hiện tại buổi này. Vết mới ghi ở buổi tái khám.</p>
+                  <p className="text-xs font-medium text-gray-500">Vùng và loại chỉ đổi được ở vết phát hiện tại buổi này.</p>
                   {injuries.map((row) =>
                     row.removed ? (
                       <div key={row.injuryId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-50/60 px-3 py-2.5 text-sm ring-1 ring-red-100">
@@ -423,10 +466,20 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
                   label="Hẹn tái khám"
                   name="nextVisitAt"
                   error={show('nextVisitAt')}
+                  onBlur={f.blur('nextVisitAt')}
                   hint={caseClosed ? 'Bệnh án đã đóng, không hẹn tái khám.' : 'Bỏ trống là bỏ lịch tái khám của buổi này.'}
                   className="sm:max-w-xs"
                 >
-                  <DateTimePicker value={nextVisitAt} min={`${todayKey()}T00:00`} onChange={setNextVisitAt} invalid={!!show('nextVisitAt')} disabled={caseClosed} />
+                  <DateTimePicker
+                    value={nextVisitAt}
+                    min={`${todayKey()}T00:00`}
+                    onChange={(value) => {
+                      setNextVisitAt(value);
+                      edited();
+                    }}
+                    invalid={!!show('nextVisitAt')}
+                    disabled={caseClosed}
+                  />
                 </Field>
               )}
             </FormSection>
@@ -463,11 +516,23 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
                 {careChanged && <Outcome>Sửa ghi chú chăm sóc cho Groom</Outcome>}
               </ul>
             ) : (
-              <p className="text-sm text-gray-500">Chưa đổi gì. Sửa các ô bên trái rồi ghi lý do.</p>
+              <p role={noChangeTried ? 'alert' : undefined} className={cn('text-sm', noChangeTried ? 'font-medium text-red-600' : 'text-gray-500')}>
+                {noChangeTried ? 'Chưa có thay đổi. Sửa ít nhất một ô rồi lưu.' : 'Chưa đổi gì. Sửa các ô bên trái rồi ghi lý do.'}
+              </p>
             )}
 
-            <Field label="Lý do sửa" required name="reason" error={show('reason')} counter={<CharCount value={reason} max={500} />}>
-              <Textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Ghi nhầm liều thuốc" className={cn(show('reason') && invalidClass)} />
+            <Field label="Lý do sửa" required name="reason" error={show('reason')} onBlur={f.blur('reason')} counter={<CharCount value={reason} max={500} />}>
+              <Textarea
+                rows={2}
+                maxLength={500}
+                value={reason}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  edited();
+                }}
+                placeholder="Ví dụ: Ghi nhầm liều thuốc"
+                className={cn(show('reason') && invalidClass)}
+              />
             </Field>
 
             {needsConfirm && (
@@ -497,7 +562,7 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
                 </>
               ) : (
                 <>
-                  <Button className="h-11 w-full" onClick={() => submit(false)} disabled={action.pending || !changed}>
+                  <Button className="h-11 w-full" onClick={() => submit(false)} disabled={action.pending}>
                     {action.pending ? 'Đang lưu…' : 'Lưu thay đổi'}
                   </Button>
                   <Button variant="ghost" className="w-full" onClick={() => navigate(back)} disabled={action.pending}>
@@ -509,6 +574,7 @@ function EditForm({ data, back }: { data: EditData; back: string }) {
           </SaveCard>
         </aside>
       </div>
+      {leaveConfirmModal}
     </div>
   );
 }

@@ -27,7 +27,7 @@ import { careTypeLabel } from '../../lib/api-labels';
 import { formatDateTime } from '../../lib/format';
 import { links } from '../../lib/links';
 import { CareDialogs, CareDue, CareRowActions, type CareDialog } from './components/care';
-import { CARE_TYPES, assigneeText, careDaysLeft } from './components/care-rules';
+import { CARE_TYPES, assigneeText, careDaysLeft, vetLabel } from './components/care-rules';
 import { horsePlace, listMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { Count, HorseChip } from './components/parts';
@@ -89,7 +89,7 @@ function CareSchedulesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Lịch chăm sóc"
-        description="Tiêm phòng, tẩy giun, kiểm tra móng đang chờ làm. Nhắc lúc 7 giờ sáng ngày đến hạn."
+        description="Tiêm phòng, tẩy giun, kiểm tra móng đang chờ làm. Nhắc lúc 5 giờ sáng ngày đến hạn."
         actions={
           canManage && (
             <Button onClick={() => navigate(links.careNew())}>
@@ -150,10 +150,10 @@ function CareSchedulesPage() {
                 },
                 {
                   key: 'assignee',
-                  header: 'Người thực hiện',
+                  header: 'Bác sĩ được giao',
                   render: (row) =>
-                    row.assigneeType ? (
-                      <span className="text-sm text-gray-700">{assigneeText(row, (id) => people.name(id))}</span>
+                    row.assignedTo ? (
+                      <span className="text-sm text-gray-700">{assigneeText(row, (id) => people.name(id, 'vet'))}</span>
                     ) : (
                       <span className="text-xs text-gray-400">Chưa giao</span>
                     ),
@@ -196,7 +196,7 @@ function CareSchedulesPage() {
                     <HorseChip
                       horse={{ id: row.horseId, name: row.horseName }}
                       size={32}
-                      sub={`${careTypeLabel[row.type]} · ${row.assignedToName ?? 'chưa có người làm'}`}
+                      sub={`${careTypeLabel[row.type]} · ${row.assignedToName ? vetLabel(row.assignedToName) : 'chưa giao bác sĩ'}`}
                     />
                     <CareDue dueAt={`${row.dueDate}T12:00:00`} />
                   </li>

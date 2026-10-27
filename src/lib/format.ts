@@ -104,7 +104,13 @@ export function moneyError(raw: string, { label, required = true, max = 1_000_00
 
 /** Hiện số tiền đang gõ có dấu chấm ngăn cách hàng nghìn. */
 export function formatMoneyInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 13);
+  // Tiền đồng không có phần lẻ. Dán "1.500.000,50" hay "250000.50" thì bỏ phần lẻ, không gộp thành số gấp 100 lần.
+  // Dấu chấm sau 4+ chữ số liền nhau không phải dấu nghìn ("1.50" khi xóa bớt từ "1.500" vẫn là dấu nghìn).
+  let text = value.trim();
+  const comma = text.indexOf(',');
+  if (comma !== -1) text = text.slice(0, comma);
+  if (/^\d{4,}\.\d{1,2}$/.test(text)) text = text.slice(0, text.indexOf('.'));
+  const digits = text.replace(/\D/g, '').slice(0, 13);
   if (!digits) return '';
   return Number(digits).toLocaleString('vi-VN');
 }

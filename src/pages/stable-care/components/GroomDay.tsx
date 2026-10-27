@@ -1,16 +1,16 @@
 // F4.1, F4.2 — Màn Việc hôm nay của Groom (GET /grooms/me/today): mỗi ngựa đang phụ trách một thẻ gồm
 // checklist hôm nay (tick to, dễ bấm trên điện thoại), khẩu phần đang áp dụng theo bữa (nhấn bữa sắp tới),
-// lượt dắt ngựa tập hôm nay (kèm sân, mặt sân) và lịch chăm sóc đến hạn. BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
-// Thêm hai khối chung: lịch chăm sóc ở ngựa khác và lượt dắt hộ (HLV giao dắt ngựa Groom không phụ trách).
+// lượt dắt ngựa tập hôm nay (kèm sân, mặt sân). BE không trả ảnh và sức khỏe ngựa: lấy từ danh sách ngựa của tôi.
+// Thêm hai khối chung: lượt dắt hộ (HLV giao dắt ngựa Groom không phụ trách) và lịch hẹn bác sĩ hôm nay.
+// Lịch tiêm phòng, tẩy giun, kiểm tra móng là việc của bác sĩ (BE 27/10), không hiện ở đây; Groom xem trong hồ sơ ngựa.
 import { Link } from 'react-router-dom';
-import { CalendarClock, Flag, Siren, Stethoscope } from 'lucide-react';
+import { Flag, Siren, Stethoscope } from 'lucide-react';
 import type { DailyChecklist, FeedingMeal, GroomToday, GroomTodayHorse, GroomTodayRun, HorseListItem } from '../../../api/types';
-import { Avatar, Button, EmptyState, cn } from '../../../components/ui';
+import { Avatar, Button, EmptyState } from '../../../components/ui';
 import { ProgressRing } from '../../../components/ui/ProgressRing';
 import { HealthPill } from '../../../components/ui/status';
-import { careTypeLabel } from '../../../lib/api-labels';
 import { clubTime } from '../../../lib/club-time';
-import { formatDate, formatTime } from '../../../lib/format';
+import { formatTime } from '../../../lib/format';
 import { links } from '../../../lib/links';
 import { MEAL_HOUR, mealText } from '../../../lib/stable-labels';
 import { participantStatusText } from '../../../lib/training-labels';
@@ -26,7 +26,7 @@ function RunLine({ run, horseName }: { run: GroomTodayRun; horseName?: string })
   return (
     <Link to={links.today} className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition hover:bg-emerald-50">
       <Flag size={14} className="shrink-0 text-emerald-700" />
-      <span className="font-mono text-xs font-semibold">{clubTime(run.scheduledStartAt)}</span>
+      <span className="tabular-nums text-xs font-semibold">{clubTime(run.scheduledStartAt)}</span>
       <span className="min-w-0 flex-1 truncate text-gray-800">
         {horseName ? <b className="font-semibold">{horseName}</b> : 'Dắt tập'}: {run.sessionName}
         {place && <span className="text-gray-500"> · {place}</span>}
@@ -61,31 +61,6 @@ export function GroomDay({
   onReport: (horse: { id: string; name: string }) => void;
 }) {
   const byId = new Map(horses.map((horse) => [horse.id, horse]));
-
-  const others = today.otherCareSchedules ?? [];
-  // Lịch ở ngựa không phụ trách: Groom vẫn có việc dù chưa được giao ngựa nào.
-  const otherBlock = others.length > 0 && (
-    <section className="rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 xl:col-span-2">
-      <h3 className="text-sm font-semibold text-gray-900">Lịch chăm sóc ở ngựa khác</h3>
-      <p className="mt-0.5 text-xs text-gray-500">Bác sĩ giao đích danh cho bạn ở ngựa bạn không phụ trách.</p>
-      <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-        {others.map((care) => (
-          <li key={care.id}>
-            <Link
-              to={links.horseMedical(care.horseId)}
-              className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition', care.overdue ? 'bg-red-50 text-red-800 hover:bg-red-100' : 'hover:bg-gray-50')}
-            >
-              <CalendarClock size={14} className="shrink-0" />
-              <span className="min-w-0 flex-1 truncate">
-                <b className="font-semibold">{care.horseName}</b> · {careTypeLabel[care.type]}
-              </span>
-              <span className="shrink-0 text-xs">{care.overdue ? `Quá hạn từ ${formatDate(care.dueAt)}` : 'Đến hạn hôm nay'}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
 
   const assisted = today.assistedRuns ?? [];
   // Lượt dắt hộ: HLV giao Groom dắt ngựa của Groom khác, Groom vẫn có lượt dù không phụ trách ngựa nào.
@@ -127,11 +102,10 @@ export function GroomDay({
   );
 
   if (today.horses.length === 0)
-    return otherBlock || assistedBlock || vetBlock ? (
+    return assistedBlock || vetBlock ? (
       <div className="space-y-4">
         {vetBlock}
         {assistedBlock}
-        {otherBlock}
         <EmptyState title="Bạn chưa được giao ngựa nào" hint="Hỏi HLV khu để được giao ngựa." />
       </div>
     ) : (
@@ -142,7 +116,6 @@ export function GroomDay({
     <div className="grid gap-4 xl:grid-cols-2">
       {vetBlock}
       {assistedBlock}
-      {otherBlock}
       {today.horses.map((entry) => {
         const horse = byId.get(entry.horseId);
         const checklist = entry.checklist ? (ticked[entry.checklist.id] ?? entry.checklist) : null;
@@ -151,7 +124,7 @@ export function GroomDay({
         const runs = entry.trainingRuns;
         const place = [entry.barnName, entry.stallCode ? `Ô ${entry.stallCode}` : null].filter(Boolean).join(' · ');
         return (
-          <article key={entry.horseId} data-reveal className="flex flex-col rounded-3xl bg-white p-4 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-5">
+          <article key={entry.horseId} data-reveal className="flex flex-col rounded-2xl bg-white p-4 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-5">
             <header className="flex items-center gap-3">
               <Link to={links.horse(entry.horseId, 'care')} className="shrink-0">
                 <Avatar src={horse?.photoUrl ?? undefined} name={entry.horseName} size={48} className="rounded-2xl" />
@@ -167,7 +140,7 @@ export function GroomDay({
               </div>
               {checklist && (
                 <ProgressRing value={progress.done} max={progress.total} size={46}>
-                  <span className="font-mono text-[11px] font-bold text-gray-900">
+                  <span className="tabular-nums text-[11px] font-bold text-gray-900">
                     {progress.done}/{progress.total}
                   </span>
                 </ProgressRing>
@@ -200,20 +173,11 @@ export function GroomDay({
               </div>
             </div>
 
-            {(runs.length > 0 || entry.careSchedules.length > 0) && (
+            {runs.length > 0 && (
               <ul className="mt-4 space-y-1.5 border-t border-gray-100 pt-3 text-sm">
                 {runs.map((run) => (
                   <li key={run.participantId}>
                     <RunLine run={run} />
-                  </li>
-                ))}
-                {entry.careSchedules.map((care) => (
-                  <li key={care.id}>
-                    <Link to={links.horseMedical(entry.horseId)} className={cn('flex items-center gap-2 rounded-lg px-2 py-1.5 transition', care.overdue ? 'bg-red-50 text-red-800 hover:bg-red-100' : 'hover:bg-gray-50')}>
-                      <CalendarClock size={14} className="shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{careTypeLabel[care.type]}</span>
-                      <span className="shrink-0 text-xs">{care.overdue ? `Quá hạn từ ${formatDate(care.dueAt)}` : 'Đến hạn hôm nay'}</span>
-                    </Link>
                   </li>
                 ))}
               </ul>

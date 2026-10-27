@@ -1,17 +1,18 @@
 // Hồ sơ cá nhân: thông tin tài khoản, công việc của tôi (vài con số theo vai trò, bấm để đi tới trang liên quan)
 // và bảo mật (đổi mật khẩu). Quyền chi tiết của từng vai trò không hiển thị ở đây.
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, BriefcaseBusiness, KeyRound, Mail, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store/store';
 import { useAction, useService } from '../hooks/useService';
+import { useFormErrors } from '../hooks/useFormErrors';
 import { countHorses, listAllHorses } from '../api/horses';
 import { listBarns } from '../api/stable';
 import { listAllUsers } from '../api/users';
 import { getMedicalDashboard, listExamRequests } from '../api/medical';
 import { changePassword } from '../api/auth';
 import type { UserRole } from '../types/domain';
-import { Button, Card, ErrorBox, Field, PageHeader, PasswordInput, SectionTitle, Skeleton, cn, useToast } from '../components/ui';
+import { Button, Card, ErrorBox, Field, PageHeader, PasswordInput, SectionTitle, Skeleton, cn, invalidClass, useToast } from '../components/ui';
 import { roleLabel, SCOPE_TEXT } from '../lib/profile-labels';
 import { links } from '../lib/links';
 import { useCrumbs } from '../components/Breadcrumb';
@@ -120,6 +121,24 @@ export default function Profile() {
   const [confirm, setConfirm] = useState('');
   // Trang nằm ngoài menu: đường dẫn trên header chỉ có một đoạn.
   useCrumbs([{ label: 'Hồ sơ cá nhân' }], []);
+  // Lỗi hiện khi rời ô hoặc bấm Đổi mật khẩu, không hiện từ ký tự đầu tiên.
+  const errors = useMemo(
+    () => ({
+      currentPassword: !current ? 'Nhập mật khẩu hiện tại' : undefined,
+      newPassword: !next
+        ? 'Nhập mật khẩu mới'
+        : !next.trim()
+          ? 'Mật khẩu không được chỉ có khoảng trắng'
+          : next.length < 8
+            ? 'Mật khẩu tối thiểu 8 ký tự'
+            : next === current
+              ? 'Mật khẩu mới phải khác mật khẩu hiện tại'
+              : undefined,
+      confirm: !confirm ? 'Nhập lại mật khẩu mới' : confirm !== next ? 'Hai lần nhập chưa khớp' : undefined,
+    }),
+    [current, next, confirm],
+  );
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
 
   if (!user) return null;
 
@@ -131,10 +150,10 @@ export default function Profile() {
       .slice(-2)
       .map((word) => word[0])
       .join('') || '?';
-  const mismatch = confirm.length > 0 && confirm !== next;
-  const tooShort = next.length > 0 && next.length < 8;
+  const serverOnField = ['currentPassword', 'newPassword'].some((key) => action.fieldErrors[key] || action.field === key);
 
   const submitPassword = async () => {
+    if (action.pending || !f.attempt()) return;
     const done = await action.run(async () => {
       await changePassword(current, next);
       return true;
@@ -150,7 +169,7 @@ export default function Profile() {
       <PageHeader title="Hồ sơ cá nhân" />
 
       {/* Dải đầu trang */}
-      <section className="flex flex-wrap items-center gap-5 rounded-2xl bg-white p-5 shadow-[0_18px_40px_-30px_rgba(6,78,59,0.5)] ring-1 ring-gray-200/80 sm:p-6">
+      <section className="flex flex-wrap items-center gap-5 rounded-2xl bg-white p-5 shadow-card ring-1 ring-gray-200/80 sm:p-6">
         <span className="flex h-18 w-18 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-2xl font-bold text-white">{initials}</span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-2xl font-bold tracking-tight text-gray-900">{user.name}</h2>
@@ -204,24 +223,33 @@ export default function Profile() {
         <Card className="lg:col-span-5">
           <SectionTitle icon={<KeyRound size={16} />}>Bảo mật</SectionTitle>
           <div className="space-y-3">
-            {action.error && action.field !== 'currentPassword' && <ErrorBox message={action.error} />}
-            <Field label="Mật khẩu hiện tại" error={action.fieldErrors.currentPassword}>
+            {action.error && !serverOnField && <ErrorBox message={action.error} />}
+            <Field label="Mật khẩu hiện tại" required name="currentPassword" error={f.show('currentPassword')} onBlur={f.blur('currentPassword')}>
               <PasswordInput
                 value={current}
                 onChange={(event) => {
                   setCurrent(event.target.value);
-                  if (action.field === 'currentPassword') action.clearError();
+                  if (action.error) action.clearError();
                 }}
                 autoComplete="current-password"
+                className={cn(f.show('currentPassword') && invalidClass)}
               />
             </Field>
-            <Field label="Mật khẩu mới" error={tooShort ? 'Tối thiểu 8 ký tự' : undefined}>
-              <PasswordInput value={next} onChange={(event) => setNext(event.target.value)} autoComplete="new-password" />
+            <Field label="Mật khẩu mới" required name="newPassword" error={f.show('newPassword')} onBlur={f.blur('newPassword')} hint="Tối thiểu 8 ký tự">
+              <PasswordInput
+                value={next}
+                onChange={(event) => {
+                  setNext(event.target.value);
+                  if (action.error) action.clearError();
+                }}
+                autoComplete="new-password"
+                className={cn(f.show('newPassword') && invalidClass)}
+              />
             </Field>
-            <Field label="Nhập lại mật khẩu mới" error={mismatch ? 'Hai lần nhập chưa khớp' : undefined}>
-              <PasswordInput value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
+            <Field label="Nhập lại mật khẩu mới" required name="confirm" error={f.show('confirm')} onBlur={f.blur('confirm')}>
+              <PasswordInput value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" className={cn(f.show('confirm') && invalidClass)} />
             </Field>
-            <Button className="w-full" disabled={action.pending || !current || next.length < 8 || next !== confirm} onClick={submitPassword}>
+            <Button className="w-full" disabled={action.pending} onClick={submitPassword}>
               {action.pending ? 'Đang đổi…' : 'Đổi mật khẩu'}
             </Button>
             <ul className="space-y-1 border-t border-gray-100 pt-3 text-xs text-gray-500">

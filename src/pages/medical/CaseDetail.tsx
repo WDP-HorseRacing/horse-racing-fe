@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Bandage, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
-import { useService } from '../../hooks/useService';
+import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
 import { getHorse } from '../../api/horses';
-import { getCase, getInjuries, listHorseExamRequests, listHorseLocks } from '../../api/medical';
+import { getCase, getInjuries, listHorseExamRequests, listHorseLocks, updateCaseConclusion } from '../../api/medical';
 import type { MedicalRecord, TrainingLock } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Avatar, Button, Card, EmptyState, ErrorBox, NotFound, Notice, SectionTitle, Skeleton, cn } from '../../components/ui';
+import { Avatar, Button, CancelButton, Card, CharCount, EmptyState, ErrorBox, Field, Modal, NotFound, Notice, SectionTitle, Skeleton, Textarea, cn, invalidClass, useToast } from '../../components/ui';
 import { CaseStatusPill, HealthPill } from '../../components/ui/status';
 import { healthHint } from '../../lib/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
@@ -77,6 +78,7 @@ export default function CaseDetail() {
   }, [horseId, isOwner]);
   const people = usePeople(extra.data?.horse.groom ? [extra.data.horse.groom] : []);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [editingConclusion, setEditingConclusion] = useState(false);
   const navigate = useNavigate();
   const caseTitle = detail.data && extra.data ? `${extra.data.horse.name} · ${detail.data.initialDiagnosis}` : null;
   useCrumbs(caseTitle ? [{ label: caseTitle }] : null);
@@ -181,9 +183,16 @@ export default function CaseDetail() {
         <div className="space-y-4 lg:col-span-8">
           {item.status === 'CLOSED' && (
             <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200/80">
-              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <FolderCheck size={16} className="text-emerald-600" /> Kết luận cuối · {formatDateTime(item.closedAt)}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <FolderCheck size={16} className="text-emerald-600" /> Kết luận cuối · {formatDateTime(item.closedAt)}
+                </p>
+                {isVet && !transferred && (
+                  <Button size="sm" variant="secondary" onClick={() => setEditingConclusion(true)}>
+                    Đính chính kết luận
+                  </Button>
+                )}
+              </div>
               {item.finalConclusion && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{item.finalConclusion}</p>}
             </div>
           )}
@@ -315,6 +324,101 @@ export default function CaseDetail() {
           }
         />
       )}
+
+      {editingConclusion && (
+        <EditConclusionModal
+          caseId={item.id}
+          currentConclusion={item.finalConclusion ?? ''}
+          onClose={() => setEditingConclusion(false)}
+          onDone={() => {
+            setEditingConclusion(false);
+            reload();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function EditConclusionModal({
+  caseId,
+  currentConclusion,
+  onClose,
+  onDone,
+}: {
+  caseId: string;
+  currentConclusion: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [conclusion, setConclusion] = useState(currentConclusion);
+  const [reason, setReason] = useState('');
+  const action = useAction();
+  const toast = useToast();
+
+  const serverErrors = action.fieldErrors.finalConclusion ? { ...action.fieldErrors, conclusion: action.fieldErrors.finalConclusion } : action.fieldErrors;
+  const f = useFormErrors(
+    {
+      conclusion: !conclusion.trim() ? 'Nhập kết luận cuối' : conclusion.trim() === currentConclusion.trim() ? 'Chưa có thay đổi' : undefined,
+      reason: reason.trim() ? undefined : 'Nhập lý do đính chính',
+    },
+    { fieldErrors: serverErrors },
+  );
+
+  const submit = async () => {
+    if (!f.attempt()) return;
+    const res = await action.run(() =>
+      updateCaseConclusion(caseId, {
+        finalConclusion: conclusion.trim(),
+        reason: reason.trim(),
+      }),
+    );
+    if (res) {
+      toast.push('Đã đính chính kết luận cuối', 'success');
+      onDone();
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Đính chính kết luận cuối"
+      description="Bệnh án đã đóng, sửa kết luận cần ghi lý do."
+      dirty={conclusion !== currentConclusion || reason.trim() !== ''}
+      busy={action.pending}
+      footer={
+        <>
+          <CancelButton variant="secondary" />
+          <Button disabled={action.pending} onClick={submit}>
+            {action.pending ? 'Đang lưu…' : 'Lưu kết luận'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {action.error && !serverErrors.conclusion && !serverErrors.reason && <ErrorBox message={action.error} />}
+        <Field label="Kết luận cuối mới" required name="conclusion" error={f.show('conclusion')} onBlur={f.blur('conclusion')} counter={<CharCount value={conclusion} max={4000} />}>
+          <Textarea
+            rows={4}
+            maxLength={4000}
+            value={conclusion}
+            onChange={(e) => setConclusion(e.target.value)}
+            placeholder="Nhập kết luận chuyên môn"
+            className={cn(f.show('conclusion') && invalidClass)}
+          />
+        </Field>
+        <Field label="Lý do đính chính" required name="reason" error={f.show('reason')} onBlur={f.blur('reason')} counter={<CharCount value={reason} max={500} />}>
+          <Textarea
+            rows={2}
+            maxLength={500}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Ví dụ: Ghi nhầm thông tin phục hồi"
+            className={cn(f.show('reason') && invalidClass)}
+          />
+        </Field>
+      </div>
+    </Modal>
   );
 }

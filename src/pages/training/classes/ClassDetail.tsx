@@ -81,7 +81,7 @@ export default function ClassDetail() {
 function ClassSkeleton() {
   return (
     <div className="space-y-4">
-      <div className="skeleton h-40 w-full rounded-3xl" />
+      <div className="skeleton h-40 w-full rounded-2xl" />
       <div className="skeleton h-72 w-full rounded-2xl" />
     </div>
   );
@@ -161,7 +161,7 @@ function ClassView({
     <div ref={scope} className="space-y-5">
       <BackLink fallback={links.classes} />
 
-      <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
+      <section className="turf-soft rounded-2xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="font-mono text-sm text-gray-500">{item.code}</p>
@@ -205,7 +205,7 @@ function ClassView({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-12 [&>*]:min-w-0">
           <div data-class-fact className="rounded-2xl bg-white/80 p-4 ring-1 ring-emerald-900/10 sm:col-span-5">
-            <div className="flex justify-between font-mono text-xs text-gray-500">
+            <div className="flex justify-between tabular-nums text-xs text-gray-500">
               <span>{formatDate(item.startDate)}</span>
               <span>
                 ngày {Math.max(0, elapsed)} trên {totalDays}
@@ -218,7 +218,7 @@ function ClassView({
               Buổi kế tiếp:{' '}
               {nextSession ? (
                 <Link to={links.session(nextSession.id)} className="font-medium text-gray-900 hover:text-emerald-800">
-                  <span className="font-mono">
+                  <span className="tabular-nums">
                     {formatDate(nextSession.scheduledStartAt).slice(0, 5)} {clubTime(nextSession.scheduledStartAt)}
                   </span>{' '}
                   {nextSession.name}
@@ -230,7 +230,7 @@ function ClassView({
           </div>
           <div data-class-fact className="rounded-2xl bg-white/80 p-4 ring-1 ring-emerald-900/10 sm:col-span-3">
             <p className="text-xs text-gray-500">Đã xếp so với tối thiểu</p>
-            <p className="font-mono text-lg font-bold tabular-nums">
+            <p className="tabular-nums text-lg font-bold ">
               {formatTotalMinutes(scheduled)}
               <span className="text-sm font-medium text-gray-400"> / {formatTotalMinutes(minimum)}</span>
             </p>
@@ -239,14 +239,14 @@ function ClassView({
           </div>
           <div data-class-fact className="rounded-2xl bg-white/80 p-4 ring-1 ring-emerald-900/10 sm:col-span-2">
             <p className="text-xs text-gray-500">Buổi đã xong</p>
-            <p className="font-mono text-2xl font-bold tabular-nums">
+            <p className="tabular-nums text-2xl font-bold ">
               {done}
               <span className="text-base text-gray-400">/{counted.length}</span>
             </p>
           </div>
           <div data-class-fact className="rounded-2xl bg-white/80 p-4 ring-1 ring-emerald-900/10 sm:col-span-2">
             <p className="text-xs text-gray-500">Ngựa đang học</p>
-            <p className="font-mono text-2xl font-bold tabular-nums">
+            <p className="tabular-nums text-2xl font-bold ">
               {activeHorses}
               <span className="text-base text-gray-400">/{item.maxHorses}</span>
             </p>

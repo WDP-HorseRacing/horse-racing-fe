@@ -298,7 +298,7 @@ export function ScoreHorseshoe({ score, size = 132 }: { score: number; size?: nu
         const rad = ((deg - 90) * Math.PI) / 180;
         return <circle key={deg} cx={60 + radius * Math.cos(rad)} cy={60 + radius * Math.sin(rad)} r={1.6} className="fill-white" />;
       })}
-      <text x={60} y={66} textAnchor="middle" className="fill-gray-900 font-mono text-[26px] font-bold">
+      <text x={60} y={66} textAnchor="middle" className="fill-gray-900 tabular-nums text-[26px] font-bold">
         {score}
       </text>
       <text x={60} y={84} textAnchor="middle" className="fill-gray-400 text-[10px]">

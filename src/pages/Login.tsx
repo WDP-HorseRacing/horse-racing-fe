@@ -17,6 +17,7 @@ gsap.registerPlugin(useGSAP);
 const REASON_TEXT: Record<string, string> = {
   expired: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.',
   elsewhere: 'Bạn đã đăng xuất ở một tab khác. Đăng nhập lại để tiếp tục.',
+  locked: 'Phiên đăng nhập đã kết thúc. Nếu tài khoản bị khóa, liên hệ Quản lý câu lạc bộ.',
 };
 
 const HIGHLIGHTS = [
@@ -183,7 +184,7 @@ export const Login = () => {
               type="button"
               onClick={loginWithGoogle}
               disabled={googlePending || isLoading}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-[15px] font-semibold text-gray-800 ring-1 ring-gray-200 transition hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_-20px_rgba(6,78,59,0.55)] hover:ring-emerald-300 active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-[15px] font-semibold text-gray-800 ring-1 ring-gray-200 transition hover:bg-emerald-50/40 hover:shadow-raised hover:ring-emerald-300 active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
             >
               {googlePending ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-emerald-600" /> : <GoogleMark />}
               {googlePending ? 'Đang chuyển tới Google…' : 'Tiếp tục với Google'}
@@ -242,7 +243,7 @@ export const Login = () => {
             <button
               type="submit"
               disabled={isLoading || googlePending}
-              className="group flex h-12 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 font-semibold text-white shadow-[0_16px_30px_-18px_rgba(6,78,59,0.9)] transition-colors duration-150 hover:bg-emerald-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+              className="group flex h-12 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 font-semibold text-white shadow-raised transition-colors duration-150 hover:bg-emerald-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />

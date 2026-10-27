@@ -11,7 +11,7 @@ import { PeriodBar } from '../../components/PeriodBar';
 import { EmptyState, ErrorBox, FilterSelect, NotFound, PageHeader, Pill, Sheet, Skeleton, cn, type PillTone } from '../../components/ui';
 import { usePeriod } from '../../hooks/usePeriod';
 import { useService } from '../../hooks/useService';
-import { AUDIT_ACTIONS, auditActionText, auditEntityText, entityLabel, featureLabel } from '../../lib/audit-labels';
+import { AUDIT_ACTIONS, auditActionText, auditEntityText, auditFeatureText, entityLabel, featureLabel } from '../../lib/audit-labels';
 import { clubDateKey } from '../../lib/club-time';
 import { now } from '../../lib/clock';
 import { formatDate, formatDateTime, formatTime } from '../../lib/format';
@@ -72,6 +72,7 @@ export default function AuditLogPage() {
   const [actorId, setActorId] = useState('');
   const [action, setAction] = useState<AuditAction | ''>('');
   const [entityType, setEntityType] = useState('');
+  const [feature, setFeature] = useState('');
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
   useCrumbs([{ label: 'Nhật ký thao tác' }]);
@@ -79,7 +80,7 @@ export default function AuditLogPage() {
   const allowed = can(user, 'audit.view');
   const users = useService(() => (allowed ? listAllUsers() : Promise.resolve([])), [allowed]);
   const names = useMemo(() => new Map((users.data ?? []).map((entry) => [entry.id, entry.fullName] as const)), [users.data]);
-  const filterKey = `${period.from}|${period.to}|${actorId}|${action}|${entityType}`;
+  const filterKey = `${period.from}|${period.to}|${actorId}|${action}|${entityType}|${feature}`;
   // Đổi bộ lọc thì về trang 1.
   const [lastKey, setLastKey] = useState(filterKey);
   if (lastKey !== filterKey) {
@@ -90,7 +91,16 @@ export default function AuditLogPage() {
     () =>
       !allowed || period.invalid
         ? Promise.resolve(null)
-        : listAuditLogs({ page, limit: PAGE_SIZE, from: period.from, to: period.to, actorId: actorId || undefined, action: action || undefined, entityType: entityType || undefined }),
+        : listAuditLogs({
+            page,
+            limit: PAGE_SIZE,
+            from: period.from,
+            to: period.to,
+            actorId: actorId || undefined,
+            action: action || undefined,
+            entityType: entityType || undefined,
+            feature: feature || undefined,
+          }),
     [allowed, page, filterKey, period.invalid],
   );
   const groups = useMemo(() => groupByDay(logs.data?.items ?? []), [logs.data]);
@@ -121,6 +131,14 @@ export default function AuditLogPage() {
               </option>
             ))}
           </FilterSelect>
+          <FilterSelect value={feature} onChange={setFeature} label="Chức năng">
+            <option value="">Mọi chức năng</option>
+            {Object.entries(auditFeatureText).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
           <FilterSelect value={entityType} onChange={setEntityType} label="Đối tượng">
             <option value="">Mọi đối tượng</option>
             {ENTITY_FILTERS.map((value) => (
@@ -147,7 +165,7 @@ export default function AuditLogPage() {
                 {group.items.map((item) => (
                   <li key={item.id}>
                     <button type="button" onClick={() => setOpenId(item.id)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-emerald-50/40">
-                      <span className="w-12 shrink-0 pt-0.5 font-mono text-xs tabular-nums text-gray-500">{formatTime(item.createdAt)}</span>
+                      <span className="w-12 shrink-0 pt-0.5 tabular-nums text-xs  text-gray-500">{formatTime(item.createdAt)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className={cn('font-semibold', !item.actor && item.action === 'LOGIN_FAILED' ? 'text-red-800' : 'text-gray-900')}>{actorText(item, names)}</span>

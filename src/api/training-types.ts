@@ -163,8 +163,8 @@ export interface EnrollableHorse {
 export interface UpdateClassInput {
   code?: string;
   name?: string;
-  description?: string;
-  raceAptitude?: RaceAptitude;
+  description?: string | null;
+  raceAptitude?: RaceAptitude | null;
   maxHorses?: number;
   startDate?: string;
 }
