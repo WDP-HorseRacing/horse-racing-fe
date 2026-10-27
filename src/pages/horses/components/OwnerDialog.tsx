@@ -1,9 +1,9 @@
 // CM gán chủ sở hữu cho ngựa chưa có chủ. Ngựa đã có chủ thì đổi chủ bằng chuyển nhượng nội bộ (OwnershipTransferDialog).
 import { useEffect, useState } from 'react';
-import { useAction, useService } from '../../../hooks/useService';
+import { useAction } from '../../../hooks/useService';
 import { updateHorse } from '../../../api/horses';
-import { listAllUsers } from '../../../api/users';
-import { Button, ErrorBox, Field, Modal, Notice, Select, useToast } from '../../../components/ui';
+import { Button, CancelButton, ErrorBox, Field, Modal, Notice, useToast } from '../../../components/ui';
+import { OwnerSelect } from './OwnerSelect';
 
 export default function OwnerDialog({
   open,
@@ -18,18 +18,20 @@ export default function OwnerDialog({
 }) {
   const toast = useToast();
   const action = useAction();
-  const owners = useService(() => (open ? listAllUsers({ role: 'HORSE_OWNER', status: 'ACTIVE' }) : Promise.resolve([])), [open]);
   const [ownerId, setOwnerId] = useState('');
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setOwnerId('');
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const submit = async () => {
-    if (!ownerId) return;
+    setAttempted(true);
+    if (!ownerId || action.pending) return;
     const done = await action.run(() => updateHorse(horse.id, { version: horse.version, ownerId }));
     if (done) {
       toast.push('Đã gán chủ sở hữu', 'success');
@@ -45,29 +47,21 @@ export default function OwnerDialog({
       title={`Gán chủ sở hữu cho ${horse.name}`}
       description="Mỗi ngựa có một chủ sở hữu."
       dirty={ownerId !== ''}
+      busy={action.pending}
       onSave={() => void submit()}
       saveLabel="Gán chủ"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !ownerId}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Gán chủ'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Chủ sở hữu" required hint="Chủ ngựa đang hoạt động.">
-          <Select value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
-            <option value="">{owners.loading && !owners.data ? 'Đang tải…' : 'Chọn chủ sở hữu'}</option>
-            {(owners.data ?? []).map((owner) => (
-              <option key={owner.id} value={owner.id}>
-                {owner.fullName} · {owner.email}
-              </option>
-            ))}
-          </Select>
+        <Field label="Chủ sở hữu" name="ownerId" required error={attempted && !ownerId ? 'Chọn chủ sở hữu' : undefined} hint="Chủ ngựa đang hoạt động.">
+          <OwnerSelect value={ownerId} invalid={attempted && !ownerId} onChange={(id) => setOwnerId(id)} />
         </Field>
         <Notice tone="info">Chủ sở hữu bắt đầu từ lúc lưu. Sau này muốn đổi chủ thì dùng Chuyển chủ trên hồ sơ ngựa.</Notice>
         {action.error && <ErrorBox message={action.error} />}

@@ -14,12 +14,12 @@ export const SUPPLY_CATEGORIES: SupplyCategory[] = ['FEED', 'SUPPLEMENT', 'MEDIC
 /** Chỉ hai loại này được đưa vào khẩu phần. */
 export const FEEDING_CATEGORIES: SupplyCategory[] = ['FEED', 'SUPPLEMENT'];
 
-/** Đơn vị chọn được theo loại vật tư (BE nhận chuỗi tự do, FE chỉ cho chọn để khỏi gõ sai). */
-export const SUPPLY_UNITS: Record<SupplyCategory, string[]> = {
-  FEED: ['kg', 'g', 'tấn', 'bao', 'gói', 'túi', 'bó', 'kiện', 'thùng'],
-  SUPPLEMENT: ['kg', 'g', 'gói', 'túi', 'hộp', 'lọ', 'hũ', 'chai', 'lít', 'ml', 'viên', 'liều'],
-  MEDICINE: ['viên', 'vỉ', 'hộp', 'lọ', 'chai', 'ống', 'tuýp', 'liều', 'gói', 'ml', 'lít', 'g', 'mg'],
-  EQUIPMENT: ['cái', 'chiếc', 'bộ', 'đôi', 'cặp', 'cuộn', 'tấm', 'sợi', 'hộp', 'thùng'],
+/** Gợi ý đơn vị theo loại vật tư cho ô Đơn vị (BE nhận chữ tự do 1-32 ký tự). */
+export const SUPPLY_UNIT_HINTS: Record<SupplyCategory, string> = {
+  FEED: 'kg, bao, bó…',
+  SUPPLEMENT: 'kg, gói, lọ…',
+  MEDICINE: 'viên, lọ, ống…',
+  EQUIPMENT: 'cái, bộ, đôi…',
 };
 
 export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
@@ -27,12 +27,14 @@ export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
   APPROVED: 'Đã duyệt',
   REJECTED: 'Từ chối',
   FULFILLED: 'Đã cấp',
+  CANCELLED: 'Đã hủy',
 };
 
 export const movementTypeText: Record<SupplyMovementType, string> = {
   OPENING: 'Tồn ban đầu',
   RESTOCK: 'Nhập hàng',
   USAGE: 'Xuất dùng',
+  USAGE_REVERSAL: 'Hủy lần xuất',
   COUNT_ADJUST: 'Kiểm kê (cũ)',
 };
 
@@ -62,6 +64,7 @@ export const checklistStatusText: Record<ChecklistStatus, string> = {
   IN_PROGRESS: 'Đang làm',
   COMPLETED: 'Xong',
   INCOMPLETE: 'Không hoàn thành',
+  CANCELLED: 'Đã hủy',
 };
 
 export const incidentStatusText: Record<IncidentStatus, string> = {
@@ -119,6 +122,8 @@ const MAX_INTEGER_DIGITS = 10;
 /** Giữ lại chữ số và một dấu thập phân, cắt phần lẻ còn 2 chữ số. Chưa đổi dấu, để người dùng gõ tiếp tự nhiên. */
 export function sanitizeQuantity(raw: string): string {
   let text = raw.replace(/[^\d.,]/g, '');
+  // "1.200" hay "12.500,5" là cách app hiển thị số (vi-VN): dấu chấm ngăn nghìn, không phải dấu thập phân.
+  if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(text)) text = text.replace(/\./g, '');
   const separator = text.search(/[.,]/);
   if (separator === -1) return text.slice(0, MAX_INTEGER_DIGITS);
   const whole = text.slice(0, separator).slice(0, MAX_INTEGER_DIGITS);

@@ -16,7 +16,6 @@ import { formatDate, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
 import { HorseChip } from './components/parts';
 import { todayKey } from './components/utils';
-import { HIDDEN_COST_TEXT, isCostHidden, isOwnClosed } from './components/case-cost';
 
 export default function CaseList() {
   const user = useStore((state) => state.currentUser);
@@ -27,9 +26,9 @@ function StaffCases() {
   const navigate = useNavigate();
   const user = useStore((state) => state.currentUser);
   const canOpen = can(user, 'case.open');
-  const board = useService(() => getMedicalDashboard(), []);
-  // HT chỉ thấy bệnh án của ngựa trong khu mình phụ trách: BE lọc ở bảng điều khiển y tế.
+  // HT chỉ xem bệnh án của ngựa trong khu mình phụ trách (BE trả mọi khu nếu không gửi mine).
   const trainer = user?.role === 'HEAD_TRAINER';
+  const board = useService(() => getMedicalDashboard(trainer ? { mine: true } : {}), [trainer]);
   const [search, setSearch] = useState('');
   const all = useMemo(() => board.data?.openCases ?? [], [board.data]);
   const rows = useMemo(() => {
@@ -134,14 +133,13 @@ function OwnerCases() {
   if (list.error) return <ErrorBox message={list.error} />;
 
   const closed = all.filter((row) => row.status === 'CLOSED');
-  // Tổng chỉ gồm bệnh án đóng trong thời gian bạn sở hữu. Bệnh án của chủ trước bị ẩn chi phí.
-  const ownClosed = closed.filter(isOwnClosed);
-  const totalCost = ownClosed.reduce((sum, row) => sum + (row.totalCost ?? 0), 0);
+  // BE chỉ cộng các buổi khám trong thời gian bạn sở hữu, có cả bệnh án đang điều trị.
+  const totalCost = all.reduce((sum, row) => sum + (row.totalCost ?? 0), 0);
   const count = (value: CaseStatus) => all.filter((row) => row.status === value).length;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Bệnh án của ngựa tôi" description="Quá trình điều trị của ngựa bạn sở hữu. Chi phí chỉ hiện khi bệnh án đã đóng." />
+      <PageHeader title="Bệnh án của ngựa tôi" description="Quá trình điều trị của ngựa bạn sở hữu. Chi phí cộng từ các buổi khám trong thời gian bạn sở hữu, có ngay từ buổi khám đầu." />
 
       <FilterTabs
         active={status}
@@ -156,7 +154,7 @@ function OwnerCases() {
           <>
             <SearchInput value={search} onChange={setSearch} placeholder="Tìm theo tên ngựa hoặc chẩn đoán…" className="min-w-60 flex-1" />
             <p className="text-sm text-gray-500">
-              Tổng chi phí {ownClosed.length} bệnh án đã đóng{ownClosed.length < closed.length ? ' trong thời gian bạn sở hữu' : ''}{' '}
+              Tổng chi phí khám, điều trị{' '}
               <span className="font-semibold tabular-nums text-gray-900">{formatMoney(totalCost)}</span>
             </p>
           </>
@@ -191,14 +189,10 @@ function OwnerCases() {
               header: 'Chi phí',
               className: 'text-right',
               render: (row) =>
-                row.status === 'CLOSED' ? (
-                  isCostHidden(row) ? (
-                    <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
-                  ) : (
-                    <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost)}</span>
-                  )
+                row.status === 'CANCELLED' ? (
+                  <span className="text-xs text-gray-500">Không có</span>
                 ) : (
-                  <span className="text-xs text-gray-500">{row.status === 'OPEN' ? 'Chốt khi đóng' : '—'}</span>
+                  <span className="font-semibold tabular-nums text-gray-900">{formatMoney(row.totalCost ?? 0)}</span>
                 ),
             },
           ]}

@@ -1,14 +1,14 @@
 // Dòng thời gian buổi khám — thẻ chỉ đọc. Buổi đã hủy vẫn hiện (mờ, kèm lý do hủy).
 // Chấm mốc xám; chỉ buổi để ngựa ở Chấn thương / Cách ly mới có chấm đỏ.
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Ban, Bandage, CalendarClock, FolderOpen, NotebookPen, Pill as PillIcon, RotateCcw } from 'lucide-react';
+import { Ban, Bandage, CalendarClock, FolderOpen, NotebookPen, Pencil, Pill as PillIcon, RotateCcw, Wallet } from 'lucide-react';
 import { Button, Pill, cn } from '../../../components/ui';
 import { HealthPill } from '../../../components/ui/status';
 import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, recoveryLabel, visitKindLabel } from '../../../lib/api-labels';
-import { formatDate, formatDateTime } from '../../../lib/format';
+import { formatDate, formatDateTime, formatMoney } from '../../../lib/format';
 import { links } from '../../../lib/links';
-import type { Injury, InjuryTimelineItem, MedicalRecord } from '../../../api/types';
+import type { Injury, MedicalRecord, TrackedInjury } from '../../../api/types';
+import { HIDDEN_COST_TEXT, isCostHidden } from './case-cost';
 import type { People } from './people';
 import { isSevere } from './utils';
 
@@ -34,6 +34,8 @@ export function VisitCard({
   people,
   caseLabel,
   onVoid,
+  onAdjustCost,
+  onEdit,
   compact = false,
 }: {
   record: MedicalRecord;
@@ -41,8 +43,12 @@ export function VisitCard({
   /** Hiện liên kết bệnh án (dùng ở danh sách buổi khám của ngựa). */
   caseLabel?: string;
   onVoid?: () => void;
+  onAdjustCost?: () => void;
+  onEdit?: () => void;
   compact?: boolean;
 }) {
+  // HT không có key cost: không hiện dòng chi phí.
+  const costVisible = 'cost' in record;
   const voided = !!record.voidedAt;
   const opening = !!record.caseId && record.conclusion === 'ISSUE';
   return (
@@ -159,18 +165,40 @@ export function VisitCard({
           </p>
         )}
 
-        {record.nextVisitAt && (
-          <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-gray-500">
-            <CalendarClock size={13} className="text-gray-400" /> Hẹn tái khám {formatDateTime(record.nextVisitAt)}
+        {(record.nextVisitAt || costVisible) && (
+          <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+            {record.nextVisitAt && (
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock size={13} className="text-gray-400" /> Hẹn tái khám {formatDateTime(record.nextVisitAt)}
+              </span>
+            )}
+            {costVisible && (
+              <span className="inline-flex items-center gap-1.5">
+                <Wallet size={13} className="text-gray-400" /> Chi phí buổi khám{' '}
+                {isCostHidden(record) ? HIDDEN_COST_TEXT : <span className="font-semibold tabular-nums text-gray-800">{formatMoney(record.cost ?? 0)}</span>}
+              </span>
+            )}
           </p>
         )}
       </div>
 
-      {onVoid && !voided && (
-        <div className="mt-3 flex justify-end">
-          <Button size="sm" variant="inlineDanger" onClick={onVoid}>
-            <Ban size={14} /> Hủy buổi khám
-          </Button>
+      {!voided && (onVoid || onAdjustCost || onEdit) && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          {onEdit && (
+            <Button size="sm" variant="inline" onClick={onEdit}>
+              <Pencil size={14} /> Sửa buổi khám
+            </Button>
+          )}
+          {onAdjustCost && (
+            <Button size="sm" variant="inline" onClick={onAdjustCost}>
+              <Wallet size={14} /> Điều chỉnh chi phí
+            </Button>
+          )}
+          {onVoid && (
+            <Button size="sm" variant="inlineDanger" onClick={onVoid}>
+              <Ban size={14} /> Hủy buổi khám
+            </Button>
+          )}
         </div>
       )}
     </article>
@@ -183,12 +211,19 @@ export function VisitTimeline({
   people,
   caseLabel,
   onVoid,
+  onAdjustCost,
+  onEdit,
+  ownRecord,
   compact,
 }: {
   records: MedicalRecord[];
   people: People;
   caseLabel?: (record: MedicalRecord) => string | undefined;
   onVoid?: (record: MedicalRecord) => void;
+  onAdjustCost?: (record: MedicalRecord) => void;
+  onEdit?: (record: MedicalRecord) => void;
+  /** Hủy, sửa, điều chỉnh chi phí chỉ dành cho bác sĩ ghi phiếu: lọc buổi nào hiện các nút này. */
+  ownRecord?: (record: MedicalRecord) => boolean;
   compact?: boolean;
 }) {
   return (
@@ -209,7 +244,9 @@ export function VisitTimeline({
               people={people}
               caseLabel={caseLabel?.(record)}
               compact={compact}
-              onVoid={onVoid ? () => onVoid(record) : undefined}
+              onVoid={onVoid && (ownRecord?.(record) ?? true) ? () => onVoid(record) : undefined}
+              onAdjustCost={onAdjustCost && (ownRecord?.(record) ?? true) ? () => onAdjustCost(record) : undefined}
+              onEdit={onEdit && (ownRecord?.(record) ?? true) ? () => onEdit(record) : undefined}
             />
           </li>
         );
@@ -218,36 +255,31 @@ export function VisitTimeline({
   );
 }
 
-/** Gom các dòng chấn thương theo (vùng, loại) để thấy diễn biến qua từng buổi khám. */
-export function InjuryProgress({ items }: { items: InjuryTimelineItem[] }) {
-  const groups = useMemo(() => {
-    const map = new Map<string, InjuryTimelineItem[]>();
-    items.forEach((item) => {
-      const key = `${item.caseId ?? ''}:${item.bodyRegion}:${item.injuryType}`;
-      map.set(key, [...(map.get(key) ?? []), item]);
-    });
-    return [...map.values()];
-  }, [items]);
-  if (groups.length === 0) return <p className="text-sm text-gray-500">Chưa ghi chấn thương nào.</p>;
+/** Diễn biến từng vết chấn thương qua các buổi khám (BE trả sẵn lịch sử theo vết). */
+export function InjuryProgress({ items, empty = 'Chưa ghi chấn thương nào.' }: { items: TrackedInjury[]; empty?: string }) {
+  if (items.length === 0) return <p className="text-sm text-gray-500">{empty}</p>;
   return (
     <ul className="space-y-3">
-      {groups.map((steps) => (
-        <li key={steps[0].id}>
-          <p className="text-sm font-semibold text-gray-900">
-            {bodyRegionLabel[steps[0].bodyRegion]} <span className="font-normal text-gray-500">· {injuryTypeLabel[steps[0].injuryType]}</span>
-          </p>
-          <ol className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-xs text-gray-500">
-            {steps.map((step, index) => (
-              <li key={step.id} className="inline-flex items-center gap-1.5" title={step.notes ?? undefined}>
-                {index > 0 && <span className="text-gray-300">→</span>}
-                <RecoveryTag status={step.recoveryStatus} />
-                <span className="tabular-nums">{formatDate(step.examDate)}</span>
-              </li>
-            ))}
-          </ol>
-          {steps[steps.length - 1].notes && <p className="mt-1 text-xs text-gray-500">{steps[steps.length - 1].notes}</p>}
-        </li>
-      ))}
+      {items.map((injury) => {
+        const last = injury.history[injury.history.length - 1];
+        return (
+          <li key={injury.id}>
+            <p className="text-sm font-semibold text-gray-900">
+              {bodyRegionLabel[injury.bodyRegion]} <span className="font-normal text-gray-500">· {injuryTypeLabel[injury.injuryType]}</span>
+            </p>
+            <ol className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1.5 text-xs text-gray-500">
+              {injury.history.map((step, index) => (
+                <li key={step.medicalRecordId} className="inline-flex items-center gap-1.5" title={step.notes ?? undefined}>
+                  {index > 0 && <span className="text-gray-300">→</span>}
+                  <RecoveryTag status={step.recoveryStatus} />
+                  <span className="tabular-nums">{formatDate(step.examDate)}</span>
+                </li>
+              ))}
+            </ol>
+            {last?.notes && <p className="mt-1 text-xs text-gray-500">{last.notes}</p>}
+          </li>
+        );
+      })}
     </ul>
   );
 }

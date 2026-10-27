@@ -95,18 +95,18 @@ export function StallStatusPill({ status }: { status: StallStatus }) {
   return <Pill tone={status === 'MAINTENANCE' ? 'amber' : 'gray'}>{stallStatusLabel[status]}</Pill>;
 }
 
-/* ===== Cường độ buổi tập: ba vạch đơn sắc cao dần, không dùng màu riêng cho từng mức ===== */
+/* ===== Cường độ buổi tập: hai vạch đơn sắc cao dần (Nhẹ một vạch, Nặng hai vạch) ===== */
 
-const INTENSITY_LEVEL: Record<TrainingIntensity, number> = { LIGHT: 1, MODERATE: 2, HEAVY: 3 };
-const INTENSITY_TEXT: Record<TrainingIntensity, string> = { LIGHT: 'Nhẹ', MODERATE: 'Trung bình', HEAVY: 'Nặng' };
+const INTENSITY_LEVEL: Record<TrainingIntensity, number> = { LIGHT: 1, HEAVY: 2 };
+const INTENSITY_TEXT: Record<TrainingIntensity, string> = { LIGHT: 'Nhẹ', HEAVY: 'Nặng' };
 
 export function IntensityMeter({ intensity, showLabel = true, className = '' }: { intensity: TrainingIntensity; showLabel?: boolean; className?: string }) {
   const level = INTENSITY_LEVEL[intensity];
   return (
     <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-gray-700', className)} title={`Cường độ ${INTENSITY_TEXT[intensity].toLowerCase()}`}>
       <span className="inline-flex items-end gap-[2px]" aria-hidden data-intensity-bars>
-        {[1, 2, 3].map((bar) => (
-          <span key={bar} className={cn('w-[3px] origin-bottom rounded-[1px]', bar <= level ? 'bg-gray-800' : 'bg-gray-200')} style={{ height: 4 + bar * 3 }} />
+        {[1, 2].map((bar) => (
+          <span key={bar} className={cn('w-[3px] origin-bottom rounded-[1px]', bar <= level ? 'bg-gray-800' : 'bg-gray-200')} style={{ height: 4 + bar * 4 }} />
         ))}
       </span>
       {showLabel && INTENSITY_TEXT[intensity]}
@@ -216,7 +216,7 @@ export function EligibilityLine({
     );
   }
   const severe = !train.allowed;
-  const title = !train.allowed ? 'Không được tập và không được đua' : 'Chỉ tập Nhẹ và Trung bình · không được đua';
+  const title = !train.allowed ? 'Không được tập và không được đua' : 'Chỉ tập buổi Nhẹ · không được đua';
   const reason = !train.allowed ? train.reason : race.reason;
 
   if (variant === 'line') {
@@ -254,7 +254,7 @@ export const stallBorder: Record<HealthStatus, string> = {
 
 /* ===== Dữ liệu từ backend ===== */
 
-/** Tình trạng xếp chỗ: chỉ nổi bật khi còn chờ xếp khu / chờ xếp ô. */
+/** Tình trạng xếp chỗ: chỉ nổi bật khi còn chờ xếp khu, chờ xếp ô, chờ giao Groom. */
 export function PlacementStatusPill({ status }: { status: ApiPlacementStatus }) {
   if (status === 'PLACED' || status === 'NOT_APPLICABLE') {
     return <span className="text-xs text-gray-500">{placementStatusLabel[status]}</span>;
@@ -292,7 +292,7 @@ export function EligibilityView({
     );
   }
   const severe = !train;
-  const title = severe ? 'Không được tập và không được đua' : 'Vẫn được tập · không được đua';
+  const title = severe ? 'Không được tập và không được đua' : 'Chỉ tập buổi Nhẹ · không được đua';
   const reasons = (severe ? eligibility.trainingReasons : eligibility.racingReasons).map((code) => eligibilityReasonLabel[code]);
   const reason = reasons.join(', ');
   if (variant === 'line') {

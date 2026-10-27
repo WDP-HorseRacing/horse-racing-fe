@@ -1,4 +1,5 @@
-// F2.2 — Chi tiết một giáo án: dải tuần lớn, các giai đoạn kèm tuần mẫu và các môn theo thứ, và các lớp đang dùng giáo án.
+// F2.2 — Chi tiết một giáo án: dải giai đoạn, các giai đoạn kèm tải tối thiểu mỗi tuần và các môn (số buổi tối thiểu),
+// tổng thời lượng tối thiểu và các lớp đang dùng giáo án.
 import { useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Pencil, Plus } from 'lucide-react';
@@ -13,9 +14,8 @@ import { formatDate } from '../../../lib/format';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
-import { ClassStatusPill, Figure, IntensityBars, TrialBadge, WeekPattern, WeekRibbon } from '../components/bits';
-import { planPhases, planSessionCount, weekPattern } from '../plan-helpers';
-import { weekdayShort } from '../../../lib/training-labels';
+import { ClassStatusPill, Figure, IntensityBars, PhaseLoad, TrialBadge, WeekRibbon } from '../components/bits';
+import { formatTotalMinutes, planPhases, planSessionCount, weekLoad } from '../plan-helpers';
 import { useUserNames } from '../hooks';
 import { BackLink } from '../../../components/BackLink';
 
@@ -72,11 +72,12 @@ export default function PlanDetail() {
         }
       />
 
-      <section className="turf-soft rounded-3xl p-6 shadow-grass-tint ring-1 ring-emerald-900/10">
+      <section className="turf-soft rounded-2xl p-6 shadow-grass-tint ring-1 ring-emerald-900/10">
         <div className="mb-5 flex flex-wrap items-end gap-x-8 gap-y-3">
           <Figure label="Tổng số tuần" value={<span className="text-3xl">{plan.totalWeeks}</span>} />
           <Figure label="Giai đoạn" value={<span className="text-3xl">{plan.phases.length}</span>} />
-          <Figure label="Số buổi" value={<span className="text-3xl">{planSessionCount(plan)}</span>} />
+          <Figure label="Số buổi tối thiểu" value={<span className="text-3xl">{planSessionCount(plan)}</span>} />
+          <Figure label="Thời lượng tối thiểu" value={<span className="text-3xl">{formatTotalMinutes(plan.minTotalMinutes)}</span>} />
           <Figure label="Lớp dùng giáo án" value={<span className="text-3xl">{classes.length}</span>} />
           <p className="ml-auto text-xs text-gray-500">Cập nhật {formatDate(plan.updatedAt)}</p>
         </div>
@@ -92,13 +93,13 @@ export default function PlanDetail() {
                 <span className="absolute -left-[27px] top-5 h-3 w-3 rounded-full bg-emerald-600 ring-4 ring-[#f5f6f4]" aria-hidden />
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                   <p className="font-semibold text-gray-900">Giai đoạn {phase.position}</p>
-                  <p className="font-mono text-xs tabular-nums text-gray-500">
+                  <p className="tabular-nums text-xs  text-gray-500">
                     Tuần {phase.startWeek}
                     {phase.weeks > 1 && ` đến ${phase.startWeek + phase.weeks - 1}`}
-                    {` · ${phase.weeks} tuần`}
+                    {` · ${phase.weeks} tuần · ${formatTotalMinutes(phase.minTotalMinutes)}`}
                   </p>
                 </div>
-                <WeekPattern days={weekPattern(phase.subjects)} />
+                <PhaseLoad load={weekLoad(phase.subjects)} />
                 <ul className="mt-3 divide-y divide-gray-100">
                   {phase.subjects.map((item) => (
                     <li key={item.subject.id} className="flex flex-wrap items-start justify-between gap-3 py-2.5">
@@ -107,13 +108,15 @@ export default function PlanDetail() {
                           <p className="truncate font-medium text-gray-900">{item.subject.name}</p>
                           <TrialBadge type={item.subject.sessionType} />
                         </div>
-                        <p className="mt-0.5 font-mono text-xs text-emerald-800">{item.weekdays.map((day) => weekdayShort[day]).join(', ')}</p>
+                        <p className="mt-0.5 tabular-nums text-xs text-emerald-800">
+                          Tối thiểu {item.minSessionsPerWeek} buổi/tuần · {item.subject.durationMinutes} phút mỗi buổi
+                        </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                         <IntensityBars intensity={item.subject.intensity} />
-                        <span className="font-mono tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
+                        <span className="tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
                         {item.subject.surface && <span>{item.subject.surface}</span>}
-                        {item.subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
+                        {item.subject.targetTimeMs && <span className="tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
                       </div>
                     </li>
                   ))}
@@ -126,7 +129,7 @@ export default function PlanDetail() {
         <aside className="lg:col-span-5">
           <h3 className="mb-3 font-semibold text-gray-900">Lớp dùng giáo án này</h3>
           {classes.length === 0 ? (
-            <EmptyState title="Chưa có lớp nào" hint={mine ? 'Mở lớp để sinh lịch buổi tập từ giáo án.' : undefined} />
+            <EmptyState title="Chưa có lớp nào" hint={mine ? 'Mở lớp rồi xếp buổi tập trên lịch tuần của lớp.' : undefined} />
           ) : (
             <ul className="space-y-2">
               {classes.map((item) => (
@@ -134,7 +137,7 @@ export default function PlanDetail() {
                   <Link to={links.class(item.id)} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 transition hover:ring-emerald-200">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-gray-900">{item.name}</p>
-                      <p className="font-mono text-xs text-gray-500">
+                      <p className="tabular-nums text-xs text-gray-500">
                         {item.code} · {formatDate(item.startDate)} đến {formatDate(item.endDate)}
                       </p>
                     </div>

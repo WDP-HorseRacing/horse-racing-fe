@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Bandage, ClipboardList, FolderCheck, HeartPulse, Lock, Plus, Unlock, Wallet } from 'lucide-react';
-import { useService } from '../../hooks/useService';
+import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
 import { getHorse } from '../../api/horses';
-import { getCase, getInjuries, listHorseExamRequests, listHorseLocks } from '../../api/medical';
+import { getCase, getInjuries, listHorseExamRequests, listHorseLocks, updateCaseConclusion } from '../../api/medical';
 import type { MedicalRecord, TrainingLock } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Avatar, Button, Card, EmptyState, ErrorBox, NotFound, Notice, SectionTitle, Skeleton, cn } from '../../components/ui';
+import { Avatar, Button, CancelButton, Card, CharCount, EmptyState, ErrorBox, Field, Modal, NotFound, Notice, SectionTitle, Skeleton, Textarea, cn, invalidClass, useToast } from '../../components/ui';
 import { CaseStatusPill, HealthPill } from '../../components/ui/status';
 import { healthHint } from '../../lib/labels';
 import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
@@ -19,14 +20,13 @@ import { AdjustCostModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisi
 import { usePeople, type People } from './components/people';
 import { useCrumbs } from '../../components/Breadcrumb';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
-import { HIDDEN_COST_TEXT, isCostHidden } from './components/case-cost';
 import { BackLink } from '../../components/BackLink';
 
 type Dialog =
-  | { kind: 'cost' }
+  | { kind: 'cost'; record: MedicalRecord }
   | { kind: 'lock' }
   | { kind: 'release'; lock: TrainingLock }
-  | { kind: 'void'; record: MedicalRecord }
+  | { kind: 'void'; record: MedicalRecord; requestIds: string[] }
   | null;
 
 function LockBlock({ lock, people, onRelease }: { lock: TrainingLock; people: People; onRelease?: () => void }) {
@@ -78,6 +78,7 @@ export default function CaseDetail() {
   }, [horseId, isOwner]);
   const people = usePeople(extra.data?.horse.groom ? [extra.data.horse.groom] : []);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [editingConclusion, setEditingConclusion] = useState(false);
   const navigate = useNavigate();
   const caseTitle = detail.data && extra.data ? `${extra.data.horse.name} · ${detail.data.initialDiagnosis}` : null;
   useCrumbs(caseTitle ? [{ label: caseTitle }] : null);
@@ -92,12 +93,14 @@ export default function CaseDetail() {
   const costVisible = 'totalCost' in item;
   const visits = item.visits;
   const visitIds = new Set(visits.map((visit) => visit.id));
-  const caseInjuries = (extra.data?.injuries ?? []).filter((injury) => injury.caseId === item.id);
+  const caseInjuries = (extra.data?.injuries ?? []).filter((injury) => injury.history.some((step) => step.caseId === item.id));
   const caseLocks = (extra.data?.locks ?? []).filter((lock) => lock.caseId === item.id);
   const horseActiveLock = (extra.data?.locks ?? []).find((lock) => lock.status === 'ACTIVE');
   const linkedRequests = (extra.data?.requests ?? []).filter((request) => request.medicalRecordId && visitIds.has(request.medicalRecordId));
   const horseName = horse?.name ?? 'Ngựa';
   const transferred = !!horse && leftClub(horse.lifecycleStatus);
+  // Lấy trước khi hủy: BE bỏ liên kết yêu cầu với buổi khám sau khi hủy.
+  const requestIdsOf = (recordId: string) => linkedRequests.filter((request) => request.medicalRecordId === recordId).map((request) => request.id);
 
   const reload = () => {
     detail.reload();
@@ -143,14 +146,15 @@ export default function CaseDetail() {
                 <p className="flex items-center justify-end gap-1.5 text-xs text-gray-500">
                   <Wallet size={13} className="text-gray-400" /> Chi phí điều trị
                 </p>
-                {item.status === 'CLOSED' ? (
-                  isCostHidden(item) ? (
-                    <p className="text-sm text-gray-500">{HIDDEN_COST_TEXT}</p>
-                  ) : (
-                    <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost)}</p>
-                  )
+                {item.status === 'CANCELLED' ? (
+                  <p className="text-sm text-gray-500">Bệnh án đã hủy, không có chi phí</p>
                 ) : (
-                  <p className="text-sm text-gray-500">{isOpen ? 'Chốt khi đóng bệnh án' : 'Bệnh án đã hủy, không có chi phí'}</p>
+                  <>
+                    <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost ?? 0)}</p>
+                    <p className="text-xs text-gray-500">
+                      {isOwner ? 'Cộng các buổi khám trong thời gian bạn sở hữu' : isOpen ? 'Cộng các buổi khám tới nay' : 'Cộng các buổi khám'}
+                    </p>
+                  </>
                 )}
               </div>
             )}
@@ -166,11 +170,6 @@ export default function CaseDetail() {
                     </Button>
                   </>
                 )}
-                {item.status === 'CLOSED' && (
-                  <Button variant="secondary" onClick={() => setDialog({ kind: 'cost' })}>
-                    <Wallet size={16} /> Điều chỉnh chi phí
-                  </Button>
-                )}
               </div>
             )}
           </div>
@@ -184,9 +183,16 @@ export default function CaseDetail() {
         <div className="space-y-4 lg:col-span-8">
           {item.status === 'CLOSED' && (
             <div className="rounded-2xl bg-white p-5 ring-1 ring-gray-200/80">
-              <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <FolderCheck size={16} className="text-emerald-600" /> Kết luận cuối · {formatDateTime(item.closedAt)}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <FolderCheck size={16} className="text-emerald-600" /> Kết luận cuối · {formatDateTime(item.closedAt)}
+                </p>
+                {isVet && !transferred && (
+                  <Button size="sm" variant="secondary" onClick={() => setEditingConclusion(true)}>
+                    Đính chính kết luận
+                  </Button>
+                )}
+              </div>
               {item.finalConclusion && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{item.finalConclusion}</p>}
             </div>
           )}
@@ -199,7 +205,10 @@ export default function CaseDetail() {
             <VisitTimeline
               records={visits}
               people={people}
-              onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record }) : undefined}
+              ownRecord={(record) => record.vetId === user?.id}
+              onVoid={isVet && !transferred ? (record) => setDialog({ kind: 'void', record, requestIds: requestIdsOf(record.id) }) : undefined}
+              onEdit={isVet && !transferred ? (record) => navigate(links.visitNew({ edit: record.id, back: links.case(item.id) })) : undefined}
+              onAdjustCost={isVet && costVisible ? (record) => setDialog({ kind: 'cost', record }) : undefined}
             />
           )}
         </div>
@@ -284,7 +293,7 @@ export default function CaseDetail() {
         </aside>
       </div>
 
-      {dialog?.kind === 'cost' && <AdjustCostModal medicalCase={item} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'cost' && <AdjustCostModal record={dialog.record} horseName={horseName} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'lock' && horse && (
         <PlaceLockModal horse={{ id: horse.id, name: horse.name }} onClose={() => setDialog(null)} onDone={done} />
       )}
@@ -293,15 +302,123 @@ export default function CaseDetail() {
         <VoidVisitModal
           record={dialog.record}
           horseName={horseName}
+          people={people}
+          requestIds={dialog.requestIds}
           caseInfo={{
             status: item.status,
             otherActiveVisits: visits.filter((visit) => !visit.voidedAt && visit.id !== dialog.record.id).length,
           }}
           onClose={() => setDialog(null)}
           onVoided={reload}
-          onReRecord={(record) => navigate(links.visitNew({ horseId: item.horseId, caseId: isOpen ? item.id : undefined, replaces: record.id, back: links.case(item.id) }))}
+          onReRecord={(record, requestIds) =>
+            navigate(
+              links.visitNew({
+                horseId: item.horseId,
+                caseId: isOpen ? item.id : undefined,
+                kind: requestIds.length ? 'REQUEST' : undefined,
+                requestIds: requestIds.length ? requestIds : undefined,
+                replaces: record.id,
+                back: links.case(item.id),
+              }),
+            )
+          }
+        />
+      )}
+
+      {editingConclusion && (
+        <EditConclusionModal
+          caseId={item.id}
+          currentConclusion={item.finalConclusion ?? ''}
+          onClose={() => setEditingConclusion(false)}
+          onDone={() => {
+            setEditingConclusion(false);
+            reload();
+          }}
         />
       )}
     </div>
+  );
+}
+
+function EditConclusionModal({
+  caseId,
+  currentConclusion,
+  onClose,
+  onDone,
+}: {
+  caseId: string;
+  currentConclusion: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [conclusion, setConclusion] = useState(currentConclusion);
+  const [reason, setReason] = useState('');
+  const action = useAction();
+  const toast = useToast();
+
+  const serverErrors = action.fieldErrors.finalConclusion ? { ...action.fieldErrors, conclusion: action.fieldErrors.finalConclusion } : action.fieldErrors;
+  const f = useFormErrors(
+    {
+      conclusion: !conclusion.trim() ? 'Nhập kết luận cuối' : conclusion.trim() === currentConclusion.trim() ? 'Chưa có thay đổi' : undefined,
+      reason: reason.trim() ? undefined : 'Nhập lý do đính chính',
+    },
+    { fieldErrors: serverErrors },
+  );
+
+  const submit = async () => {
+    if (!f.attempt()) return;
+    const res = await action.run(() =>
+      updateCaseConclusion(caseId, {
+        finalConclusion: conclusion.trim(),
+        reason: reason.trim(),
+      }),
+    );
+    if (res) {
+      toast.push('Đã đính chính kết luận cuối', 'success');
+      onDone();
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Đính chính kết luận cuối"
+      description="Bệnh án đã đóng, sửa kết luận cần ghi lý do."
+      dirty={conclusion !== currentConclusion || reason.trim() !== ''}
+      busy={action.pending}
+      footer={
+        <>
+          <CancelButton variant="secondary" />
+          <Button disabled={action.pending} onClick={submit}>
+            {action.pending ? 'Đang lưu…' : 'Lưu kết luận'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {action.error && !serverErrors.conclusion && !serverErrors.reason && <ErrorBox message={action.error} />}
+        <Field label="Kết luận cuối mới" required name="conclusion" error={f.show('conclusion')} onBlur={f.blur('conclusion')} counter={<CharCount value={conclusion} max={4000} />}>
+          <Textarea
+            rows={4}
+            maxLength={4000}
+            value={conclusion}
+            onChange={(e) => setConclusion(e.target.value)}
+            placeholder="Nhập kết luận chuyên môn"
+            className={cn(f.show('conclusion') && invalidClass)}
+          />
+        </Field>
+        <Field label="Lý do đính chính" required name="reason" error={f.show('reason')} onBlur={f.blur('reason')} counter={<CharCount value={reason} max={500} />}>
+          <Textarea
+            rows={2}
+            maxLength={500}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Ví dụ: Ghi nhầm thông tin phục hồi"
+            className={cn(f.show('reason') && invalidClass)}
+          />
+        </Field>
+      </div>
+    </Modal>
   );
 }

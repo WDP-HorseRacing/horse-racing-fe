@@ -7,7 +7,7 @@ import type { Page } from './types';
 export const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000/api/v1';
 export const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL as string | undefined) ?? 'http://localhost:3000/events';
 
-type QueryValue = string | number | boolean | null | undefined;
+type QueryValue = string | number | boolean | null | undefined | (string | number | boolean)[];
 export type Query = Record<string, QueryValue>;
 
 interface RequestOptions {
@@ -28,13 +28,21 @@ function buildUrl(path: string, query?: Query) {
   const url = new URL(`${API_URL}${path}`);
   Object.entries(query ?? {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== '') {
+          url.searchParams.append(key, String(item));
+        }
+      });
+      return;
+    }
     url.searchParams.set(key, String(value));
   });
   return url.toString();
 }
 
 /** `expired`: refresh token hết hạn hoặc đã thu hồi. `error`: máy chủ xác thực trục trặc, phiên vẫn còn. */
-type RefreshResult = 'ok' | 'expired' | 'error';
+export type RefreshResult = 'ok' | 'expired' | 'error';
 
 let refreshing: Promise<RefreshResult> | null = null;
 
@@ -67,15 +75,26 @@ async function refreshTokens(): Promise<RefreshResult> {
 
 /** Câu dự phòng khi BE không trả message (lỗi mạng, proxy…). */
 function fallbackMessage(status: number) {
-  if (status === 0) return 'Không kết nối được máy chủ. Hãy kiểm tra backend đang chạy.';
+  if (status === 0) return 'Mất kết nối, vui lòng kiểm tra mạng rồi thử lại';
   if (status === 401) return 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại';
   if (status === 403) return 'Bạn không có quyền thực hiện thao tác này';
   if (status === 404) return 'Không tìm thấy dữ liệu';
   if (status === 409) return 'Dữ liệu vừa thay đổi, vui lòng tải lại';
   if (status === 429) return 'Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút';
-  if (status === 501) return 'Chức năng này backend chưa làm';
+  if (status === 501) return 'Chức năng này đang được hoàn thiện';
   if (status >= 500) return 'Máy chủ gặp lỗi, vui lòng thử lại sau';
   return 'Yêu cầu không hợp lệ';
+}
+
+/**
+ * Hỏi lại máy chủ xem phiên còn sống không bằng cách làm mới token. Dùng khi BE chủ động ngắt socket
+ * (Quản lý CLB khóa tài khoản: BE thu hồi phiên và ngắt socket; access token cũ vẫn còn hạn nên API chỉ trả 403).
+ * `expired` thì xóa token, nơi gọi đưa người dùng về màn đăng nhập.
+ */
+export async function checkSession(): Promise<RefreshResult> {
+  const result = await refreshTokens();
+  if (result === 'expired') clearTokens();
+  return result;
 }
 
 async function send(method: string, path: string, options: RequestOptions, retried = false): Promise<Response> {
@@ -99,7 +118,7 @@ async function send(method: string, path: string, options: RequestOptions, retri
     const refreshed = await refreshTokens();
     if (refreshed === 'ok') return send(method, path, options, true);
     // Không làm mới được vì máy chủ xác thực lỗi: báo lỗi, không đá người dùng ra màn đăng nhập.
-    if (refreshed === 'error') throw new ApiError(503, 'Không kết nối được máy chủ xác thực, vui lòng thử lại sau');
+    if (refreshed === 'error') throw new ApiError(503, 'Chưa xác nhận được phiên đăng nhập, vui lòng thử lại sau');
     clearTokens();
     onUnauthorized?.();
   }
@@ -126,7 +145,7 @@ export async function request<T>(method: string, path: string, options: RequestO
     const body = (data && typeof data === 'object' ? data : {}) as {
       message?: string | string[];
       details?: string[] | null;
-      errors?: { field?: string; message?: string }[];
+      errors?: { field?: string; message?: string; conflictId?: string }[];
     };
     let message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
     const details = body.details ?? null;
@@ -136,12 +155,14 @@ export async function request<T>(method: string, path: string, options: RequestO
     }
     // Lỗi 400 và lỗi trùng 409 có thể kèm `errors` theo từng ô: màn hình gắn câu lỗi ngay dưới ô đó.
     const fieldErrors: Record<string, string> = {};
+    const conflictIds: Record<string, string> = {};
     for (const item of body.errors ?? []) {
       if (item.field && item.message && !fieldErrors[item.field]) fieldErrors[item.field] = humanizeMessage(fieldMessage(item.field, item.message));
+      if (item.field && item.conflictId) conflictIds[item.field] = item.conflictId;
     }
     // 422 chỉ dùng cho số đo ngoài khoảng bình thường chưa xác nhận: màn hình hỏi lại người dùng.
     const field = response.status === 422 ? 'confirmAbnormal' : Object.keys(fieldErrors)[0];
-    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field, fieldErrors);
+    throw new ApiError(response.status, humanizeMessage(message || fallbackMessage(response.status)), details, field, fieldErrors, conflictIds);
   }
   return data as T;
 }

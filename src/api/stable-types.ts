@@ -39,8 +39,11 @@ export interface SupplyItemInput {
   openingUnitPrice?: number;
 }
 
-/** OPENING: tồn ban đầu. RESTOCK: nhập hàng hoặc cấp theo đề xuất. USAGE: xuất dùng. COUNT_ADJUST: kiểm kê, chỉ còn ở dữ liệu cũ. */
-export type SupplyMovementType = 'OPENING' | 'RESTOCK' | 'USAGE' | 'COUNT_ADJUST';
+/**
+ * OPENING: tồn ban đầu. RESTOCK: nhập hàng hoặc cấp theo đề xuất. USAGE: xuất dùng.
+ * USAGE_REVERSAL: hủy một lần xuất ghi nhầm (số dương, ghi chú là lý do). COUNT_ADJUST: kiểm kê, chỉ còn ở dữ liệu cũ.
+ */
+export type SupplyMovementType = 'OPENING' | 'RESTOCK' | 'USAGE' | 'USAGE_REVERSAL' | 'COUNT_ADJUST';
 
 export interface SupplyMovement {
   id: string;
@@ -55,6 +58,10 @@ export interface SupplyMovement {
   unitPrice: number | null;
   /** Tiền của dòng = chênh lệch × đơn giá, âm là xuất. */
   amount: number | null;
+  /** Mã lần xuất: chung cho các dòng USAGE của một lần xuất (trừ nhiều lô) và dòng USAGE_REVERSAL hủy nó. null với dòng xuất cũ (không hủy được). */
+  usageId: string | null;
+  /** true ở dòng USAGE của lần xuất đã hủy. */
+  cancelled: boolean;
   note: string | null;
   creator: UserBrief;
   createdAt: string;
@@ -69,7 +76,7 @@ export interface SupplyLot {
   createdAt: string;
 }
 
-export type SupplyRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED';
+export type SupplyRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED' | 'CANCELLED';
 
 export interface SupplyRequest {
   id: string;
@@ -78,7 +85,8 @@ export interface SupplyRequest {
   item: SupplyItem;
   requestedBy: string;
   requester: UserBrief;
-  quantity: number;
+  /** Số thực nhận khi cấp. Null tới khi Đã cấp (người gửi chỉ ghi nhu cầu vào `note`). */
+  quantity: number | null;
   status: SupplyRequestStatus;
   note: string | null;
   reviewer: UserBrief | null;
@@ -86,6 +94,11 @@ export interface SupplyRequest {
   fulfiller: UserBrief | null;
   fulfilledAt: string | null;
   rejectionReason: string | null;
+  /** Quản lý hủy đề xuất đã duyệt (vd nhà cung cấp hết hàng). */
+  cancelledBy: string | null;
+  canceller: UserBrief | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -146,9 +159,13 @@ export interface ChecklistTaskType {
   active: boolean;
 }
 
+/** EXTRA: gắn thêm loại việc không áp mọi ngựa. EXEMPT: miễn loại việc đang áp mọi ngựa (lý do ở `note`). */
+export type HorseCareTaskMode = 'EXTRA' | 'EXEMPT';
+
 export interface HorseCareTask {
   id: string;
   horseId: string;
+  mode: HorseCareTaskMode;
   taskType: ChecklistTaskType;
   fromDate: string;
   toDate: string;
@@ -157,7 +174,8 @@ export interface HorseCareTask {
   createdAt: string;
 }
 
-export type ChecklistStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'INCOMPLETE';
+/** `CANCELLED`: ngựa chuyển nhượng hoặc mất trong ngày, checklist chỉ đọc (việc đã tick giữ nguyên). */
+export type ChecklistStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'INCOMPLETE' | 'CANCELLED';
 
 export interface ChecklistItem {
   id: string;
@@ -188,15 +206,11 @@ export interface GroomTodayRun {
   sessionName: string;
   scheduledStartAt: string;
   scheduledEndAt: string;
+  /** Sân và mặt sân của buổi. */
+  location: string | null;
+  surface: string | null;
   status: ParticipantStatus;
-}
-
-export interface GroomTodayCare {
-  id: string;
-  type: CareType;
-  dueAt: string;
-  overdue: boolean;
-  notes: string | null;
+  stoppedReason: string | null;
 }
 
 export interface GroomTodayHorse {
@@ -208,12 +222,29 @@ export interface GroomTodayHorse {
   checklist: DailyChecklist | null;
   feedingPlan: FeedingPlan | null;
   trainingRuns: GroomTodayRun[];
-  careSchedules: GroomTodayCare[];
+}
+
+/** Lượt hôm nay Groom được HLV giao dắt ở ngựa Groom không phụ trách. */
+export interface GroomTodayAssistedRun extends GroomTodayRun {
+  horseId: string;
+  horseName: string;
+}
+
+/** Ngày hẹn bác sĩ hôm nay ở ngựa Groom phụ trách: chỉ để chuẩn bị ngựa, không hoàn tất được. */
+export interface GroomTodayVetAppointment {
+  id: string;
+  horseId: string;
+  horseName: string;
+  type: Extract<CareType, 'ROUTINE_CHECKUP' | 'FOLLOW_UP'>;
+  scheduledAt: string;
 }
 
 export interface GroomToday {
   date: string;
   horses: GroomTodayHorse[];
+  assistedRuns: GroomTodayAssistedRun[];
+  /** Theo giờ hẹn. */
+  horseVetAppointments: GroomTodayVetAppointment[];
 }
 
 /* ===== Sự cố tại chuồng ===== */
@@ -243,6 +274,8 @@ export interface Incident {
   resolver: UserBrief | null;
   /** Hệ thống tự đóng khi ngựa chuyển nhượng hoặc đã mất. Lúc đó `resolver` là null. */
   resolvedBySystem: boolean;
+  /** Nguồn đóng sự cố: HLV khu đóng tay, bác sĩ xử lý yêu cầu khám xong tự đóng, hoặc đổi vòng đời. */
+  resolutionSource: 'HEAD_TRAINER' | 'EXAM' | 'LIFECYCLE' | null;
   resolvedAt: string | null;
   examRequest: IncidentExamRequest | null;
   createdAt: string;

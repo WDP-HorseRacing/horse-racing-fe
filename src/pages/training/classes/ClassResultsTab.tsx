@@ -1,7 +1,7 @@
 // Tab Kết quả: lưới ngựa theo buổi đã diễn ra. Ô tô đậm nhạt theo điểm đánh giá của HLV,
 // buổi chạy thử hiện thời gian tốt nhất và chênh lệch với mục tiêu. Mỗi ngựa một lần gọi lịch tập của ngựa trong lớp.
 import { Link } from 'react-router-dom';
-import { getTimeTrial, listHorseSessions } from '../../../api/training';
+import { listHorseSessions } from '../../../api/training';
 import type { HorseTrainingSession } from '../../../api/types';
 import { EmptyState, ErrorBox, Notice, Skeleton, cn } from '../../../components/ui';
 import { useService } from '../../../hooks/useService';
@@ -26,14 +26,9 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
 
   const data = useService(async () => {
     if (groom || held.length === 0) return { rows: new Map<string, HorseTrainingSession[]>(), targets: new Map<string, number | null>() };
-    const [rows, targets] = await Promise.all([
-      Promise.all(horseIds.map(async (horseId) => [horseId, (await listHorseSessions(horseId, { classId: item.id, limit: 100 })).items] as const)),
-      Promise.all(
-        held
-          .filter((session) => session.sessionType === 'TIME_TRIAL')
-          .map(async (session) => [session.id, (await getTimeTrial(session.id).catch(() => null))?.targetTimeMs ?? null] as const),
-      ),
-    ]);
+    const rows = await Promise.all(horseIds.map(async (horseId) => [horseId, (await listHorseSessions(horseId, { classId: item.id, limit: 100 })).items] as const));
+    // Mục tiêu chạy thử nằm trên buổi.
+    const targets = held.filter((session) => session.sessionType === 'TIME_TRIAL').map((session) => [session.id, session.targetTimeMs] as const);
     return { rows: new Map(rows), targets: new Map(targets) };
   }, [item.id, horseIds.join(','), held.map((session) => session.id).join(',')]);
 
@@ -51,7 +46,7 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
             {held.map((session) => (
               <th key={session.id} className="px-1 py-1 text-center text-xs font-medium text-gray-500">
                 <Link to={links.session(session.id)} className="hover:text-emerald-800">
-                  <span className="block font-mono">{formatDate(session.scheduledStartAt).slice(0, 5)}</span>
+                  <span className="block tabular-nums">{formatDate(session.scheduledStartAt).slice(0, 5)}</span>
                   <span className="block max-w-28 truncate">{session.name}</span>
                 </Link>
               </th>
@@ -78,15 +73,15 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
                     <td key={session.id} className="p-0">
                       <Link
                         to={links.participant(entry.participantId, horseId)}
-                        title={entry.evaluation?.comment ?? participantStatusText[entry.participantStatus]}
+                        title={entry.evaluation?.comment ?? entry.stoppedReason ?? participantStatusText[entry.participantStatus]}
                         className={cn(
                           'flex h-14 min-w-24 flex-col items-center justify-center rounded-lg px-2 text-center transition hover:ring-2 hover:ring-emerald-400',
-                          score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : 'bg-gray-50 text-gray-500',
+                          score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : entry.participantStatus === 'STOPPED' ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-500',
                         )}
                       >
-                        {score !== undefined ? <span className="font-mono text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}
+                        {score !== undefined ? <span className="tabular-nums text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}
                         {best !== undefined && (
-                          <span className="mt-0.5 font-mono text-[11px] leading-none">
+                          <span className="mt-0.5 tabular-nums text-[11px] leading-none">
                             {formatRaceTime(best)}
                             {target ? ` ${formatDelta(best - target).replace(' giây', 's')}` : ''}
                           </span>

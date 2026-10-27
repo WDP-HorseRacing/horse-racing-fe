@@ -42,7 +42,7 @@ export function FormSection({
 
 /** Thẻ lưu ở cột phải: bóng đổ ánh xanh cỏ để tách khỏi các thẻ thông tin. */
 export function SaveCard({ children }: { children: ReactNode }) {
-  return <div className="space-y-4 rounded-2xl bg-white p-5 shadow-[0_18px_40px_-24px_rgba(6,78,59,0.4)] ring-1 ring-emerald-900/10">{children}</div>;
+  return <div className="space-y-4 rounded-2xl bg-white p-5 shadow-card ring-1 ring-emerald-900/10">{children}</div>;
 }
 
 /** Thẻ ngựa ở cột phải: tên (bấm sang hồ sơ y tế), chỗ ở, sức khỏe, khóa. */

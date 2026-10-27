@@ -7,6 +7,7 @@ import type {
   CaseStatus,
   HealthStatus,
   InjuryType,
+  LifecycleStatus,
   LockStatus,
   MeasurementType,
   ParticipantStatus,
@@ -26,6 +27,8 @@ export type IntensityCounts = Record<TrainingIntensity, number>;
 export interface ReportWeek {
   weekStart: string;
   completed: number;
+  /** Lượt dừng sớm trong tuần. */
+  stopped: number;
   avgHeartRateBpm: number | null;
   avgSpeedMps: number | null;
   alertCount: number;
@@ -37,13 +40,15 @@ export interface TrainingDashboard {
   from: string;
   to: string;
   herd: { total: number; byHealthStatus: Record<HealthStatus, number>; trainingLocked: number };
-  training: { sessions: number; completed: number; absent: number; ineligible: number; completedByIntensity: IntensityCounts };
+  training: { sessions: number; completed: number; stopped: number; absent: number; ineligible: number; completedByIntensity: IntensityCounts };
   weekly: ReportWeek[];
   horses: {
     horseId: string;
     horseName: string;
     barnId: string | null;
     barnName: string | null;
+    /** Ngựa đã giải nghệ, chuyển nhượng, đã mất vẫn có dòng nếu có lượt tập trong kỳ. */
+    lifecycleStatus: LifecycleStatus;
     healthStatus: HealthStatus;
     trainingLocked: boolean;
     completed: number;
@@ -56,7 +61,10 @@ export interface TrainingDashboard {
   }[];
 }
 
-/** Chỉ ngựa đang hoạt động. barnId: một khu. mine: các khu người gọi phụ trách (HLV). Mặc định toàn CLB. */
+/**
+ * `herd` chỉ ngựa đang hoạt động. `training`, `weekly`, `horses` gồm cả ngựa đã rời CLB có lượt tập trong kỳ.
+ * barnId: một khu. mine: các khu người gọi phụ trách (HLV). Mặc định toàn CLB.
+ */
 export const getTrainingDashboard = (query: ReportPeriod & { barnId?: string; mine?: boolean }) =>
   http.get<TrainingDashboard>('/reports/dashboard', { ...query, mine: query.mine ? 'true' : undefined });
 
@@ -67,7 +75,8 @@ export interface HorseProgress {
   horseName: string;
   from: string;
   to: string;
-  totals: { completed: number; absent: number; ineligible: number; plannedDistanceM: number; trainedMinutes: number; completedByIntensity: IntensityCounts };
+  /** trainedMinutes cộng cả lượt dừng sớm, completed và plannedDistanceM thì không. */
+  totals: { completed: number; stopped: number; absent: number; ineligible: number; plannedDistanceM: number; trainedMinutes: number; completedByIntensity: IntensityCounts };
   weekly: ReportWeek[];
   sessions: {
     participantId: string;
@@ -110,13 +119,18 @@ export const getHorseHealthReport = (horseId: string, period: ReportPeriod) => h
 export interface ClubFinance {
   from: string;
   to: string;
-  /** Khoản CLB thu của chủ: phí nuôi + chi phí y tế (bệnh án đóng trong kỳ). */
-  ownerCharges: { dailyFee: number; medicalCost: number; total: number };
-  /** purchased: giá trị nhập hàng trong kỳ (không gồm tồn ban đầu). used: giá trị đã xuất dùng. */
-  supplies: { purchased: number; used: number };
+  /** Khoản CLB thu của chủ: phí nuôi + phụ phí riêng từng ngựa + chi phí y tế (buổi khám chưa hủy có ngày khám trong kỳ, trong hay ngoài bệnh án). */
+  ownerCharges: { dailyFee: number; surcharge: number; medicalCost: number; total: number };
+  /** purchased: giá trị nhập hàng trong kỳ (không gồm tồn ban đầu). used: giá trị đã xuất dùng. inventoryValue: giá trị tồn kho tới hết ngày to. */
+  supplies: { purchased: number; used: number; inventoryValue?: number };
   /** Luôn 0 (chưa có giải đua). */
   prizeMoney: number;
-  owners: { ownerId: string; ownerName: string; dailyFee: number; medicalCost: number; total: number }[];
+  owners: { ownerId: string; ownerName: string; dailyFee: number; surcharge: number; medicalCost: number; total: number }[];
+  /**
+   * Phần không có chủ: ngày ngựa ở CLB mà lúc hết ngày không có chủ (sau kích hoạt lại, khôi phục hồ sơ khi chủ cũ không còn hoạt động)
+   * và buổi khám lúc ngựa không có chủ. `ownerCharges` = tổng `owners` + `unowned`. Không có thì các số bằng 0.
+   */
+  unowned: { billedDays: number; dailyFee: number; surcharge: number; medicalCost: number; total: number };
 }
 
 export interface OwnerCosts {
@@ -125,10 +139,12 @@ export interface OwnerCosts {
   from: string;
   to: string;
   dailyFee: number;
+  /** Phụ phí riêng từng ngựa, đã cộng vào total. */
+  surcharge: number;
   medicalCost: number;
   total: number;
   prizeMoney: number;
-  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; caseCount: number; medicalCost: number; total: number }[];
+  horses: { horseId: string; horseName: string; billedDays: number; dailyFee: number; surcharge: number; /** Số buổi khám chưa hủy trong kỳ. */ visitCount: number; medicalCost: number; total: number }[];
 }
 
 export const getClubFinance = (period: ReportPeriod) => http.get<ClubFinance>('/reports/club/finance', { ...period });

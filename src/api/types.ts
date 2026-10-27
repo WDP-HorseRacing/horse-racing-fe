@@ -50,7 +50,8 @@ export type Gender = 'MALE' | 'FEMALE' | 'GELDING';
 export type RaceAptitude = 'SPRINTER' | 'MILER' | 'STAYER';
 export type HealthStatus = 'ELIGIBLE' | 'UNDER_OBSERVATION' | 'INJURED' | 'QUARANTINED';
 export type LifecycleStatus = 'ACTIVE' | 'RETIRED' | 'TRANSFERRED' | 'DECEASED';
-export type PlacementStatus = 'PENDING_BARN' | 'PENDING_STALL' | 'PLACED' | 'NOT_APPLICABLE';
+/** PENDING_GROOM: đã có khu và ô nhưng chưa có Groom phụ trách. PLACED: đủ khu, ô và Groom. */
+export type PlacementStatus = 'PENDING_BARN' | 'PENDING_STALL' | 'PENDING_GROOM' | 'PLACED' | 'NOT_APPLICABLE';
 export type EligibilityReason =
   | 'PROFILE_DELETED'
   | 'LIFECYCLE_RETIRED'
@@ -176,6 +177,29 @@ export interface PedigreeNode {
   childId: string;
 }
 
+/** Một khoảng sở hữu của chủ cũ (ngựa đã bán). */
+export interface OwnershipSpan {
+  startedAt: string;
+  endedAt: string | null;
+}
+
+/** Ngựa chủ ngựa từng sở hữu, nay đã chuyển chủ hoặc bán ra ngoài (`GET /past-horses`). */
+export interface PastHorse {
+  horseId: string;
+  name: string;
+  photoUrl: string | null;
+  /** Mới nhất trước. */
+  periods: OwnershipSpan[];
+}
+
+/** Thông tin cơ bản của ngựa đã bán: phả hệ 2 đời chỉ tên, `canOpen` luôn false. */
+export interface PastHorseDetail extends PastHorse {
+  gender: Gender | null;
+  dateOfBirth: string | null;
+  color: string | null;
+  ancestors: PedigreeNode[];
+}
+
 export interface Pedigree {
   horseId: string;
   horseName: string;
@@ -205,11 +229,13 @@ export interface CreateHorseInput {
   gender: Gender;
   breed?: string | null;
   color?: string | null;
+  /** Bắt buộc khi tạo (đúng 15 chữ số). Khi sửa không gửi null hay chuỗi rỗng (BE không cho xóa số chip). */
   microchipId?: string | null;
   dateOfBirth?: string | null;
   sireId?: string | null;
   damId?: string | null;
   mediaId?: string | null;
+  /** Bắt buộc khi tạo: chủ ngựa đang hoạt động. */
   ownerId?: string | null;
   barnId?: string;
 }
@@ -256,7 +282,16 @@ export interface LifecyclePreview {
   incidentsClosed: number;
   healthResetTo: HealthStatus | null;
   pendingBarnAfter: boolean;
+  /** Tên chủ sẽ kết thúc sở hữu (bán ra ngoài), null nếu giữ chủ. */
   ownerCleared: string | null;
+  /** Kích hoạt lại từ Đã chuyển nhượng: bắt buộc chọn chủ mới (gửi `ownerId`). */
+  ownerRequired: boolean;
+  /** Chốt chăm sóc chuồng khi chuyển nhượng hoặc ghi nhận mất (giải nghệ thì 0, false). */
+  feedingPlansArchived: number;
+  draftFeedingPlansDeleted: number;
+  careTasksEnded: number;
+  careTasksDeleted: number;
+  checklistCancelled: boolean;
   summary: string | null;
 }
 
@@ -273,6 +308,12 @@ export interface RestorePreview {
   horseId: string;
   barnCleared: string | null;
   ownerCleared: string | null;
+  /** Phí tính lại cho những ngày hồ sơ bị xóa (từ ngày xóa tới hôm nay). */
+  rebilledDays: number;
+  rebilledDailyFee: number;
+  rebilledSurcharge: number;
+  /** Chủ trong thời gian đó, null là vào mục Chưa có chủ của báo cáo. */
+  rebilledOwnerName: string | null;
   summary: string;
 }
 
@@ -364,8 +405,9 @@ export type CaseStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
 export type ExamRequestStatus = 'PENDING' | 'EXAMINED' | 'DISMISSED';
 export type ExamRequestSource = 'GROOM_INCIDENT' | 'MEASUREMENT_ALERT' | 'STAFF' | 'VET';
 export type CheckupDueStatus = 'OK' | 'DUE_SOON' | 'OVERDUE';
-export type CareType = 'VACCINATION' | 'DEWORMING' | 'FARRIER' | 'ROUTINE_CHECKUP';
-export type CareTaskType = Exclude<CareType, 'ROUTINE_CHECKUP'>;
+/** ROUTINE_CHECKUP: ngày hẹn khám định kỳ. FOLLOW_UP: lịch tái khám của bệnh án (từ `nextVisitAt`). Hai loại này không qua route lịch chăm sóc. */
+export type CareType = 'VACCINATION' | 'DEWORMING' | 'FARRIER' | 'ROUTINE_CHECKUP' | 'FOLLOW_UP';
+export type CareTaskType = Exclude<CareType, 'ROUTINE_CHECKUP' | 'FOLLOW_UP'>;
 export type CareStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
 export type LockStatus = 'ACTIVE' | 'RELEASED';
 export type BodyRegion =
@@ -402,9 +444,12 @@ export interface Prescription {
   endDate: string | null;
 }
 
+/** Một dòng chấn thương của buổi khám: vùng, loại, vị trí lấy từ vết; mức, ghi chú là của buổi đó. */
 export interface Injury {
   id: string;
   medicalRecordId: string;
+  /** Vết chấn thương mà dòng này ghi nhận. */
+  injuryId: string;
   bodyRegion: BodyRegion;
   position: { x: number; y: number; z: number } | null;
   injuryType: InjuryType;
@@ -412,9 +457,19 @@ export interface Injury {
   notes: string | null;
 }
 
-export interface InjuryTimelineItem extends Injury {
-  examDate: string;
-  caseId: string | null;
+/** Một vết chấn thương sống qua nhiều buổi khám (GET /horses/:id/injuries). */
+export interface TrackedInjury {
+  id: string;
+  horseId: string;
+  bodyRegion: BodyRegion;
+  injuryType: InjuryType;
+  position: { x: number; y: number; z: number };
+  firstMedicalRecordId: string;
+  firstExamDate: string;
+  /** Mức ở lần khám mới nhất chưa hủy. */
+  currentRecoveryStatus: RecoveryStatus;
+  /** Tăng dần theo ngày khám, chỉ buổi chưa hủy. */
+  history: { medicalRecordId: string; examDate: string; caseId: string | null; recoveryStatus: RecoveryStatus; notes: string | null }[];
 }
 
 export interface MedicalRecord {
@@ -432,6 +487,9 @@ export interface MedicalRecord {
   voidedAt: string | null;
   voidReason: string | null;
   replacesRecordId: string | null;
+  /** Chi phí buổi khám (VND). Không có key với HT. null kèm costHidden khi buổi thuộc giai đoạn chủ khác sở hữu. */
+  cost?: number | null;
+  costHidden?: boolean;
   prescriptions: Prescription[];
   injuries: Injury[];
 }
@@ -446,13 +504,22 @@ export interface PrescriptionInput {
 
 export interface InjuryInput {
   bodyRegion: BodyRegion;
+  /** Bắt buộc. Web gắn điểm cố định theo vùng (lib/injury-position). */
+  position: { x: number; y: number; z: number };
   injuryType: InjuryType;
   recoveryStatus: RecoveryStatus;
   notes?: string;
 }
 
+/** Mức hồi phục mới của một vết đang theo dõi. Vị trí, vùng, loại giữ như lúc phát hiện. */
+export interface InjuryUpdateInput {
+  injuryId: string;
+  recoveryStatus: RecoveryStatus;
+  notes?: string;
+}
+
+/** Thời điểm khám là lúc lưu, BE không nhận `examDate`. */
 export interface VisitInputBase {
-  examDate?: string;
   requestIds?: string[];
   diagnosis?: string;
   healthStatus?: HealthStatus;
@@ -462,8 +529,11 @@ export interface VisitInputBase {
   measurements?: { type: MeasurementType; value: number }[];
   confirmAbnormal?: boolean;
   prescriptions?: PrescriptionInput[];
-  injuries?: InjuryInput[];
+  injuryUpdates?: InjuryUpdateInput[];
+  newInjuries?: InjuryInput[];
   replacesRecordId?: string;
+  /** Chi phí buổi khám (VND), bỏ trống là 0. */
+  cost?: number;
 }
 
 export interface StandaloneVisitInput extends VisitInputBase {
@@ -481,10 +551,8 @@ export interface MedicalCase {
   initialDiagnosis: string;
   closedAt: string | null;
   finalConclusion: string | null;
-  /** Không có key với HT. null khi bệnh án chưa đóng, hoặc khi chi phí thuộc chủ khác (costHidden). */
-  totalCost?: number | null;
-  /** Chủ ngựa xem bệnh án đóng trong thời gian chủ khác sở hữu: chi phí bị ẩn. Không có key với HT. */
-  costHidden?: boolean;
+  /** Tổng chi phí các buổi khám chưa hủy, có cả lúc đang điều trị. Chủ ngựa chỉ được cộng phần của mình. Không có key với HT. */
+  totalCost?: number;
 }
 
 export interface MedicalCaseList {
@@ -501,13 +569,62 @@ export interface ClosePreview {
   healthStatus: HealthStatus;
   healthWarning: boolean;
   pendingRequestCount: number;
+  /** Số vết chưa lành: lớn hơn 0 thì BE chặn đóng bệnh án (trừ khi đóng kèm ngựa mất). */
+  unhealedInjuryCount: number;
+  /** Hệ quả nếu đóng kèm ghi nhận ngựa mất. */
+  deathImpact?: LifecyclePreview;
 }
 
 export interface CloseCaseInput {
   finalConclusion: string;
-  totalCost: number;
   lockDecision?: 'RELEASE' | 'KEEP';
   lockExpectedEnd?: string;
+  /** Đóng bệnh án và ghi nhận ngựa mất (ngày mất là hôm nay). Không gửi kèm lựa chọn khóa. */
+  deceased?: boolean;
+}
+
+/** Lần đổi sức khỏe sau buổi khám, làm sức khỏe hiện tại không đổi theo buổi khám bị hủy hoặc sửa. */
+export interface LaterHealthChange {
+  changedAt: string;
+  changedBy: string | null;
+  to: HealthStatus;
+}
+
+/** Hủy buổi khám: sức khỏe về như trước, giữ lần đổi sau, buổi không đổi sức khỏe, hoặc buổi cũ không rõ sức khỏe trước. */
+export interface VoidVisitResult extends MedicalRecord {
+  healthOutcome: 'REVERTED' | 'KEPT_LATER_CHANGE' | 'NOT_CHANGED_BY_VISIT' | 'UNKNOWN_BEFORE';
+  laterHealthChange: LaterHealthChange | null;
+}
+
+/** Sửa một vết của buổi khám. Vùng, loại, vị trí chỉ sửa được ở vết phát hiện tại buổi này. */
+export interface VisitInjuryEdit {
+  injuryId: string;
+  recoveryStatus?: RecoveryStatus;
+  notes?: string | null;
+  bodyRegion?: BodyRegion;
+  injuryType?: InjuryType;
+  position?: { x: number; y: number; z: number };
+}
+
+/** PATCH /medical-records/:id: chỉ bác sĩ ghi phiếu, bắt buộc lý do, ô không gửi giữ nguyên, null là xóa. */
+export interface VisitUpdateInput {
+  reason: string;
+  diagnosis?: string | null;
+  careInstructions?: string | null;
+  nextVisitAt?: string | null;
+  healthStatus?: HealthStatus;
+  measurements?: { type: MeasurementType; value: number }[];
+  confirmAbnormal?: boolean;
+  prescriptions?: PrescriptionInput[];
+  injuries?: VisitInjuryEdit[];
+  removedInjuryIds?: string[];
+  requestIds?: string[];
+  initialDiagnosis?: string;
+}
+
+export interface VisitUpdateResult extends MedicalRecord {
+  healthOutcome: 'UNCHANGED' | 'UPDATED' | 'KEPT_LATER_CHANGE';
+  laterHealthChange: LaterHealthChange | null;
 }
 
 export interface ExamRequest {
@@ -567,6 +684,7 @@ export interface CareSchedule {
   horseId: string;
   type: CareType;
   dueAt: string;
+  /** Bác sĩ được giao; null là chưa giao ai (mọi bác sĩ cùng thấy và cùng được nhắc). Lịch chỉ thuộc bác sĩ từ BE 27/10. */
   assignedTo: string | null;
   status: CareStatus;
   completedAt: string | null;
@@ -614,7 +732,9 @@ export interface MedicalDashboard {
     horseName: string;
     type: CareType;
     dueDate: string;
+    /** Bác sĩ được giao (còn hoạt động), null nếu chưa giao ai. */
     assignedTo: string | null;
+    assignedToName: string | null;
   }[];
   openCases: {
     caseId: string;
@@ -626,14 +746,41 @@ export interface MedicalDashboard {
     nextVisitAt: string | null;
   }[];
   pendingRequests: ExamRequest[];
+  /** Ngựa Chấn thương hoặc Cách ly mà không có bệnh án đang mở, Cách ly trước. */
+  horsesWithoutCase: {
+    horseId: string;
+    horseName: string;
+    barnId: string | null;
+    barnName: string | null;
+    stallId: string | null;
+    stallCode: string | null;
+    healthStatus: HealthStatus;
+    /** Lúc chuyển sang trạng thái hiện tại. */
+    since: string | null;
+  }[];
+  /** Đơn thuốc đang hiệu lực hôm nay, theo tên ngựa rồi tên thuốc. */
+  todayPrescriptions: {
+    prescriptionId: string;
+    horseId: string;
+    horseName: string;
+    medicine: string;
+    dosage: string;
+    frequency: string;
+    startDate: string;
+    /** null là dùng tới khi đóng bệnh án. */
+    endDate: string | null;
+    medicalRecordId: string;
+    caseId: string | null;
+  }[];
 }
 
+/** Báo cáo chi phí y tế theo ngày khám, gồm cả buổi khám ngoài bệnh án. */
 export interface CostReport {
   from: string;
   to: string;
-  caseCount: number;
+  visitCount: number;
   totalCost: number;
-  items: { horseId: string; horseName: string; caseCount: number; totalCost: number }[];
+  items: { horseId: string; horseName: string; visitCount: number; totalCost: number }[];
 }
 
 /* ===== Thông báo (socket notification.created và REST /notifications dùng chung một dạng) ===== */
@@ -650,12 +797,21 @@ export type NotificationCategory =
   | 'HORSE_LIFECYCLE'
   | 'OWNERSHIP'
   | 'PERFORMANCE_ALERT'
-  /** Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo. resource là ngựa. */
+  /**
+   * Flow 4: HLV gắn việc có hiệu lực hôm nay, Groom phụ trách được báo (resource là ngựa).
+   * Quản lý CLB: lỗi sinh checklist hôm nay và đã đủ lại (resource null).
+   */
   | 'DAILY_CHECKLIST'
   /** Flow 4: sự cố mới (HLV khu) và sự cố mở quá 4 giờ (HLV khu, Quản lý CLB). resource là ngựa. */
   | 'INCIDENT'
   /** Flow 4: đề xuất vật tư mới (Quản lý CLB), đã duyệt, từ chối, đã cấp (người gửi), sắp hết (Quản lý CLB, HIGH). resource null. */
-  | 'SUPPLY';
+  | 'SUPPLY'
+  /** Phụ phí mới của ngựa: HLV khu hiện tại và chủ ngựa được báo. resource là ngựa. */
+  | 'SURCHARGE'
+  /** Buổi tập có ngựa mình dắt bị hủy: Groom được báo (HIGH), liệt kê ngựa của mình. resource null. */
+  | 'TRAINING_SESSION'
+  /** Ngựa bị rút khỏi lớp do đổi khu hoặc đổi vòng đời: HLV phụ trách lớp được báo. resource là ngựa. */
+  | 'TRAINING_CLASS';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */

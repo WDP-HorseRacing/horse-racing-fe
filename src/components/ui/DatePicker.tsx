@@ -162,7 +162,7 @@ export function CalendarPanel({ value, min, max, defaultView = 'day', defaultMon
                         cell.inMonth && !selected && 'text-gray-700',
                         allowed && !selected && 'hover:bg-emerald-50 hover:text-emerald-900',
                         !allowed && 'cursor-not-allowed opacity-30',
-                        selected && 'bg-emerald-700 font-semibold text-white shadow-[0_8px_18px_-10px_rgba(6,78,59,0.8)]',
+                        selected && 'bg-emerald-700 font-semibold text-white shadow-raised',
                         isToday && !selected && 'font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-300',
                         'focus-visible:ring-2 focus-visible:ring-emerald-500',
                       )}
@@ -293,6 +293,8 @@ export function DatePicker({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(displayKey(value));
   const [editing, setEditing] = useState(false);
+  // Câu báo khi gõ tay sai dạng hoặc ngoài khoảng: ô trả về ngày cũ nhưng phải nói vì sao.
+  const [typedError, setTypedError] = useState<string>();
   const input = useRef<HTMLInputElement>(null);
   const lastSelected = useRef<string | null>(null);
   // Giá trị từ ngoài đổi (chọn trên lịch, form nạp lại) thì cập nhật chữ trong ô, trừ khi đang gõ.
@@ -300,22 +302,25 @@ export function DatePicker({
 
   const commit = () => {
     setEditing(false);
+    setTypedError(undefined);
     if (!draft.trim()) {
       if (clearable && value) onChange('');
       return;
     }
     const key = parseTyped(draft);
-    if (key) {
+    if (key && inRange(key, min, max)) {
       if (key !== value) onChange(key);
       setDraft(displayKey(key));
     } else {
-      if (draft !== value) onChange(draft);
-      setDraft(draft);
+      // Gõ sai dạng hoặc ngoài khoảng cho phép: trả về ngày cũ, không để chuỗi thô lọt lên API, và báo lý do.
+      setTypedError(key ? rangeMessage(min, max) : 'Ngày không hợp lệ, nhập theo dạng dd/mm/yyyy');
+      setDraft(parseKey(value) ? displayKey(value) : value);
     }
   };
 
   const select = (key: string) => {
     lastSelected.current = key;
+    setTypedError(undefined);
     onChange(key);
     setDraft(displayKey(key));
     setEditing(false);
@@ -331,57 +336,67 @@ export function DatePicker({
         if (!next) onBlur?.();
       }}
     >
-      <Popover.Anchor asChild>
-        <div className={cn('relative', className)}>
-          <input
-            ref={input}
-            id={id}
-            name={name}
-            title={title}
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            disabled={disabled}
-            placeholder={placeholder}
-            value={shown}
-            onFocus={() => {
-              const actualValue = lastSelected.current ?? value;
-              setDraft(parseKey(actualValue) ? displayKey(actualValue) : actualValue);
-              setEditing(true);
-              lastSelected.current = null;
-            }}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => {
-              commit();
-              if (!open) onBlur?.();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commit();
-              } else if (event.key === 'ArrowDown' && event.altKey) {
-                event.preventDefault();
-                setOpen(true);
-              }
-            }}
-            aria-invalid={invalid || undefined}
-            className={cn(fieldClass, 'tabular-nums', size === 'sm' ? 'h-9 py-0 pl-3 pr-9' : 'px-3 py-2 pr-10', invalid && invalidClass)}
-          />
-          <Popover.Trigger asChild>
-            <button
-              type="button"
+      <div className={className}>
+        <Popover.Anchor asChild>
+          <div className="relative">
+            <input
+              ref={input}
+              id={id}
+              name={name}
+              title={title}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
               disabled={disabled}
-              aria-label="Mở lịch chọn ngày"
-              className={cn(
-                'absolute right-1 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:pointer-events-none data-[state=open]:bg-emerald-50 data-[state=open]:text-emerald-700',
-                size === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
-              )}
-            >
-              <CalendarDays size={16} />
-            </button>
-          </Popover.Trigger>
-        </div>
-      </Popover.Anchor>
+              placeholder={placeholder}
+              value={shown}
+              onFocus={() => {
+                const actualValue = lastSelected.current ?? value;
+                setDraft(parseKey(actualValue) ? displayKey(actualValue) : actualValue);
+                setEditing(true);
+                lastSelected.current = null;
+              }}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                if (typedError) setTypedError(undefined);
+              }}
+              onBlur={() => {
+                commit();
+                if (!open) onBlur?.();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commit();
+                } else if (event.key === 'ArrowDown' && event.altKey) {
+                  event.preventDefault();
+                  setOpen(true);
+                }
+              }}
+              aria-invalid={invalid || undefined}
+              className={cn(fieldClass, 'tabular-nums', size === 'sm' ? 'h-9 py-0 pl-3 pr-9' : 'px-3 py-2 pr-10', invalid && invalidClass)}
+            />
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                disabled={disabled}
+                aria-label="Mở lịch chọn ngày"
+                className={cn(
+                  'absolute right-1 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition hover:bg-emerald-50 hover:text-emerald-700 disabled:pointer-events-none data-[state=open]:bg-emerald-50 data-[state=open]:text-emerald-700',
+                  size === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
+                )}
+              >
+                <CalendarDays size={16} />
+              </button>
+            </Popover.Trigger>
+          </div>
+        </Popover.Anchor>
+        {typedError && (
+          <span role="alert" className="mt-1 block text-xs font-medium text-red-600">
+            {typedError}
+          </span>
+        )}
+      </div>
       <Popover.Portal>
         <Popover.Content
           align="start"
@@ -389,7 +404,7 @@ export function DatePicker({
           collisionPadding={12}
           data-lenis-prevent
           onOpenAutoFocus={(event) => event.preventDefault()}
-          className="anim-pop z-[60] rounded-2xl bg-white shadow-[0_22px_48px_-20px_rgba(6,78,59,0.45)] ring-1 ring-gray-200"
+          className="anim-pop z-[60] rounded-2xl bg-white shadow-float ring-1 ring-gray-200"
         >
           <CalendarPanel
             value={value}
@@ -484,4 +499,12 @@ export function DateTimePicker({
       </div>
     </div>
   );
+}
+
+/** Câu báo ngày ngoài khoảng cho phép, theo min/max của ô. */
+function rangeMessage(min?: string, max?: string) {
+  if (min && max) return `Chọn ngày từ ${displayKey(min)} đến ${displayKey(max)}`;
+  if (min) return `Ngày không được trước ${displayKey(min)}`;
+  if (max) return `Ngày không được sau ${displayKey(max)}`;
+  return 'Ngày không hợp lệ';
 }

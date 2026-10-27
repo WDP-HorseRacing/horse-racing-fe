@@ -23,7 +23,7 @@ export function SensorSimIndicator() {
           <Link to={links.participant(sim.participantId)} className="min-w-0 truncate hover:underline">
             Cảm biến giả lập: <b className="font-semibold text-gray-900">{sim.horseName}</b>
           </Link>
-          <span className="shrink-0 font-mono font-semibold tabular-nums">{sim.offline ? `giữ ${sim.pending} điểm` : sim.heartRateBpm ? `${sim.heartRateBpm} bpm` : ''}</span>
+          <span className="shrink-0 tabular-nums font-semibold ">{sim.offline ? `giữ ${sim.pending} điểm` : sim.heartRateBpm ? `${sim.heartRateBpm} bpm` : ''}</span>
           <button
             type="button"
             onClick={() => stopSim(sim.participantId)}

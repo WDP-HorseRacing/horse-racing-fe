@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 export function DashboardHero({ eyebrow, title, actions, children }: { eyebrow?: ReactNode; title: ReactNode; actions?: ReactNode; children?: ReactNode }) {
   return (
-    <section data-reveal className="turf-soft relative overflow-hidden rounded-3xl p-5 ring-1 ring-emerald-900/6 sm:p-6">
+    <section data-reveal className="turf-soft relative overflow-hidden rounded-2xl p-5 ring-1 ring-emerald-900/6 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           {eyebrow && <p className="text-sm font-medium text-emerald-800/70">{eyebrow}</p>}

@@ -125,7 +125,7 @@ function Slot({
   }
 
   const tile = (
-    <span className={cn(base, 'border-gray-200 bg-white shadow-[0_1px_2px_rgba(20,30,25,0.04)] hover:border-gray-300 hover:shadow-[0_10px_24px_-16px_rgba(6,78,59,0.45)]')}>
+    <span className={cn(base, 'border-gray-200 bg-white shadow-card hover:border-gray-300 hover:shadow-raised')}>
       <span className={cn('absolute bottom-2 left-1.5 top-2 w-1 rounded-full', full && 'w-1.5', occupantBarClass(occupant))} aria-hidden />
       <span className="flex items-center justify-between gap-1">
         {code}
@@ -291,7 +291,7 @@ export function ZoneBoard({
       ? 'ring-amber-200 shadow-[inset_3px_0_0_0_#f59e0b]'
       : variant === 'nested'
         ? 'ring-gray-200/60'
-        : 'ring-gray-200/80 shadow-[0_12px_30px_-24px_rgba(6,78,59,0.4)]',
+        : 'ring-gray-200/80 shadow-card',
     highlight && 'ring-2 ring-emerald-500',
   );
 

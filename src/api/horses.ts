@@ -16,6 +16,8 @@ import type {
   Measurement,
   MeasurementType,
   OwnershipPeriod,
+  PastHorse,
+  PastHorseDetail,
   Page,
   Pedigree,
   RestorePreview,
@@ -48,18 +50,25 @@ export const assignBarn = (id: string, barnId: string, reason?: string) =>
 /* Vòng đời, xóa, khôi phục (CM) */
 export const previewLifecycle = (id: string, lifecycleStatus: LifecycleStatus) =>
   http.get<LifecyclePreview>(`/horses/${id}/lifecycle-status/preview`, { lifecycleStatus });
-/** `dateOfDeath` chỉ gửi khi ghi nhận ngựa mất: backend trả 400 nếu gửi kèm trạng thái khác. */
-export const changeLifecycle = (id: string, input: { lifecycleStatus: LifecycleStatus; reason: string; dateOfDeath?: string }) =>
+/**
+ * Ngày mất do hệ thống ghi là hôm nay. `ownerId` chỉ gửi khi kích hoạt lại ngựa đã chuyển nhượng (bắt buộc lúc đó).
+ * Gửi kèm ở trường hợp khác thì backend trả 400.
+ */
+export const changeLifecycle = (id: string, input: { lifecycleStatus: LifecycleStatus; reason: string; ownerId?: string }) =>
   http.patch<HorseBase>(`/horses/${id}/lifecycle-status`, {
     lifecycleStatus: input.lifecycleStatus,
     reason: input.reason,
-    ...(input.lifecycleStatus === 'DECEASED' ? { dateOfDeath: input.dateOfDeath } : {}),
+    ...(input.ownerId ? { ownerId: input.ownerId } : {}),
   });
 /* Chuyển nhượng nội bộ: chủ mới bắt đầu sở hữu từ lúc lưu (CM) */
 export const transferOwnership = (id: string, input: { newOwnerId: string; reason: string; version: number }) =>
   http.post<HorseBase>(`/horses/${id}/ownership-transfers`, input);
 /** Lịch sử sở hữu, mới nhất lên trên. Chủ ngựa chỉ nhận các giai đoạn của chính mình. */
 export const listOwnerships = (id: string) => http.get<OwnershipPeriod[]>(`/horses/${id}/ownerships`);
+/** Chủ ngựa: các con mình từng sở hữu, đã kết thúc giai đoạn và không còn là chủ hiện tại. */
+export const listPastHorses = () => http.get<PastHorse[]>('/past-horses');
+/** Không từng sở hữu hoặc đang là chủ hiện tại: 404. */
+export const getPastHorse = (id: string) => http.get<PastHorseDetail>(`/past-horses/${id}`);
 
 export const previewDeletion = (id: string) => http.get<DeletionPreview>(`/horses/${id}/deletion-preview`);
 export const deleteHorse = (id: string, reason: string) => http.del<void>(`/horses/${id}`, { reason });
@@ -71,7 +80,8 @@ export const listMeasurements = (id: string, query: { type?: MeasurementType; fr
   http.get<Page<Measurement>>(`/horses/${id}/measurements`, query);
 export const addMeasurements = (
   id: string,
-  input: { values: { type: MeasurementType; value: number }[]; measuredAt?: string; confirmAbnormal?: boolean },
+  /** Thời điểm đo là lúc lưu, BE không nhận `measuredAt`. */
+  input: { values: { type: MeasurementType; value: number }[]; confirmAbnormal?: boolean },
 ) => http.post<CreatedMeasurement[]>(`/horses/${id}/measurements`, input);
 export const deleteMeasurement = (horseId: string, measurementId: string, reason: string) =>
   http.del<void>(`/horses/${horseId}/measurements/${measurementId}`, { reason });

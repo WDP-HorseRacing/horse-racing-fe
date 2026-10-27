@@ -8,6 +8,8 @@ export const Profile = lazyPage(() => import('../pages/Profile'));
 export const HorseList = lazyPage(() => import('../pages/horses/HorseList'));
 export const HorseForm = lazyPage(() => import('../pages/horses/HorseForm'));
 export const HorseDetail = lazyPage(() => import('../pages/horses/HorseDetail'));
+export const PastHorses = lazyPage(() => import('../pages/horses/PastHorses'));
+export const PastHorseDetail = lazyPage(() => import('../pages/horses/PastHorses').then((module) => ({ default: module.PastHorseDetail })));
 export const StableMap = lazyPage(() => import('../pages/stable/StableMap'));
 
 export const SubjectsPage = lazyPage(() => import('../pages/training/subjects/SubjectsPage'));
@@ -31,7 +33,6 @@ export const CaseList = lazyPage(() => import('../pages/medical/CaseList'));
 export const CaseDetail = lazyPage(() => import('../pages/medical/CaseDetail'));
 export const PeriodicExams = lazyPage(() => import('../pages/medical/PeriodicExams'));
 export const CareSchedules = lazyPage(() => import('../pages/medical/CareSchedules'));
-export const CostReport = lazyPage(() => import('../pages/medical/CostReport'));
 export const HorseMedical = lazyPage(() => import('../pages/medical/HorseMedical'));
 export const VisitNew = lazyPage(() => import('../pages/medical/VisitNew'));
 export const CaseClose = lazyPage(() => import('../pages/medical/CaseClose'));
@@ -49,6 +50,7 @@ const ROUTES: [string, LazyPage][] = [
   ['/dashboard', Dashboard],
   ['/profile', Profile],
   ['/horses', HorseList],
+  ['/horses/past', PastHorses],
   ['/stable', StableMap],
   ['/stable/incidents', Incidents],
   ['/stable/care', StableCare],
@@ -62,7 +64,6 @@ const ROUTES: [string, LazyPage][] = [
   ['/medical/cases', CaseList],
   ['/medical/periodic', PeriodicExams],
   ['/medical/care', CareSchedules],
-  ['/medical/costs', CostReport],
   ['/reports', Reports],
   ['/reports/my-costs', OwnerCosts],
   ['/admin/audit', AuditLog],

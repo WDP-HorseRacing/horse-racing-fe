@@ -205,6 +205,16 @@ export default function HorseList() {
           );
         }
         if (placementStatus === 'NOT_APPLICABLE') return <span className="text-sm text-gray-400">{placementStatusLabel.NOT_APPLICABLE}</span>;
+        if (placementStatus === 'PENDING_GROOM') {
+          return (
+            <div className="space-y-1">
+              <p className="text-sm text-gray-700">
+                {rowBarn?.name} · <span className="font-mono text-[13px]">{stall?.code}</span>
+              </p>
+              <PlacementStatusPill status={placementStatus} />
+            </div>
+          );
+        }
         return (
           <div className="space-y-1">
             <PlacementStatusPill status={placementStatus} />
@@ -289,7 +299,7 @@ export default function HorseList() {
                 </FilterSelect>
                 <FilterSelect value={placement} onChange={setPlacement} label="Xếp chỗ">
                   <option value="">Mọi tình trạng xếp chỗ</option>
-                  {(['PENDING_BARN', 'PENDING_STALL', 'PLACED'] as PlacementStatus[]).map((item) => (
+                  {(['PENDING_BARN', 'PENDING_STALL', 'PENDING_GROOM', 'PLACED'] as PlacementStatus[]).map((item) => (
                     <option key={item} value={item}>
                       {placementStatusLabel[item]}
                     </option>

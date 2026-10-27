@@ -17,6 +17,7 @@ gsap.registerPlugin(useGSAP);
 const REASON_TEXT: Record<string, string> = {
   expired: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.',
   elsewhere: 'Bạn đã đăng xuất ở một tab khác. Đăng nhập lại để tiếp tục.',
+  locked: 'Phiên đăng nhập đã kết thúc. Nếu tài khoản bị khóa, liên hệ Quản lý câu lạc bộ.',
 };
 
 const HIGHLIGHTS = [
@@ -44,6 +45,8 @@ export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // Số lần sai liên tiếp của email đang gõ: Keycloak khóa tạm tài khoản sau 5 lần sai, nhắc từ lần thứ 3.
+  const [failures, setFailures] = useState({ email: '', count: 0 });
   const [isLoading, setIsLoading] = useState(false);
   const [googlePending, setGooglePending] = useState(false);
   // Lỗi từ trang /auth/callback (hủy đăng nhập, tài khoản chưa được cấp…), lấy một lần.
@@ -82,6 +85,8 @@ export const Login = () => {
       navigate(next, { replace: true });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không đăng nhập được, vui lòng thử lại.');
+      const key = email.trim().toLowerCase();
+      setFailures((current) => ({ email: key, count: current.email === key ? current.count + 1 : 1 }));
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +184,7 @@ export const Login = () => {
               type="button"
               onClick={loginWithGoogle}
               disabled={googlePending || isLoading}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-[15px] font-semibold text-gray-800 ring-1 ring-gray-200 transition hover:bg-emerald-50/40 hover:shadow-[0_14px_30px_-20px_rgba(6,78,59,0.55)] hover:ring-emerald-300 active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-xl bg-white text-[15px] font-semibold text-gray-800 ring-1 ring-gray-200 transition hover:bg-emerald-50/40 hover:shadow-raised hover:ring-emerald-300 active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
             >
               {googlePending ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-emerald-600" /> : <GoogleMark />}
               {googlePending ? 'Đang chuyển tới Google…' : 'Tiếp tục với Google'}
@@ -229,13 +234,16 @@ export const Login = () => {
             {error && (
               <div className="rounded-xl bg-white p-3 text-sm font-medium text-red-700 shadow-[inset_3px_0_0_0_#ef4444] ring-1 ring-red-200" role="alert">
                 {error}
+                {failures.count >= 3 && failures.email === email.trim().toLowerCase() && (
+                  <p className="mt-1 text-xs font-normal text-red-600">Sai 5 lần liên tiếp thì tài khoản bị khóa tạm vài phút, sau đó tự mở.</p>
+                )}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isLoading || googlePending}
-              className="group flex h-12 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 font-semibold text-white shadow-[0_16px_30px_-18px_rgba(6,78,59,0.9)] transition-colors duration-150 hover:bg-emerald-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+              className="group flex h-12 w-full items-center justify-center rounded-xl bg-emerald-700 px-4 font-semibold text-white shadow-raised transition-colors duration-150 hover:bg-emerald-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />

@@ -55,21 +55,28 @@ const NO_FIELD_ERRORS: Record<string, string> = {};
 
 /**
  * Bọc một thao tác ghi: trả về hàm chạy, trạng thái đang gửi và lỗi tiếng Việt.
- * `fieldErrors` là lỗi theo từng ô backend trả về (tên ô trong body → câu lỗi).
+ * `fieldErrors` là lỗi theo từng ô backend trả về (tên ô trong body → câu lỗi), `conflictIds` là id bản ghi gây trùng (409) theo ô.
  */
 export function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [field, setField] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(NO_FIELD_ERRORS);
+  const [conflictIds, setConflictIds] = useState<Record<string, string>>(NO_FIELD_ERRORS);
+  // Chặn bấm đúp nhanh hơn một lần vẽ lại (nút chưa kịp xám): lần gọi thứ hai khi lần đầu chưa xong thì bỏ qua.
+  const inFlight = useRef(false);
 
   const run = useCallback(async <T,>(fn: () => Promise<T>, onDone?: (result: T) => void) => {
+    if (inFlight.current) return undefined;
+    inFlight.current = true;
     setPending(true);
     setError(undefined);
     setField(undefined);
     setFieldErrors(NO_FIELD_ERRORS);
+    setConflictIds(NO_FIELD_ERRORS);
     try {
       const result = await track(fn());
+      inFlight.current = false;
       onDone?.(result);
       return result;
     } catch (caught) {
@@ -77,9 +84,11 @@ export function useAction() {
       if (caught instanceof AppError) {
         setField(caught.field);
         setFieldErrors(caught.fieldErrors);
+        setConflictIds(caught.conflictIds);
       }
       return undefined;
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }, []);
@@ -88,7 +97,8 @@ export function useAction() {
     setError(undefined);
     setField(undefined);
     setFieldErrors(NO_FIELD_ERRORS);
+    setConflictIds(NO_FIELD_ERRORS);
   }, []);
 
-  return { run, pending, error, field, fieldErrors, clearError };
+  return { run, pending, error, field, fieldErrors, conflictIds, clearError };
 }

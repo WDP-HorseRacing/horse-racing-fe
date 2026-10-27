@@ -10,6 +10,7 @@ import type {
   FeedingPlanStatus,
   GroomToday,
   HorseCareTask,
+  HorseCareTaskMode,
   Incident,
   IncidentStatus,
   Page,
@@ -51,12 +52,29 @@ export const updateTaskType = (id: string, input: { name?: string; appliesToAll?
 
 /** Gồm cả việc đã kết thúc, mới nhất trước. */
 export const listHorseCareTasks = (horseId: string) => http.get<HorseCareTask[]>(`/horses/${horseId}/care-tasks`);
-export const attachCareTask = (horseId: string, input: { taskTypeId: string; fromDate: string; toDate: string; note?: string }) =>
+/**
+ * `mode` mặc định EXTRA. EXEMPT miễn một loại việc đang áp mọi ngựa trong khoảng ngày, `note` (lý do) bắt buộc (thiếu: 400).
+ * Miễn loại không áp mọi ngựa, hoặc trùng khoảng ngày với dòng khác cùng loại: 409.
+ */
+export const attachCareTask = (horseId: string, input: { taskTypeId: string; fromDate: string; toDate: string; mode?: HorseCareTaskMode; note?: string }) =>
   http.post<HorseCareTask>(`/horses/${horseId}/care-tasks`, input);
-/** Chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc ở hôm nay. */
+/** Chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc ở hôm nay. Gỡ dòng miễn: việc chung có lại ngay trong checklist hôm nay. */
 export const removeCareTask = (id: string) => http.del<void>(`/horse-care-tasks/${id}`);
 
 /* ===== Checklist hằng ngày ===== */
+
+/** Kết quả sinh lại checklist hôm nay: số checklist vừa sinh và các ngựa vẫn lỗi. */
+export interface RegenerateChecklistResult {
+  date: string;
+  generated: number;
+  failures: { horseId: string; horseName: string; message: string }[];
+}
+
+/**
+ * Chỉ Quản lý CLB. Sinh checklist hôm nay cho ngựa có Groom mà còn thiếu, checklist đã có giữ nguyên.
+ * BE cũng tự thử lại khi lỗi và báo Quản lý CLB (thông báo DAILY_CHECKLIST không kèm ngựa).
+ */
+export const regenerateTodayChecklists = () => http.post<RegenerateChecklistResult>('/daily-checklists/regenerate-today');
 
 /**
  * Tối đa 31 ngày. Xem không tạo checklist: BE tạo sẵn lúc 00:05 (và khi khởi động) cho mọi ngựa đang có Groom,
@@ -73,7 +91,7 @@ export const getGroomToday = () => http.get<GroomToday>('/grooms/me/today');
 
 /* ===== Sự cố tại chuồng ===== */
 
-/** Quản lý CLB, bác sĩ thấy tất cả. HLV thấy ngựa đang ở khu mình. Groom thấy sự cố mình báo. Mới nhất trước. */
+/** Quản lý CLB, bác sĩ thấy tất cả. HLV thấy ngựa đang ở khu mình. Groom thấy sự cố mình báo và mọi sự cố của ngựa mình đang phụ trách. Mới nhất trước. */
 export const listIncidents = (query: { status?: IncidentStatus; horseId?: string; barnId?: string } = {}) => fetchAll<Incident>('/incidents', query);
 /** Chỉ đếm (Tổng quan). */
 export const countIncidents = async (query: { status?: IncidentStatus; barnId?: string } = {}) =>

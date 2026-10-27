@@ -46,7 +46,7 @@ export const CAPABILITIES: Capability[] = [
   { key: 'plan.view', code: 'F2.2', group: 'Huấn luyện', feature: 'Xem giáo án', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S } },
   { key: 'plan.manage', code: 'F2.2', group: 'Huấn luyện', feature: 'Lập, sửa, xóa giáo án của mình', roles: { HEAD_TRAINER: S } },
   { key: 'class.view', code: 'F2.3', group: 'Huấn luyện', feature: 'Xem lớp và buổi tập', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
-  { key: 'class.manage', code: 'F2.3', group: 'Huấn luyện', feature: 'Mở lớp, ghi danh, công bố và hủy buổi', roles: { HEAD_TRAINER: Z } },
+  { key: 'class.manage', code: 'F2.3', group: 'Huấn luyện', feature: 'Mở lớp, xếp lịch buổi, ghi danh và hủy buổi', roles: { HEAD_TRAINER: Z } },
   { key: 'session.run', code: 'F2.3', group: 'Huấn luyện', feature: 'Điểm danh, bắt đầu, hoàn thành lượt tập, ghi kết quả chạy thử', roles: { HEAD_TRAINER: Z, GROOM: G } },
   { key: 'realtime.view', code: 'F2.4', group: 'Huấn luyện', feature: 'Theo dõi nhịp tim, tốc độ khi tập', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
   { key: 'threshold.view', code: 'F2.4', group: 'Huấn luyện', feature: 'Xem ngưỡng nhịp tim và tốc độ', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
@@ -77,7 +77,7 @@ export const CAPABILITIES: Capability[] = [
   { key: 'careInstructions.view', code: 'F3.10', group: 'Y tế', feature: 'Xem ghi chú chăm sóc của bác sĩ', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
   { key: 'care.view', code: 'F3.11', group: 'Y tế', feature: 'Xem lịch tiêm phòng, tẩy giun, kiểm tra móng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: G, HORSE_OWNER: O } },
   { key: 'care.manage', code: 'F3.11', group: 'Y tế', feature: 'Tạo, dời, hủy lịch chăm sóc', roles: { VETERINARIAN: A } },
-  { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc được giao', roles: { VETERINARIAN: A, GROOM: G } },
+  { key: 'care.complete', code: 'F3.11', group: 'Y tế', feature: 'Hoàn tất lịch chăm sóc', roles: { VETERINARIAN: A } },
 
   // ===== Flow 4 — chăm sóc chuồng trại và dinh dưỡng (theo bảng phân quyền III.8 của BE) =====
   { key: 'checklist.view', code: 'F4.1', group: 'Chăm sóc chuồng', feature: 'Xem checklist chăm sóc hằng ngày', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, GROOM: G } },
@@ -85,28 +85,32 @@ export const CAPABILITIES: Capability[] = [
   { key: 'feeding.view', code: 'F4.2', group: 'Chăm sóc chuồng', feature: 'Xem khẩu phần ăn theo bữa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
   { key: 'feeding.manage', code: 'F4.2', group: 'Chăm sóc chuồng', feature: 'Lập, sửa và áp dụng khẩu phần ăn', roles: { HEAD_TRAINER: Z } },
   { key: 'taskType.manage', code: 'F4.3', group: 'Chăm sóc chuồng', feature: 'Quản lý loại việc chăm sóc', roles: { CLUB_MANAGER: A } },
-  { key: 'careTask.manage', code: 'F4.3', group: 'Chăm sóc chuồng', feature: 'Gắn, gỡ việc chăm sóc riêng cho ngựa', roles: { HEAD_TRAINER: Z } },
+  { key: 'careTask.manage', code: 'F4.3', group: 'Chăm sóc chuồng', feature: 'Gắn, miễn, gỡ việc chăm sóc riêng cho ngựa', roles: { HEAD_TRAINER: Z, VETERINARIAN: A } },
   { key: 'incident.report', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Báo sự cố tại chuồng kèm ảnh', roles: { GROOM: G } },
   { key: 'incident.view', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Xem sự cố tại chuồng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: S } },
   { key: 'incident.handle', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Chuyển bác sĩ, đóng sự cố', roles: { HEAD_TRAINER: Z } },
   { key: 'supply.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem vật tư, vật tư sắp hết, lô hàng, sổ nhập xuất', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
   { key: 'supply.manage', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Thêm, sửa, xóa vật tư', roles: { CLUB_MANAGER: A } },
   { key: 'supply.receive', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Nhập hàng kèm đơn giá', roles: { CLUB_MANAGER: A } },
-  { key: 'supply.use', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư, trừ tồn ngay', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
+  { key: 'supply.use', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư (trừ thuốc), trừ tồn ngay, ghi chú bắt buộc', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
+  { key: 'supply.useMedicine', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư loại thuốc', roles: { CLUB_MANAGER: A, VETERINARIAN: A } },
   { key: 'supply.price', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đơn giá, thành tiền và giá trị tồn', roles: { CLUB_MANAGER: A } },
-  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, GROOM: S } },
-  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, GROOM: S } },
+  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
+  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
   { key: 'supplyRequest.review', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Duyệt, từ chối, đánh dấu đã cấp đề xuất', roles: { CLUB_MANAGER: A } },
 
   // ===== Quản trị =====
   { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự: tạo tài khoản, đổi vai trò, khóa tài khoản', roles: { CLUB_MANAGER: A } },
   { key: 'audit.view', code: 'QT', group: 'Quản trị', feature: 'Xem nhật ký thao tác, trước và sau khi đổi', roles: { CLUB_MANAGER: A } },
   { key: 'fee.manage', code: 'QT', group: 'Quản trị', feature: 'Đặt và xóa mức phí nuôi theo ngày', roles: { CLUB_MANAGER: A } },
+  { key: 'surcharge.view', code: 'QT', group: 'Quản trị', feature: 'Xem phụ phí riêng của ngựa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, HORSE_OWNER: O } },
+  { key: 'surcharge.manage', code: 'QT', group: 'Quản trị', feature: 'Ghi, kết thúc sớm, xóa phụ phí riêng của ngựa', roles: { CLUB_MANAGER: A } },
+  { key: 'surcharge.apply', code: 'QT', group: 'Quản trị', feature: 'Xác nhận đã áp dụng phụ phí cho ngựa trong khu', roles: { HEAD_TRAINER: Z } },
 
   // ===== Báo cáo =====
   { key: 'report.training', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo huấn luyện theo kỳ, theo khu', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A } },
   { key: 'report.finance', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo tài chính CLB, chi phí từng chủ ngựa', roles: { CLUB_MANAGER: A } },
-  { key: 'report.ownerCosts', code: 'BC', group: 'Báo cáo', feature: 'Xem phí nuôi và chi phí y tế của mình', roles: { HORSE_OWNER: S } },
+  { key: 'report.ownerCosts', code: 'BC', group: 'Báo cáo', feature: 'Xem phí nuôi, phụ phí và chi phí y tế của mình', roles: { HORSE_OWNER: S } },
   { key: 'report.horse', code: 'BC', group: 'Báo cáo', feature: 'Báo cáo tiến độ và sức khỏe của một ngựa', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, HORSE_OWNER: O } },
 ];
 

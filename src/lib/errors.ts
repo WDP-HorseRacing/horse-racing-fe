@@ -3,6 +3,8 @@ export class AppError extends Error {
   field?: string;
   /** Lỗi theo từng ô nhập (tên ô trong body gửi đi → câu lỗi). Rỗng khi lỗi không gắn ô nào. */
   fieldErrors: Record<string, string> = {};
+  /** Lỗi trùng (409) có thể kèm id bản ghi đang giữ giá trị đó, theo tên ô. Ví dụ số chip trùng: id con ngựa đang giữ số chip. */
+  conflictIds: Record<string, string> = {};
   constructor(message: string, field?: string) {
     super(message);
     this.name = 'AppError';
@@ -14,12 +16,20 @@ export class AppError extends Error {
 export class ApiError extends AppError {
   status: number;
   details: string[] | null;
-  constructor(status: number, message: string, details: string[] | null = null, field?: string, fieldErrors: Record<string, string> = {}) {
+  constructor(
+    status: number,
+    message: string,
+    details: string[] | null = null,
+    field?: string,
+    fieldErrors: Record<string, string> = {},
+    conflictIds: Record<string, string> = {},
+  ) {
     super(message, field);
     this.name = 'ApiError';
     this.status = status;
     this.details = details;
     this.fieldErrors = fieldErrors;
+    this.conflictIds = conflictIds;
   }
 }
 
@@ -54,7 +64,6 @@ export function fieldFromMessage(message: string | undefined): string | undefine
   if (!message) return undefined;
   const text = message.toLowerCase();
   if (text.includes('số chip') || text.includes('microchip')) return 'microchipId';
-  if (text.includes('ngày mất')) return 'dateOfDeath';
   if (text.includes('ngày sinh') || text.includes('sinh trước')) return 'dateOfBirth';
   if (text.includes('ngựa cha') || /\bsire\b/.test(text)) return 'sireId';
   if (text.includes('ngựa mẹ') || /\bdam\b/.test(text)) return 'damId';

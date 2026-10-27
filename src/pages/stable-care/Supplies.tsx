@@ -1,13 +1,14 @@
 // F4.5 — Vật tư: kho chung của câu lạc bộ (không chia theo khu), quản lý theo lô.
 // Quản lý CLB: thêm, sửa, xóa vật tư, nhập hàng kèm đơn giá, duyệt hoặc từ chối đề xuất rồi cấp hàng (kèm đơn giá).
-// HLV, Groom: theo dõi tồn, xuất dùng, đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng.
+// HLV, Groom: theo dõi tồn, xuất dùng (trừ thuốc), đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng cả thuốc.
+// Mọi lần xuất bắt buộc ghi chú.
 // Hệ thống không tự trừ tồn theo khẩu phần hay đơn thuốc: ai lấy hàng thì bấm Xuất dùng, lô nhập trước trừ trước.
 // Tiền (đơn giá, thành tiền, giá trị tồn) chỉ Quản lý CLB thấy.
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowDownToLine, PackageMinus, PackagePlus, Plus } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
-import { deleteSupplyItem, listSupplyItems, listSupplyRequests, reviewSupplyRequest } from '../../api/supplies';
+import { cancelSupplyRequest, deleteSupplyItem, listSupplyItems, listSupplyRequests } from '../../api/supplies';
 import type { NotificationItem, SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -37,6 +38,7 @@ import { useStore } from '../../store/store';
 import { stockTone } from './care-helpers';
 import { SupplyItemSheet } from './components/SupplyItemSheet';
 import { FulfillRequestDialog, ReceiveDialog, RejectRequestDialog, SupplyItemDialog, SupplyRequestDialog, UsageDialog } from './components/supply-dialogs';
+import { ReasonDialog } from '../training/components/ReasonDialog';
 
 type Dialog =
   | { kind: 'item'; item?: SupplyItem }
@@ -45,9 +47,10 @@ type Dialog =
   | { kind: 'request'; item?: SupplyItem; request?: SupplyRequest }
   | { kind: 'delete'; item: SupplyItem }
   | { kind: 'reject'; request: SupplyRequest }
-  | { kind: 'fulfill'; request: SupplyRequest };
+  | { kind: 'fulfill'; request: SupplyRequest; approveFirst?: boolean }
+  | { kind: 'cancel'; request: SupplyRequest };
 
-const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red' };
+const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red', CANCELLED: 'gray' };
 
 export default function Supplies() {
   const user = useStore((state) => state.currentUser);
@@ -61,10 +64,14 @@ export default function Supplies() {
   const [requestsVersion, setRequestsVersion] = useState(0);
   const reloadRequests = () => setRequestsVersion((version) => version + 1);
   const remove = useAction();
+  const cancelRequest = useAction();
 
   const canManage = can(user, 'supply.manage');
   const canReceive = can(user, 'supply.receive');
-  const canUse = can(user, 'supply.use');
+  const canUseAny = can(user, 'supply.use');
+  const canUseMedicine = can(user, 'supply.useMedicine');
+  // Thuốc chỉ Quản lý CLB và bác sĩ xuất (BE trả 403 với HLV, Groom).
+  const canUse = (item: SupplyItem) => canUseAny && (item.category !== 'MEDICINE' || canUseMedicine);
   const showPrice = can(user, 'supply.price');
   const canRequest = can(user, 'supplyRequest.create');
   const canViewRequests = can(user, 'supplyRequest.view');
@@ -110,7 +117,7 @@ export default function Supplies() {
           canManage
             ? 'Thức ăn, thuốc và dụng cụ dùng chung của CLB.'
             : canRequest
-              ? 'Lấy hàng ra dùng thì bấm Xuất dùng. Sắp hết thì đề xuất thêm.'
+              ? `Lấy hàng ra dùng thì bấm Xuất dùng, ghi rõ lấy cho việc gì${canUseMedicine ? '' : ' (thuốc do bác sĩ xuất)'}. Sắp hết thì đề xuất thêm.`
               : 'Lấy hàng ra dùng thì bấm Xuất dùng.'
         }
         actions={
@@ -176,24 +183,24 @@ export default function Supplies() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {visible.map((item) => (
-                  <li key={item.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap', item.lowStock && 'bg-red-50/30')}>
+                  <li key={item.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap', item.lowStock && 'bg-amber-50/40')}>
                     <button type="button" onClick={() => setOpenId(item.id)} className="min-w-0 flex-1 text-left">
                       <span className="flex items-center gap-2">
                         <span className="truncate font-semibold text-gray-900 hover:underline">{item.name}</span>
-                        {item.lowStock && <Pill tone="red">Sắp hết</Pill>}
+                        {item.lowStock && <Pill tone="amber">Sắp hết</Pill>}
                       </span>
                       <span className="block text-xs text-gray-500">
                         {supplyCategoryText[item.category]} · báo sắp hết ở {formatAmount(item.reorderThreshold, item.unit)}
                       </span>
                     </button>
                     <div className="w-36 shrink-0">
-                      <p className="text-right font-mono text-sm font-semibold tabular-nums text-gray-900">
+                      <p className="text-right tabular-nums text-sm font-semibold  text-gray-900">
                         {formatQuantity(item.quantityOnHand)} <span className="font-sans text-xs font-normal text-gray-500">{item.unit}</span>
                       </p>
                       <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {canUse && (
+                      {canUse(item) && (
                         <Button variant="ghost" size="icon" title={item.quantityOnHand > 0 ? 'Xuất dùng' : 'Hết hàng'} disabled={item.quantityOnHand <= 0} onClick={() => setDialog({ kind: 'use', item })}>
                           <PackageMinus size={16} />
                         </Button>
@@ -224,20 +231,26 @@ export default function Supplies() {
           </section>
 
           <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4">
-            <section className={cn('rounded-2xl p-4 ring-1', low.length ? 'bg-red-50/70 shadow-[0_18px_40px_-28px_rgba(185,28,28,0.55)] ring-red-100' : 'bg-white shadow-card ring-gray-200/80')}>
+            <section className={cn('rounded-2xl bg-white p-4 ring-1 ring-gray-200/80', low.length ? 'shadow-amber-tint' : 'shadow-card')}>
               <h2 className="flex items-center justify-between text-sm font-semibold text-gray-900">
-                Sắp hết <span className={cn('font-mono text-lg', low.length ? 'text-red-700' : 'text-gray-400')}>{low.length}</span>
+                Sắp hết
+                <span className={cn('rounded-md px-1.5 text-sm font-semibold tabular-nums', low.length ? 'bg-amber-50 text-amber-800' : 'text-gray-400')}>{low.length}</span>
               </h2>
               {low.length === 0 ? (
                 <p className="mt-1 text-sm text-gray-500">Chưa có vật tư nào sắp hết.</p>
               ) : (
-                <ul className="mt-2 space-y-1.5">
+                <ul className="mt-2">
                   {low.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-red-100">
-                      <button type="button" onClick={() => setOpenId(item.id)} className="min-w-0 truncate text-left text-sm font-medium text-gray-900 hover:underline">
-                        {item.name}
-                      </button>
-                      <span className="shrink-0 font-mono text-xs text-red-700">{formatAmount(item.quantityOnHand, item.unit)}</span>
+                    <li key={item.id} className="flex items-center gap-2 border-t border-gray-100 py-2 first:border-t-0">
+                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      <span className="min-w-0 flex-1">
+                        <button type="button" onClick={() => setOpenId(item.id)} className="block max-w-full truncate text-left text-sm font-medium text-gray-900 hover:underline">
+                          {item.name}
+                        </button>
+                        <span className="block text-xs tabular-nums text-gray-500">
+                          Còn <span className="font-semibold text-amber-800">{formatAmount(item.quantityOnHand, item.unit)}</span> / ngưỡng {formatAmount(item.reorderThreshold, item.unit)}
+                        </span>
+                      </span>
                       {canRequest && (
                         <Button variant="inline" size="sm" onClick={() => setDialog({ kind: 'request', item })}>
                           Đề xuất thêm
@@ -261,7 +274,7 @@ export default function Supplies() {
                   )}
                 >
                   <p className="text-xs text-gray-500">{supplyCategoryText[value]}</p>
-                  <p className="font-mono text-xl font-bold text-gray-900">{all.filter((item) => item.category === value).length}</p>
+                  <p className="tabular-nums text-xl font-bold text-gray-900">{all.filter((item) => item.category === value).length}</p>
                 </button>
               ))}
             </section>
@@ -275,9 +288,10 @@ export default function Supplies() {
           onClose={() => setOpenId(null)}
           showPrice={showPrice}
           onReceive={canReceive ? () => setDialog({ kind: 'receive', item: opened }) : undefined}
-          onUse={canUse && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
+          onUse={canUse(opened) && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
           onRequest={canRequest ? () => setDialog({ kind: 'request', item: opened }) : undefined}
           onEdit={canManage ? () => setDialog({ kind: 'item', item: opened }) : undefined}
+          onChanged={afterItemChange}
         />
       )}
 
@@ -322,9 +336,37 @@ export default function Supplies() {
       >
         {remove.error && <ErrorBox message={remove.error} />}
       </ConfirmDialog>
+      {dialog?.kind === 'cancel' && (
+        <ReasonDialog
+          title={`Hủy đề xuất ${dialog.request.item.name}`}
+          message={<>Đề xuất của <b>{dialog.request.requester.fullName}</b> đã duyệt nhưng chưa cấp. Người gửi nhận thông báo kèm lý do, muốn thì gửi đề xuất mới.</>}
+          label="Lý do hủy"
+          maxLength={500}
+          suggestions={['Nhà cung cấp hết hàng', 'Đã mua loại khác thay thế', 'Duyệt nhầm']}
+          confirmLabel="Hủy đề xuất"
+          pending={cancelRequest.pending}
+          error={cancelRequest.error}
+          onClose={() => {
+            cancelRequest.clearError();
+            setDialog(null);
+          }}
+          onConfirm={(reason) =>
+            dialog.kind === 'cancel' &&
+            void cancelRequest.run(
+              () => cancelSupplyRequest(dialog.request.id, reason),
+              () => {
+                toast.push(`Đã hủy đề xuất ${dialog.request.item.name}`, 'success');
+                setDialog(null);
+                reloadRequests();
+              },
+            )
+          }
+        />
+      )}
       {dialog?.kind === 'fulfill' && (
         <FulfillRequestDialog
           request={dialog.request}
+          approveFirst={dialog.approveFirst}
           onClose={() => setDialog(null)}
           onDone={() => {
             reloadRequests();
@@ -339,11 +381,8 @@ export default function Supplies() {
 /* ===== Đề xuất ===== */
 
 function RequestsPanel({ manager, version, onDialog }: { manager: boolean; version: number; onDialog: (dialog: Dialog) => void }) {
-  const toast = useToast();
   const [status, setStatus] = useState<SupplyRequestStatus | 'ALL'>(manager ? 'PENDING' : 'ALL');
-  const [approved, setApproved] = useState(0);
-  const list = useService(() => listSupplyRequests(status === 'ALL' ? undefined : status), [status, version, approved]);
-  const approve = useAction();
+  const list = useService(() => listSupplyRequests(status === 'ALL' ? undefined : status), [status, version]);
   const rows = list.data ?? [];
 
   return (
@@ -352,11 +391,10 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
         value={status}
         onChange={setStatus}
         options={[
-          ...(manager ? (['PENDING', 'APPROVED', 'FULFILLED', 'REJECTED'] as const) : []).map((value) => ({ value, label: supplyRequestStatusText[value] })),
+          ...(manager ? (['PENDING', 'APPROVED', 'FULFILLED', 'REJECTED', 'CANCELLED'] as const) : []).map((value) => ({ value, label: supplyRequestStatusText[value] })),
           { value: 'ALL' as const, label: 'Tất cả' },
         ]}
       />
-      {approve.error && <ErrorBox message={approve.error} />}
       {list.loading && !list.data ? (
         <Skeleton rows={3} />
       ) : list.error ? (
@@ -369,7 +407,8 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900">
-                  {request.item.name} <span className="font-mono text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>
+                  {request.item.name}{' '}
+                  {request.status === 'FULFILLED' && request.quantity !== null && <span className="tabular-nums text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>}
                 </p>
                 <p className="text-xs text-gray-500" title={formatDateTime(request.createdAt)}>
                   {manager ? `${request.requester.fullName} · ` : ''}
@@ -389,37 +428,39 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
             {request.status === 'APPROVED' && request.reviewer && <p className="mt-2 text-xs text-gray-500">{request.reviewer.fullName} đã duyệt, chờ cấp</p>}
             {request.status === 'FULFILLED' && (
               <p className="mt-2 text-xs text-gray-500">
-                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
+                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'}
+                {request.quantity !== null ? ` ${formatAmount(request.quantity, request.item.unit)}` : ''} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
               </p>
             )}
-            {(manager || request.status === 'PENDING') && request.status !== 'REJECTED' && request.status !== 'FULFILLED' && (
+            {request.status === 'CANCELLED' && (
+              <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700 ring-1 ring-gray-100">
+                Đã hủy{request.cancellationReason ? `: ${request.cancellationReason}` : ''}
+                <span className="block text-xs text-gray-500" title={request.cancelledAt ? formatDateTime(request.cancelledAt) : undefined}>
+                  {[request.canceller?.fullName, request.cancelledAt ? formatDateTime(request.cancelledAt) : null].filter(Boolean).join(' · ')}
+                </span>
+              </p>
+            )}
+            {(manager || request.status === 'PENDING') && (request.status === 'PENDING' || request.status === 'APPROVED') && (
               <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-3">
                 {manager && request.status === 'PENDING' && (
                   <>
                     <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'reject', request })}>
                       Từ chối
                     </Button>
-                    <Button
-                      size="sm"
-                      disabled={approve.pending}
-                      onClick={() =>
-                        void approve.run(
-                          () => reviewSupplyRequest(request.id, 'APPROVED'),
-                          () => {
-                            toast.push(`Đã duyệt đề xuất ${request.item.name}`, 'success');
-                            setApproved((key) => key + 1);
-                          },
-                        )
-                      }
-                    >
+                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request, approveFirst: true })}>
                       Duyệt
                     </Button>
                   </>
                 )}
                 {manager && request.status === 'APPROVED' && (
-                  <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
-                    Cấp hàng
-                  </Button>
+                  <>
+                    <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'cancel', request })}>
+                      Hủy đề xuất
+                    </Button>
+                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
+                      Cấp hàng
+                    </Button>
+                  </>
                 )}
                 {!manager && request.status === 'PENDING' && (
                   <Button variant="secondary" size="sm" onClick={() => onDialog({ kind: 'request', request })}>

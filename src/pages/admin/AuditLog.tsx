@@ -11,7 +11,7 @@ import { PeriodBar } from '../../components/PeriodBar';
 import { EmptyState, ErrorBox, FilterSelect, NotFound, PageHeader, Pill, Sheet, Skeleton, cn, type PillTone } from '../../components/ui';
 import { usePeriod } from '../../hooks/usePeriod';
 import { useService } from '../../hooks/useService';
-import { AUDIT_ACTIONS, auditActionText, auditEntityText, entityLabel, featureLabel } from '../../lib/audit-labels';
+import { AUDIT_ACTIONS, auditActionText, auditEntityText, auditFeatureText, entityLabel, featureLabel } from '../../lib/audit-labels';
 import { clubDateKey } from '../../lib/club-time';
 import { now } from '../../lib/clock';
 import { formatDate, formatDateTime, formatTime } from '../../lib/format';
@@ -28,12 +28,22 @@ const ACTION_TONE: Record<AuditAction, PillTone> = {
   RESTORE: 'amber',
   LOGIN: 'gray',
   LOGOUT: 'gray',
+  LOGIN_FAILED: 'red',
+  PASSWORD_CHANGE: 'amber',
 };
+
+/** Người làm. Dòng đăng nhập sai không có người làm: ghi tài khoản bị thử (entityId), không ghi "Hệ thống". */
+function actorText(item: Pick<AuditLog, 'actor' | 'action' | 'entityId' | 'feature'>, names: Map<string, string>) {
+  if (item.actor) return item.actor.fullName;
+  if (item.action === 'LOGIN_FAILED') return `Đăng nhập sai: ${names.get(item.entityId) ?? 'tài khoản đã xóa'}`;
+  // Hệ thống chấm lại lượt tập khi khóa huấn luyện hoặc sức khỏe ngựa đổi.
+  if (item.feature === 'TRAIN_RUN') return 'Hệ thống chấm lại lượt tập';
+  return 'Hệ thống';
+}
 
 /** Loại đối tượng hay gặp, để lọc. Các loại khác vẫn hiện trong danh sách. */
 const ENTITY_FILTERS = [
   'HORSE',
-  'HORSE_OWNERSHIP',
   'HORSE_MEASUREMENT',
   'BARN',
   'STALL_ASSIGNMENT',
@@ -62,13 +72,15 @@ export default function AuditLogPage() {
   const [actorId, setActorId] = useState('');
   const [action, setAction] = useState<AuditAction | ''>('');
   const [entityType, setEntityType] = useState('');
+  const [feature, setFeature] = useState('');
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
   useCrumbs([{ label: 'Nhật ký thao tác' }]);
 
   const allowed = can(user, 'audit.view');
   const users = useService(() => (allowed ? listAllUsers() : Promise.resolve([])), [allowed]);
-  const filterKey = `${period.from}|${period.to}|${actorId}|${action}|${entityType}`;
+  const names = useMemo(() => new Map((users.data ?? []).map((entry) => [entry.id, entry.fullName] as const)), [users.data]);
+  const filterKey = `${period.from}|${period.to}|${actorId}|${action}|${entityType}|${feature}`;
   // Đổi bộ lọc thì về trang 1.
   const [lastKey, setLastKey] = useState(filterKey);
   if (lastKey !== filterKey) {
@@ -79,7 +91,16 @@ export default function AuditLogPage() {
     () =>
       !allowed || period.invalid
         ? Promise.resolve(null)
-        : listAuditLogs({ page, limit: PAGE_SIZE, from: period.from, to: period.to, actorId: actorId || undefined, action: action || undefined, entityType: entityType || undefined }),
+        : listAuditLogs({
+            page,
+            limit: PAGE_SIZE,
+            from: period.from,
+            to: period.to,
+            actorId: actorId || undefined,
+            action: action || undefined,
+            entityType: entityType || undefined,
+            feature: feature || undefined,
+          }),
     [allowed, page, filterKey, period.invalid],
   );
   const groups = useMemo(() => groupByDay(logs.data?.items ?? []), [logs.data]);
@@ -110,6 +131,14 @@ export default function AuditLogPage() {
               </option>
             ))}
           </FilterSelect>
+          <FilterSelect value={feature} onChange={setFeature} label="Chức năng">
+            <option value="">Mọi chức năng</option>
+            {Object.entries(auditFeatureText).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
           <FilterSelect value={entityType} onChange={setEntityType} label="Đối tượng">
             <option value="">Mọi đối tượng</option>
             {ENTITY_FILTERS.map((value) => (
@@ -136,10 +165,10 @@ export default function AuditLogPage() {
                 {group.items.map((item) => (
                   <li key={item.id}>
                     <button type="button" onClick={() => setOpenId(item.id)} className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-emerald-50/40">
-                      <span className="w-12 shrink-0 pt-0.5 font-mono text-xs tabular-nums text-gray-500">{formatTime(item.createdAt)}</span>
+                      <span className="w-12 shrink-0 pt-0.5 tabular-nums text-xs  text-gray-500">{formatTime(item.createdAt)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="font-semibold text-gray-900">{item.actor?.fullName ?? 'Hệ thống'}</span>
+                          <span className={cn('font-semibold', !item.actor && item.action === 'LOGIN_FAILED' ? 'text-red-800' : 'text-gray-900')}>{actorText(item, names)}</span>
                           {item.actor?.role && <span className="text-xs text-gray-500">{roleLabel[item.actor.role]}</span>}
                           <Pill tone={ACTION_TONE[item.action]}>{auditActionText[item.action]}</Pill>
                         </span>
@@ -182,7 +211,7 @@ export default function AuditLogPage() {
         </div>
       )}
 
-      {openId && <AuditDetailSheet id={openId} onClose={() => setOpenId(null)} />}
+      {openId && <AuditDetailSheet id={openId} names={names} onClose={() => setOpenId(null)} />}
     </div>
   );
 }
@@ -239,6 +268,31 @@ const FIELD_TEXT: Record<string, string> = {
   used: 'Đã lấy',
   received: 'Đã nhập',
   remaining: 'Còn lại',
+  dailyAmount: 'Tiền mỗi ngày',
+  startDate: 'Từ ngày',
+  endDate: 'Đến ngày',
+  appliedAt: 'Đã áp dụng lúc',
+  appliedBy: 'Người áp dụng',
+  method: 'Cách đăng nhập',
+  provider: 'Nhà cung cấp',
+  ongoingRunsCancelled: 'Lượt đang chạy bị hủy',
+  position: 'Tọa độ',
+  ineligibilityReason: 'Lý do không tập',
+  mode: 'Kiểu',
+  assigneeType: 'Cách giao',
+  assignedTo: 'Người làm',
+  appliesToAll: 'Cho mọi ngựa',
+  fromDate: 'Từ ngày',
+  toDate: 'Đến ngày',
+  taskTypeId: 'Loại việc',
+  usageId: 'Mã lần xuất',
+  microchipId: 'Số chip',
+  generated: 'Số checklist đã sinh',
+  elapsedMs: 'Thời gian chạy (ms)',
+  notes: 'Ghi chú',
+  stoppedReason: 'Lý do dừng sớm',
+  cost: 'Chi phí buổi khám',
+  recoveryStatus: 'Mức hồi phục',
 };
 
 function fieldName(key: string) {
@@ -278,7 +332,7 @@ function entityLink(entityType: string, entityId: string): string | undefined {
   return undefined;
 }
 
-function AuditDetailSheet({ id, onClose }: { id: string; onClose: () => void }) {
+function AuditDetailSheet({ id, names, onClose }: { id: string; names: Map<string, string>; onClose: () => void }) {
   const detail = useService(() => getAuditLog(id), [id]);
   const data = detail.data;
   const rows = data ? diffRows(data.before, data.after) : [];
@@ -289,7 +343,7 @@ function AuditDetailSheet({ id, onClose }: { id: string; onClose: () => void }) 
       open
       onClose={onClose}
       title={data ? `${auditActionText[data.action]} ${entityLabel(data.entityType).toLowerCase()}` : 'Chi tiết thao tác'}
-      description={data ? `${data.actor?.fullName ?? 'Hệ thống'} · ${formatDateTime(data.createdAt)}` : undefined}
+      description={data ? `${actorText(data, names)} · ${formatDateTime(data.createdAt)}` : undefined}
     >
       {detail.loading && !data ? (
         <Skeleton rows={5} />

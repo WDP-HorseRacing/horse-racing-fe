@@ -6,24 +6,23 @@
 // Nút điểm danh, sẵn sàng, bắt đầu, báo vắng chỉ bấm được trong khung giờ của BE (lib/training-window.ts), ngoài khung hiện giờ mở.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { AlertOctagon, CheckCircle2, Clock3, Flag, Lock, MapPin, MoreHorizontal, Radio, UserCog, UserX, XCircle } from 'lucide-react';
+import { AlertOctagon, CheckCircle2, CircleStop, Clock3, Flag, Lock, MapPin, MoreHorizontal, Radio, UserCog, UserX, XCircle } from 'lucide-react';
 import {
   cancelSession,
   checkInParticipant,
   getClass,
   getEvaluation,
   getSession,
-  getTimeTrial,
   listParticipants,
   listTrialResults,
   markParticipantAbsent,
-  publishSession,
   readyParticipant,
   startParticipant,
+  stopParticipant,
 } from '../../../api/training';
-import { CLUB_DEFAULT_LIMITS, getThresholds } from '../../../api/performance';
-import type { Evaluation, HorseThresholds, Participant, ParticipantStatus, PublishedSession, TrialResult } from '../../../api/types';
-import { ActionMenu, Avatar, Button, EmptyState, ErrorBox, NotFound, Tabs, cn, useToast } from '../../../components/ui';
+import { CLUB_DEFAULT_LIMITS } from '../../../api/performance';
+import type { Evaluation, Participant, ParticipantStatus, TrialResult } from '../../../api/types';
+import { ActionMenu, Avatar, Button, EmptyState, ErrorBox, NotFound, Notice, Tabs, cn, useToast } from '../../../components/ui';
 import { useAction, useService } from '../../../hooks/useService';
 import { useStore } from '../../../store/store';
 import { useCrumbs } from '../../../components/Breadcrumb';
@@ -32,6 +31,7 @@ import { formatDate, formatTime } from '../../../lib/format';
 import { clubTime } from '../../../lib/club-time';
 import { now } from '../../../lib/clock';
 import { actionWindow, lockedText, openingText, windowOpensAt, type WindowKind } from '../../../lib/training-window';
+import { leftClub } from '../../../lib/horse-rules';
 import { formatMeters, formatRaceTime } from '../../../lib/training-format';
 import { PARTICIPANT_FLOW, PARTICIPANT_OUT, ineligibleReasonText, isParticipantOpen, participantStatusText } from '../../../lib/training-labels';
 import { playAlertBeep } from '../../../lib/sound';
@@ -43,8 +43,6 @@ import { IntensityBars, ParticipantPill, SessionStatusPill, TrialBadge } from '.
 import { HeartbeatIcon, LiveNumber, useFlip } from '../components/motion';
 import { Elapsed, LiveMonitorCard } from '../components/LiveMonitor';
 import { ReasonDialog } from '../components/ReasonDialog';
-import { SkippedHorsesDialog } from '../components/SkippedHorsesDialog';
-import { sessionsWithSkips } from '../plan-helpers';
 import { useGroomIndex, useHorseIndex, useLiveMetrics, type LiveSeries } from '../hooks';
 import { CompleteDialog, EvaluationSheet, GroomDialog, TrialDialog } from './dialogs';
 import { BackLink } from '../../../components/BackLink';
@@ -55,7 +53,13 @@ type Dialog =
   | { kind: 'trial'; participant: Participant; complete?: boolean }
   | { kind: 'complete'; participant: Participant }
   | { kind: 'evaluate'; participant: Participant }
+  | { kind: 'stop'; participant: Participant }
   | { kind: 'cancelSession' };
+
+/** Lượt dừng sớm nằm chung tab Hoàn thành (cùng là lượt đã kết thúc). */
+const tabOf = (status: ParticipantStatus): ParticipantStatus => (status === 'STOPPED' ? 'COMPLETED' : status);
+/** Lượt đã chạy xong (hoàn thành hoặc dừng sớm): có kết quả, đánh giá được. */
+const finished = (status: ParticipantStatus) => status === 'COMPLETED' || status === 'STOPPED';
 
 /** Nút chính của thẻ ngựa. `locked`: ngoài khung giờ, chỉ hiện câu giờ mở, không bấm được. */
 type PrimaryAction = { label: string; onClick?: () => void; locked?: boolean };
@@ -70,6 +74,7 @@ const EMPTY_TAB: Record<ParticipantStatus, { title: string; hint?: string }> = {
   READY: { title: 'Chưa có ngựa sẵn sàng', hint: 'Khởi động xong thì báo sẵn sàng ở tab Có mặt.' },
   ONGOING: { title: 'Chưa có ngựa đang chạy', hint: 'HLV trưởng bấm Bắt đầu ở tab Sẵn sàng.' },
   COMPLETED: { title: 'Chưa có ngựa hoàn thành' },
+  STOPPED: { title: 'Không có ngựa' },
   ABSENT: { title: 'Không có ngựa' },
   SKIPPED: { title: 'Không có ngựa' },
   INELIGIBLE: { title: 'Không có ngựa' },
@@ -82,7 +87,7 @@ const COLUMN_HINT: Partial<Record<ParticipantStatus, string>> = {
   PRESENT: 'Khởi động xong thì báo sẵn sàng',
   READY: 'HLV trưởng bấm bắt đầu',
   ONGOING: 'Cảm biến gửi nhịp tim mỗi giây',
-  COMPLETED: 'HLV đánh giá sau buổi',
+  COMPLETED: 'HLV đánh giá sau buổi, lượt dừng sớm cũng đánh giá được',
 };
 
 export default function SessionBoard() {
@@ -92,12 +97,8 @@ export default function SessionBoard() {
   const board = useService(
     async () => {
       const session = await getSession(id);
-      const [trainingClass, participants, timeTrial] = await Promise.all([
-        getClass(session.classId).catch(() => undefined),
-        listParticipants(id),
-        session.sessionType === 'TIME_TRIAL' ? getTimeTrial(id).catch(() => null) : Promise.resolve(null),
-      ]);
-      return { session, trainingClass, participants, timeTrial };
+      const [trainingClass, participants] = await Promise.all([getClass(session.classId).catch(() => undefined), listParticipants(id)]);
+      return { session, trainingClass, participants };
     },
     [id],
     { silent: true },
@@ -130,33 +131,20 @@ export default function SessionBoard() {
   const seesMetrics = role !== 'HORSE_OWNER' && role !== 'GROOM';
   const live = useLiveMetrics({ sessionId: id, participantIds: ongoing.map((participant) => participant.id), socket: manage, enabled: seesMetrics });
 
-  // Ngưỡng của ngựa đang chạy (Groom không đọc được ngưỡng: dùng mặc định câu lạc bộ).
-  const canReadThresholds = role === 'HEAD_TRAINER' || role === 'CLUB_MANAGER' || role === 'VETERINARIAN';
-  const ongoingHorseKey = ongoing.map((participant) => participant.horseId).sort().join(',');
-  const thresholds = useService(
-    async () => {
-      if (!canReadThresholds || !ongoingHorseKey) return new Map<string, HorseThresholds>();
-      const entries = await Promise.all(ongoingHorseKey.split(',').map(async (horseId) => [horseId, await getThresholds(horseId).catch(() => null)] as const));
-      return new Map(entries.filter((entry): entry is [string, HorseThresholds] => !!entry[1]));
-    },
-    [ongoingHorseKey, canReadThresholds],
-    { silent: true },
-  );
-
   // Kết quả chạy thử và đánh giá của các lượt đã chạy.
   const finishedKey = participants
-    .filter((participant) => participant.status === 'ONGOING' || participant.status === 'COMPLETED')
+    .filter((participant) => participant.status === 'ONGOING' || finished(participant.status))
     .map((participant) => `${participant.id}:${participant.status}`)
     .join(',');
   const extras = useService(
     async () => {
-      const ran = participants.filter((participant) => participant.status === 'ONGOING' || participant.status === 'COMPLETED');
+      const ran = participants.filter((participant) => participant.status === 'ONGOING' || finished(participant.status));
       const trials = new Map<string, TrialResult[]>();
       const evaluations = new Map<string, Evaluation | null>();
       await Promise.all(
         ran.map(async (participant) => {
           if (session?.sessionType === 'TIME_TRIAL') trials.set(participant.id, await listTrialResults(participant.id).catch(() => []));
-          if (participant.status === 'COMPLETED') evaluations.set(participant.id, await getEvaluation(participant.id).catch(() => null));
+          if (finished(participant.status)) evaluations.set(participant.id, await getEvaluation(participant.id).catch(() => null));
         }),
       );
       return { trials, evaluations };
@@ -187,8 +175,8 @@ export default function SessionBoard() {
     return value && PARTICIPANT_FLOW.includes(value) ? value : null;
   });
   const [showAllOut, setShowAllOut] = useState(false);
-  const countOf = (status: ParticipantStatus) => participants.filter((participant) => participant.status === status).length;
-  const mineToHandle = (status: ParticipantStatus) => participants.some((participant) => participant.status === status && participant.assignedGroomId === user?.id);
+  const countOf = (status: ParticipantStatus) => participants.filter((participant) => tabOf(participant.status) === status).length;
+  const mineToHandle = (status: ParticipantStatus) => participants.some((participant) => tabOf(participant.status) === status && participant.assignedGroomId === user?.id);
   const preferred: ParticipantStatus[] =
     role === 'GROOM' ? ['PLANNED', 'PRESENT', 'READY', 'ONGOING', 'COMPLETED'] : ['ONGOING', 'READY', 'PRESENT', 'PLANNED', 'COMPLETED'];
   const defaultTab =
@@ -222,7 +210,6 @@ export default function SessionBoard() {
     setParams(params, { replace: true });
   }, [chosenTab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [skipped, setSkipped] = useState<PublishedSession[]>([]);
   const action = useAction();
   const sessionAction = useAction();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -256,7 +243,7 @@ export default function SessionBoard() {
   if (board.loading && !board.data) {
     return (
       <div className="space-y-4">
-        <div className="skeleton h-36 w-full rounded-3xl" />
+        <div className="skeleton h-36 w-full rounded-2xl" />
         <div className="skeleton h-10 w-full rounded-xl" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }, (_, index) => (
@@ -272,7 +259,15 @@ export default function SessionBoard() {
   const horsePhoto = (participant: Participant) => participant.horsePhotoUrl ?? horses.get(participant.horseId)?.photoUrl ?? undefined;
   // Groom được giao chỉ dắt ngựa: điểm danh, báo vắng, báo sẵn sàng. Bắt đầu, hoàn thành, ghi chạy thử là việc của HLV trưởng.
   const canAttend = (participant: Participant) => manage || (role === 'GROOM' && participant.assignedGroomId === user?.id);
-  const target = board.data.timeTrial?.targetTimeMs ?? null;
+  // Ngựa đã chuyển nhượng, đã mất: lượt chỉ xem, không ghi kết quả, đánh giá.
+  const departed = (participant: Participant) => {
+    const status = horses.get(participant.horseId)?.lifecycleStatus;
+    return !!status && leftClub(status);
+  };
+  // Báo vắng nhầm: điểm danh lại khi còn khung giờ điểm danh, kể cả buổi đang hiện Đã xong mà chưa tới giờ kết thúc.
+  const canRecheck = (participant: Participant) =>
+    participant.status === 'ABSENT' && session.status !== 'CANCELLED' && canAttend(participant) && actionWindow(session, 'checkIn', clock).state === 'open';
+  const target = session.targetTimeMs;
   const operational = session.status === 'SCHEDULED' || session.status === 'IN_PROGRESS';
   // BE chuyển buổi sang Đang diễn ra khi lượt đầu tiên bắt đầu, không so với giờ trên lịch.
   const firstStart = participants.map((participant) => participant.startedAt).filter((value): value is string => !!value).sort()[0];
@@ -313,7 +308,7 @@ export default function SessionBoard() {
     }
   };
 
-  const tabItems = participants.filter((participant) => participant.status === activeTab);
+  const tabItems = participants.filter((participant) => tabOf(participant.status) === activeTab);
   const out = participants.filter((participant) => PARTICIPANT_OUT.includes(participant.status));
   const outShown = showAllOut ? out : out.slice(0, 6);
   const outReason = (participant: Participant) =>
@@ -337,11 +332,18 @@ export default function SessionBoard() {
       ? [{ label: 'Báo vắng', icon: <UserX size={14} />, onSelect: () => setDialog({ kind: 'absent', participant }) }]
       : []),
     ...(manage && isParticipantOpen(participant.status) ? [{ label: 'Đổi Groom dắt', icon: <UserCog size={14} />, onSelect: () => setDialog({ kind: 'groom', participant }) }] : []),
-    ...(session.sessionType === 'TIME_TRIAL' && session.status === 'IN_PROGRESS' && manage && (participant.status === 'ONGOING' || participant.status === 'COMPLETED')
+    ...(session.sessionType === 'TIME_TRIAL' &&
+    (session.status === 'IN_PROGRESS' || session.status === 'COMPLETED') &&
+    manage &&
+    !departed(participant) &&
+    (participant.status === 'ONGOING' || finished(participant.status))
       ? [{ label: 'Ghi thời gian chạy', icon: <Flag size={14} />, onSelect: () => setDialog({ kind: 'trial', participant }) }]
       : []),
+    ...(manage && operational && participant.status === 'ONGOING'
+      ? [{ label: 'Dừng sớm', icon: <CircleStop size={14} />, onSelect: () => setDialog({ kind: 'stop', participant }) }]
+      : []),
   ];
-  const counts = PARTICIPANT_FLOW.map((status) => participants.filter((participant) => participant.status === status).length);
+  const counts = PARTICIPANT_FLOW.map((status) => countOf(status));
   const leaderboard =
     session.sessionType === 'TIME_TRIAL'
       ? participants
@@ -368,13 +370,25 @@ export default function SessionBoard() {
             </p>
             <p className="text-sm text-red-100">Cân nhắc dừng bài tập và kiểm tra ngựa ngay. Bác sĩ thú y đã nhận thông báo khẩn.</p>
           </div>
+          {manage && operational && alerting.length === 1 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const participant = participants.find((item) => item.id === alerting[0]);
+                if (participant) setDialog({ kind: 'stop', participant });
+              }}
+            >
+              <CircleStop size={14} /> Dừng sớm
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setAcked((current) => new Set([...current, ...alerting]))}>
             Đã xem
           </Button>
         </div>
       )}
 
-      <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
+      <section className="turf-soft rounded-2xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-gray-500">Sân tập · {formatDate(session.scheduledStartAt)}</p>
@@ -388,18 +402,18 @@ export default function SessionBoard() {
                   Bắt đầu sớm hơn lịch
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 font-mono">
+              <span className="inline-flex items-center gap-1 tabular-nums">
                 <Clock3 size={13} /> {clubTime(session.scheduledStartAt)} đến {clubTime(session.scheduledEndAt)}
               </span>
               <IntensityBars intensity={session.intensity} />
-              <span className="font-mono">{formatMeters(session.plannedDistanceM)}</span>
+              <span className="tabular-nums">{formatMeters(session.plannedDistanceM)}</span>
               {session.surface && <span>{session.surface}</span>}
               {session.location && (
                 <span className="inline-flex items-center gap-1">
                   <MapPin size={13} /> {session.location}
                 </span>
               )}
-              {target && <span className="font-mono text-amber-800">Mục tiêu {formatRaceTime(target)}</span>}
+              {target && <span className="tabular-nums text-amber-800">Mục tiêu {formatRaceTime(target)}</span>}
             </div>
             {session.status === 'SCHEDULED' && actionWindow(session, 'checkIn', clock).state === 'early' && (
               <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-600">
@@ -412,28 +426,11 @@ export default function SessionBoard() {
           <div className="flex flex-col items-end gap-2">
             {ongoing.length > 0 && seesMetrics && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
-                <Radio size={13} className="animate-pulse" /> {manage ? 'Nhận nhịp tim trực tiếp' : 'Cập nhật mỗi 3 giây'}
+                <Radio size={13} className="animate-pulse" /> {manage ? 'Nhận nhịp tim trực tiếp' : 'Trực tiếp'}
               </span>
             )}
             {manage && (
               <div className="flex gap-2">
-                {session.status === 'DRAFT' && trainingClass?.status === 'ACTIVE' && (
-                  <Button
-                    disabled={sessionAction.pending}
-                    onClick={() =>
-                      void sessionAction.run(
-                        () => publishSession(session.id),
-                        (published) => {
-                          toast.push('Đã công bố buổi', 'success');
-                          setSkipped(sessionsWithSkips([published]));
-                          reload();
-                        },
-                      )
-                    }
-                  >
-                    Công bố buổi
-                  </Button>
-                )}
                 {session.status !== 'COMPLETED' && session.status !== 'CANCELLED' && (
                   <Button variant="inlineDanger" onClick={() => setDialog({ kind: 'cancelSession' })}>
                     <XCircle size={14} /> Hủy buổi
@@ -461,13 +458,17 @@ export default function SessionBoard() {
       </section>
 
       {(action.error || sessionAction.error) && <ErrorBox message={(action.error ?? sessionAction.error)!} />}
-      {session.status === 'DRAFT' && <EmptyState title="Buổi còn nháp" hint="Công bố buổi để bắt đầu điểm danh." />}
+      {ongoing.length > 0 && clock.getTime() > new Date(session.scheduledEndAt).getTime() && (
+        <Notice tone="info">
+          Lượt chưa xong sẽ tự hoàn thành sau giờ kết thúc buổi.
+        </Notice>
+      )}
 
       {out.length > 0 && (
         <section className="rounded-2xl bg-amber-50/50 p-3 ring-1 ring-amber-200/60 sm:p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-amber-900">
-              Không tập buổi này <span className="font-mono text-amber-700">{out.length}</span>
+              Không tập buổi này <span className="tabular-nums text-amber-700">{out.length}</span>
             </h3>
             {/* Gập còn 2 thẻ trên điện thoại, 6 thẻ trên màn rộng, để phần thao tác bên dưới không bị đẩy xa. */}
             {out.length > 2 && (
@@ -497,82 +498,93 @@ export default function SessionBoard() {
                     </p>
                   )}
                 </div>
+                {canRecheck(participant) && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="shrink-0"
+                    disabled={action.pending}
+                    onClick={() => run(`${horseName(participant)} có mặt`, () => checkInParticipant(participant.id))}
+                  >
+                    Điểm danh lại
+                  </Button>
+                )}
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      {session.status !== 'DRAFT' && (
-        <section>
-          <Tabs
-            active={activeTab}
-            onChange={(key) => pickTab(key as ParticipantStatus)}
-            tabs={PARTICIPANT_FLOW.map((status) => ({ key: status, label: participantStatusText[status], count: countOf(status) }))}
-          />
-          <div className="rounded-b-2xl border border-t-0 border-gray-200/80 bg-white/70 p-3 sm:p-4">
-            {tabItems.length > 0 && <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>}
-            {activeTab === 'COMPLETED' && leaderboard.length > 0 && <Leaderboard rows={leaderboard} target={target} horseName={horseName} />}
-            {tabItems.length === 0 ? (
-              <EmptyState title={EMPTY_TAB[activeTab].title} hint={EMPTY_TAB[activeTab].hint} className="rounded-xl border border-dashed border-gray-200 py-10" />
-            ) : activeTab === 'ONGOING' && seesMetrics ? (
-              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                {tabItems.map((participant) => {
-                  const limits = thresholds.data?.get(participant.horseId);
-                  return (
-                    <div key={participant.id} data-tab-card>
-                      <LiveMonitorCard
-                        participantId={participant.id}
-                        horseId={participant.horseId}
-                        horseName={horseName(participant)}
-                        photoUrl={horsePhoto(participant)}
-                        startedAt={participant.startedAt}
-                        live={live[participant.id]}
-                        limits={limits?.activeLimits ?? CLUB_DEFAULT_LIMITS}
-                        limitsSource={limits?.source ?? 'CLUB_DEFAULT'}
-                        acknowledged={acked.has(participant.id)}
-                        onAcknowledge={() => setAcked((current) => new Set([...current, participant.id]))}
-                        simulator={FEATURES.sensorSimulator && operational && manage}
-                        actions={
-                          manage && operational ? (
+      <section>
+        <Tabs
+          active={activeTab}
+          onChange={(key) => pickTab(key as ParticipantStatus)}
+          tabs={PARTICIPANT_FLOW.map((status) => ({ key: status, label: participantStatusText[status], count: countOf(status) }))}
+        />
+        <div className="rounded-b-2xl border border-t-0 border-gray-200/80 bg-white/70 p-3 sm:p-4">
+          {tabItems.length > 0 && <p className="mb-3 text-xs text-gray-500">{COLUMN_HINT[activeTab]}</p>}
+          {activeTab === 'COMPLETED' && leaderboard.length > 0 && <Leaderboard rows={leaderboard} target={target} horseName={horseName} />}
+          {tabItems.length === 0 ? (
+            <EmptyState title={EMPTY_TAB[activeTab].title} hint={EMPTY_TAB[activeTab].hint} className="rounded-xl border border-dashed border-gray-200 py-10" />
+          ) : activeTab === 'ONGOING' && seesMetrics ? (
+            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              {tabItems.map((participant) => {
+                return (
+                  <div key={participant.id} data-tab-card>
+                    <LiveMonitorCard
+                      participantId={participant.id}
+                      horseId={participant.horseId}
+                      horseName={horseName(participant)}
+                      photoUrl={horsePhoto(participant)}
+                      startedAt={participant.startedAt}
+                      live={live[participant.id]}
+                      limits={CLUB_DEFAULT_LIMITS}
+                      acknowledged={acked.has(participant.id)}
+                      onAcknowledge={() => setAcked((current) => new Set([...current, participant.id]))}
+                      simulator={FEATURES.sensorSimulator && operational && manage}
+                      actions={
+                        manage && operational ? (
+                          <>
+                            <Button size="sm" variant="secondary" onClick={() => setDialog({ kind: 'stop', participant })}>
+                              <CircleStop size={13} /> Dừng sớm
+                            </Button>
                             <Button size="sm" onClick={() => primaryAction(participant)?.onClick?.()}>
                               <CheckCircle2 size={13} /> Hoàn thành
                             </Button>
-                          ) : undefined
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div ref={trackRef} className="grid gap-3 md:grid-cols-2">
-                {tabItems.map((participant) => (
-                  <div key={participant.id} data-tab-card>
-                    <ParticipantCard
-                      participant={participant}
-                      horseName={horseName(participant)}
-                      photoUrl={horsePhoto(participant)}
-                      groomLabel={groomLabel(participant)}
-                      live={seesMetrics ? live[participant.id] : undefined}
-                      primary={primaryAction(participant)}
-                      pending={action.pending}
-                      evaluation={extras.data?.evaluations.get(participant.id)}
-                      trials={extras.data?.trials.get(participant.id)}
-                      target={target}
-                      menu={menuOf(participant)}
-                      onEvaluate={manage && participant.status === 'COMPLETED' && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
+                          </>
+                        ) : undefined
+                      }
                     />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+                );
+              })}
+            </div>
+          ) : (
+            <div ref={trackRef} className="grid gap-3 md:grid-cols-2">
+              {tabItems.map((participant) => (
+                <div key={participant.id} data-tab-card>
+                  <ParticipantCard
+                    participant={participant}
+                    horseName={horseName(participant)}
+                    photoUrl={horsePhoto(participant)}
+                    groomLabel={groomLabel(participant)}
+                    live={seesMetrics ? live[participant.id] : undefined}
+                    primary={primaryAction(participant)}
+                    pending={action.pending}
+                    evaluation={extras.data?.evaluations.get(participant.id)}
+                    trials={extras.data?.trials.get(participant.id)}
+                    target={target}
+                    menu={menuOf(participant)}
+                    onEvaluate={manage && !departed(participant) && finished(participant.status) && extras.data && extras.data.evaluations.get(participant.id) === null ? () => setDialog({ kind: 'evaluate', participant }) : undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Hộp thoại */}
-      {skipped.length > 0 && <SkippedHorsesDialog sessions={skipped} onClose={() => setSkipped([])} />}
       {dialog?.kind === 'absent' && (
         <ReasonDialog
           title={`Báo vắng ${horseName(dialog.participant)}`}
@@ -581,12 +593,42 @@ export default function SessionBoard() {
           confirmLabel="Báo vắng"
           pending={action.pending}
           error={action.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            action.clearError();
+          }}
           onConfirm={(reason) =>
             void action.run(
               () => markParticipantAbsent(dialog.participant.id, reason),
               () => {
                 toast.push(`Đã báo vắng ${horseName(dialog.participant)}`, 'success');
+                setDialog(null);
+                reload();
+              },
+            )
+          }
+        />
+      )}
+      {dialog?.kind === 'stop' && (
+        <ReasonDialog
+          title={`Dừng sớm ${horseName(dialog.participant)}`}
+          message="Lượt kết thúc ngay, ghi là Dừng sớm kèm lý do. Vẫn ghi thời gian chạy thử và đánh giá được."
+          label="Lý do dừng"
+          suggestions={['Ngựa đi khập khiễng', 'Nhịp tim cao kéo dài', 'Thời tiết xấu']}
+          confirmLabel="Dừng sớm"
+          danger
+          pending={action.pending}
+          error={action.error}
+          onClose={() => {
+            setDialog(null);
+            action.clearError();
+          }}
+          onConfirm={(reason) =>
+            void action.run(
+              () => stopParticipant(dialog.participant.id, reason),
+              () => {
+                toast.push(`Đã dừng sớm ${horseName(dialog.participant)}`, 'success');
+                stopSim(dialog.participant.id);
                 setDialog(null);
                 reload();
               },
@@ -631,7 +673,10 @@ export default function SessionBoard() {
           confirmLabel="Hủy buổi"
           pending={sessionAction.pending}
           error={sessionAction.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            sessionAction.clearError();
+          }}
           onConfirm={(reason) =>
             void sessionAction.run(
               () => cancelSession(session.id, reason),
@@ -684,7 +729,7 @@ function ParticipantCard({
       className={cn(
         'flex h-full gap-3.5 rounded-2xl bg-white p-3.5 ring-1 transition-colors',
         participant.status === 'ONGOING' ? (level === 'CRITICAL' ? 'ring-2 ring-red-400' : level === 'WARNING' ? 'ring-2 ring-amber-300' : 'ring-2 ring-emerald-400/70') : 'ring-gray-200/80',
-        'shadow-[0_12px_26px_-22px_rgba(6,78,59,0.6)]',
+        'shadow-card',
       )}
     >
       <Link to={links.horse(participant.horseId)} className="shrink-0" tabIndex={-1} aria-hidden>
@@ -717,24 +762,27 @@ function ParticipantCard({
               <Clock3 size={12} /> <Elapsed since={participant.startedAt} />
             </span>
           )}
-          {participant.status === 'COMPLETED' && participant.startedAt && participant.completedAt && (
+          {finished(participant.status) && participant.startedAt && participant.completedAt && (
             <span>
               Chạy <Elapsed since={participant.startedAt} until={participant.completedAt} />
             </span>
           )}
+          {participant.status === 'STOPPED' && <ParticipantPill status="STOPPED" title={participant.stoppedReason ?? undefined} />}
           {participant.status === 'ONGOING' && live?.latest && (
-            <span className={cn('inline-flex items-center gap-1 font-mono text-sm font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
+            <span className={cn('inline-flex items-center gap-1 tabular-nums text-sm font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
               <HeartbeatIcon bpm={live.latest.heartRateBpm} level={level} size={14} />
               <LiveNumber value={live.latest.heartRateBpm} />
             </span>
           )}
           {best !== undefined && (
-            <span className={cn('rounded-md px-1.5 py-0.5 font-mono font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
+            <span className={cn('rounded-md px-1.5 py-0.5 tabular-nums font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
               {formatRaceTime(best)}
             </span>
           )}
-          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono font-semibold text-white">{evaluation.score} điểm</span>}
+          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums font-semibold text-white">{evaluation.score} điểm</span>}
         </div>
+
+        {participant.status === 'STOPPED' && participant.stoppedReason && <p className="mt-1.5 text-xs text-amber-800">Lý do dừng: {participant.stoppedReason}</p>}
 
         {lockedWarning && (
           <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-red-700">
@@ -777,10 +825,10 @@ function Leaderboard({ rows, target, horseName }: { rows: { participant: Partici
       <ol className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row, index) => (
           <li key={row.participant.id} className={cn('flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm', index === 0 ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'bg-gray-50')}>
-            <span className="w-5 font-mono text-xs text-gray-400">{index + 1}</span>
+            <span className="w-5 tabular-nums text-xs text-gray-400">{index + 1}</span>
             <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{horseName(row.participant)}</span>
-            <span className="font-mono font-semibold">{formatRaceTime(row.best)}</span>
-            {target && <span className={cn('font-mono text-xs', row.best <= target ? 'text-emerald-700' : 'text-amber-700')}>{row.best <= target ? 'đạt' : `+${((row.best - target) / 1000).toFixed(2)}`}</span>}
+            <span className="tabular-nums font-semibold">{formatRaceTime(row.best)}</span>
+            {target && <span className={cn('tabular-nums text-xs', row.best <= target ? 'text-emerald-700' : 'text-amber-700')}>{row.best <= target ? 'đạt' : `+${((row.best - target) / 1000).toFixed(2)}`}</span>}
           </li>
         ))}
       </ol>

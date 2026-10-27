@@ -27,12 +27,13 @@ export async function exchangeOidcCode(provider: 'google', query: OidcCallbackQu
 
 export const getMe = () => http.get<CurrentUser>('/auth/me');
 
-export async function logout() {
+export async function logout(deviceToken?: string) {
   const tokens = getTokens();
   clearTokens();
   if (!tokens?.refreshToken) return;
   // Thu hồi phiên phía Keycloak; lỗi ở đây không chặn việc đăng xuất trên máy.
-  await request('POST', '/auth/logout', { body: { refreshToken: tokens.refreshToken }, auth: false }).catch(() => undefined);
+  const body = deviceToken ? { refreshToken: tokens.refreshToken, deviceToken } : { refreshToken: tokens.refreshToken };
+  await request('POST', '/auth/logout', { body, auth: false }).catch(() => undefined);
 }
 
 export const changePassword = (currentPassword: string, newPassword: string) =>
