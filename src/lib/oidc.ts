@@ -60,12 +60,12 @@ export function takeOidcError(): string | undefined {
 /** Câu tiếng Việt cho lỗi của Keycloak (?error=) hoặc của BE khi đổi mã lấy token. */
 export function oidcErrorMessage(caught?: unknown, keycloakError?: string | null): string {
   if (keycloakError === 'access_denied') return 'Bạn đã hủy đăng nhập bằng Google.';
-  if (keycloakError) return 'Google hoặc máy chủ xác thực từ chối đăng nhập. Vui lòng thử lại.';
+  if (keycloakError) return 'Google từ chối đăng nhập. Vui lòng thử lại.';
   if (caught instanceof ApiError) {
     const text = caught.message;
     if (caught.status === 401 && /state/i.test(text)) return 'Phiên đăng nhập Google đã quá 10 phút hoặc đã được dùng. Vui lòng bấm đăng nhập lại.';
     if (caught.status === 401) return text || 'Tài khoản Google này chưa được cấp quyền vào hệ thống. Liên hệ Quản lý câu lạc bộ.';
-    if (caught.status === 503) return 'Máy chủ chưa cấu hình đăng nhập Google. Dùng email và mật khẩu, hoặc báo nhóm backend.';
+    if (caught.status === 503) return 'Đăng nhập bằng Google đang tạm ngưng. Vui lòng dùng email và mật khẩu.';
     if (caught.status === 400) return 'Liên kết đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.';
     if (caught.status === 0) return text;
     return text || 'Không đăng nhập được bằng Google. Vui lòng thử lại.';

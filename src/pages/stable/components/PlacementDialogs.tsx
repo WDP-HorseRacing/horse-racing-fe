@@ -4,11 +4,24 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, Info, UserRound } from 'lucide-react';
 import { useAction, useService } from '../../../hooks/useService';
 import { assignBarn, previewBarn } from '../../../api/horses';
-import { assignGroom, listBarns, listGroomHistory, listGroomWorkload, listStalls, moveStall, removeFromStall } from '../../../api/stable';
+import { assignGroom, listBarns, listGroomWorkload, listStalls, moveStall, removeFromStall } from '../../../api/stable';
 import { ChoiceList } from '../../../components/ui/ChoiceList';
 import type { HealthStatus, PlacementStatus } from '../../../api/types';
 import { barnBlocker } from './barn';
-import { Button, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { useCurrentGroom } from './useCurrentGroom';
+import { Button, CancelButton, CharCount, ErrorBox, Field, Modal, Notice, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
+
+const REASON_MAX = 500;
+
+/** Dòng lỗi dưới một nhóm lựa chọn (không phải ô nhập). */
+function ChoiceError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p role="alert" data-invalid="true" className="text-xs font-medium text-red-600">
+      {message}
+    </p>
+  );
+}
 
 export interface PlacementHorse {
   id: string;
@@ -38,12 +51,16 @@ export function AssignZoneDialog({
   const action = useAction();
   const [barnId, setBarnId] = useState('');
   const [reason, setReason] = useState('');
+  const [reasonTouched, setReasonTouched] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const barns = useService(() => (horse ? listBarns() : Promise.resolve([])), [horse?.id]);
   const preview = useService(() => (horse && barnId ? previewBarn(horse.id, barnId) : Promise.resolve(undefined)), [horse?.id, barnId]);
 
   useEffect(() => {
     setBarnId('');
     setReason('');
+    setReasonTouched(false);
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id]);
@@ -53,9 +70,13 @@ export function AssignZoneDialog({
   const data = preview.data;
   const chosen = barns.data?.find((item) => item.id === barnId);
   const blocked = !data || !data.allowed || (!!chosen && !!barnBlocker(chosen));
+  const barnError = attempted && !barnId ? 'Chọn khu' : undefined;
+  const reasonError = isChange && !reason.trim() && (reasonTouched || attempted) ? 'Nhập lý do đổi khu' : undefined;
 
   const submit = async () => {
-    if (!horse) return;
+    if (!horse || action.pending) return;
+    setAttempted(true);
+    if (!barnId || (isChange && !reason.trim()) || blocked) return;
     const done = await action.run(() => assignBarn(horse.id, barnId, isChange ? reason.trim() : undefined));
     if (done) {
       toast.push(`${horse.name} đã được xếp vào ${data?.toBarnName ?? 'khu mới'}`, 'success');
@@ -71,13 +92,12 @@ export function AssignZoneDialog({
       width="max-w-2xl"
       title={isChange ? `Đổi khu cho ${horse?.name ?? ''}` : `Xếp khu cho ${horse?.name ?? ''}`}
       dirty={barnId !== '' || reason.trim() !== ''}
+      busy={action.pending}
       description={isChange ? `Đang ở ${horse?.barnName}${horse?.stallCode ? `, ô ${horse.stallCode}` : ''}` : 'Ngựa đang chờ xếp khu'}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button onClick={submit} disabled={!barnId || blocked || action.pending || (isChange && !reason.trim())}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button onClick={submit} disabled={action.pending || (!!barnId && blocked)}>
             {action.pending ? 'Đang xếp…' : isChange ? 'Xác nhận đổi khu' : 'Xếp vào khu'}
           </Button>
         </>
@@ -118,6 +138,7 @@ export function AssignZoneDialog({
             })}
           </div>
         )}
+        <ChoiceError message={barnError} />
 
         {barnId && preview.loading && <Skeleton rows={1} />}
         {preview.error && <ErrorBox message={preview.error} />}
@@ -152,8 +173,14 @@ export function AssignZoneDialog({
         )}
 
         {isChange && (
-          <Field label="Lý do đổi khu" required>
-            <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: cân đối số ngựa giữa hai khu" />
+          <Field label="Lý do đổi khu" required name="reason" error={reasonError} onBlur={() => setReasonTouched(true)} counter={<CharCount value={reason} max={REASON_MAX} />}>
+            <Textarea
+              value={reason}
+              maxLength={REASON_MAX}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Ví dụ: cân đối số ngựa giữa hai khu"
+              className={cn(reasonError && invalidClass)}
+            />
           </Field>
         )}
         {action.error && <ErrorBox message={action.error} />}
@@ -169,47 +196,48 @@ export function AssignStallDialog({
   onClose,
   onDone,
   presetStallId,
+  presetStallCode,
   onAssignGroom,
 }: {
   horse: PlacementHorse | null;
   onClose: () => void;
   onDone: () => void;
+  /** Có ô chọn sẵn (bấm ô trống trên sơ đồ) thì chỉ hiện xác nhận gọn, không hiện lưới ô. */
   presetStallId?: string;
+  presetStallCode?: string;
   /** Có thì sau khi xếp ô cho ngựa chưa có Groom, thông báo có nút "Giao Groom". */
   onAssignGroom?: (horse: PlacementHorse) => void;
 }) {
   const toast = useToast();
   const action = useAction();
   const [stallId, setStallId] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  const preset = !!presetStallId;
   const stalls = useService(
-    () => (horse?.barnId ? listStalls({ barnId: horse.barnId, status: 'AVAILABLE' }) : Promise.resolve([])),
-    [horse?.id, horse?.barnId],
+    () => (horse?.barnId && !preset ? listStalls({ barnId: horse.barnId, status: 'AVAILABLE' }) : Promise.resolve([])),
+    [horse?.id, horse?.barnId, preset],
   );
   const moving = !!horse?.stallId;
-  // Xếp ô lần đầu: xem ngựa đã có Groom chưa (gỡ khỏi ô vẫn giữ Groom) để nhắc giao sau.
-  const currentGroom = useService(async () => {
-    if (!horse || moving) return null;
-    if (horse.groomId) return { id: horse.groomId, fullName: horse.groomName ?? 'Groom' };
-    const history = await listGroomHistory(horse.id).catch(() => []);
-    const active = history.find((item) => !item.endAt);
-    return active ? { id: active.groomId, fullName: active.groom?.fullName ?? 'Groom' } : null;
-  }, [horse?.id, moving]);
+  const current = useCurrentGroom(horse);
 
   useEffect(() => {
     setStallId(presetStallId ?? '');
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [horse?.id, presetStallId]);
 
   const submit = async () => {
-    if (!horse) return;
+    if (!horse || action.pending) return;
+    setAttempted(true);
+    if (!stallId) return;
     const done = await action.run(async () => {
       await moveStall(horse.id, stallId);
       return true;
     });
     if (done) {
-      const code = stalls.data?.find((item) => item.id === stallId)?.code ?? '';
-      const needsGroom = !moving && !currentGroom.data;
+      const code = (preset ? presetStallCode : stalls.data?.find((item) => item.id === stallId)?.code) ?? '';
+      const needsGroom = !moving && current.ready && !current.groom;
       const placed: PlacementHorse = { ...horse, stallId, stallCode: code, placementStatus: 'PLACED' };
       toast.push(
         needsGroom ? `${horse.name} đã vào ô ${code}, chưa có Groom` : `${horse.name} đã vào ô ${code}`,
@@ -221,6 +249,67 @@ export function AssignStallDialog({
     }
   };
 
+  const quarantine = horse?.healthStatus === 'QUARANTINED' && (
+    <Notice tone="warning" icon={<Info size={16} />}>
+      Ngựa đang cách ly. Có thể chọn ô cách xa các ngựa khác để tách đàn.
+    </Notice>
+  );
+  const groomNote = (
+    <p className="flex items-start gap-2 rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600">
+      <UserRound size={15} className="mt-0.5 shrink-0 text-gray-400" />
+      {!current.ready ? (
+        <span className="text-gray-400">Đang kiểm tra Groom phụ trách…</span>
+      ) : moving ? (
+        <span>Chuyển ô không đổi Groom{current.groom ? ` (${current.groom.fullName})` : ''}, ô cũ được trả về trống.</span>
+      ) : current.groom ? (
+        <span>
+          Groom phụ trách giữ nguyên: <span className="font-medium text-gray-900">{current.groom.fullName}</span>.
+        </span>
+      ) : (
+        <span>Ngựa chưa có Groom, giao Groom sau khi xếp ô.</span>
+      )}
+    </p>
+  );
+
+  if (preset) {
+    return (
+      <Modal
+        open={!!horse}
+        onClose={onClose}
+        width="max-w-md"
+        title={`${moving ? 'Chuyển' : 'Xếp'} ${horse?.name ?? ''} vào ô ${presetStallCode ?? ''}`}
+        busy={action.pending}
+        footer={
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Quay lại
+            </Button>
+            <Button onClick={submit} disabled={action.pending}>
+              {action.pending ? 'Đang lưu…' : `${moving ? 'Chuyển' : 'Xếp'} vào ô ${presetStallCode ?? ''}`}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 shadow-card">
+            <span className="flex h-10 min-w-12 items-center justify-center rounded-lg border border-dashed border-emerald-400 bg-white px-2 font-mono text-sm font-semibold text-emerald-800">
+              {presetStallCode}
+            </span>
+            <span className="min-w-0 text-sm">
+              <span className="block font-semibold text-gray-900">
+                {presetStallCode} · {horse?.barnName}
+              </span>
+              <span className="block text-xs text-gray-500">Ô trống{moving && horse?.stallCode ? `, ngựa đang ở ô ${horse.stallCode}` : ''}</span>
+            </span>
+          </div>
+          {quarantine}
+          {groomNote}
+          {action.error && <ErrorBox message={action.error} />}
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open={!!horse}
@@ -228,24 +317,21 @@ export function AssignStallDialog({
       width="max-w-2xl"
       title={moving ? `Chuyển ô cho ${horse?.name ?? ''}` : `Xếp ô cho ${horse?.name ?? ''}`}
       dirty={stallId !== ''}
+      busy={action.pending}
       description={`${horse?.barnName ?? ''}${moving ? ` · đang ở ô ${horse?.stallCode}` : ' · đang chờ xếp ô'}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!stallId || action.pending}>
+          <Button onClick={submit} disabled={action.pending || (!stalls.loading && (stalls.data ?? []).length === 0)}>
             {action.pending ? 'Đang lưu…' : moving ? 'Chuyển sang ô này' : 'Xếp vào ô'}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        {horse?.healthStatus === 'QUARANTINED' && (
-          <Notice tone="warning" icon={<Info size={16} />}>
-            Ngựa đang cách ly. Có thể chọn ô cách xa các ngựa khác để tách đàn.
-          </Notice>
-        )}
+        {quarantine}
         <div>
           <p className="mb-2 text-sm font-medium text-gray-600">
             Chọn ô trống<span className="ml-0.5 text-red-500">*</span>
@@ -270,7 +356,7 @@ export function AssignStallDialog({
                   className={cn(
                     'rounded-xl border px-3 py-3 font-mono text-sm font-semibold transition',
                     stallId === stall.id
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-[0_10px_24px_-18px_rgba(6,78,59,0.6)] ring-2 ring-emerald-500/20'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-800 shadow-raised ring-2 ring-emerald-500/20'
                       : 'border-dashed border-gray-300 bg-white text-gray-700 hover:border-emerald-400 hover:bg-emerald-50/30',
                   )}
                 >
@@ -279,21 +365,11 @@ export function AssignStallDialog({
               ))}
             </div>
           )}
+          <div className="mt-2">
+            <ChoiceError message={attempted && !stallId ? 'Chọn một ô trống' : undefined} />
+          </div>
         </div>
-        <p className="flex items-start gap-2 rounded-xl bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600">
-          <UserRound size={15} className="mt-0.5 shrink-0 text-gray-400" />
-          {moving ? (
-            <span>Chuyển ô không đổi Groom{horse?.groomName ? ` (${horse.groomName})` : ''}, ô cũ được trả về trống.</span>
-          ) : currentGroom.loading ? (
-            <span className="text-gray-400">Đang kiểm tra Groom phụ trách…</span>
-          ) : currentGroom.data ? (
-            <span>
-              Groom phụ trách giữ nguyên: <span className="font-medium text-gray-900">{currentGroom.data.fullName}</span>.
-            </span>
-          ) : (
-            <span>Ngựa chưa có Groom. Xếp ô xong, giao Groom ở menu ô (Giao Groom) hoặc trong hồ sơ ngựa.</span>
-          )}
-        </p>
+        {groomNote}
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
@@ -314,49 +390,62 @@ export function GroomDialog({
   const toast = useToast();
   const action = useAction();
   const [groomId, setGroomId] = useState('');
+  const [attempted, setAttempted] = useState(false);
   const grooms = useService(() => (horse ? listGroomWorkload() : Promise.resolve([])), [horse?.id]);
+  // Sơ đồ chuồng không mang Groom theo ngựa: tra Groom đang phụ trách trước khi hiện tiêu đề, nút.
+  const current = useCurrentGroom(horse);
+  const currentId = current.groom?.id;
+  const changing = !!current.groom;
 
   useEffect(() => {
-    setGroomId(horse?.groomId ?? '');
+    setGroomId('');
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [horse?.id, horse?.groomId]);
+  }, [horse?.id]);
+
+  const groomError = !groomId ? (changing ? 'Chọn Groom mới' : 'Chọn Groom') : undefined;
 
   const submit = async () => {
-    if (!horse) return;
+    if (!horse || action.pending || !current.ready) return;
+    setAttempted(true);
+    if (groomError) return;
     const done = await action.run(() => assignGroom(horse.id, groomId));
     if (done) {
-      toast.push(`Đã giao Groom cho ${horse.name}`, 'success');
+      const name = grooms.data?.find((groom) => groom.groomId === groomId)?.fullName ?? 'Groom mới';
+      toast.push(changing ? `Đã đổi Groom của ${horse.name} sang ${name}` : `Đã giao ${name} phụ trách ${horse.name}`, 'success');
       onDone();
       onClose();
     }
   };
 
-  // Ít việc nhất lên đầu; thanh khối lượng so với Groom nhiều ngựa nhất.
+  // Ít việc nhất lên đầu (Groom hiện tại luôn đứng đầu); thanh khối lượng so với Groom nhiều ngựa nhất.
   const list = [...(grooms.data ?? [])].sort((a, b) => a.activeHorseCount - b.activeHorseCount || a.fullName.localeCompare(b.fullName, 'vi'));
   const most = Math.max(1, ...list.map((groom) => groom.activeHorseCount));
+  const loading = !current.ready || (grooms.loading && !grooms.data);
 
   return (
     <Modal
       open={!!horse}
       onClose={onClose}
       width="max-w-2xl"
-      title={horse?.groomId ? `Đổi Groom cho ${horse?.name}` : `Giao Groom cho ${horse?.name ?? ''}`}
-      dirty={groomId !== '' && groomId !== (horse?.groomId ?? '')}
-      description={horse?.groomName ? `Đang phụ trách: ${horse.groomName}` : 'Ngựa chưa có Groom phụ trách'}
+      title={!current.ready ? <span className="skeleton inline-block h-5 w-56 rounded-md align-middle" /> : changing ? `Đổi Groom cho ${horse?.name}` : `Giao Groom cho ${horse?.name ?? ''}`}
+      dirty={groomId !== ''}
+      busy={action.pending}
+      description={!current.ready ? <span className="skeleton mt-1 inline-block h-3.5 w-40 rounded" /> : current.groom ? `Đang phụ trách: ${current.groom.fullName}` : 'Ngựa chưa có Groom phụ trách'}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button onClick={submit} disabled={!groomId || groomId === horse?.groomId || action.pending}>
-            {action.pending ? 'Đang lưu…' : horse?.groomId ? 'Đổi Groom' : 'Giao Groom'}
-          </Button>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          {current.ready && (
+            <Button onClick={submit} disabled={action.pending}>
+              {action.pending ? 'Đang lưu…' : changing ? 'Đổi Groom' : 'Giao Groom'}
+            </Button>
+          )}
         </>
       }
     >
       <div className="space-y-4">
-        {grooms.loading && !grooms.data ? (
+        {loading ? (
           <div className="grid gap-2 sm:grid-cols-2">
             {Array.from({ length: 4 }, (_, index) => (
               <div key={index} className="skeleton h-16 rounded-xl" />
@@ -372,14 +461,15 @@ export function GroomDialog({
               value: groom.groomId,
               title: groom.fullName,
               meta: `Đang phụ trách ${groom.activeHorseCount} ngựa`,
-              badge: groom.groomId === horse?.groomId ? 'Hiện tại' : undefined,
-              disabled: groom.groomId === horse?.groomId,
+              badge: groom.groomId === currentId ? 'Đang phụ trách' : undefined,
+              locked: groom.groomId === currentId,
               load: groom.activeHorseCount / most,
             }))}
           />
         )}
+        <ChoiceError message={attempted ? groomError : undefined} />
         <p className="text-xs text-gray-500">Groom được phân công theo con ngựa, không theo ô: chuyển ô vẫn giữ Groom.</p>
-        {horse?.groomId && (
+        {changing && (
           <Notice tone="info">Groom cũ và Groom mới đều nhận thông báo. Groom cũ vẫn xem được hồ sơ nhưng không thao tác được nữa.</Notice>
         )}
         {action.error && <ErrorBox message={action.error} />}
@@ -410,6 +500,7 @@ export function RemoveStallDialog({
       open={!!horse}
       onClose={onClose}
       title={`Gỡ ${horse?.name ?? ''} khỏi ô ${horse?.stallCode ?? ''}`}
+      busy={action.pending}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -465,9 +556,23 @@ export function ReasonDialog({
 }) {
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const close = () => {
     setReason('');
+    setTouched(false);
+    setAttempted(false);
     onClose();
+  };
+  const reasonError = !reason.trim() && (touched || attempted) ? 'Nhập lý do' : undefined;
+  const submit = async () => {
+    if (pending) return;
+    setAttempted(true);
+    if (!reason.trim()) return;
+    setPending(true);
+    const ok = await onSubmit(reason.trim());
+    setPending(false);
+    if (ok) close();
   };
   return (
     <Modal
@@ -475,21 +580,11 @@ export function ReasonDialog({
       onClose={close}
       title={title}
       dirty={reason.trim() !== ''}
+      busy={pending}
       footer={
         <>
-          <Button variant="secondary" onClick={close}>
-            Quay lại
-          </Button>
-          <Button
-            variant={danger ? 'danger' : 'primary'}
-            disabled={!reason.trim() || pending}
-            onClick={async () => {
-              setPending(true);
-              const ok = await onSubmit(reason.trim());
-              setPending(false);
-              if (ok) close();
-            }}
-          >
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button variant={danger ? 'danger' : 'primary'} disabled={pending} onClick={submit}>
             {pending ? 'Đang xử lý…' : confirmLabel}
           </Button>
         </>
@@ -497,8 +592,8 @@ export function ReasonDialog({
     >
       <div className="space-y-4">
         <div className="text-sm text-gray-600">{message}</div>
-        <Field label="Lý do" required>
-          <Textarea value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} autoFocus />
+        <Field label="Lý do" required name="reason" error={reasonError} onBlur={() => setTouched(true)} counter={<CharCount value={reason} max={REASON_MAX} />}>
+          <Textarea value={reason} maxLength={REASON_MAX} onChange={(event) => setReason(event.target.value)} className={cn(reasonError && invalidClass)} autoFocus />
         </Field>
         {error && <ErrorBox message={error} />}
       </div>

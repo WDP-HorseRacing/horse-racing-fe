@@ -1,14 +1,16 @@
 // F4.2 — HLV khu lập hoặc sửa bản nháp khẩu phần cho một ngựa: 4 làn bữa, mỗi dòng một món (thức ăn hoặc thực phẩm bổ sung) và lượng.
 // "Chép từ ngựa khác" điền sẵn các dòng từ khẩu phần đang áp dụng của ngựa cùng khu để sửa tiếp.
-// Lưu nháp, hoặc lưu rồi áp dụng luôn (bản đang áp dụng cũ chuyển vào lịch sử). Kiểm hết ở đây trước khi gửi.
+// Lưu nháp, hoặc lưu rồi áp dụng luôn (bản đang áp dụng cũ chuyển vào lịch sử). Kiểm hết ở đây trước khi gửi, lỗi hiện khi rời ô.
+// Bản mới: tạo nháp xong mà áp dụng lỗi thì giữ bản vừa tạo, bấm lại sẽ thay và áp dụng chính bản đó (không tạo trùng).
 import { useMemo, useRef, useState } from 'react';
 import { Copy, Plus, Trash2 } from 'lucide-react';
 import { listAllHorses } from '../../../api/horses';
 import { MEAL_ORDER, applyFeedingPlan, createFeedingPlan, listFeedingPlans, planLines, replaceFeedingPlan } from '../../../api/stable-care';
 import { listSupplyItems } from '../../../api/supplies';
 import type { FeedingMeal, FeedingPlan, FeedingPlanItemInput, SupplyItem } from '../../../api/types';
-import { Button, ErrorBox, Field, Input, Modal, Select, Sheet, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { Button, CancelButton, ErrorBox, Field, Input, Modal, Select, Sheet, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { QuantityInput } from './QuantityInput';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction, useService } from '../../../hooks/useService';
 import { errorMessage } from '../../../lib/errors';
 import { FEEDING_CATEGORIES, mealText, parseQuantity, quantityError, quantityText, supplyCategoryText, textError } from '../../../lib/stable-labels';
@@ -46,7 +48,8 @@ export function FeedingPlanEditor({
   const supplies = useService(async () => (await listSupplyItems()).filter((item) => FEEDING_CATEGORIES.includes(item.category)), []);
   const [lines, setLines] = useState<Line[]>(() => (draft ? planLines(draft).map(toLine) : []));
   const [note, setNote] = useState(draft?.note ?? '');
-  const [touched, setTouched] = useState(false);
+  // Bản nháp đã tạo ở lần bấm trước (áp dụng bị lỗi): lần sau thay bản này thay vì tạo mới.
+  const [created, setCreated] = useState<FeedingPlan>();
   const [copying, setCopying] = useState(false);
   const [mode, setMode] = useState<'draft' | 'apply'>('draft');
   const list = useRef<HTMLDivElement>(null);
@@ -66,10 +69,18 @@ export function FeedingPlanEditor({
       note: textError(line.note, { label: 'Ghi chú', max: 200, required: false }),
     };
   };
-  const errors = lines.map((line) => ({ key: line.key, ...lineErrors(line) }));
-  const hasLineErrors = errors.some((entry) => entry.supply || entry.quantity || entry.note);
-  const noteError = textError(note, { label: 'Ghi chú', max: 500, required: false });
-  const countError = lines.length === 0 ? 'Thêm ít nhất một món' : lines.length > MAX_LINES ? `Tối đa ${MAX_LINES} món` : undefined;
+  // Khóa mỗi ô của dòng theo key dòng, ví dụ quantity-3. Ghi chú khẩu phần dùng khóa note trùng tên ô của BE.
+  const errors: Record<string, string | undefined> = {
+    count: lines.length === 0 ? 'Thêm ít nhất một món' : lines.length > MAX_LINES ? `Tối đa ${MAX_LINES} món` : undefined,
+    note: textError(note, { label: 'Ghi chú', max: 500, required: false }),
+  };
+  for (const line of lines) {
+    const lineError = lineErrors(line);
+    errors[`supply-${line.key}`] = lineError.supply;
+    errors[`quantity-${line.key}`] = lineError.quantity;
+    errors[`note-${line.key}`] = lineError.note;
+  }
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
 
   const addLine = (meal: FeedingMeal) => {
     const used = new Set(lines.filter((line) => line.meal === meal).map((line) => line.supplyItemId));
@@ -80,12 +91,8 @@ export function FeedingPlanEditor({
   const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key));
 
   const submit = (next: 'draft' | 'apply') => {
-    setTouched(true);
     setMode(next);
-    if (countError || hasLineErrors || noteError) {
-      list.current?.querySelector('[data-invalid="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
+    if (!f.attempt(list.current ?? undefined)) return;
     const items: FeedingPlanItemInput[] = MEAL_ORDER.flatMap((meal) =>
       lines
         .filter((line) => line.meal === meal)
@@ -93,7 +100,15 @@ export function FeedingPlanEditor({
     );
     void action.run(
       async () => {
-        const saved = draft ? await replaceFeedingPlan(draft.id, items, note.trim() || null) : await createFeedingPlan(horse.id, items, note.trim() || undefined);
+        const target = draft ?? created;
+        let saved: FeedingPlan;
+        if (target) saved = await replaceFeedingPlan(target.id, items, note.trim() || null);
+        else {
+          saved = await createFeedingPlan(horse.id, items, note.trim() || undefined);
+          // Giữ ngay bản vừa tạo: áp dụng lỗi thì lần bấm sau không tạo thêm bản nháp trùng.
+          setCreated(saved);
+          onSaved();
+        }
         if (next === 'apply') await applyFeedingPlan(saved.id);
         return saved;
       },
@@ -121,13 +136,12 @@ export function FeedingPlanEditor({
       title={draft ? `Sửa khẩu phần: ${horse.name}` : `Lập khẩu phần: ${horse.name}`}
       description="Không cần đủ cả 4 bữa."
       dirty={dirty}
+      busy={action.pending}
       onSave={() => submit('draft')}
       saveLabel="Lưu nháp"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button variant="secondary" onClick={() => submit('draft')} disabled={action.pending}>
             {action.pending && mode === 'draft' ? 'Đang lưu…' : 'Lưu nháp'}
           </Button>
@@ -146,7 +160,11 @@ export function FeedingPlanEditor({
           {options.length === 0 && <ErrorBox message="Kho chưa có thức ăn. Nhờ Quản lý CLB thêm vào kho." />}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-gray-600">
-              {lines.length} món{touched && countError ? <span className="ml-2 font-medium text-red-600">{countError}</span> : null}
+              {lines.length} món{f.show('count') ? (
+                <span role="alert" data-invalid="true" className="ml-2 font-medium text-red-600">
+                  {f.show('count')}
+                </span>
+              ) : null}
             </p>
             <Button variant="inline" size="sm" onClick={() => setCopying(true)}>
               <Copy size={13} /> Chép từ ngựa khác
@@ -168,12 +186,20 @@ export function FeedingPlanEditor({
                 ) : (
                   <div className="space-y-2">
                     {mealLines.map((line) => {
-                      const lineError = touched ? errors.find((entry) => entry.key === line.key) : undefined;
                       const supply = byId.get(line.supplyItemId);
+                      const supplyKey = `supply-${line.key}`;
+                      const quantityKey = `quantity-${line.key}`;
+                      const noteKey = `note-${line.key}`;
                       return (
-                        <div key={line.key} className="grid gap-2 sm:grid-cols-12" data-invalid={lineError && (lineError.supply || lineError.quantity || lineError.note) ? 'true' : undefined}>
-                          <Field error={lineError?.supply} className="sm:col-span-5">
-                            <Select value={line.supplyItemId} onChange={(event) => update(line.key, { supplyItemId: event.target.value })}>
+                        <div key={line.key} className="grid gap-2 sm:grid-cols-12">
+                          <Field name={supplyKey} error={f.show(supplyKey)} onBlur={f.blur(supplyKey)} className="sm:col-span-5">
+                            <Select
+                              value={line.supplyItemId}
+                              onChange={(event) => update(line.key, { supplyItemId: event.target.value })}
+                              onBlur={f.blur(supplyKey)}
+                              aria-label="Món"
+                              className={cn(f.show(supplyKey) && invalidClass)}
+                            >
                               <option value="">Chọn món…</option>
                               {line.supplyItemId && !supply && <option value={line.supplyItemId}>{draftNames.get(line.supplyItemId) ?? 'Vật tư đã xóa'} · đã ngừng dùng</option>}
                               {options.map((item: SupplyItem) => (
@@ -183,14 +209,27 @@ export function FeedingPlanEditor({
                               ))}
                             </Select>
                           </Field>
-                          <Field error={lineError?.quantity} className="sm:col-span-3">
+                          <Field name={quantityKey} error={f.show(quantityKey)} onBlur={f.blur(quantityKey)} className="sm:col-span-3">
                             <div className="relative">
-                              <QuantityInput value={line.quantity} onChange={(quantity) => update(line.key, { quantity })} placeholder="Lượng" className="pr-12" />
+                              <QuantityInput
+                                value={line.quantity}
+                                onChange={(quantity) => update(line.key, { quantity })}
+                                placeholder="Lượng"
+                                aria-label="Lượng"
+                                className={cn('pr-12', f.show(quantityKey) && invalidClass)}
+                              />
                               <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">{supply?.unit}</span>
                             </div>
                           </Field>
-                          <Field error={lineError?.note} className="sm:col-span-3">
-                            <Input value={line.note} onChange={(event) => update(line.key, { note: event.target.value })} placeholder="Ghi chú" maxLength={220} />
+                          <Field name={noteKey} error={f.show(noteKey)} onBlur={f.blur(noteKey)} className="sm:col-span-3">
+                            <Input
+                              value={line.note}
+                              onChange={(event) => update(line.key, { note: event.target.value })}
+                              placeholder="Ghi chú"
+                              aria-label="Ghi chú món"
+                              maxLength={200}
+                              className={cn(f.show(noteKey) && invalidClass)}
+                            />
                           </Field>
                           <div className="flex justify-end sm:col-span-1">
                             <Button variant="ghost" size="icon" title="Bỏ món" onClick={() => removeLine(line.key)}>
@@ -206,11 +245,22 @@ export function FeedingPlanEditor({
             );
           })}
 
-          <Field label="Ghi chú" error={touched ? noteError : undefined}>
-            <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Giảm tinh bột tuần thi đấu, uống đủ nước sau buổi tập" />
+          <Field label="Ghi chú" name="note" error={f.show('note')} onBlur={f.blur('note')}>
+            <Textarea
+              rows={2}
+              maxLength={500}
+              value={note}
+              onChange={(event) => {
+                setNote(event.target.value);
+                if (action.error) action.clearError();
+              }}
+              placeholder="Ví dụ: Giảm tinh bột tuần thi đấu, uống đủ nước sau buổi tập"
+              className={cn(f.show('note') && invalidClass)}
+            />
           </Field>
           {mode === 'apply' && <p className="text-xs text-gray-500">Khẩu phần cũ sẽ chuyển vào lịch sử.</p>}
-          {action.error && <ErrorBox message={action.error} />}
+          {created && !draft && action.error && <p className="text-xs text-gray-500">Bản nháp đã lưu. Bấm Áp dụng lần nữa để thử lại.</p>}
+          {action.error && !action.fieldErrors.note && <ErrorBox message={action.error} />}
         </div>
       )}
       {copying && <CopyFromHorse horse={horse} onClose={() => setCopying(false)} onPick={copyFrom} hasLines={lines.length > 0} />}

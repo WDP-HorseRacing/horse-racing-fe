@@ -29,7 +29,9 @@ export function HorseCard({ horse, age, index = 0 }: { horse: HorseListItem; age
   const place =
     placementStatus === 'PLACED'
       ? barn?.name
-      : placementStatus === 'NOT_APPLICABLE'
+      : placementStatus === 'PENDING_GROOM'
+        ? `${barn?.name ?? ''}${stall ? ` · ô ${stall.code}` : ''} · chờ giao Groom`
+        : placementStatus === 'NOT_APPLICABLE'
         ? placementStatusLabel.NOT_APPLICABLE
         : `${barn?.name ? `${barn.name} · ` : ''}${placementStatusLabel[placementStatus].toLowerCase()}`;
 
@@ -38,7 +40,7 @@ export function HorseCard({ horse, age, index = 0 }: { horse: HorseListItem; age
       to={links.horse(horse.id)}
       style={{ animationDelay: `${Math.min(index, 12) * 35}ms` }}
       className={cn(
-        'card-rise group flex flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-gray-200/80 transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_44px_-28px_rgba(6,78,59,0.6)] hover:ring-emerald-200',
+        'card-rise group flex flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-gray-200/80 transition duration-300 hover:-translate-y-1 hover:shadow-raised hover:ring-emerald-200',
         muted && 'opacity-60',
       )}
     >

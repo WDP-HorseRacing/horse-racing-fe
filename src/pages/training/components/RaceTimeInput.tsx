@@ -1,4 +1,5 @@
 // Ô nhập thời gian chạy gồm hai ô [phút] : [giây]. Giây có thể lẻ tới phần trăm (14,8 hoặc 14.80). Giá trị ngoài là mili giây.
+// Đang gõ thì không tự báo lỗi: onChange trả kèm câu lỗi để nơi dùng hiện dưới ô khi rời ô hoặc bấm lưu.
 import { useRef, useState } from 'react';
 import { cn, invalidClass } from '../../../components/ui';
 import { formatRaceTime, minutePartValid, msFromParts, partsFromMs, secondPartValid } from '../../../lib/training-format';
@@ -15,6 +16,14 @@ function cleanSeconds(raw: string) {
   return match ? `${match[1]}${match[2]}${match[3]}` : '';
 }
 
+/** Câu lỗi của hai ô đang gõ. Trống cả hai thì không lỗi, nơi dùng tự xét bắt buộc. */
+function partsIssue(minutes: string, seconds: string): string | undefined {
+  if (!minutes && !seconds) return undefined;
+  if (!secondPartValid(seconds)) return 'Giây tối đa 59,99';
+  if (!minutePartValid(minutes)) return 'Phút tối đa 59';
+  return msFromParts(minutes, seconds) === undefined ? 'Thời gian phải lớn hơn 0' : undefined;
+}
+
 export function RaceTimeInput({
   value,
   onChange,
@@ -24,8 +33,8 @@ export function RaceTimeInput({
   className = '',
 }: {
   value: number | undefined;
-  /** `raw` rỗng khi cả hai ô trống, để nơi dùng phân biệt "chưa nhập" với "nhập sai". */
-  onChange: (ms: number | undefined, raw: string) => void;
+  /** `issue`: câu lỗi khi đã gõ mà sai (quá 59, bằng 0). ms trống mà không có issue là chưa nhập. */
+  onChange: (ms: number | undefined, issue?: string) => void;
   invalid?: boolean;
   autoFocus?: boolean;
   name?: string;
@@ -45,11 +54,9 @@ export function RaceTimeInput({
     setParts(next);
     const ms = msFromParts(next.minutes, next.seconds);
     setSynced(ms);
-    onChange(ms, next.minutes || next.seconds ? `${next.minutes}:${next.seconds}` : '');
+    onChange(ms, partsIssue(next.minutes, next.seconds));
   };
 
-  const minutesBad = !minutePartValid(parts.minutes);
-  const secondsBad = !secondPartValid(parts.seconds);
   const ms = msFromParts(parts.minutes, parts.seconds);
 
   return (
@@ -78,11 +85,11 @@ export function RaceTimeInput({
               secondsRef.current?.focus();
             }
           }}
-          className={cn(boxClass, 'pr-10', (minutesBad || invalid) && invalidClass)}
+          className={cn(boxClass, 'pr-10', invalid && invalidClass)}
         />
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">phút</span>
       </div>
-      <span className="font-mono text-lg font-semibold text-gray-300">:</span>
+      <span className="tabular-nums text-lg font-semibold text-gray-300">:</span>
       <div className="relative min-w-[6.5rem] flex-1">
         <input
           ref={secondsRef}
@@ -92,17 +99,11 @@ export function RaceTimeInput({
           placeholder="15.00"
           value={parts.seconds}
           onChange={(event) => update({ ...parts, seconds: cleanSeconds(event.target.value) })}
-          className={cn(boxClass, 'pr-10', (secondsBad || invalid) && invalidClass)}
+          className={cn(boxClass, 'pr-10', invalid && invalidClass)}
         />
         <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">giây</span>
       </div>
-      {secondsBad ? (
-        <span className="shrink-0 text-xs font-medium text-red-600">Giây tối đa 59,99</span>
-      ) : minutesBad ? (
-        <span className="shrink-0 text-xs font-medium text-red-600">Phút tối đa 59</span>
-      ) : (
-        ms !== undefined && <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-emerald-800">= {formatRaceTime(ms)}</span>
-      )}
+      {ms !== undefined && <span className="shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-emerald-800">= {formatRaceTime(ms)}</span>}
     </div>
   );
 }

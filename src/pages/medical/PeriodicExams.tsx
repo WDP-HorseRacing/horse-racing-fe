@@ -1,21 +1,22 @@
 // F3.2 — Lịch khám định kỳ (VET, CM, HT) từ GET /medical/checkups.
-// Chu kỳ cố định 30 ngày (không có chỗ sửa). VET đặt / dời ngày hẹn và ghi buổi khám định kỳ.
+// Chu kỳ cố định 30 ngày (không có chỗ sửa). VET đặt, dời, hủy ngày hẹn và ghi buổi khám định kỳ.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarClock, Repeat, Stethoscope } from 'lucide-react';
-import { useService } from '../../hooks/useService';
-import { listCheckups } from '../../api/medical';
+import { useAction, useService } from '../../hooks/useService';
+import { cancelCheckupAppointment, listCheckups } from '../../api/medical';
 import { listBarns } from '../../api/stable';
 import type { CheckupDueStatus, CheckupItem } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Button, DataTable, ErrorBox, FilterSelect, FilterTabs, PageHeader, SearchInput, Skeleton } from '../../components/ui';
+import { Button, DataTable, ErrorBox, FilterSelect, FilterTabs, PageHeader, SearchInput, Skeleton, useToast } from '../../components/ui';
 import { HealthPill } from '../../components/ui/status';
 import { checkupStatusLabel } from '../../lib/api-labels';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { links } from '../../lib/links';
 import { AppointmentModal } from './components/modals';
 import { CheckupDue, HorseChip } from './components/parts';
+import { ReasonDialog } from '../training/components/ReasonDialog';
 
 export default function PeriodicExams() {
   const user = useStore((state) => state.currentUser);
@@ -29,6 +30,9 @@ export default function PeriodicExams() {
   const navigate = useNavigate();
   const exam = (horseId?: string) => navigate(links.visitNew({ horseId, kind: 'ROUTINE', back: links.periodic }));
   const [appointing, setAppointing] = useState<CheckupItem | null>(null);
+  const [cancelling, setCancelling] = useState<CheckupItem | null>(null);
+  const cancel = useAction();
+  const toast = useToast();
 
   const barnName = useMemo(() => new Map((barns.data ?? []).map((barn) => [barn.id, barn.name])), [barns.data]);
   const all = useMemo(() => list.data ?? [], [list.data]);
@@ -152,6 +156,11 @@ export default function PeriodicExams() {
                         {row.appointment ? 'Dời hẹn' : 'Đặt hẹn'}
                       </Button>
                     )}
+                    {canAppoint && row.appointment && (
+                      <Button size="sm" variant="inline" onClick={() => setCancelling(row)}>
+                        Hủy hẹn
+                      </Button>
+                    )}
                     {isVet && (
                       <Button size="sm" variant="secondary" onClick={() => exam(row.horseId)}>
                         <Stethoscope size={14} /> Ghi khám
@@ -172,6 +181,36 @@ export default function PeriodicExams() {
             setAppointing(null);
             list.reload();
           }}
+        />
+      )}
+      {cancelling?.appointment && (
+        <ReasonDialog
+          title="Hủy ngày hẹn khám"
+          message={
+            <>
+              Hủy hẹn khám định kỳ của <b>{cancelling.horseName}</b> lúc {formatDateTime(cancelling.appointment.scheduledAt)}. Hạn khám không đổi, có thể đặt hẹn mới sau.
+            </>
+          }
+          label="Lý do hủy hẹn"
+          maxLength={500}
+          suggestions={['Ngựa đang điều trị bệnh án', 'Đặt nhầm ngày', 'Bác sĩ bận lịch khác']}
+          confirmLabel="Hủy hẹn"
+          pending={cancel.pending}
+          error={cancel.error}
+          onClose={() => {
+            cancel.clearError();
+            setCancelling(null);
+          }}
+          onConfirm={(reason) =>
+            cancel.run(
+              () => cancelCheckupAppointment(cancelling.horseId, reason),
+              () => {
+                toast.push(`Đã hủy ngày hẹn khám của ${cancelling.horseName}`, 'success');
+                setCancelling(null);
+                list.reload();
+              },
+            )
+          }
         />
       )}
     </div>

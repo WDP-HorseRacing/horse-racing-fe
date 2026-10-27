@@ -37,7 +37,7 @@ export default function ClassList() {
     // Lớp còn mở cần buổi và ghi danh để vẽ tiến độ. Lớp đã kết thúc chỉ hiện dòng gọn.
     const rows: ClassRow[] = await Promise.all(
       classes.map(async (item) =>
-        item.status === 'ACTIVE' || item.status === 'DRAFT'
+        item.status === 'ACTIVE'
           ? { item, sessions: await listSessions(item.id).catch(() => []), enrollments: await listEnrollments(item.id).catch(() => []) }
           : { item, sessions: [], enrollments: [] },
       ),
@@ -48,14 +48,14 @@ export default function ClassList() {
 
   const rows = useMemo(() => data.data?.rows ?? [], [data.data]);
   const counts = useMemo(() => {
-    const result: Record<Filter, number> = { ALL: rows.length, DRAFT: 0, ACTIVE: 0, COMPLETED: 0, CANCELLED: 0 };
+    const result: Record<Filter, number> = { ALL: rows.length, ACTIVE: 0, COMPLETED: 0, CANCELLED: 0 };
     rows.forEach((row) => (result[row.item.status] += 1));
     return result;
   }, [rows]);
   const [filter, setFilter] = useState<Filter | null>(null);
   const effective: Filter = filter ?? (counts.ACTIVE > 0 ? 'ACTIVE' : 'ALL');
   const visible = rows.filter((row) => effective === 'ALL' || row.item.status === effective);
-  const open = visible.filter((row) => row.item.status === 'ACTIVE' || row.item.status === 'DRAFT');
+  const open = visible.filter((row) => row.item.status === 'ACTIVE');
   const closed = visible.filter((row) => row.item.status === 'COMPLETED' || row.item.status === 'CANCELLED');
 
   useGSAP(
@@ -118,7 +118,6 @@ export default function ClassList() {
             onChange={setFilter}
             options={[
               { value: 'ACTIVE', label: 'Đang chạy', count: counts.ACTIVE },
-              { value: 'DRAFT', label: 'Nháp', count: counts.DRAFT },
               { value: 'COMPLETED', label: 'Đã hoàn thành', count: counts.COMPLETED },
               { value: 'CANCELLED', label: 'Đã hủy', count: counts.CANCELLED },
               { value: 'ALL', label: 'Tất cả', count: counts.ALL },
@@ -172,15 +171,15 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
   const ratio = totalDays > 0 ? elapsed / totalDays : 0;
   const counted = sessions.filter((session) => session.status !== 'CANCELLED');
   const done = counted.filter((session) => session.status === 'COMPLETED').length;
-  const drafts = sessions.filter((session) => session.status === 'DRAFT').length;
   const active = enrollments.filter((enrollment) => enrollment.status === 'ACTIVE').length;
   const now = new Date().toISOString();
   const live = sessions.find((session) => session.status === 'IN_PROGRESS');
-  const next = live ?? sessions.filter((session) => session.status === 'SCHEDULED' && session.scheduledEndAt >= now).sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt))[0];
+  const upcoming = sessions.filter((session) => session.status === 'SCHEDULED' && session.scheduledEndAt >= now).sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt));
+  const next = live ?? upcoming[0];
   const inRange = today >= item.startDate && today <= item.endDate;
   return (
     // Cả thẻ bấm được để vào trang lớp (link phủ toàn thẻ). Dải buổi kế tiếp nằm lớp trên nên vẫn mở thẳng sân tập.
-    <article data-class-card className={cn('group relative flex min-w-0 flex-col rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 transition hover:ring-emerald-300', item.status === 'ACTIVE' ? 'shadow-grass-tint' : 'border border-dashed border-gray-300 ring-0', className)}>
+    <article data-class-card className={cn('group relative flex min-w-0 flex-col rounded-2xl bg-white p-5 ring-1 ring-gray-200/80 transition hover:ring-emerald-300', item.status === 'ACTIVE' ? 'shadow-grass-tint' : '', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-xs text-gray-500">{item.code}</p>
@@ -198,7 +197,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
       </div>
 
       <div className="mt-5">
-        <div className="mb-1.5 flex justify-between font-mono text-xs text-gray-500">
+        <div className="mb-1.5 flex justify-between tabular-nums text-xs text-gray-500">
           <span>{formatDate(item.startDate)}</span>
           <span>{formatDate(item.endDate)}</span>
         </div>
@@ -213,7 +212,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <Layers size={12} /> Buổi xong
           </p>
-          <p className="font-mono text-sm font-semibold tabular-nums">
+          <p className="tabular-nums text-sm font-semibold ">
             {done}/{counted.length}
           </p>
         </div>
@@ -221,13 +220,13 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <Users size={12} /> Ngựa
           </p>
-          <p className="font-mono text-sm font-semibold tabular-nums">
+          <p className="tabular-nums text-sm font-semibold ">
             {active}/{item.maxHorses}
           </p>
         </div>
-        <div className={cn('rounded-xl px-3 py-2 ring-1', drafts ? 'bg-amber-50/70 ring-amber-200/70' : 'bg-gray-50/80 ring-gray-100')}>
-          <p className="text-xs text-gray-500">Buổi nháp</p>
-          <p className="font-mono text-sm font-semibold tabular-nums">{drafts}</p>
+        <div className={cn('rounded-xl px-3 py-2 ring-1', upcoming.length ? 'bg-gray-50/80 ring-gray-100' : 'bg-amber-50/70 ring-amber-200/70')}>
+          <p className="text-xs text-gray-500">Sắp tới</p>
+          <p className="tabular-nums text-sm font-semibold ">{upcoming.length}</p>
         </div>
       </div>
 
@@ -239,10 +238,10 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
             <p className="truncate text-sm font-semibold text-gray-900">{next.name}</p>
           </div>
           <div className="text-right">
-            <p className="font-mono text-xs text-gray-600">
+            <p className="tabular-nums text-xs text-gray-600">
               {weekdayShort[isoWeekdayOf(clubDateKey(next.scheduledStartAt))]} {formatDate(next.scheduledStartAt).slice(0, 5)}
             </p>
-            <p className="font-mono text-sm font-semibold">{clubTime(next.scheduledStartAt)}</p>
+            <p className="tabular-nums text-sm font-semibold">{clubTime(next.scheduledStartAt)}</p>
           </div>
           <div className="hidden flex-col items-end gap-1 sm:flex">
             <IntensityBars intensity={next.intensity} showLabel={false} />
@@ -251,7 +250,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
         </Link>
       ) : (
         <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-500 ring-1 ring-gray-100">
-          {item.status === 'DRAFT' ? 'Lớp nháp. Kích hoạt để ghi danh ngựa và công bố buổi.' : drafts ? 'Chưa công bố buổi nào sắp tới.' : 'Không còn buổi sắp tới.'}
+          {sessions.length === 0 ? 'Lớp chưa có buổi. Xếp buổi trên lịch tuần của lớp.' : 'Không còn buổi sắp tới.'}
         </p>
       )}
     </article>

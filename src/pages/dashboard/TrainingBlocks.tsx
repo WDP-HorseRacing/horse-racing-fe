@@ -14,7 +14,7 @@ import { useStore } from '../../store/store';
 import { links } from '../../lib/links';
 import { formatDate, formatRelative } from '../../lib/format';
 import { addDateKey, clubDateKey, clubTime, clubToday, diffDateKeys, isoWeekdayOf, mondayOf } from '../../lib/club-time';
-import { classStatusText, participantStatusText, weekdayShort } from '../../lib/training-labels';
+import { PARTICIPANT_OUT, classStatusText, participantStatusText, weekdayShort } from '../../lib/training-labels';
 import { now } from '../../lib/clock';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../training/components/bits';
 import { ProgressFill } from '../training/components/motion';
@@ -43,16 +43,16 @@ export function TrainerTodayCard() {
       ) : data.error ? (
         <ErrorBox message={data.error} />
       ) : items.length === 0 ? (
-        <p className="text-sm text-gray-500">Hôm nay không có buổi tập nào đã công bố.</p>
+        <p className="text-sm text-gray-500">Hôm nay không có buổi tập nào.</p>
       ) : (
         <ul className="-mx-2 space-y-1">
           {items.map((item) => {
             const running = item.participants.filter((participant) => participant.status === 'ONGOING').length;
-            const done = item.participants.filter((participant) => participant.status === 'COMPLETED').length;
+            const done = item.participants.filter((participant) => participant.status === 'COMPLETED' || participant.status === 'STOPPED').length;
             return (
               <li key={item.session.id}>
                 <Link to={links.session(item.session.id)} className={cn('flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-gray-50', item.session.status === 'IN_PROGRESS' && 'bg-emerald-50/60')}>
-                  <span className="w-12 font-mono text-sm font-semibold text-gray-900">{clubTime(item.session.scheduledStartAt)}</span>
+                  <span className="w-12 tabular-nums text-sm font-semibold text-gray-900">{clubTime(item.session.scheduledStartAt)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 truncate text-sm font-semibold text-gray-900">
                       {item.session.name} <TrialBadge type={item.session.sessionType} />
@@ -111,7 +111,7 @@ export function ActiveClassesCard() {
                     <span className="truncate font-semibold text-gray-900">
                       <span className="font-mono text-gray-500">{item.code}</span> {item.name}
                     </span>
-                    <span className="shrink-0 font-mono text-xs text-gray-500">
+                    <span className="shrink-0 tabular-nums text-xs text-gray-500">
                       {done}/{counted.length} buổi
                     </span>
                   </div>
@@ -147,7 +147,7 @@ export function GroomTrainingCard() {
           {rows.map(({ item, participant }) => (
             <li key={participant.id}>
               <Link to={links.today} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
-                <span className="w-12 font-mono text-sm font-semibold">{clubTime(item.session.scheduledStartAt)}</span>
+                <span className="w-12 tabular-nums text-sm font-semibold">{clubTime(item.session.scheduledStartAt)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900">{participant.horseName || 'Ngựa'}</span>
                   <span className="block truncate text-xs text-gray-500">{item.session.name}</span>
@@ -233,8 +233,8 @@ export function ManagerTrainingCards() {
   const classes: TrainingClass[] = data.data?.classes ?? [];
   const monday = mondayOf(clubToday());
   const week = Array.from({ length: 7 }, (_, index) => addDateKey(monday, index));
-  const sessions = (data.data?.sessions ?? []).filter((session) => session.status !== 'DRAFT' && session.status !== 'CANCELLED');
-  const colors = { DRAFT: '#9ca3af', ACTIVE: '#047857', COMPLETED: '#6ee7b7', CANCELLED: '#d1d5db' } as const;
+  const sessions = (data.data?.sessions ?? []).filter((session) => session.status !== 'CANCELLED');
+  const colors = { ACTIVE: '#047857', COMPLETED: '#6ee7b7', CANCELLED: '#d1d5db' } as const;
   return (
     <>
       <Card className="flex flex-col">
@@ -246,7 +246,7 @@ export function ManagerTrainingCards() {
         ) : (
           <DonutChart
             centerLabel="lớp"
-            segments={(['ACTIVE', 'DRAFT', 'COMPLETED', 'CANCELLED'] as const).map((status) => ({
+            segments={(['ACTIVE', 'COMPLETED', 'CANCELLED'] as const).map((status) => ({
               key: status,
               label: classStatusText[status],
               value: classes.filter((item) => item.status === status).length,
@@ -261,7 +261,7 @@ export function ManagerTrainingCards() {
           <Skeleton rows={3} />
         ) : (
           <ColumnChart
-            caption="Số buổi đã công bố mỗi ngày trong tuần (lịch câu lạc bộ)"
+            caption="Số buổi mỗi ngày trong tuần (lịch câu lạc bộ)"
             columns={week.map((day) => ({
               key: day,
               label: `${weekdayShort[isoWeekdayOf(day)]} ${day.slice(8, 10)}`,
@@ -315,14 +315,17 @@ export function OwnerTrainingCards() {
             {data.data!.upcoming.map(({ horse, horseId, item }) => (
               <li key={item.participantId}>
                 <Link to={links.horse(horseId, 'training')} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-gray-50">
-                  <span className="w-20 font-mono text-xs text-gray-600">
+                  <span className="w-20 tabular-nums text-xs text-gray-600">
                     {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-gray-900">{horse}</span>
                     <span className="block truncate text-xs text-gray-500">{item.name}</span>
                   </span>
-                  <span className="text-xs text-gray-500">{participantStatusText[item.participantStatus]}</span>
+                  <span className="max-w-40 text-right text-xs text-gray-500">
+                    <span className={cn(PARTICIPANT_OUT.includes(item.participantStatus) && 'font-medium text-amber-800')}>{participantStatusText[item.participantStatus]}</span>
+                    {PARTICIPANT_OUT.includes(item.participantStatus) && item.cancelReason && <span className="block truncate" title={item.cancelReason}>{item.cancelReason}</span>}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -344,7 +347,7 @@ export function OwnerTrainingCards() {
                     <span className="truncate text-sm font-semibold text-gray-900">
                       {horse} · {item.name}
                     </span>
-                    <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono text-xs font-semibold text-white">{item.evaluation!.score}/10</span>
+                    <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-white">{item.evaluation!.score}/10</span>
                   </div>
                   {item.evaluation!.comment && <p className="mt-1 line-clamp-2 text-xs text-gray-600">“{item.evaluation!.comment}”</p>}
                 </Link>

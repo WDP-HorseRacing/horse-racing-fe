@@ -12,32 +12,39 @@ import {
   Lock,
   Stethoscope,
   Users,
+  Wheat,
 } from 'lucide-react';
 import { useStore } from '../store/store';
 import { Logo } from '../components/Logo';
-import { useGsapReveal, useGsapCounter } from '../hooks/useGsapReveal';
+import { useGsapReveal } from '../hooks/useGsapReveal';
 
 gsap.registerPlugin(ScrollTrigger);
 
-/** Ba luồng nghiệp vụ bắt buộc — bố cục bento: một ô lớn và hai ô xếp chồng. */
+/** Bốn mảng việc của câu lạc bộ, viết cho người lần đầu xem — bố cục bento: một ô lớn và ba ô xếp chồng. */
 const flows: { icon: typeof Users; title: string; desc: string; points?: string[]; big: boolean }[] = [
   {
     icon: ClipboardList,
-    title: 'Lập và thực hiện giáo án theo lớp',
-    desc: 'Huấn luyện viên soạn môn học, ghép thành giáo án theo giai đoạn rồi mở lớp với khung giờ và sĩ số. Ngựa đăng ký vào lớp, lịch tập của từng con được tính ra từ các lớp đang học. Buổi tập theo dõi nhịp tim và tốc độ từng giây, cảnh báo đỏ tới ngay người đang dắt ngựa.',
-    points: ['Môn học → giáo án → lớp → buổi học', 'Một buổi nhiều ngựa, chấm điểm từng con', 'Ngựa không đủ điều kiện chỉ vắng riêng, lớp vẫn chạy'],
+    title: 'Huấn luyện theo lớp',
+    desc: 'Huấn luyện viên lên giáo án, mở lớp và xếp buổi tập trên lịch tuần. Trên sân, mỗi con ngựa được theo dõi nhịp tim và tốc độ, có cảnh báo ngay cho người đang dắt khi ngựa quá sức.',
+    points: ['Một buổi tập nhiều ngựa', 'Chấm điểm từng con sau buổi', 'Chủ ngựa xem được kết quả'],
     big: true,
   },
   {
     icon: Users,
-    title: 'Hồ sơ và lý lịch ngựa',
-    desc: 'Định danh, số chip, phả hệ ba đời, một chủ sở hữu, chỉ số cơ thể có cảnh báo và quy trình xếp khu → ô → Groom.',
+    title: 'Hồ sơ ngựa và chuồng trại',
+    desc: 'Lý lịch, số chip, phả hệ ba đời, chủ sở hữu và chỉ số cơ thể của từng con. Ngựa mới về được xếp khu, xếp ô và giao người chăm sóc.',
     big: false,
   },
   {
     icon: HeartPulse,
-    title: 'Y tế và xử lý chấn thương',
-    desc: 'Yêu cầu khám, bệnh án gồm nhiều buổi khám, khám định kỳ theo chu kỳ chung và khóa huấn luyện độc lập với trạng thái sức khỏe.',
+    title: 'Y tế và chấn thương',
+    desc: 'Bác sĩ thú y khám, kê đơn, theo dõi chấn thương và cho ngựa nghỉ tập khi cần. Ngựa khỏi thì mở lại lịch tập.',
+    big: false,
+  },
+  {
+    icon: Wheat,
+    title: 'Chăm sóc hằng ngày và chi phí',
+    desc: 'Khẩu phần ăn, việc chăm sóc mỗi ngày, kho vật tư và báo sự cố. Chủ ngựa xem rõ phí nuôi và chi phí y tế.',
     big: false,
   },
 ];
@@ -46,27 +53,27 @@ const roles = [
   {
     name: 'Huấn luyện viên trưởng',
     scope: 'Các khu chuồng phụ trách',
-    desc: 'Soạn môn học và giáo án, mở lớp, đăng ký ngựa, điều hành buổi tập, chấm điểm từng ngựa, xếp ô và phân công Groom.',
+    desc: 'Lên giáo án, mở lớp, điều hành buổi tập và đánh giá từng con ngựa. Xếp ô chuồng, giao người chăm sóc và duyệt khẩu phần ăn.',
   },
   {
     name: 'Bác sĩ thú y',
     scope: 'Toàn câu lạc bộ',
-    desc: 'Tiếp nhận yêu cầu khám, ghi buổi khám, mở và đóng bệnh án, đổi trạng thái sức khỏe, đặt khóa huấn luyện, đặt ngưỡng nhịp tim.',
+    desc: 'Khám và điều trị, theo dõi chấn thương, lên lịch tiêm phòng, cho ngựa nghỉ tập khi cần.',
   },
   {
     name: 'Nhân viên chăm sóc',
     scope: 'Ngựa được phân công',
-    desc: 'Chuẩn bị ngựa, đưa ra sân, chăm sóc sau tập, ghi chỉ số cơ thể và gửi yêu cầu khám khi ngựa có dấu hiệu bất thường.',
+    desc: 'Làm việc chăm sóc mỗi ngày, cho ăn, dắt ngựa ra sân, ghi chỉ số cơ thể và báo sự cố khi ngựa có dấu hiệu lạ.',
   },
   {
     name: 'Chủ sở hữu ngựa',
     scope: 'Ngựa đang sở hữu',
-    desc: 'Xem hồ sơ, phả hệ, lịch tập, nhận xét sau buổi tập và bệnh án kèm chi phí khi bệnh án đã đóng.',
+    desc: 'Theo dõi hồ sơ, lịch tập, kết quả tập, bệnh án và chi phí của ngựa mình.',
   },
   {
     name: 'Quản lý câu lạc bộ',
     scope: 'Toàn câu lạc bộ',
-    desc: 'Tạo hồ sơ ngựa, xếp khu chuồng, quản lý danh mục khu và ô, vòng đời hồ sơ, nhân sự, phân quyền và nhật ký thao tác.',
+    desc: 'Tiếp nhận ngựa, quản lý khu chuồng, nhân sự, phí nuôi, kho vật tư và xem báo cáo của cả câu lạc bộ.',
   },
 ];
 
@@ -77,11 +84,6 @@ const LandingPage = () => {
   const introRef = useGsapReveal({ stagger: 0.12, distance: 50 });
   const featuresRef = useGsapReveal({ stagger: 0.12, distance: 50 });
   const rolesRef = useGsapReveal({ direction: 'up', stagger: 0.08 });
-  const statsRef = useGsapReveal({ direction: 'up', stagger: 0.12 });
-
-  const counter1 = useGsapCounter(29);
-  const counter2 = useGsapCounter(6);
-  const counter3 = useGsapCounter(5);
 
   useEffect(() => {
     if (!titleRef.current || !heroRef.current) return;
@@ -171,8 +173,8 @@ const LandingPage = () => {
             className="mx-auto mb-10 max-w-2xl text-lg font-light leading-relaxed text-white/80 sm:text-xl"
             data-hero-reveal
           >
-            Hồ sơ ngựa, lớp huấn luyện và sổ y tế trong một nơi. Quyết định của bác sĩ có hiệu lực ngay
-            với buổi tập kế tiếp, và mỗi vai trò chỉ thấy đúng phần việc của mình.
+            Nền tảng quản lý toàn diện cho trường đua hiện đại: Đồng bộ hoá huấn luyện,
+            chăm sóc chuồng trại và y tế chuyên sâu trên từng cá thể ngựa.
           </p>
 
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row" data-hero-reveal>
@@ -201,7 +203,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* ===== BA LUỒNG NGHIỆP VỤ ===== */}
+      {/* ===== BỐN MẢNG VIỆC ===== */}
       <section id="chuc-nang" className="bg-white px-6 py-24 sm:py-32">
         <div className="mx-auto max-w-7xl">
           <div className="mb-14 grid gap-6 lg:grid-cols-12 lg:items-end" ref={introRef}>
@@ -210,23 +212,23 @@ const LandingPage = () => {
                 Dựng cho câu lạc bộ đua ngựa
               </p>
               <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl" data-reveal>
-                Ba luồng nghiệp vụ nối liền quanh một con ngựa
+                Mọi việc quanh một chú ngựa, gói trong một nơi
               </h2>
             </div>
             <p className="text-lg font-light leading-relaxed text-gray-500 lg:col-span-5" data-reveal>
-              Bác sĩ đặt khóa huấn luyện thì ngựa tự vắng ở buổi kế tiếp mà lớp vẫn chạy. Ngựa đổi khu thì tự rút khỏi
-              lớp của khu cũ. Không có thao tác nào phải làm tay hai lần.
+              Bác sĩ cho ngựa nghỉ tập thì lịch tập tự cập nhật, huấn luyện viên và chủ ngựa được báo ngay. Mọi người
+              cùng làm trên một hồ sơ ngựa, không phải ghi chép lại nhiều lần.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:grid-rows-2" ref={featuresRef}>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:grid-rows-3" ref={featuresRef}>
             {flows.map((flow) => (
               <div
                 key={flow.title}
                 data-reveal
                 className={
                   flow.big
-                    ? 'group relative overflow-hidden rounded-3xl bg-emerald-950 p-8 text-white shadow-[0_30px_60px_-30px_rgba(6,78,59,0.8)] sm:p-10 lg:col-span-7 lg:row-span-2'
+                    ? 'group relative overflow-hidden rounded-3xl bg-emerald-950 p-8 text-white shadow-raised sm:p-10 lg:col-span-7 lg:row-span-3'
                     : 'group relative rounded-3xl bg-emerald-50/60 p-8 ring-1 ring-emerald-900/5 transition-all duration-300 hover:-translate-y-1 hover:bg-emerald-50 lg:col-span-5'
                 }
               >
@@ -266,13 +268,13 @@ const LandingPage = () => {
                 {flow.big && (
                   <div className="mt-10 grid max-w-lg grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3 text-sm text-emerald-50/80">
                     <CalendarRange size={18} className="text-emerald-300" />
-                    <span>Sáu khung giờ cố định mỗi ngày, mỗi lớp dùng một khung giờ</span>
+                    <span>Xếp buổi tập trên lịch tuần, kéo thả để đổi giờ</span>
                     <Activity size={18} className="text-emerald-300" />
-                    <span>Cảnh báo tim vượt ngưỡng, nghi chấn thương, mất tín hiệu</span>
+                    <span>Cảnh báo khi nhịp tim quá cao hoặc ngựa có dấu hiệu chấn thương</span>
                     <Lock size={18} className="text-emerald-300" />
-                    <span>Khóa huấn luyện chặn đăng ký lớp và buổi tập ngay lập tức</span>
+                    <span>Ngựa đang điều trị không bị xếp vào buổi tập</span>
                     <Stethoscope size={18} className="text-emerald-300" />
-                    <span>Nghi chấn thương trong buổi tập tự thành yêu cầu khám</span>
+                    <span>Có dấu hiệu chấn thương khi tập thì bác sĩ được báo ngay</span>
                   </div>
                 )}
               </div>
@@ -292,8 +294,7 @@ const LandingPage = () => {
               Mỗi vai trò thấy đúng phần việc của mình
             </h2>
             <p className="text-lg font-light leading-relaxed text-gray-500" data-reveal>
-              Phạm vi dữ liệu được lọc ngay ở tầng dịch vụ chứ không phải ẩn bớt trên giao diện: thông tin
-              ngoài quyền không có trong dữ liệu trả về.
+              Mỗi người chỉ thấy những con ngựa và công việc thuộc phần mình phụ trách.
             </p>
           </div>
           <div className="grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -308,36 +309,6 @@ const LandingPage = () => {
                 <p className="mt-1.5 text-sm font-light leading-relaxed text-gray-500">{role.desc}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== SỐ LIỆU ===== */}
-      <section className="bg-white px-6 py-20">
-        <div className="mx-auto grid max-w-7xl items-end gap-10 lg:grid-cols-12" ref={statsRef}>
-          <div className="lg:col-span-5" data-reveal>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Gọn trong phạm vi đồ án, đủ cho một câu lạc bộ</h2>
-            <p className="mt-2 font-light text-gray-500">Ba luồng bắt buộc: hồ sơ ngựa, huấn luyện theo lớp, y tế và chấn thương.</p>
-          </div>
-          <div className="flex flex-wrap gap-x-14 gap-y-8 lg:col-span-7 lg:justify-end">
-            <div data-reveal>
-              <span ref={counter1} className="text-5xl font-bold tracking-tight text-emerald-800 tabular-nums">
-                0
-              </span>
-              <p className="mt-1 text-sm font-medium text-gray-500">chức năng nghiệp vụ</p>
-            </div>
-            <div data-reveal>
-              <span ref={counter2} className="text-5xl font-bold tracking-tight text-gray-900 tabular-nums">
-                0
-              </span>
-              <p className="mt-1 text-sm font-medium text-gray-500">khung giờ tập mỗi ngày</p>
-            </div>
-            <div data-reveal>
-              <span ref={counter3} className="text-5xl font-bold tracking-tight text-gray-900 tabular-nums">
-                0
-              </span>
-              <p className="mt-1 text-sm font-medium text-gray-500">vai trò có phân quyền riêng</p>
-            </div>
           </div>
         </div>
       </section>

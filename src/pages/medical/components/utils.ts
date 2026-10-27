@@ -47,6 +47,29 @@ export const HEALTH_SEVERITY: HealthStatus[] = ['QUARANTINED', 'INJURED', 'UNDER
 
 export const isSevere = (status: HealthStatus) => status === 'INJURED' || status === 'QUARANTINED';
 
+/** Loại kết luận quyết định sức khỏe sau khám: mở bệnh án, bình thường, hay tái khám trong bệnh án. */
+export type HealthMode = 'ISSUE' | 'NORMAL' | 'FOLLOW_UP';
+
+/**
+ * Sức khỏe sau khám được chọn theo kết luận:
+ *  - Có vấn đề (mở bệnh án): Cần theo dõi / Chấn thương / Cách ly, bắt buộc chọn.
+ *  - Bình thường: Đủ điều kiện / Cần theo dõi / Cách ly; ngựa đang Chấn thương thì phải chọn trạng thái mới.
+ *  - Tái khám: cả bốn, không bắt buộc.
+ */
+export function healthChoices(mode: HealthMode, current?: HealthStatus): { allowed: HealthStatus[]; required: boolean; note?: string } {
+  if (mode === 'ISSUE') {
+    return { allowed: ['UNDER_OBSERVATION', 'INJURED', 'QUARANTINED'], required: true, note: 'Có bệnh án thì ngựa ít nhất Cần theo dõi.' };
+  }
+  if (mode === 'NORMAL') {
+    return {
+      allowed: ['ELIGIBLE', 'UNDER_OBSERVATION', 'QUARANTINED'],
+      required: current === 'INJURED',
+      note: current === 'INJURED' ? 'Kết luận bình thường thì ngựa không còn Chấn thương, chọn trạng thái mới.' : 'Kết luận bình thường thì không ghi Chấn thương, cần thì mở bệnh án.',
+    };
+  }
+  return { allowed: HEALTH_ORDER, required: false };
+}
+
 export { formatMoneyInput, parseMoney } from '../../../lib/format';
 
 export const MAX_COST = 10_000_000_000;

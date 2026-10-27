@@ -81,8 +81,12 @@ export default function TrainingToday() {
     return locked ? { label: locked, locked: true as const } : { label, onClick, locked: false as const };
   };
   const nextStep = (item: DayBoardItem, participant: Participant) => {
-    if (!groom || !operational(item)) return null;
+    if (!groom) return null;
     const name = horseName(participant);
+    // Báo vắng nhầm: điểm danh lại trong khung giờ điểm danh, kể cả buổi đang hiện Đã xong mà chưa tới giờ kết thúc.
+    if (participant.status === 'ABSENT' && item.session.status !== 'CANCELLED' && actionWindow(item.session, 'checkIn', clock).state === 'open')
+      return { label: 'Điểm danh lại', onClick: () => run(`${name} có mặt`, () => checkInParticipant(participant.id)), locked: false as const };
+    if (!operational(item)) return null;
     if (participant.status === 'PLANNED') return gated(item, 'checkIn', 'Điểm danh', () => run(`${name} có mặt`, () => checkInParticipant(participant.id)));
     if (participant.status === 'PRESENT') return gated(item, 'start', 'Báo sẵn sàng', () => run(`${name} sẵn sàng`, () => readyParticipant(participant.id)));
     return null;
@@ -96,7 +100,7 @@ export default function TrainingToday() {
     <div ref={scope} className="space-y-5">
       <PageHeader
         title={groom ? 'Dắt ngựa tập' : 'Hôm nay trên sân'}
-        description={groom ? 'Dắt ngựa ra sân rồi điểm danh. Khởi động xong thì báo sẵn sàng.' : 'Mọi buổi đã công bố trong ngày của các lớp bạn phụ trách.'}
+        description={groom ? 'Dắt ngựa ra sân rồi điểm danh. Khởi động xong thì báo sẵn sàng.' : 'Mọi buổi trong ngày của các lớp bạn phụ trách.'}
       />
 
       <div className="flex items-center gap-2">
@@ -115,7 +119,7 @@ export default function TrainingToday() {
               )}
             >
               <span className="block text-xs">{key === today ? 'Hôm nay' : weekdayShort[isoWeekdayOf(key)]}</span>
-              <span className="block font-mono text-sm font-semibold">{key.slice(8, 10)}/{key.slice(5, 7)}</span>
+              <span className="block tabular-nums text-sm font-semibold">{key.slice(8, 10)}/{key.slice(5, 7)}</span>
             </button>
           ))}
         </div>
@@ -125,10 +129,10 @@ export default function TrainingToday() {
       </div>
 
       <p className="text-sm text-gray-600">
-        {weekdayLong[isoWeekdayOf(day)]} {day.slice(8, 10)}/{day.slice(5, 7)} · <b className="font-mono">{items.length}</b> buổi
+        {weekdayLong[isoWeekdayOf(day)]} {day.slice(8, 10)}/{day.slice(5, 7)} · <b className="tabular-nums">{items.length}</b> buổi
         {groom && (
           <>
-            {' '}· <b className="font-mono">{myCount}</b> lượt bạn dắt
+            {' '}· <b className="tabular-nums">{myCount}</b> lượt bạn dắt
           </>
         )}
       </p>
@@ -140,7 +144,7 @@ export default function TrainingToday() {
       ) : board.error ? (
         <ErrorBox message={board.error} />
       ) : items.length === 0 ? (
-        <EmptyState title="Không có buổi tập nào trong ngày" hint={groom ? 'Khi HLV công bố buổi có ngựa bạn được giao, lịch hiện ở đây.' : 'Công bố buổi ở trang lớp để buổi hiện ở đây.'} />
+        <EmptyState title="Không có buổi tập nào trong ngày" hint={groom ? 'Khi HLV xếp buổi có ngựa bạn được giao, lịch hiện ở đây.' : 'Xếp buổi trên lịch tuần của lớp để buổi hiện ở đây.'} />
       ) : (
         <ol className="relative space-y-4 border-l-2 border-emerald-100 pl-6">
           {items.map((item, position) => (
@@ -156,7 +160,7 @@ export default function TrainingToday() {
               <article className={cn('rounded-2xl bg-white p-4 ring-1', item.session.status === 'IN_PROGRESS' ? 'shadow-grass-tint ring-2 ring-emerald-400/70' : 'ring-gray-200/80')}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 font-mono text-sm font-semibold text-gray-900">
+                    <p className="flex items-center gap-1.5 tabular-nums text-sm font-semibold text-gray-900">
                       <Clock3 size={14} /> {clubTime(item.session.scheduledStartAt)} đến {clubTime(item.session.scheduledEndAt)}
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-2 font-semibold text-gray-900">
@@ -167,7 +171,7 @@ export default function TrainingToday() {
                         {item.trainingClass.code} {item.trainingClass.name}
                       </span>
                       <IntensityBars intensity={item.session.intensity} />
-                      <span className="font-mono">{formatMeters(item.session.plannedDistanceM)}</span>
+                      <span className="tabular-nums">{formatMeters(item.session.plannedDistanceM)}</span>
                       {item.session.surface && <span>{item.session.surface}</span>}
                       {item.session.location && (
                         <span className="inline-flex items-center gap-1">
@@ -190,11 +194,11 @@ export default function TrainingToday() {
                 {trainer ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {[...PARTICIPANT_FLOW, 'OUT' as const].map((status) => {
-                      const count = status === 'OUT' ? item.participants.filter((participant) => PARTICIPANT_OUT.includes(participant.status)).length : item.participants.filter((participant) => participant.status === status).length;
+                      const count = status === 'OUT' ? item.participants.filter((participant) => PARTICIPANT_OUT.includes(participant.status)).length : item.participants.filter((participant) => participant.status === status || (status === 'COMPLETED' && participant.status === 'STOPPED')).length;
                       if (!count) return null;
                       return (
                         <span key={status} className={cn('rounded-lg px-2 py-1 text-xs ring-1', status === 'ONGOING' ? 'bg-emerald-50 font-semibold text-emerald-800 ring-emerald-200' : status === 'OUT' ? 'bg-amber-50 text-amber-800 ring-amber-200' : 'bg-gray-50 text-gray-700 ring-gray-100')}>
-                          {status === 'OUT' ? 'Không tập' : participantStatusText[status]} <b className="font-mono">{count}</b>
+                          {status === 'OUT' ? 'Không tập' : participantStatusText[status]} <b className="tabular-nums">{count}</b>
                         </span>
                       );
                     })}
@@ -214,6 +218,7 @@ export default function TrainingToday() {
                               {participant.status === 'ONGOING' && <Elapsed since={participant.startedAt} />}
                               {participant.status === 'INELIGIBLE' && <span>{ineligibleReasonText(participant.ineligibilityReason)}</span>}
                               {participant.status === 'ABSENT' && <span>{participant.absenceReason}</span>}
+                              {participant.status === 'STOPPED' && participant.stoppedReason && <span>{participant.stoppedReason}</span>}
                               {participant.status === 'SKIPPED' && <span>Hết giờ, chưa bắt đầu</span>}
                               {participant.status === 'READY' && <span>Chờ HLV trưởng bắt đầu</span>}
                             </div>
@@ -258,7 +263,10 @@ export default function TrainingToday() {
           confirmLabel="Báo vắng"
           pending={action.pending}
           error={action.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            action.clearError();
+          }}
           onConfirm={(reason) =>
             void action.run(
               () => markParticipantAbsent(dialog.participant.id, reason),
@@ -286,7 +294,7 @@ function NowLine() {
     <div className="relative -ml-[30px] mb-3 flex items-center gap-2" aria-label={`Bây giờ ${time}`}>
       <span className="h-2.5 w-2.5 rounded-full bg-red-500 ring-4 ring-red-100" />
       <span data-now-line className="h-0.5 flex-1 rounded-full bg-red-400" />
-      <span className="font-mono text-xs font-semibold text-red-600">{time}</span>
+      <span className="tabular-nums text-xs font-semibold text-red-600">{time}</span>
     </div>
   );
 }

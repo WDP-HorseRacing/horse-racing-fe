@@ -7,8 +7,9 @@ import { Camera, CheckCircle2, Clock3, Stethoscope } from 'lucide-react';
 import { referIncident, resolveIncident } from '../../../api/stable-care';
 import type { Incident } from '../../../api/types';
 import { Lightbox } from '../../../components/Lightbox';
-import { Button, Dot, ErrorBox, Field, Modal, Pill, Textarea, Tip, cn, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, Dot, ErrorBox, Field, Modal, Pill, Textarea, Tip, cn, invalidClass, useToast } from '../../../components/ui';
 import { RequestPill, UrgentPill } from '../../../components/ui/status';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction } from '../../../hooks/useService';
 import { now } from '../../../lib/clock';
 import { formatDateTime, formatRelative } from '../../../lib/format';
@@ -115,7 +116,15 @@ export function IncidentCard({
           </p>
           <p className="mt-0.5 whitespace-pre-line text-gray-700">{incident.resolution}</p>
           <p className="mt-1 text-xs text-gray-500">
-            {incident.resolvedBySystem ? 'Tự đóng' : (incident.resolver?.fullName ?? 'HLV khu')}
+            {incident.resolutionSource === 'EXAM' ? (
+              <span className="font-medium text-emerald-800">
+                {incident.resolver?.fullName ? `Bác sĩ ${incident.resolver.fullName}` : 'Bác sĩ xử lý'} (tự đóng qua khám)
+              </span>
+            ) : incident.resolutionSource === 'LIFECYCLE' || incident.resolvedBySystem ? (
+              'Tự đóng do ngựa rời câu lạc bộ'
+            ) : (
+              (incident.resolver?.fullName ?? 'HLV khu')
+            )}
             {incident.resolvedAt && ` · ${formatDateTime(incident.resolvedAt)}`}
           </p>
         </div>
@@ -128,7 +137,7 @@ export function IncidentCard({
               <Stethoscope size={14} /> Chuyển bác sĩ
             </Button>
           )}
-          <Tip content={waitingVet ? 'Đang chờ bác sĩ khám' : undefined}>
+          <Tip content={waitingVet ? 'Sự cố đang chờ bác sĩ khám, sẽ tự đóng khi bác sĩ xử lý xong' : undefined}>
             <span>
               <Button size="sm" onClick={() => setResolving(true)} disabled={waitingVet}>
                 <CheckCircle2 size={14} /> Đóng sự cố
@@ -166,11 +175,10 @@ function ReferDialog({ incident, onClose, onDone }: { incident: Incident; onClos
       onClose={onClose}
       title={`Chuyển bác sĩ: ${incident.horseName}`}
       description="Bác sĩ sẽ nhận mô tả của Groom. Chỉ chuyển được một lần."
+      busy={action.pending}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button variant={urgent ? 'danger' : 'primary'} onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang chuyển…' : 'Chuyển bác sĩ'}
           </Button>
@@ -210,11 +218,10 @@ function ResolveDialog({ incident, onClose, onDone }: { incident: Incident; onCl
   const toast = useToast();
   const action = useAction();
   const [resolution, setResolution] = useState('');
-  const [touched, setTouched] = useState(false);
-  const error = touched ? textError(resolution, { label: 'Kết quả xử lý', max: MAX_RESOLUTION }) : undefined;
+  const errors: Partial<Record<'resolution', string>> = { resolution: textError(resolution, { label: 'Kết quả xử lý', max: MAX_RESOLUTION }) };
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const submit = () => {
-    setTouched(true);
-    if (textError(resolution, { label: 'Kết quả xử lý', max: MAX_RESOLUTION })) return;
+    if (!f.attempt()) return;
     void action.run(
       () => resolveIncident(incident.id, resolution.trim()),
       () => {
@@ -231,23 +238,32 @@ function ResolveDialog({ incident, onClose, onDone }: { incident: Incident; onCl
       title={`Đóng sự cố: ${incident.horseName}`}
       description="Groom sẽ thấy kết quả này."
       dirty={resolution.trim() !== ''}
+      busy={action.pending}
       onSave={submit}
       saveLabel="Đóng sự cố"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Đóng sự cố'}
           </Button>
         </>
       }
     >
-      <Field label="Kết quả xử lý" required error={error} counter={<span className="tabular-nums">{resolution.trim().length}/{MAX_RESOLUTION}</span>}>
-        <Textarea rows={4} value={resolution} maxLength={MAX_RESOLUTION + 100} onChange={(event) => setResolution(event.target.value)} placeholder="Ví dụ: Đã sát trùng móng, theo dõi thêm 2 ngày. Hoặc: Báo nhầm, ngựa bình thường" />
+      <Field label="Kết quả xử lý" required name="resolution" error={f.show('resolution')} onBlur={f.blur('resolution')} counter={<CharCount value={resolution} max={MAX_RESOLUTION} />}>
+        <Textarea
+          rows={4}
+          value={resolution}
+          maxLength={MAX_RESOLUTION}
+          onChange={(event) => {
+            setResolution(event.target.value);
+            if (action.error) action.clearError();
+          }}
+          placeholder="Ví dụ: Đã sát trùng móng, theo dõi thêm 2 ngày. Hoặc: Báo nhầm, ngựa bình thường"
+          className={cn(f.show('resolution') && invalidClass)}
+        />
       </Field>
-      {action.error && (
+      {action.error && !Object.keys(action.fieldErrors).length && (
         <div className="mt-3">
           <ErrorBox message={action.error} />
         </div>

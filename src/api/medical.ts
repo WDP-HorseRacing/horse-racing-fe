@@ -16,7 +16,6 @@ import type {
   HealthChangeResult,
   HealthHistoryItem,
   HealthStatus,
-  InjuryTimelineItem,
   MedicalCase,
   MedicalCaseDetail,
   MedicalCaseList,
@@ -24,17 +23,27 @@ import type {
   MedicalRecord,
   Page,
   StandaloneVisitInput,
+  TrackedInjury,
   TrainingLock,
   VisitInputBase,
+  VisitUpdateInput,
+  VisitUpdateResult,
+  VoidVisitResult,
 } from './types';
 
 /* Bảng điều khiển và khám định kỳ */
-export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus } = {}) =>
+/**
+ * `careAssignee = 'me'`: khối lịch chăm sóc chỉ còn lịch người gọi là người làm, các khối khác không đổi.
+ * `mine`: chỉ các khu người gọi phụ trách (HT mặc định thấy mọi khu).
+ */
+export const getMedicalDashboard = (query: { barnId?: string; healthStatus?: HealthStatus; careAssignee?: 'me'; mine?: boolean } = {}) =>
   http.get<MedicalDashboard>('/medical/dashboard', query);
 export const listCheckups = (query: { status?: CheckupDueStatus; barnId?: string } = {}) =>
   http.get<CheckupItem[]>('/medical/checkups', query);
 export const setCheckupAppointment = (horseId: string, scheduledAt: string, reason?: string) =>
   http.put<{ id: string; horseId: string; scheduledAt: string }>(`/horses/${horseId}/checkup-appointment`, reason ? { scheduledAt, reason } : { scheduledAt });
+/** Hủy ngày hẹn khám định kỳ đang hiệu lực (bác sĩ, bắt buộc lý do). */
+export const cancelCheckupAppointment = (horseId: string, reason: string) => http.del<void>(`/horses/${horseId}/checkup-appointment`, { reason });
 
 /* Buổi khám */
 export const listHorseRecords = (horseId: string) => http.get<MedicalRecord[]>(`/horses/${horseId}/medical-records`);
@@ -43,7 +52,16 @@ export const createStandaloneVisit = (horseId: string, input: StandaloneVisitInp
   http.post<MedicalRecord>(`/horses/${horseId}/medical-records`, input);
 export const createFollowUpVisit = (caseId: string, input: VisitInputBase) =>
   http.post<MedicalRecord>(`/medical-cases/${caseId}/visits`, input);
-export const voidRecord = (id: string, reason: string) => http.post<MedicalRecord>(`/medical-records/${id}/void`, { reason });
+/**
+ * Chỉ bác sĩ ghi phiếu được hủy. Yêu cầu khám đã gắn quay về hàng đợi, sức khỏe về như trước buổi khám
+ * nếu chưa có lần đổi sau (`healthOutcome`).
+ */
+export const voidRecord = (id: string, reason: string) => http.post<VoidVisitResult>(`/medical-records/${id}/void`, { reason });
+/** Sửa buổi khám: chỉ bác sĩ ghi phiếu, bắt buộc lý do, chỉ gửi ô đổi. Không sửa thời điểm khám, chi phí. */
+export const updateVisit = (id: string, input: VisitUpdateInput) => http.patch<VisitUpdateResult>(`/medical-records/${id}`, input);
+/** Chỉ bác sĩ ghi phiếu, kể cả ngựa đã chuyển nhượng, đã mất. Bệnh án mở hay đóng đều sửa được. */
+export const adjustVisitCost = (id: string, cost: number, reason: string) =>
+  http.patch<MedicalRecord>(`/medical-records/${id}/cost`, { cost, reason });
 
 /* Bệnh án */
 export const listHorseCases = (horseId: string, status?: MedicalCase['status']) =>
@@ -51,8 +69,8 @@ export const listHorseCases = (horseId: string, status?: MedicalCase['status']) 
 export const getCase = (id: string) => http.get<MedicalCaseDetail>(`/medical-cases/${id}`);
 export const getClosePreview = (id: string) => http.get<ClosePreview>(`/medical-cases/${id}/close-preview`);
 export const closeCase = (id: string, input: CloseCaseInput) => http.post<MedicalCase>(`/medical-cases/${id}/close`, input);
-export const adjustCaseCost = (id: string, totalCost: number, reason: string) =>
-  http.patch<MedicalCase>(`/medical-cases/${id}/cost`, { totalCost, reason });
+export const updateCaseConclusion = (id: string, input: { finalConclusion: string; reason: string }) =>
+  http.patch<MedicalCaseDetail>(`/medical-cases/${id}/conclusion`, input);
 export const getCostReport = (query: { from: string; to: string; barnId?: string; ownerId?: string }) =>
   http.get<CostReport>('/medical/cost-report', query);
 
@@ -70,7 +88,9 @@ export const dismissExamRequest = (id: string, reason: string) => http.post<Exam
 export const changeHealthStatus = (horseId: string, healthStatus: HealthStatus, reason: string) =>
   http.patch<HealthChangeResult>(`/horses/${horseId}/health-status`, { healthStatus, reason });
 export const getHealthHistory = (horseId: string) => http.get<HealthHistoryItem[]>(`/horses/${horseId}/health-history`);
-export const getInjuries = (horseId: string) => http.get<InjuryTimelineItem[]>(`/horses/${horseId}/injuries`);
+/** Mỗi phần tử là một vết, theo lần khám sớm nhất. `unhealedOnly`: chỉ vết chưa lành. */
+export const getInjuries = (horseId: string, query: { unhealedOnly?: boolean } = {}) =>
+  http.get<TrackedInjury[]>(`/horses/${horseId}/injuries`, query.unhealedOnly ? { unhealedOnly: true } : {});
 export const getCareInstructions = (horseId: string) => http.get<CareInstructions>(`/horses/${horseId}/care-instructions`);
 
 /* Khóa huấn luyện */
@@ -81,14 +101,16 @@ export const releaseLock = (id: string, conclusion: string) => http.post<Trainin
 
 /* Lịch chăm sóc (tiêm phòng, tẩy giun, kiểm tra móng) */
 export const listCareSchedules = (horseId: string) => http.get<CareSchedule[]>(`/horses/${horseId}/care-schedules`);
+/** `assignedTo` là bác sĩ đang hoạt động được giao; bỏ trống là chưa giao ai. */
 export const createCareSchedule = (horseId: string, input: { type: CareTaskType; dueAt: string; assignedTo?: string; notes?: string }) =>
   http.post<CareSchedule>(`/horses/${horseId}/care-schedules`, input);
-export const updateCareSchedule = (
-  id: string,
-  input: { dueAt?: string; assignedTo?: string | null; notes?: string | null; reason?: string },
-) => http.patch<CareSchedule>(`/care-schedules/${id}`, input);
+/** Đổi bác sĩ được giao: gửi `assignedTo` (null để bỏ giao). Không gửi thì giữ nguyên. */
+export const updateCareSchedule = (id: string, input: { dueAt?: string; assignedTo?: string | null; notes?: string | null; reason?: string }) =>
+  http.patch<CareSchedule>(`/care-schedules/${id}`, input);
+/** Chỉ bác sĩ. Có `nextDueAt` thì tạo luôn lịch lần tới cùng loại, giữ bác sĩ được giao. */
 export const completeCareSchedule = (id: string, nextDueAt?: string) =>
   http.post<{ completed: CareSchedule; next: CareSchedule | null }>(`/care-schedules/${id}/complete`, nextDueAt ? { nextDueAt } : {});
 export const cancelCareSchedule = (id: string, reason: string) => http.post<CareSchedule>(`/care-schedules/${id}/cancel`, { reason });
+export const reopenCareSchedule = (id: string, reason: string) => http.post<CareSchedule>(`/care-schedules/${id}/reopen`, { reason });
 
 export type { CareStatus };

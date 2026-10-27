@@ -36,8 +36,13 @@ export function daysBetween(from: Date | string, to: Date | string): number {
   return Math.round((b - a) / DAY_MS);
 }
 
+/** Ngày lịch 'YYYY-MM-DD' của BE: tách chuỗi, không đổi sang Date (tránh lệch ngày theo múi giờ máy). */
+const DATE_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 export function formatDate(value?: string | Date | null): string {
   if (!value) return '—';
+  const key = typeof value === 'string' ? DATE_KEY.exec(value) : null;
+  if (key) return `${key[3]}/${key[2]}/${key[1]}`;
   const date = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return '—';
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
@@ -45,6 +50,8 @@ export function formatDate(value?: string | Date | null): string {
 
 export function formatDateShort(value?: string | Date | null): string {
   if (!value) return '—';
+  const key = typeof value === 'string' ? DATE_KEY.exec(value) : null;
+  if (key) return `${key[3]}/${key[2]}`;
   const date = typeof value === 'string' ? new Date(value) : value;
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -97,7 +104,13 @@ export function moneyError(raw: string, { label, required = true, max = 1_000_00
 
 /** Hiện số tiền đang gõ có dấu chấm ngăn cách hàng nghìn. */
 export function formatMoneyInput(value: string): string {
-  const digits = value.replace(/\D/g, '').slice(0, 13);
+  // Tiền đồng không có phần lẻ. Dán "1.500.000,50" hay "250000.50" thì bỏ phần lẻ, không gộp thành số gấp 100 lần.
+  // Dấu chấm sau 4+ chữ số liền nhau không phải dấu nghìn ("1.50" khi xóa bớt từ "1.500" vẫn là dấu nghìn).
+  let text = value.trim();
+  const comma = text.indexOf(',');
+  if (comma !== -1) text = text.slice(0, comma);
+  if (/^\d{4,}\.\d{1,2}$/.test(text)) text = text.slice(0, text.indexOf('.'));
+  const digits = text.replace(/\D/g, '').slice(0, 13);
   if (!digits) return '';
   return Number(digits).toLocaleString('vi-VN');
 }

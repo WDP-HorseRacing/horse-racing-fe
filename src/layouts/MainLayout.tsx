@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Outlet, NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import * as Popover from '@radix-ui/react-popover';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -24,7 +24,6 @@ import {
   PanelLeftClose,
   Package,
   PanelLeftOpen,
-  ReceiptText,
   Siren,
   Stethoscope,
   Syringe,
@@ -102,7 +101,6 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
           { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
           { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
-          { name: 'Báo cáo chi phí', path: links.costReport, icon: ReceiptText },
         ]),
         {
           group: 'Quản trị',
@@ -171,6 +169,7 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           items: [
             { name: 'Tổng quan', path: links.dashboard, icon: LayoutDashboard },
             { name: 'Ngựa của tôi', path: links.horses, icon: Users },
+            { name: 'Ngựa đã bán', path: links.pastHorses, icon: History },
             { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
             { name: 'Chi phí', path: links.myCosts, icon: Wallet },
           ],
@@ -329,6 +328,28 @@ function readCollapsed(): boolean {
 }
 
 function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collapsed: boolean; onNavigate?: () => void }) {
+  const location = useLocation();
+  const currentPath = location.pathname;
+
+  // Thuật toán Longest Matching Path: chỉ đúng 1 item có tiền tố khớp dài nhất được active trên sidebar.
+  const activeItemPath = useMemo(() => {
+    const allItems = groups.flatMap((group) => group.items);
+    let bestMatch: string | null = null;
+    let maxMatchLength = -1;
+
+    for (const item of allItems) {
+      const itemBase = item.path.split('?')[0];
+      // Khớp chính xác hoặc là tiền tố đường dẫn con (kèm '/')
+      if (currentPath === itemBase || currentPath.startsWith(itemBase + '/')) {
+        if (itemBase.length > maxMatchLength) {
+          maxMatchLength = itemBase.length;
+          bestMatch = item.path;
+        }
+      }
+    }
+    return bestMatch;
+  }, [groups, currentPath]);
+
   return (
     <nav className="flex-1 space-y-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
       {groups.map((group, index) => (
@@ -340,14 +361,12 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
               <p className="mb-1 px-3 text-xs font-medium text-gray-400">{group.group}</p>
             ))}
           {group.items.map((item) => {
-            // className phải là chuỗi: Tooltip.Trigger (asChild) ghép class bằng nối chuỗi nên làm hỏng className dạng hàm.
-            // Mục đang mở nhận aria-current="page" từ NavLink, tô màu bằng biến thể aria-[current=page].
-            // Mục đang chọn mang màu vai trò (biến --role đặt ở khung ngoài): nền nhạt, vạch trái, icon cùng màu.
+            const isActive = item.path === activeItemPath;
             const link = (
-              <NavLink
+              <Link
                 key={item.path}
                 to={item.path}
-                end={item.path === links.dashboard}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={onNavigate}
                 // Rê chuột / focus vào menu thì tải trước mã trang.
                 onMouseEnter={() => preloadRoute(item.path)}
@@ -360,7 +379,7 @@ function NavList({ groups, collapsed, onNavigate }: { groups: NavGroup[]; collap
               >
                 <item.icon size={17} className="shrink-0 group-aria-[current=page]:text-(--role)" />
                 {!collapsed && <span className="truncate">{item.name}</span>}
-              </NavLink>
+              </Link>
             );
             return collapsed ? (
               <Tip key={item.path} content={item.name} side="right">

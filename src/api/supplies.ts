@@ -20,25 +20,34 @@ export const deleteSupplyItem = (id: string) => http.del<void>(`/supplies/items/
 export const receiveSupply = (id: string, input: { quantity: number; unitPrice: number; note?: string }) =>
   http.post<SupplyItem>(`/supplies/items/${id}/receipts`, input);
 /** Lấy hàng ra dùng (Quản lý CLB, HLV, bác sĩ, Groom), trừ tồn ngay, lô cũ trừ trước. Lấy quá tồn thì 409. */
-export const recordSupplyUsage = (id: string, input: { quantity: number; note?: string }) => http.post<SupplyItem>(`/supplies/items/${id}/usages`, input);
+export const recordSupplyUsage = (id: string, input: { quantity: number; note: string }) => http.post<SupplyItem>(`/supplies/items/${id}/usages`, input);
+/**
+ * Hủy lần xuất ghi nhầm: cộng trả đúng số đã trừ vào từng lô. Người xuất tự hủy trong 24 giờ, Quản lý CLB bất kỳ lúc nào (khác: 403).
+ * Đã hủy: 409. Trả vật tư sau khi cộng trả.
+ */
+export const cancelSupplyUsage = (usageId: string, reason: string) => http.post<SupplyItem>(`/supplies/usages/${usageId}/cancel`, { reason });
 /** Các lô của vật tư, lô nhập sớm nhất trước, kể cả lô đã hết. */
 export const listSupplyLots = (id: string) => http.get<SupplyLot[]>(`/supplies/items/${id}/lots`);
 /** Sổ nhập xuất của một vật tư, mới nhất trước. */
 export const listSupplyMovements = (id: string, page = 1, limit = 20) => http.get<Page<SupplyMovement>>(`/supplies/items/${id}/movements`, { page, limit });
 
-/* ===== Đề xuất bổ sung (HLV, Groom gửi. Quản lý CLB duyệt, cấp) ===== */
+/* ===== Đề xuất bổ sung (HLV, bác sĩ, Groom gửi. Quản lý CLB duyệt, cấp) ===== */
 
-/** Quản lý CLB thấy tất cả, HLV và Groom chỉ thấy đề xuất của mình. Mới nhất trước. Bác sĩ nhận 403. */
+/** Quản lý CLB thấy tất cả, HLV, bác sĩ, Groom chỉ thấy đề xuất của mình. Mới nhất trước. */
 export const listSupplyRequests = (status?: SupplyRequestStatus) => fetchAll<SupplyRequest>('/supplies/requests', status ? { status } : {});
 /** Chỉ đếm (Tổng quan). */
 export const countSupplyRequests = async (status: SupplyRequestStatus) =>
   (await http.get<Page<SupplyRequest>>('/supplies/requests', { status, limit: 1 })).meta.total;
-export const createSupplyRequest = (input: { itemId: string; quantity: number; note?: string }) => http.post<SupplyRequest>('/supplies/requests', input);
-/** Người gửi sửa khi còn chờ duyệt. Bỏ trường để giữ nguyên, ghi chú "" để xóa (gửi null thì BE trả 400). */
-export const editSupplyRequest = (id: string, input: { quantity?: number; note?: string }) => http.patch<SupplyRequest>(`/supplies/requests/${id}`, input);
+/** Không ghi số lượng: nhu cầu ghi vào `note`. Quản lý cấp theo số thực nhận. */
+export const createSupplyRequest = (input: { itemId: string; note?: string }) => http.post<SupplyRequest>('/supplies/requests', input);
+/** Người gửi sửa ghi chú khi còn chờ duyệt (gửi null thì BE trả 400). */
+export const editSupplyRequest = (id: string, input: { note: string }) => http.patch<SupplyRequest>(`/supplies/requests/${id}`, input);
 /** Chờ duyệt → Đã duyệt hoặc Từ chối (bắt buộc lý do). */
 export const reviewSupplyRequest = (id: string, status: 'APPROVED' | 'REJECTED', reason?: string) =>
   http.patch<SupplyRequest>(`/supplies/requests/${id}/status`, status === 'REJECTED' ? { status, reason } : { status });
-/** Đã duyệt → Đã cấp: cộng vào tồn thành một lô mới, bắt buộc đơn giá (đồng). */
-export const fulfillSupplyRequest = (id: string, unitPrice: number) =>
-  http.patch<SupplyRequest>(`/supplies/requests/${id}/status`, { status: 'FULFILLED', unitPrice });
+/** Đã duyệt → Đã cấp: số thực nhận cộng vào tồn thành một lô mới, bắt buộc số lượng và đơn giá (đồng). */
+export const fulfillSupplyRequest = (id: string, input: { quantity: number; unitPrice: number }) =>
+  http.patch<SupplyRequest>(`/supplies/requests/${id}/status`, { status: 'FULFILLED', ...input });
+/** Đã duyệt → Đã hủy (Quản lý CLB, bắt buộc lý do). Người gửi nhận thông báo. */
+export const cancelSupplyRequest = (id: string, reason: string) =>
+  http.patch<SupplyRequest>(`/supplies/requests/${id}/status`, { status: 'CANCELLED', reason });

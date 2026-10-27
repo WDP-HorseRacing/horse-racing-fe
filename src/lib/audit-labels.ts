@@ -5,6 +5,7 @@ import type { AuditAction } from '../api/audit';
 export const auditFeatureText: Record<string, string> = {
   HORSE_CREATE: 'Tạo hồ sơ ngựa',
   HORSE_UPDATE: 'Sửa hồ sơ ngựa',
+  HORSE_OWNER: 'Chuyển chủ',
   HORSE_MEASURE: 'Chỉ số cơ thể',
   HORSE_BARN: 'Xếp khu, xếp ô',
   HORSE_LIFECYCLE: 'Vòng đời ngựa',
@@ -36,8 +37,9 @@ export const auditFeatureText: Record<string, string> = {
   INCIDENT: 'Sự cố',
   CHECKLIST: 'Checklist',
   PERF_EVAL: 'Đánh giá buổi tập',
-  PERF_THRESHOLD: 'Ngưỡng cảnh báo',
   DAILY_FEE: 'Phí nuôi',
+  HORSE_SURCHARGE: 'Phụ phí ngựa',
+  AUTH: 'Đăng nhập',
 };
 
 export const auditEntityText: Record<string, string> = {
@@ -56,7 +58,6 @@ export const auditEntityText: Record<string, string> = {
   NOTIFICATION: 'Thông báo',
   PERFORMANCE_EVALUATION: 'Đánh giá',
   PERFORMANCE_METRIC: 'Số đo khi tập',
-  PERFORMANCE_THRESHOLD: 'Ngưỡng cảnh báo',
   RACE: 'Cuộc đua',
   RACE_REGISTRATION: 'Đăng ký đua',
   DAILY_CHECKLIST: 'Checklist ngày',
@@ -80,6 +81,7 @@ export const auditEntityText: Record<string, string> = {
   CARE_TASK_TYPE: 'Loại việc',
   HORSE_CARE_TASK: 'Việc riêng',
   DAILY_FEE: 'Phí nuôi',
+  HORSE_SURCHARGE: 'Phụ phí ngựa',
   REFRESH_SESSION: 'Phiên đăng nhập',
 };
 
@@ -90,9 +92,11 @@ export const auditActionText: Record<AuditAction, string> = {
   LOGIN: 'Đăng nhập',
   LOGOUT: 'Đăng xuất',
   RESTORE: 'Khôi phục',
+  LOGIN_FAILED: 'Đăng nhập sai',
+  PASSWORD_CHANGE: 'Đổi mật khẩu',
 };
 
-export const AUDIT_ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE', 'RESTORE'];
+export const AUDIT_ACTIONS: AuditAction[] = ['CREATE', 'UPDATE', 'DELETE', 'RESTORE', 'LOGIN', 'LOGOUT', 'LOGIN_FAILED', 'PASSWORD_CHANGE'];
 
 export const featureLabel = (feature: string | null | undefined) => (feature ? (auditFeatureText[feature] ?? feature) : 'Khác');
 export const entityLabel = (entityType: string) => auditEntityText[entityType] ?? entityType;

@@ -3,14 +3,20 @@
 //     kết luận Có vấn đề thì mở bệnh án ngay trong cùng thao tác).
 //  b) Tái khám trong bệnh án đang mở — POST /medical-cases/:caseId/visits.
 // Ngựa đã có bệnh án mở thì backend chặn buổi ngoài bệnh án (409), nên trang tự chuyển sang (b).
-// Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, back.
+// Chấn thương theo từng vết: vết đang theo dõi chỉ ghi mức hồi phục mới (injuryUpdates), vết mới gửi kèm vị trí (newInjuries).
+// Chi phí ghi theo từng buổi khám, bỏ trống là 0. Thời điểm khám là lúc lưu (BE không nhận `examDate`).
+// Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, edit, back.
+// Có `edit=<id buổi khám>` thì mở trang sửa buổi khám (VisitEdit), dùng chung các khối trong components/visit-form.
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Activity, AlertTriangle, Bandage, Check, ClipboardList, FolderOpen, HeartPulse, NotebookPen, Pill as PillIcon, Plus, Stethoscope, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, Bandage, FolderOpen, HeartPulse, Plus, Stethoscope, Trash2, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
+import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { getHorse } from '../../api/horses';
-import { createFollowUpVisit, createStandaloneVisit, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
-import type { BodyRegion, HealthStatus, InjuryType, MeasurementType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
+import { createFollowUpVisit, createStandaloneVisit, getInjuries, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
+import type { BodyRegion, HealthStatus, InjuryType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -23,53 +29,63 @@ import {
   NotFound,
   Notice,
   PageHeader,
+  Pill,
   Segmented,
   Select,
   Skeleton,
   Textarea,
   cn,
   invalidClass,
-  scrollToFirstError,
   useToast,
 } from '../../components/ui';
-import { UrgentPill } from '../../components/ui/status';
 import { healthLabel } from '../../lib/labels';
-import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, measurementSpec, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
-import { addDays, formatDate, formatDateTime } from '../../lib/format';
+import { bodyRegionLabel, conclusionLabel, injuryTypeLabel, recoveryLabel, visitKindLabel } from '../../lib/api-labels';
+import { positionOfRegion, type InjuryPosition } from '../../lib/injury-position';
+import { formatDate, formatMoney } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
-import { now } from '../../lib/clock';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { PlaceLockModal } from './components/modals';
 import { usePeople } from './components/people';
-import { HealthPicker, RequestMeta, RequestText } from './components/parts';
-import { isSevere, localToIso, toLocalInput, todayKey } from './components/utils';
+import { HealthPicker } from './components/parts';
+import { MAX_COST, formatMoneyInput, healthChoices, isSevere, localToIso, parseMoney, toLocalInput, todayKey } from './components/utils';
+import { RecoveryTag } from './components/ExamTimeline';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
-import { DatePicker, DateTimePicker } from '../../components/ui/DatePicker';
+import { DateTimePicker } from '../../components/ui/DatePicker';
+import { CareNotesSection, MetricFields, PrescriptionSection, RequestChooser } from './components/visit-form';
+import {
+  METRICS,
+  emptyMetrics,
+  mapServerFieldErrors,
+  nextRowKey,
+  parseMetrics,
+  prescriptionErrors,
+  prescriptionInputs,
+  prescriptionRowsOf,
+  type MetricValues,
+  type PrescriptionRow,
+} from './components/visit-form-utils';
+import VisitEdit from './VisitEdit';
 import { leftClub, leftClubText } from '../../lib/horse-rules';
 
-const METRICS: MeasurementType[] = ['WEIGHT', 'TEMPERATURE', 'HEIGHT', 'BODY_CONDITION'];
 const REGIONS = Object.keys(bodyRegionLabel) as BodyRegion[];
 const INJURY_TYPES = Object.keys(injuryTypeLabel) as InjuryType[];
 const RECOVERY = Object.keys(recoveryLabel) as RecoveryStatus[];
 
-interface PrescriptionRow {
-  key: number;
-  medicine: string;
-  dosage: string;
-  frequency: string;
-  startDate: string;
-  endDate: string;
-}
+/** Vết chấn thương mới phát hiện ở buổi này. */
 interface InjuryRow {
   key: number;
   bodyRegion: BodyRegion | '';
   injuryType: InjuryType | '';
   recoveryStatus: RecoveryStatus;
   notes: string;
+  /** Buổi khám ghi lại: giữ tọa độ cũ nếu vẫn cùng vùng (có thể do mobile chấm trên mô hình 3D). */
+  kept?: { region: BodyRegion; position: InjuryPosition };
 }
-
-let rowKey = 0;
-const nextKey = () => (rowKey += 1);
+/** Mức mới của một vết đang theo dõi. Rỗng là buổi này không khám chỗ đó, giữ nguyên mức cũ. */
+interface InjuryUpdate {
+  status: RecoveryStatus | '';
+  notes: string;
+}
 
 interface VisitOptions {
   horseId?: string;
@@ -78,6 +94,8 @@ interface VisitOptions {
   requestIds?: string[];
   conclusion?: VisitConclusion;
   replaces?: MedicalRecord;
+  /** Vết chưa lành của ngựa lúc ghi lại buổi đã hủy: vết còn trong đây thì ghi thành cập nhật, không còn thì ghi như vết mới. */
+  replacesTracked?: Set<string>;
   back?: string;
 }
 
@@ -85,29 +103,37 @@ interface VisitOptions {
 export default function VisitNew() {
   const user = useStore((state) => state.currentUser);
   const [params] = useSearchParams();
+  const editId = params.get('edit') ?? undefined;
   const replacesId = params.get('replaces') ?? undefined;
-  const replaced = useService(() => (replacesId ? getRecord(replacesId) : Promise.resolve(undefined)), [replacesId]);
+  const replaced = useService(async () => {
+    if (!replacesId) return undefined;
+    const record = await getRecord(replacesId);
+    const tracked = await getInjuries(record.horseId, { unhealedOnly: true }).catch(() => []);
+    return { record, tracked: new Set(tracked.map((injury) => injury.id)) };
+  }, [replacesId]);
 
   if (!can(user, 'exam.record')) return <NotFound message="Chỉ bác sĩ thú y ghi được buổi khám." />;
+  if (editId) return <VisitEdit key={editId} id={editId} back={safeInternalPath(params.get('back'))} />;
   if (replaced.loading) return <Skeleton rows={6} />;
   if (replaced.error) return <ErrorBox message={replaced.error} />;
 
   const kind = params.get('kind');
   const conclusion = params.get('conclusion');
   const options: VisitOptions = {
-    horseId: params.get('horseId') ?? replaced.data?.horseId ?? undefined,
+    horseId: params.get('horseId') ?? replaced.data?.record.horseId ?? undefined,
     caseId: params.get('caseId') ?? undefined,
     kind: kind === 'ROUTINE' || kind === 'REQUEST' ? kind : undefined,
     requestIds: params.get('requestIds')?.split(',').filter(Boolean),
     conclusion: conclusion === 'ISSUE' || conclusion === 'NORMAL' ? conclusion : undefined,
-    replaces: replaced.data,
+    replaces: replaced.data?.record,
+    replacesTracked: replaced.data?.tracked,
     back: safeInternalPath(params.get('back')),
   };
   return <VisitForm key={params.toString()} {...options} />;
 }
 
 function VisitForm(props: VisitOptions) {
-  const { horseId: fixedHorseId, caseId: fixedCaseId, replaces, back } = props;
+  const { horseId: fixedHorseId, caseId: fixedCaseId, replaces, replacesTracked, back } = props;
   const navigate = useNavigate();
   const toast = useToast();
   const action = useAction();
@@ -117,56 +143,61 @@ function VisitForm(props: VisitOptions) {
 
   const context = useService(async () => {
     if (!horseId) return null;
-    const [horse, open, requests, records] = await Promise.all([
+    const [horse, open, requests, records, tracked] = await Promise.all([
       getHorse(horseId),
       listHorseCases(horseId, 'OPEN'),
       listHorseExamRequests(horseId),
       listHorseRecords(horseId).catch(() => [] as MedicalRecord[]),
+      getInjuries(horseId, { unhealedOnly: true }).catch(() => []),
     ]);
     return {
       horse,
       openCase: open.items[0] ?? null,
       pending: requests.filter((row) => row.status === 'PENDING'),
       recent: records.filter((record) => !record.voidedAt).slice(0, 3),
+      tracked,
     };
   }, [horseId]);
 
-  const recentDay = (value?: string | null) => !!value && new Date(value).getTime() >= addDays(now(), -7).getTime();
-
-  const [kindChoice, setKindChoice] = useState<'ROUTINE' | 'REQUEST' | null>(props.kind ?? (replaces && replaces.kind !== 'FOLLOW_UP' ? replaces.kind : null));
+  // Loại buổi theo lối vào (Khám định kỳ → ROUTINE, Yêu cầu khám → REQUEST, ghi lại → loại của buổi cũ), không chọn tay.
+  const entryKind = props.kind ?? (replaces && replaces.kind !== 'FOLLOW_UP' ? replaces.kind : undefined);
   const [selected, setSelected] = useState<string[]>(props.requestIds ?? []);
   const [conclusion, setConclusion] = useState<VisitConclusion>(props.conclusion ?? replaces?.conclusion ?? 'NORMAL');
   const [initialDiagnosis, setInitialDiagnosis] = useState('');
-  const [examDate, setExamDate] = useState(() => toLocalInput(replaces && recentDay(replaces.examDate) ? replaces.examDate : now()));
-  const [metrics, setMetrics] = useState<Record<MeasurementType, string>>({ WEIGHT: '', HEIGHT: '', BODY_CONDITION: '', TEMPERATURE: '' });
+  const [metrics, setMetrics] = useState<MetricValues>(emptyMetrics);
   const [diagnosis, setDiagnosis] = useState(replaces?.diagnosis ?? '');
   const [careInstructions, setCareInstructions] = useState(replaces?.careInstructions ?? '');
   const [healthAfter, setHealthAfter] = useState<HealthStatus | ''>('');
   const [healthReason, setHealthReason] = useState('');
   const [nextVisitAt, setNextVisitAt] = useState(() => (replaces?.nextVisitAt && replaces.nextVisitAt.slice(0, 10) >= todayKey() ? toLocalInput(replaces.nextVisitAt) : ''));
-  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>(
-    () =>
-      replaces?.prescriptions.map((item) => ({
-        key: nextKey(),
-        medicine: item.medicine,
-        dosage: item.dosage ?? '',
-        frequency: item.frequency ?? '',
-        startDate: item.startDate,
-        endDate: item.endDate ?? '',
-      })) ?? [],
-  );
+  const [prescriptions, setPrescriptions] = useState<PrescriptionRow[]>(() => prescriptionRowsOf(replaces?.prescriptions ?? []));
   const [injuries, setInjuries] = useState<InjuryRow[]>(
     () =>
-      replaces?.injuries.map((item) => ({
-        key: nextKey(),
-        bodyRegion: item.bodyRegion,
-        injuryType: item.injuryType,
-        recoveryStatus: item.recoveryStatus,
-        notes: item.notes ?? '',
-      })) ?? [],
+      replaces?.injuries
+        .filter((item) => !replacesTracked?.has(item.injuryId))
+        .map((item) => ({
+          key: nextRowKey(),
+          bodyRegion: item.bodyRegion,
+          injuryType: item.injuryType,
+          recoveryStatus: item.recoveryStatus,
+          notes: item.notes ?? '',
+          kept: item.position ? { region: item.bodyRegion, position: item.position } : undefined,
+        })) ?? [],
   );
-  const [attempted, setAttempted] = useState(false);
+  const [updates, setUpdates] = useState<Record<string, InjuryUpdate>>(() =>
+    Object.fromEntries(
+      (replaces?.injuries ?? [])
+        .filter((item) => replacesTracked?.has(item.injuryId))
+        .map((item) => [item.injuryId, { status: item.recoveryStatus, notes: item.notes ?? '' }]),
+    ),
+  );
+  const [cost, setCost] = useState(() => (replaces?.cost ? formatMoneyInput(String(replaces.cost)) : ''));
   const [saved, setSaved] = useState<MedicalRecord | null>(null);
+  // Đã lưu xong: thôi hỏi "chưa lưu" khi chuyển trang.
+  const [finished, setFinished] = useState(false);
+  const snapshot = JSON.stringify([horseId, selected, conclusion, initialDiagnosis, metrics, diagnosis, careInstructions, healthAfter, healthReason, nextVisitAt, prescriptions, injuries, updates, cost]);
+  const [initialSnapshot] = useState(snapshot);
+  const leaveConfirmModal = useLeaveConfirm(!finished && snapshot !== initialSnapshot, 'Buổi khám chưa được lưu. Rời trang thì mất phần đã nhập.');
 
   const ctx = context.data;
   const horse = ctx?.horse;
@@ -175,75 +206,74 @@ function VisitForm(props: VisitOptions) {
   const caseId = fixedCaseId ?? ctx?.openCase?.id;
   const followUp = !!caseId;
   const openCase = ctx?.openCase;
-  const kind = kindChoice ?? (selected.length > 0 ? 'REQUEST' : 'ROUTINE');
   const issue = !followUp && conclusion === 'ISSUE';
   const allowCaseFields = followUp || issue;
   const pendingRows = ctx?.pending ?? [];
   const selectedIds = selected.filter((id) => pendingRows.some((row) => row.id === id));
+  // Vào từ yêu cầu khám mà bỏ tick hết thì thành buổi định kỳ.
+  const kind = entryKind === 'ROUTINE' ? 'ROUTINE' : selectedIds.length > 0 ? 'REQUEST' : 'ROUTINE';
+  const health = healthChoices(followUp ? 'FOLLOW_UP' : conclusion, horse?.healthStatus);
   const healthChanged = !!horse && !!healthAfter && healthAfter !== horse.healthStatus;
+  // Ngựa vừa tải xong ở buổi mở bệnh án: chọn sẵn sức khỏe hiện tại nếu hợp lệ.
+  const [presetFor, setPresetFor] = useState<string>();
+  if (horse && presetFor !== horse.id) {
+    setPresetFor(horse.id);
+    if (issue && !healthAfter && health.allowed.includes(horse.healthStatus)) setHealthAfter(horse.healthStatus);
+  }
+  const pickConclusion = (value: VisitConclusion) => {
+    setConclusion(value);
+    const next = healthChoices(value, horse?.healthStatus);
+    const keep = healthAfter && next.allowed.includes(healthAfter) ? healthAfter : '';
+    setHealthAfter(keep || (value === 'ISSUE' && horse && next.allowed.includes(horse.healthStatus) ? horse.healthStatus : ''));
+  };
+  // Vết đang theo dõi chỉ cập nhật được trong bệnh án (tái khám) hoặc buổi mở bệnh án.
+  const tracked = allowCaseFields ? (ctx?.tracked ?? []) : [];
+  const chosenUpdates = tracked.filter((injury) => updates[injury.id]?.status);
+  const healing = chosenUpdates.filter((injury) => updates[injury.id].status === 'HEALED').length;
+  // Buổi khám không mở bệnh án: thuốc phải có ngày kết thúc (không có bệnh án để đóng).
+  const standaloneNormal = !followUp && !issue;
+  const costValue = parseMoney(cost);
+  const costOk = !cost.trim() || (Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST);
 
-  const title = replaces ? 'Ghi lại buổi khám thay thế' : followUp ? 'Ghi buổi tái khám' : issue ? 'Ghi buổi khám và mở bệnh án' : 'Ghi buổi khám';
+  const title = !horse
+    ? 'Ghi buổi khám'
+    : `${followUp ? 'Tái khám' : kind === 'REQUEST' ? 'Khám theo yêu cầu' : 'Khám định kỳ'}: ${horse.name}${issue ? ' và mở bệnh án' : ''}`;
   useCrumbs(
     horse ? [{ label: horse.name, to: links.horseMedical(horse.id) }, { label: followUp ? 'Tái khám' : 'Ghi buổi khám' }] : [{ label: 'Ghi buổi khám' }],
     [{ label: 'Y tế', to: links.medicalBoard }],
   );
 
   /* ----- Kiểm tra trước khi gửi, lỗi gắn vào từng ô (backend vẫn kiểm lại) ----- */
-  const parsed: { type: MeasurementType; value: number }[] = [];
-  const metricErrors: Partial<Record<MeasurementType, string>> = {};
-  const abnormal: string[] = [];
-  METRICS.forEach((type) => {
-    const raw = metrics[type].trim().replace(',', '.');
-    if (!raw) return;
-    const spec = measurementSpec[type];
-    const value = Number(raw);
-    if (!Number.isFinite(value)) {
-      metricErrors[type] = 'Nhập một số';
-      return;
-    }
-    if (value < spec.hardMin || value > spec.hardMax) {
-      metricErrors[type] = `Giá trị phải trong khoảng ${spec.hardMin}–${spec.hardMax} ${spec.unit}`;
-      return;
-    }
-    if (value < spec.min || value > spec.max) abnormal.push(`${spec.name} ${raw} ${spec.unit} (bình thường ${spec.min}–${spec.max})`);
-    parsed.push({ type, value });
-  });
+  const { parsed, errors: metricErrors, abnormal } = parseMetrics(metrics);
 
   const errors: Record<string, string> = {};
   if (!horse && !fixedHorseId) errors.horse = 'Chọn ngựa được khám';
-  const examIso = localToIso(examDate);
-  if (!examIso) errors.examDate = 'Nhập thời điểm khám';
-  else if (new Date(examIso).getTime() > now().getTime() + 60_000) errors.examDate = 'Thời điểm khám đang ở tương lai';
-  else if (new Date(examIso).getTime() < addDays(now(), -7).getTime()) errors.examDate = 'Chỉ nhập lùi được tối đa 7 ngày';
-  else if (followUp && openCase && new Date(examIso).getTime() < new Date(openCase.openedAt).getTime()) {
-    errors.examDate = `Sớm hơn lúc mở bệnh án (${formatDateTime(openCase.openedAt)})`;
-  }
-  if (!followUp && kind === 'REQUEST' && selectedIds.length === 0) errors.requests = 'Chọn ít nhất một yêu cầu khám được xử lý';
+  if (health.required && (!healthAfter || !health.allowed.includes(healthAfter))) errors.healthAfter = 'Chọn sức khỏe sau khám';
   if (issue && !initialDiagnosis.trim()) errors.initialDiagnosis = 'Nhập chẩn đoán ban đầu';
   if (healthChanged && !healthReason.trim()) errors.healthReason = 'Nhập lý do đổi trạng thái';
-  prescriptions.forEach((row) => {
-    if (!row.medicine.trim() || !row.dosage.trim() || !row.frequency.trim() || !row.startDate) errors[`rx.${row.key}`] = 'Nhập đủ tên thuốc, liều, tần suất và ngày bắt đầu';
-    else if (row.endDate && row.endDate < row.startDate) errors[`rx.${row.key}`] = 'Ngày kết thúc sớm hơn ngày bắt đầu';
+  METRICS.forEach((type) => {
+    if (metricErrors[type]) errors[`metric.${type}`] = metricErrors[type];
   });
+  Object.assign(errors, prescriptionErrors(prescriptions, standaloneNormal));
+  if (!costOk) errors.cost = 'Chi phí là số nguyên từ 0 đến 10 tỷ đồng';
   if (allowCaseFields) {
-    const pairs = new Set<string>();
+    // Hai vết mới cùng vùng, cùng loại vẫn ghi được (vd hai vết rách ở cùng chân).
     injuries.forEach((row) => {
-      if (!row.bodyRegion || !row.injuryType) {
-        errors[`injury.${row.key}`] = 'Chọn vùng cơ thể và loại chấn thương';
-        return;
-      }
-      const pair = `${row.bodyRegion}:${row.injuryType}`;
-      if (pairs.has(pair)) errors[`injury.${row.key}`] = 'Trùng vùng và loại với một dòng phía trên';
-      pairs.add(pair);
+      if (!row.bodyRegion) errors[`injury.${row.key}.bodyRegion`] = 'Chọn vùng cơ thể';
+      if (!row.injuryType) errors[`injury.${row.key}.injuryType`] = 'Chọn loại chấn thương';
     });
     if (nextVisitAt && nextVisitAt.slice(0, 10) < todayKey()) errors.nextVisitAt = 'Ngày hẹn đã qua';
   }
-  const hasErrors = Object.keys(errors).length > 0 || Object.keys(metricErrors).length > 0;
-  const show = (key: string) => (attempted ? errors[key] : undefined);
+  const f = useFormErrors<string>(errors, { fieldErrors: mapServerFieldErrors(action.fieldErrors, prescriptions), field: action.field, error: action.error });
+  const show = f.show;
+  // Sửa ô đang có lỗi backend thì bỏ lỗi đó.
+  const edited = () => {
+    if (action.field && action.field !== 'confirmAbnormal') action.clearError();
+  };
 
   const buildBase = (confirm: boolean): VisitInputBase => {
     const trim = (value: string) => value.trim() || undefined;
-    const base: VisitInputBase = { examDate: examIso, diagnosis: trim(diagnosis), careInstructions: trim(careInstructions) };
+    const base: VisitInputBase = { diagnosis: trim(diagnosis), careInstructions: trim(careInstructions) };
     if (selectedIds.length) base.requestIds = selectedIds;
     if (healthAfter) {
       base.healthStatus = healthAfter;
@@ -253,19 +283,19 @@ function VisitForm(props: VisitOptions) {
       base.measurements = parsed;
       if (confirm) base.confirmAbnormal = true;
     }
-    if (prescriptions.length) {
-      base.prescriptions = prescriptions.map((row) => ({
-        medicine: row.medicine.trim(),
-        dosage: row.dosage.trim(),
-        frequency: row.frequency.trim(),
-        startDate: row.startDate,
-        ...(row.endDate ? { endDate: row.endDate } : {}),
-      }));
-    }
+    if (prescriptions.length) base.prescriptions = prescriptionInputs(prescriptions);
+    if (cost.trim()) base.cost = costValue;
     if (allowCaseFields) {
+      if (chosenUpdates.length) {
+        base.injuryUpdates = chosenUpdates.map((injury) => {
+          const update = updates[injury.id];
+          return { injuryId: injury.id, recoveryStatus: update.status as RecoveryStatus, ...(update.notes.trim() ? { notes: update.notes.trim() } : {}) };
+        });
+      }
       if (injuries.length) {
-        base.injuries = injuries.map((row) => ({
+        base.newInjuries = injuries.map((row) => ({
           bodyRegion: row.bodyRegion as BodyRegion,
+          position: row.kept && row.kept.region === row.bodyRegion ? row.kept.position : positionOfRegion(row.bodyRegion as BodyRegion),
           injuryType: row.injuryType as InjuryType,
           recoveryStatus: row.recoveryStatus,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
@@ -284,11 +314,7 @@ function VisitForm(props: VisitOptions) {
   };
 
   const submit = (confirm = false) => {
-    setAttempted(true);
-    if (!horse || hasErrors) {
-      scrollToFirstError(formRef.current ?? document);
-      return;
-    }
+    if (!f.attempt(formRef.current ?? document) || !horse) return;
     const base = buildBase(confirm);
     action.run(
       () =>
@@ -300,6 +326,7 @@ function VisitForm(props: VisitOptions) {
           followUp ? `Đã ghi buổi tái khám cho ${horse.name}` : record.caseId ? `Đã ghi buổi khám và mở bệnh án cho ${horse.name}` : `Đã ghi buổi khám cho ${horse.name}`,
           'success',
         );
+        flushSync(() => setFinished(true));
         const offerLock = !horse.activeTrainingLock && ((!followUp && !!record.caseId) || (healthChanged && isSevere(healthAfter as HealthStatus)));
         if (offerLock) setSaved(record);
         else finish(record);
@@ -315,16 +342,21 @@ function VisitForm(props: VisitOptions) {
     <div className="space-y-5" ref={formRef}>
       <PageHeader
         back={<BackLink to={cancelTo}>Quay lại</BackLink>}
-        title={title}
-        description="Buổi khám đã lưu thì không sửa được. Ghi sai thì hủy rồi ghi lại."
+        title={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {title}
+            {horse && !followUp && (kind === 'REQUEST' ? <Pill tone="amber">Theo yêu cầu · {selectedIds.length}</Pill> : <Pill>Định kỳ</Pill>)}
+          </span>
+        }
+        description={replaces ? 'Ghi lại thay buổi khám đã hủy. Thời điểm khám là lúc bấm lưu.' : 'Thời điểm khám là lúc bấm lưu.'}
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:col-span-8">
           {/* Ngựa + loại buổi khám */}
-          <FormSection icon={<Stethoscope size={16} />} title={followUp ? 'Ngựa và bệnh án' : 'Ngựa và loại buổi khám'}>
+          <FormSection icon={<Stethoscope size={16} />} title={followUp ? 'Ngựa và bệnh án' : fixedHorseId ? 'Kết luận' : 'Ngựa và kết luận'}>
             {!fixedHorseId && (
-              <Field label="Ngựa được khám" required name="horse" error={show('horse')}>
+              <Field label="Ngựa được khám" required name="horse" error={show('horse')} onBlur={f.blur('horse')}>
                 {options.loading && !options.data ? (
                   <Skeleton rows={1} />
                 ) : (
@@ -334,7 +366,7 @@ function VisitForm(props: VisitOptions) {
                     onChange={(event) => {
                       setHorseId(event.target.value);
                       setSelected([]);
-                      setKindChoice(props.kind ?? null);
+                      setHealthAfter('');
                     }}
                   >
                     <option value="">Chọn ngựa…</option>
@@ -369,20 +401,12 @@ function VisitForm(props: VisitOptions) {
                 </div>
               ) : (
                 <>
-                  <Segmented
-                    value={kind}
-                    onChange={(value) => setKindChoice(value)}
-                    options={[
-                      { value: 'ROUTINE', label: 'Khám định kỳ' },
-                      { value: 'REQUEST', label: 'Theo yêu cầu', badge: pendingRows.length },
-                    ]}
-                  />
                   <div className="grid gap-2 sm:grid-cols-2">
                     {(['NORMAL', 'ISSUE'] as const).map((value) => (
                       <button
                         key={value}
                         type="button"
-                        onClick={() => setConclusion(value)}
+                        onClick={() => pickConclusion(value)}
                         aria-pressed={conclusion === value}
                         className={cn(
                           'rounded-xl bg-white p-3.5 text-left transition',
@@ -402,12 +426,16 @@ function VisitForm(props: VisitOptions) {
                       required
                       name="initialDiagnosis"
                       error={show('initialDiagnosis')}
+                      onBlur={f.blur('initialDiagnosis')}
                       counter={<CharCount value={initialDiagnosis} max={2000} />}
                     >
                       <Input
                         value={initialDiagnosis}
                         maxLength={2000}
-                        onChange={(event) => setInitialDiagnosis(event.target.value)}
+                        onChange={(event) => {
+                          setInitialDiagnosis(event.target.value);
+                          edited();
+                        }}
                         placeholder="Ví dụ: Viêm gân gấp chân trước trái"
                         className={cn(show('initialDiagnosis') && invalidClass)}
                       />
@@ -420,95 +448,28 @@ function VisitForm(props: VisitOptions) {
           {horse && !transferred && (
             <>
               {/* Yêu cầu khám */}
-              {(pendingRows.length > 0 || kind === 'REQUEST') && (
-                <FormSection
-                  icon={<ClipboardList size={16} />}
-                  title="Yêu cầu khám được xử lý"
-                  aside={pendingRows.length > 0 ? <span className="text-xs text-gray-500">Đã chọn {selectedIds.length}/{pendingRows.length}</span> : undefined}
-                >
-                  <div data-field="requests" data-invalid={show('requests') ? 'true' : undefined} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                    {pendingRows.length === 0 ? (
-                      <p className="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-500 lg:col-span-2">Ngựa không có yêu cầu khám đang chờ.</p>
-                    ) : (
-                      pendingRows.map((row) => {
-                        const checked = selectedIds.includes(row.id);
-                        return (
-                          <label
-                            key={row.id}
-                            className={cn(
-                              'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-300',
-                              checked
-                                ? 'bg-emerald-50/50 ring-2 ring-emerald-500 shadow-[0_8px_30px_rgb(16,185,129,0.12)]'
-                                : 'ring-1 ring-gray-200 hover:shadow-lg hover:shadow-gray-200/50 hover:-translate-y-0.5',
-                              row.urgent && !checked && 'shadow-[inset_4px_0_0_0_#ef4444]',
-                            )}
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                {row.urgent && <UrgentPill urgent />}
-                                <RequestMeta request={row} people={people} showUrgent={false} />
-                              </span>
-                              <span className="mt-2 block text-sm">
-                                <RequestText text={row.description} />
-                              </span>
-                            </span>
-                            <div className={cn(
-                              'mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                              checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-gray-300 bg-white group-hover:border-emerald-400'
-                            )}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(event) => setSelected(event.target.checked ? [...selectedIds, row.id] : selectedIds.filter((id) => id !== row.id))}
-                                className="peer sr-only"
-                              />
-                              {checked && <Check size={14} strokeWidth={3} />}
-                            </div>
-                          </label>
-                        );
-                      })
-                    )}
-                    {show('requests') && <p className="text-xs font-medium text-red-600 lg:col-span-2">{show('requests')}</p>}
-                  </div>
-                </FormSection>
+              {(pendingRows.length > 0 || entryKind === 'REQUEST') && (
+                <RequestChooser
+                  rows={pendingRows}
+                  selected={selectedIds}
+                  onChange={setSelected}
+                  people={people}
+                  error={show('requests')}
+                  title={kind === 'ROUTINE' ? 'Xử lý kèm yêu cầu khám' : undefined}
+                />
               )}
 
               {/* Khám */}
               <FormSection icon={<Activity size={16} />} title="Kết quả khám">
-                <Field label="Thời điểm khám" required name="examDate" error={show('examDate')} className="sm:max-w-xs">
-                  <DateTimePicker
-                    value={examDate}
-                    min={toLocalInput(addDays(now(), -7))}
-                    max={toLocalInput(now())}
-                    onChange={setExamDate}
-                    invalid={!!show('examDate')}
-                  />
-                </Field>
-                <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {METRICS.map((type) => {
-                    const spec = measurementSpec[type];
-                    return (
-                      <Field key={type} label={`${spec.name} (${spec.unit})`} name={`metric.${type}`} error={metricErrors[type]}>
-                        <Input
-                          inputMode="decimal"
-                          value={metrics[type]}
-                          onChange={(event) => {
-                            setMetrics({ ...metrics, [type]: event.target.value });
-                            if (needsConfirm) action.clearError();
-                          }}
-                          onBlur={() => {
-                            const val = metrics[type].trim().replace(',', '.');
-                            if (val && !isNaN(Number(val))) {
-                              setMetrics({ ...metrics, [type]: Number(val).toFixed(2).replace(/\.00$/, '') });
-                            }
-                          }}
-                          placeholder={`${spec.min}–${spec.max}`}
-                          className={cn('tabular-nums', metricErrors[type] && invalidClass)}
-                        />
-                      </Field>
-                    );
-                  })}
-                </div>
+                <MetricFields
+                  values={metrics}
+                  errors={Object.fromEntries(METRICS.map((type) => [type, show(`metric.${type}`)]))}
+                  onBlur={(type) => f.touch(`metric.${type}`)}
+                  onChange={(type, value) => {
+                    setMetrics((current) => ({ ...current, [type]: value }));
+                    if (needsConfirm) action.clearError();
+                  }}
+                />
                 <Field label="Chẩn đoán và hướng điều trị" counter={<CharCount value={diagnosis} max={4000} />}>
                   <Textarea
                     value={diagnosis}
@@ -523,77 +484,49 @@ function VisitForm(props: VisitOptions) {
 
               {/* Điều trị */}
               <FormSection icon={<HeartPulse size={16} />} title="Sức khỏe sau khám">
-                <HealthPicker value={healthAfter} onChange={(value) => setHealthAfter(value === healthAfter ? '' : value)} current={horse.healthStatus} />
+                <div data-field="healthAfter" data-invalid={show('healthAfter') ? 'true' : undefined}>
+                  <HealthPicker
+                    value={healthAfter}
+                    onChange={(value) => {
+                      setHealthAfter(value === healthAfter && !health.required ? '' : value);
+                      f.touch('healthAfter');
+                    }}
+                    current={horse.healthStatus}
+                    allowed={health.allowed}
+                    note={health.note}
+                    error={show('healthAfter')}
+                  />
+                </div>
                 {healthChanged && (
                   <Field
                     label={`Lý do đổi ${healthLabel[horse.healthStatus]} → ${healthLabel[healthAfter as HealthStatus]}`}
                     required
                     name="healthReason"
                     error={show('healthReason')}
+                    onBlur={f.blur('healthReason')}
                   >
-                    <Input value={healthReason} maxLength={500} onChange={(event) => setHealthReason(event.target.value)} className={cn(show('healthReason') && invalidClass)} />
+                    <Input
+                      value={healthReason}
+                      maxLength={500}
+                      onChange={(event) => {
+                        setHealthReason(event.target.value);
+                        edited();
+                      }}
+                      className={cn(show('healthReason') && invalidClass)}
+                    />
                   </Field>
                 )}
               </FormSection>
 
-              <FormSection
-                icon={<PillIcon size={16} />}
-                title="Đơn thuốc"
-                aside={
-                  prescriptions.length < 20 && (
-                    <Button
-                      size="sm"
-                      variant="inline"
-                      onClick={() => setPrescriptions([...prescriptions, { key: nextKey(), medicine: '', dosage: '', frequency: '', startDate: todayKey(), endDate: '' }])}
-                    >
-                      <Plus size={14} /> Thêm thuốc
-                    </Button>
-                  )
-                }
-              >
-                {prescriptions.length === 0 ? (
-                  <p className="text-sm text-gray-500">Chưa kê thuốc.</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {prescriptions.map((row) => {
-                      const update = (patch: Partial<PrescriptionRow>) => setPrescriptions(prescriptions.map((item) => (item.key === row.key ? { ...item, ...patch } : item)));
-                      const rowError = show(`rx.${row.key}`);
-                      return (
-                        <div key={row.key} data-field={`rx.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-4', rowError && 'ring-1 ring-red-200')}>
-                          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-12">
-                            <div className="sm:col-span-5">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tên thuốc</label>
-                              <Input placeholder="Ví dụ: Amoxicillin" maxLength={160} value={row.medicine} onChange={(event) => update({ medicine: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-4">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Liều lượng</label>
-                              <Input placeholder="Ví dụ: 2 viên, 50ml, ..." maxLength={160} value={row.dosage} onChange={(event) => update({ dosage: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-3">
-                              <label className="mb-1.5 block text-xs font-medium text-gray-700">Tần suất</label>
-                              <Input placeholder="Ví dụ: 2 lần/ngày" maxLength={160} value={row.frequency} onChange={(event) => update({ frequency: event.target.value })} />
-                            </div>
-                            <div className="sm:col-span-12 flex items-end gap-3">
-                              <div className="flex-1">
-                                <label className="mb-1.5 block text-xs font-medium text-gray-700">Thời gian dùng thuốc</label>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <DatePicker className="w-[140px]" value={row.startDate} onChange={(value) => update({ startDate: value })} />
-                                  <span className="text-sm font-medium text-gray-400">→</span>
-                                  <DatePicker className="w-[140px]" min={row.startDate || undefined} value={row.endDate} onChange={(value) => update({ endDate: value })} />
-                                </div>
-                              </div>
-                              <Button type="button" size="icon" variant="ghost" className="mb-0.5 shrink-0 text-gray-400 hover:text-red-600 hover:bg-red-50" title="Bỏ thuốc này" onClick={() => setPrescriptions(prescriptions.filter((item) => item.key !== row.key))}>
-                                <Trash2 size={18} />
-                              </Button>
-                            </div>
-                          </div>
-                          {rowError && <p className="mt-3 text-xs font-medium text-red-600">{rowError}</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </FormSection>
+              <PrescriptionSection
+                rows={prescriptions}
+                onChange={(rows) => {
+                  setPrescriptions(rows);
+                  edited();
+                }}
+                show={show}
+                blur={f.blur}
+              />
 
               {/* Chấn thương + hẹn tái khám: chỉ khi mở bệnh án hoặc tái khám */}
               {allowCaseFields && (
@@ -602,38 +535,74 @@ function VisitForm(props: VisitOptions) {
                   title="Chấn thương và hẹn tái khám"
                   aside={
                     injuries.length < 20 && (
-                      <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
-                        <Plus size={14} /> Thêm chấn thương
+                      <Button size="sm" variant="inline" onClick={() => setInjuries([...injuries, { key: nextRowKey(), bodyRegion: '', injuryType: '', recoveryStatus: 'ACUTE', notes: '' }])}>
+                        <Plus size={14} /> Thêm chấn thương mới
                       </Button>
                     )
                   }
                 >
+                  {tracked.length > 0 && (
+                    <div className="space-y-2.5">
+                      <p className="text-xs font-medium text-gray-500">Chấn thương đang theo dõi · chỗ không khám thì để Giữ nguyên</p>
+                      {tracked.map((injury) => {
+                        const update = updates[injury.id] ?? { status: '', notes: '' };
+                        const set = (patch: Partial<InjuryUpdate>) => setUpdates({ ...updates, [injury.id]: { ...update, ...patch } });
+                        return (
+                          <div key={injury.id} className={cn('rounded-xl p-3 ring-1', update.status ? 'bg-emerald-50/40 ring-emerald-200' : 'bg-gray-50/80 ring-transparent')}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                                <span className="font-semibold text-gray-900">{bodyRegionLabel[injury.bodyRegion]}</span>
+                                <span className="text-gray-600">· {injuryTypeLabel[injury.injuryType]}</span>
+                                <RecoveryTag status={injury.currentRecoveryStatus} />
+                                <span className="text-xs text-gray-500">từ {formatDate(injury.firstExamDate)}</span>
+                              </p>
+                              <Segmented
+                                value={update.status || 'KEEP'}
+                                onChange={(value) => set({ status: value === 'KEEP' ? '' : (value as RecoveryStatus) })}
+                                className="flex-wrap"
+                                options={[{ value: 'KEEP', label: 'Giữ nguyên' }, ...RECOVERY.map((value) => ({ value, label: recoveryLabel[value] }))]}
+                              />
+                            </div>
+                            {update.status && (
+                              <Input className="mt-2" placeholder="Ghi chú (vd Bớt sưng)" maxLength={500} value={update.notes} onChange={(event) => set({ notes: event.target.value })} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {injuries.length === 0 ? (
-                    <p className="text-sm text-gray-500">Chưa ghi chấn thương.</p>
+                    tracked.length === 0 && <p className="text-sm text-gray-500">Chưa ghi chấn thương.</p>
                   ) : (
                     <div className="space-y-2.5">
                       {injuries.map((row) => {
                         const update = (patch: Partial<InjuryRow>) => setInjuries(injuries.map((item) => (item.key === row.key ? { ...item, ...patch } : item)));
-                        const rowError = show(`injury.${row.key}`);
+                        const regionKey = `injury.${row.key}.bodyRegion`;
+                        const typeKey = `injury.${row.key}.injuryType`;
+                        const rowInvalid = !!show(regionKey) || !!show(typeKey);
                         return (
-                          <div key={row.key} data-field={`injury.${row.key}`} data-invalid={rowError ? 'true' : undefined} className={cn('rounded-xl bg-gray-50/80 p-3', rowError && 'ring-1 ring-red-200')}>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <Select value={row.bodyRegion} onChange={(event) => update({ bodyRegion: event.target.value as BodyRegion })}>
-                                <option value="">Vùng cơ thể…</option>
-                                {REGIONS.map((value) => (
-                                  <option key={value} value={value}>
-                                    {bodyRegionLabel[value]}
-                                  </option>
-                                ))}
-                              </Select>
-                              <Select value={row.injuryType} onChange={(event) => update({ injuryType: event.target.value as InjuryType })}>
-                                <option value="">Loại chấn thương…</option>
-                                {INJURY_TYPES.map((value) => (
-                                  <option key={value} value={value}>
-                                    {injuryTypeLabel[value]}
-                                  </option>
-                                ))}
-                              </Select>
+                          <div key={row.key} className={cn('rounded-xl bg-gray-50/80 p-3', rowInvalid && 'ring-1 ring-red-200')}>
+                            <div className="grid items-start gap-2 sm:grid-cols-3">
+                              <Field name={regionKey} error={show(regionKey)} onBlur={f.blur(regionKey)}>
+                                <Select value={row.bodyRegion} onChange={(event) => update({ bodyRegion: event.target.value as BodyRegion })} className={cn(show(regionKey) && invalidClass)}>
+                                  <option value="">Vùng cơ thể…</option>
+                                  {REGIONS.map((value) => (
+                                    <option key={value} value={value}>
+                                      {bodyRegionLabel[value]}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </Field>
+                              <Field name={typeKey} error={show(typeKey)} onBlur={f.blur(typeKey)}>
+                                <Select value={row.injuryType} onChange={(event) => update({ injuryType: event.target.value as InjuryType })} className={cn(show(typeKey) && invalidClass)}>
+                                  <option value="">Loại chấn thương…</option>
+                                  {INJURY_TYPES.map((value) => (
+                                    <option key={value} value={value}>
+                                      {injuryTypeLabel[value]}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </Field>
                               <Select value={row.recoveryStatus} onChange={(event) => update({ recoveryStatus: event.target.value as RecoveryStatus })}>
                                 {RECOVERY.map((value) => (
                                   <option key={value} value={value}>
@@ -642,35 +611,54 @@ function VisitForm(props: VisitOptions) {
                                 ))}
                               </Select>
                               <div className="flex gap-2 sm:col-span-3">
-                                <Input placeholder="Ghi chú" value={row.notes} onChange={(event) => update({ notes: event.target.value })} />
+                                <Input placeholder="Ghi chú" maxLength={500} value={row.notes} onChange={(event) => update({ notes: event.target.value })} />
                                 <Button size="icon" variant="ghost" title="Bỏ dòng này" onClick={() => setInjuries(injuries.filter((item) => item.key !== row.key))}>
                                   <Trash2 size={15} />
                                 </Button>
                               </div>
                             </div>
-                            {rowError && <p className="mt-2 text-xs font-medium text-red-600">{rowError}</p>}
                           </div>
                         );
                       })}
                     </div>
                   )}
-                  <Field label="Hẹn tái khám" name="nextVisitAt" error={show('nextVisitAt')} className="sm:max-w-xs">
-                    <DateTimePicker value={nextVisitAt} min={`${todayKey()}T00:00`} onChange={setNextVisitAt} invalid={!!show('nextVisitAt')} />
+                  <Field label="Hẹn tái khám" name="nextVisitAt" error={show('nextVisitAt')} onBlur={f.blur('nextVisitAt')} className="sm:max-w-xs">
+                    <DateTimePicker
+                      value={nextVisitAt}
+                      min={`${todayKey()}T00:00`}
+                      onChange={(value) => {
+                        setNextVisitAt(value);
+                        edited();
+                      }}
+                      invalid={!!show('nextVisitAt')}
+                    />
                   </Field>
                 </FormSection>
               )}
 
-              <FormSection icon={<NotebookPen size={16} />} title="Ghi chú chăm sóc cho Groom">
-                <Field counter={<CharCount value={careInstructions} max={2000} />}>
-                  <Textarea
-                    rows={3}
-                    maxLength={2000}
-                    value={careInstructions}
-                    onChange={(event) => setCareInstructions(event.target.value)}
-                    placeholder="Ví dụ: Chườm lạnh chân trước trái 2 lần/ngày, chỉ dắt bộ nhẹ 10 phút"
+              <FormSection icon={<Wallet size={16} />} title="Chi phí buổi khám">
+                <Field
+                  label="Chi phí (đồng)"
+                  name="cost"
+                  error={show('cost')}
+                  onBlur={f.blur('cost')}
+                  hint={cost.trim() && costOk ? `= ${formatMoney(costValue)}` : 'Bỏ trống là 0 đồng.'}
+                  className="sm:max-w-sm"
+                >
+                  <Input
+                    inputMode="numeric"
+                    value={cost}
+                    onChange={(event) => {
+                      setCost(formatMoneyInput(event.target.value));
+                      edited();
+                    }}
+                    placeholder="Ví dụ: 1.500.000"
+                    className={cn('tabular-nums', show('cost') && invalidClass)}
                   />
                 </Field>
               </FormSection>
+
+              <CareNotesSection value={careInstructions} onChange={setCareInstructions} />
             </>
           )}
         </div>
@@ -725,6 +713,9 @@ function VisitForm(props: VisitOptions) {
                 )}
                 {parsed.length > 0 && <Outcome>{parsed.length} chỉ số ghi vào bảng chỉ số cơ thể</Outcome>}
                 {prescriptions.length > 0 && <Outcome>{prescriptions.length} thuốc trong đơn</Outcome>}
+                {chosenUpdates.length > 0 && <Outcome>Cập nhật {chosenUpdates.length} chấn thương{healing > 0 ? `, ${healing} đã lành` : ''}</Outcome>}
+                {allowCaseFields && injuries.length > 0 && <Outcome tone="warning">Ghi {injuries.length} chấn thương mới</Outcome>}
+                <Outcome>Chi phí buổi khám {formatMoney(cost.trim() && costOk ? costValue : 0)}</Outcome>
               </ul>
             )}
 
@@ -755,7 +746,7 @@ function VisitForm(props: VisitOptions) {
                 </>
               ) : (
                 <>
-                  <Button className="h-11 w-full" onClick={() => submit(false)} disabled={action.pending || !horse || transferred}>
+                  <Button className="h-11 w-full" onClick={() => submit(false)} disabled={action.pending || transferred}>
                     {action.pending ? 'Đang lưu…' : issue ? 'Lưu và mở bệnh án' : 'Lưu buổi khám'}
                   </Button>
                   <Button variant="ghost" className="w-full" onClick={() => navigate(cancelTo)} disabled={action.pending}>
@@ -780,6 +771,7 @@ function VisitForm(props: VisitOptions) {
           }
         />
       )}
+      {leaveConfirmModal}
     </div>
   );
 }

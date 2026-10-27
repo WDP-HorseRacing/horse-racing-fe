@@ -9,7 +9,7 @@ export function fillWeeks(weekly: ReportWeek[], from: string, to: string): Repor
   const byWeek = new Map(weekly.map((week) => [week.weekStart, week]));
   const weeks: ReportWeek[] = [];
   for (let cursor = mondayOf(from); cursor <= to; cursor = addDateKey(cursor, 7)) {
-    weeks.push(byWeek.get(cursor) ?? { weekStart: cursor, completed: 0, avgHeartRateBpm: null, avgSpeedMps: null, alertCount: 0 });
+    weeks.push(byWeek.get(cursor) ?? { weekStart: cursor, completed: 0, stopped: 0, avgHeartRateBpm: null, avgSpeedMps: null, alertCount: 0 });
   }
   return weeks;
 }
@@ -34,6 +34,5 @@ export function weeklyColumns(weeks: ReportWeek[], { withHeartRate = true }: { w
 
 export const INTENSITY_COLORS: Record<TrainingIntensity, string> = {
   LIGHT: '#6ee7b7',
-  MODERATE: '#10b981',
-  HEAVY: '#065f46',
+  HEAVY: '#047857',
 };

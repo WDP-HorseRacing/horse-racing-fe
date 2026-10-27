@@ -48,9 +48,9 @@ export default function ReportTab({ horse, owner }: { horse: HorseDetail; owner:
               p && (
                 <>
                   <div className="grid gap-4 lg:grid-cols-12 [&>*]:min-w-0">
-                    <div className="rounded-3xl bg-white p-5 shadow-grass-tint ring-1 ring-emerald-100 lg:col-span-5">
+                    <div className="rounded-2xl bg-white p-5 shadow-grass-tint ring-1 ring-emerald-100 lg:col-span-5">
                       <p className="text-sm text-gray-500">Lượt hoàn thành</p>
-                      <p className="mt-1 font-mono text-4xl font-bold tabular-nums leading-none text-emerald-900">{p.totals.completed}</p>
+                      <p className="mt-1 tabular-nums text-2xl font-semibold  leading-none text-emerald-900">{p.totals.completed}</p>
                       <SplitBar
                         className="mt-4"
                         parts={INTENSITIES.map((intensity) => ({ key: intensity, label: intensityText[intensity], value: p.totals.completedByIntensity[intensity], color: INTENSITY_COLORS[intensity] }))}
@@ -60,6 +60,8 @@ export default function ReportTab({ horse, owner }: { horse: HorseDetail; owner:
                         <dd className="text-right tabular-nums text-gray-900">{formatMeters(p.totals.plannedDistanceM)}</dd>
                         <dt className="text-gray-500">Thời gian tập</dt>
                         <dd className="text-right tabular-nums text-gray-900">{p.totals.trainedMinutes} phút</dd>
+                        <dt className="text-gray-500">Dừng sớm</dt>
+                        <dd className={cn('text-right tabular-nums', p.totals.stopped ? 'text-amber-700' : 'text-gray-400')}>{p.totals.stopped}</dd>
                         <dt className="text-gray-500">Vắng</dt>
                         <dd className={cn('text-right tabular-nums', p.totals.absent ? 'text-amber-700' : 'text-gray-400')}>{p.totals.absent}</dd>
                         <dt className="text-gray-500">Không đủ điều kiện</dt>
@@ -119,7 +121,7 @@ export default function ReportTab({ horse, owner }: { horse: HorseDetail; owner:
                         key: 'trial',
                         header: 'Chạy thử tốt nhất',
                         className: 'text-right',
-                        render: (row) => <span className="font-mono tabular-nums text-gray-700">{row.bestTrialMs === null ? '' : formatRaceTime(row.bestTrialMs)}</span>,
+                        render: (row) => <span className="tabular-nums text-gray-700">{row.bestTrialMs === null ? '' : formatRaceTime(row.bestTrialMs)}</span>,
                       },
                     ]}
                   />
@@ -213,7 +215,7 @@ function HealthTimeline({ report, onOpenCase }: { report: HorseHealthReport; onO
         ].map((item) => (
           <div key={item.label} className="rounded-2xl bg-white px-4 py-3 shadow-card ring-1 ring-gray-200/80">
             <dt className="text-xs text-gray-500">{item.label}</dt>
-            <dd className="font-mono text-xl font-bold tabular-nums text-gray-900">
+            <dd className="tabular-nums text-xl font-bold  text-gray-900">
               {item.value}
               {item.sub && <span className="ml-1.5 font-sans text-xs font-normal text-gray-500">{item.sub}</span>}
             </dd>

@@ -11,11 +11,10 @@ import type {
 
 export const intensityText: Record<TrainingIntensity, string> = {
   LIGHT: 'Nhẹ',
-  MODERATE: 'Trung bình',
   HEAVY: 'Nặng',
 };
 
-export const INTENSITIES: TrainingIntensity[] = ['LIGHT', 'MODERATE', 'HEAVY'];
+export const INTENSITIES: TrainingIntensity[] = ['LIGHT', 'HEAVY'];
 
 export const sessionTypeText: Record<TrainingSessionType, string> = {
   REGULAR: 'Buổi thường',
@@ -23,15 +22,13 @@ export const sessionTypeText: Record<TrainingSessionType, string> = {
 };
 
 export const classStatusText: Record<TrainingClassStatus, string> = {
-  DRAFT: 'Nháp',
   ACTIVE: 'Đang chạy',
   COMPLETED: 'Đã hoàn thành',
   CANCELLED: 'Đã hủy',
 };
 
 export const sessionStatusText: Record<TrainingSessionStatus, string> = {
-  DRAFT: 'Nháp',
-  SCHEDULED: 'Đã công bố',
+  SCHEDULED: 'Đã lên lịch',
   IN_PROGRESS: 'Đang diễn ra',
   COMPLETED: 'Đã xong',
   CANCELLED: 'Đã hủy',
@@ -43,14 +40,15 @@ export const participantStatusText: Record<ParticipantStatus, string> = {
   READY: 'Sẵn sàng',
   ONGOING: 'Đang chạy',
   COMPLETED: 'Hoàn thành',
+  STOPPED: 'Dừng sớm',
   ABSENT: 'Vắng',
   SKIPPED: 'Bỏ qua',
   INELIGIBLE: 'Không đủ điều kiện',
-  CANCELLED_BY_LOCK: 'Hủy do khóa huấn luyện',
+  CANCELLED_BY_LOCK: 'Hủy do khóa tập',
   CANCELLED: 'Đã hủy',
 };
 
-/** Các bước của một lượt tập, theo thứ tự. */
+/** Các bước của một lượt tập, theo thứ tự. Lượt dừng sớm (STOPPED) nằm ở bước Hoàn thành. */
 export const PARTICIPANT_FLOW: ParticipantStatus[] = ['PLANNED', 'PRESENT', 'READY', 'ONGOING', 'COMPLETED'];
 /** Lượt không tập: gom vào dải riêng dưới đường đua. */
 export const PARTICIPANT_OUT: ParticipantStatus[] = ['ABSENT', 'SKIPPED', 'INELIGIBLE', 'CANCELLED_BY_LOCK', 'CANCELLED'];
@@ -70,7 +68,7 @@ export const alertLevelText: Record<MetricAlertLevel, string> = {
 
 /** Lý do lượt "Không đủ điều kiện" BE ghi bằng mã. */
 const INELIGIBLE_REASON: Record<string, string> = {
-  HEALTH_UNDER_OBSERVATION: 'Đang cần theo dõi, không tập buổi nặng',
+  HEALTH_UNDER_OBSERVATION: 'Đang cần theo dõi, chỉ tập buổi Nhẹ',
   HEALTH_INJURED: 'Đang chấn thương',
   HEALTH_QUARANTINED: 'Đang cách ly',
   LIFECYCLE_RETIRED: 'Đã giải nghệ',
@@ -80,13 +78,15 @@ const INELIGIBLE_REASON: Record<string, string> = {
   ACTIVE_TRAINING_LOCK: 'Đang bị khóa huấn luyện',
 };
 
+/** Lý do BE ghi dạng mã nối dấu phẩy (có thể bị cắt ở 64 ký tự). Mã lạ hiện câu chung, không hiện mã thô. */
 export function ineligibleReasonText(reason: string | null | undefined): string | undefined {
   if (!reason) return undefined;
-  return reason
+  const texts = reason
     .split(/[,|]/)
-    .map((part) => INELIGIBLE_REASON[part.trim()] ?? part.trim())
+    .map((part) => part.trim())
     .filter(Boolean)
-    .join(', ');
+    .map((part) => INELIGIBLE_REASON[part] ?? 'Không đủ điều kiện tập');
+  return [...new Set(texts)].join(', ') || 'Không đủ điều kiện tập';
 }
 
 /** Gợi ý mặt sân. BE nhận chuỗi tự do, tối đa 80 ký tự. */

@@ -9,3 +9,5 @@ export const createUser = (input: { fullName: string; email: string; role: Role;
   http.post<UserAccount>('/users', input);
 export const updateUser = (id: string, input: { fullName?: string; role?: Role }) => http.patch<UserAccount>(`/users/${id}`, input);
 export const setUserStatus = (id: string, status: UserStatus) => http.patch<UserAccount>(`/users/${id}/status`, { status });
+export const resetUserPassword = (id: string, newPassword: string) =>
+  http.post<void>(`/users/${id}/reset-password`, { newPassword });

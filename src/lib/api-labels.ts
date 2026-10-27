@@ -22,6 +22,7 @@ import { featureLabel } from './audit-labels';
 export const placementStatusLabel: Record<PlacementStatus, string> = {
   PENDING_BARN: 'Chờ xếp khu',
   PENDING_STALL: 'Chờ xếp ô',
+  PENDING_GROOM: 'Chờ giao Groom',
   PLACED: 'Đã xếp chỗ',
   NOT_APPLICABLE: 'Không ở câu lạc bộ',
 };
@@ -80,6 +81,7 @@ export const careTypeLabel: Record<CareType, string> = {
   DEWORMING: 'Tẩy giun',
   FARRIER: 'Kiểm tra móng',
   ROUTINE_CHECKUP: 'Hẹn khám định kỳ',
+  FOLLOW_UP: 'Tái khám',
 };
 
 export const careStatusLabel: Record<CareStatus, string> = {

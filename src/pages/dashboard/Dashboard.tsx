@@ -5,7 +5,7 @@
 // Phần huấn luyện (Flow 2) nằm ở TrainingBlocks.tsx, hiện khi bật cờ FEATURES.training.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, ListChecks, Lock, MapPinned, Plus, Siren, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
+import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, Flag, ListChecks, Lock, MapPinned, Plus, Siren, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { useService } from '../../hooks/useService';
 import type { DailyChecklist, HorseListItem, Incident, NotificationItem, SupplyItem } from '../../api/types';
@@ -26,8 +26,8 @@ import { links } from '../../lib/links';
 import { formatDate, formatDateShort, formatMoney, formatRelative, toDateKey, addDays } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { cannotTrain, isLocked, loadGroom, loadManager, loadOwner, loadTrainer, loadVet, todayKey } from './data';
-import { HIDDEN_COST_TEXT, isCostHidden } from '../medical/components/case-cost';
 import { FEATURES } from '../../config/features';
+import { leftClub } from '../../lib/horse-rules';
 import { ActiveClassesCard, GroomTrainingCard, LiveNowCard, ManagerTrainingCards, OwnerTrainingCards, TrainerTodayCard, VetAlertsCard } from './TrainingBlocks';
 
 /* ===== Mảnh ghép dùng chung ===== */
@@ -95,7 +95,7 @@ function Row({ children }: { children: ReactNode }) {
 function AttentionList({ items, empty = 'Không có việc nào cần xử lý', className = '' }: { items: Attention[]; empty?: string; className?: string }) {
   const sorted = [...items].sort((a, b) => levelOrder[a.level] - levelOrder[b.level]);
   return (
-    <Card className={cn('flex flex-col p-0 shadow-[inset_3px_0_0_0_#047857,0_18px_40px_-30px_rgba(6,78,59,0.55)] sm:p-0', className)}>
+    <Card className={cn('flex flex-col p-0 shadow-[inset_3px_0_0_0_#047857,0_1px_2px_rgba(6,78,59,0.06)] sm:p-0', className)}>
       <div className="flex items-center justify-between px-5 pb-3 pt-4">
         <h3 className="text-[0.95rem] font-semibold text-gray-900">Cần xử lý</h3>
         {sorted.length > 0 && <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-800">{sorted.length} việc</span>}
@@ -225,11 +225,12 @@ function HorseRows({ horses, empty, note }: { horses: HorseListItem[]; empty: st
   );
 }
 
-/** Thứ tự ưu tiên hiển thị: không tập được → cần theo dõi → chờ xếp chỗ → còn lại. */
+/** Thứ tự ưu tiên hiển thị: không tập được → cần theo dõi → chờ xếp chỗ, chờ Groom → còn lại → đã rời CLB (như BE). */
 function priority(horse: HorseListItem) {
+  if (leftClub(horse.lifecycleStatus)) return 4;
   if (cannotTrain(horse)) return 0;
   if (horse.healthStatus === 'UNDER_OBSERVATION' && horse.lifecycleStatus === 'ACTIVE') return 1;
-  if (horse.location.placementStatus === 'PENDING_BARN' || horse.location.placementStatus === 'PENDING_STALL') return 2;
+  if (['PENDING_BARN', 'PENDING_STALL', 'PENDING_GROOM'].includes(horse.location.placementStatus)) return 2;
   return 3;
 }
 const byPriority = (a: HorseListItem, b: HorseListItem) => priority(a) - priority(b) || a.name.localeCompare(b.name, 'vi');
@@ -258,12 +259,21 @@ function ManagerDashboard({ name }: { name: string }) {
   const { horses, barns, stalls, medical } = data;
   const pendingBarn = horses.filter((horse) => horse.location.placementStatus === 'PENDING_BARN');
   const pendingStall = horses.filter((horse) => horse.location.placementStatus === 'PENDING_STALL');
+  const pendingGroom = horses.filter((horse) => horse.location.placementStatus === 'PENDING_GROOM');
   const urgent = medical.pendingRequests.filter((item) => item.urgent);
   const overdueAlert = medical.checkups.filter((item) => item.daysLeft < -7);
   const blocked = horses.filter(cannotTrain);
 
   const attention: Attention[] = [
     ...stableAttention(data.stable, false),
+    ...data.surcharges.map((row) => ({
+      key: `sur-${row.id}`,
+      level: 'info' as const,
+      title: `Phụ phí của ${row.horseName} chờ HLV áp dụng`,
+      detail: !row.barnName ? 'Ngựa chưa xếp khu' : !row.headTrainerName ? `${row.barnName} chưa có HLV` : `Chờ HLV ${row.headTrainerName} · ${row.description}`,
+      to: links.horse(row.horseId, 'surcharge'),
+      cta: 'Xem',
+    })),
     ...urgent.map((item) => ({
       key: `req-${item.id}`,
       level: 'danger' as const,
@@ -320,6 +330,18 @@ function ManagerDashboard({ name }: { name: string }) {
           },
         ]
       : []),
+    ...(pendingGroom.length > 0
+      ? [
+          {
+            key: 'pending-groom',
+            level: 'info' as const,
+            title: `${pendingGroom.length} ngựa có ô, chờ HLV giao Groom`,
+            detail: pendingGroom.map((horse) => horse.name).join(', '),
+            to: links.stable,
+            cta: 'Sơ đồ chuồng',
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -338,7 +360,7 @@ function ManagerDashboard({ name }: { name: string }) {
             </>
           }>
         <Stat value={horses.length} label="Ngựa ở câu lạc bộ" hint={`${blocked.length} không tập được`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-        <Stat value={pendingBarn.length + pendingStall.length} label="Chờ xếp chỗ" hint="chờ xếp khu hoặc chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
+        <Stat value={pendingBarn.length + pendingStall.length + pendingGroom.length} label="Chờ xếp chỗ" hint="chờ xếp khu, xếp ô hoặc giao Groom" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
         <Stat value={urgent.length} label="Yêu cầu khám khẩn" hint={`${medical.pendingRequests.length} yêu cầu đang chờ`} icon={<AlertOctagon size={18} />} tone="danger" onClick={() => navigate(links.requests)} />
         <Stat value={overdueAlert.length} label="Quá hạn khám > 7 ngày" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
       </DashboardHero>
@@ -398,6 +420,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   const { horses, barns, stalls, medical, ids } = data;
   const pendingStall = horses.filter((horse) => horse.location.placementStatus === 'PENDING_STALL');
+  const pendingGroom = horses.filter((horse) => horse.location.placementStatus === 'PENDING_GROOM');
   const requests = medical.pendingRequests.filter((item) => ids.has(item.horseId));
   const blocked = horses.filter(cannotTrain);
   const watch = horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus === 'UNDER_OBSERVATION');
@@ -405,6 +428,14 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
 
   const attention: Attention[] = [
     ...stableAttention(data.stable, true),
+    ...data.surcharges.map((row) => ({
+      key: `sur-${row.id}`,
+      level: 'warn' as const,
+      title: `Phụ phí mới cho ${row.horseName}`,
+      detail: `${row.description} · ${formatMoney(row.dailyAmount)}/ngày từ ${formatDate(row.startDate)}`,
+      to: links.horse(row.horseId, 'surcharge'),
+      cta: 'Áp dụng',
+    })),
     ...requests
       .filter((item) => item.urgent)
       .map((item) => ({
@@ -423,6 +454,14 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
       to: horse.location.barn?.id ? `${links.stable}?zone=${horse.location.barn.id}` : links.stable,
       cta: 'Xếp ô',
     })),
+    ...pendingGroom.map((horse) => ({
+      key: `groom-${horse.id}`,
+      level: 'warn' as const,
+      title: `${horse.name} chờ giao Groom`,
+      detail: [horse.location.barn?.name, horse.location.stall ? `ô ${horse.location.stall.code}` : null].filter(Boolean).join(' · '),
+      to: horse.location.barn?.id ? `${links.stable}?zone=${horse.location.barn.id}` : links.stable,
+      cta: 'Giao Groom',
+    })),
     ...blocked.map((horse) => ({
       key: `blk-${horse.id}`,
       level: 'info' as const,
@@ -435,7 +474,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
       key: `watch-${horse.id}`,
       level: 'info' as const,
       title: `${horse.name} cần theo dõi`,
-      detail: 'Vẫn được tập, không được đăng ký đua',
+      detail: 'Chỉ tập buổi Nhẹ, không được đăng ký đua',
       to: links.horse(horse.id),
       cta: 'Hồ sơ',
     })),
@@ -457,7 +496,7 @@ function TrainerDashboard({ name, userId }: { name: string; userId: string }) {
             </>
           }>
           <Stat value={horses.length} label="Ngựa trong khu" hint={`${watch.length} cần theo dõi`} icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-          <Stat value={pendingStall.length} label="Chờ xếp ô" icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
+          <Stat value={pendingStall.length + pendingGroom.length} label="Chờ xếp ô, giao Groom" hint={pendingGroom.length ? `${pendingStall.length} chờ ô · ${pendingGroom.length} chờ Groom` : undefined} icon={<MapPinned size={18} />} tone="warning" onClick={() => navigate(links.stable)} />
           <Stat value={requests.length} label="Yêu cầu khám đang chờ" hint={`${requests.filter((item) => item.urgent).length} khẩn`} icon={<ClipboardCheck size={18} />} tone="warning" onClick={() => navigate(links.requests)} />
           <Stat value={blocked.length} label="Ngựa không tập được" icon={<AlertOctagon size={18} />} tone="danger" />
       </DashboardHero>
@@ -646,8 +685,6 @@ function GroomDashboard({ name }: { name: string }) {
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được dữ liệu'} />;
 
-  const today = todayKey();
-  const due = data.schedules.filter((item) => toDateKey(item.schedule.dueAt) <= today);
   const ticked = local.source === data.today ? local.map : {};
   const work = (data.today?.horses ?? []).reduce(
     (sum, horse) => {
@@ -656,15 +693,9 @@ function GroomDashboard({ name }: { name: string }) {
     },
     { done: 0, total: 0 },
   );
+  // Lượt dắt tập hôm nay: ngựa mình phụ trách cộng lượt dắt hộ.
+  const runCount = (data.today?.horses ?? []).reduce((sum, horse) => sum + horse.trainingRuns.length, 0) + (data.today?.assistedRuns ?? []).length;
   const attention: Attention[] = [
-    ...due.map(({ schedule, horseName }) => ({
-      key: `care-${schedule.id}`,
-      level: toDateKey(schedule.dueAt) < today ? ('danger' as const) : ('warn' as const),
-      title: `${careTypeLabel[schedule.type]} cho ${horseName}`,
-      detail: `${toDateKey(schedule.dueAt) < today ? `Quá hạn từ ${formatDate(schedule.dueAt)}` : 'Đến hạn hôm nay'}${schedule.notes ? ` · ${schedule.notes}` : ''}`,
-      to: links.horseMedical(schedule.horseId),
-      cta: 'Hoàn tất',
-    })),
     ...data.horses
       .filter((horse) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus !== 'ELIGIBLE')
       .map((horse) => ({
@@ -717,7 +748,11 @@ function GroomDashboard({ name }: { name: string }) {
             tone={work.total && work.done < work.total ? 'warning' : 'default'}
           />
           <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-          <Stat value={due.length} label="Lịch chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
+          {FEATURES.training ? (
+            <Stat value={runCount} label="Lượt dắt tập hôm nay" hint="kể cả lượt dắt hộ" icon={<Flag size={18} />} onClick={() => navigate(links.today)} />
+          ) : (
+            <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
+          )}
           <Stat value={data.incidents.length} label="Sự cố đang mở" icon={<Siren size={18} />} tone="warning" onClick={() => navigate(links.incidents())} />
         </DashboardHero>
 
@@ -744,7 +779,7 @@ function GroomDashboard({ name }: { name: string }) {
 
         <Row>
           {doctorNotes}
-          <Panel title="Sự cố tôi báo đang mở" to={links.incidents()} toLabel="Sự cố" flush className="h-full">
+          <Panel title="Sự cố đang mở" to={links.incidents()} toLabel="Sự cố" flush className="h-full">
             {data.incidents.length === 0 ? (
               <p className="px-5 py-5 text-sm text-gray-500">Không có sự cố nào đang mở.</p>
             ) : (
@@ -768,8 +803,8 @@ function GroomDashboard({ name }: { name: string }) {
         </Row>
 
         <Row>
-          <DayAgenda days={data.week} overdue={data.overdue} title="Lịch chăm sóc 7 ngày tới" empty="Không có việc" className="h-full" />
-          <AttentionList items={attention} empty="Hôm nay không có lịch chăm sóc nào đến hạn" className="h-full" />
+          <AttentionList items={attention} empty="Ngựa bạn phụ trách đều đủ điều kiện" className="h-full" />
+          <HerdHealthCard counts={countHealth(data.horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE'))} title="Sức khỏe ngựa bạn phụ trách" className="h-full" />
         </Row>
 
         <IncidentReportDialog open={!!reporting} horse={reporting?.horse} onClose={() => setReporting(null)} onDone={reload} />
@@ -781,7 +816,7 @@ function GroomDashboard({ name }: { name: string }) {
     <Reveal className="space-y-5">
       <DashboardHero eyebrow={todayLabel()} title={`${greeting()}, ${name}`}>
         <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-        <Stat value={due.length} label="Việc chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
+        <Stat value={data.incidents.length} label="Sự cố đang mở" icon={<Siren size={18} />} tone="warning" />
         <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
         <Stat value={data.requests.length} label="Yêu cầu khám chờ bác sĩ" icon={<Stethoscope size={18} />} onClick={() => navigate(links.requests)} />
       </DashboardHero>
@@ -795,7 +830,7 @@ function GroomDashboard({ name }: { name: string }) {
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
           <HorseRows horses={[...data.horses].sort(byPriority)} empty="Bạn chưa được giao ngựa nào." />
         </Panel>
-        <AttentionList items={attention} empty="Hôm nay không có việc chăm sóc nào đến hạn" className="h-full" />
+        <AttentionList items={attention} empty="Ngựa bạn phụ trách đều đủ điều kiện" className="h-full" />
       </Row>
 
       <Row>
@@ -804,7 +839,6 @@ function GroomDashboard({ name }: { name: string }) {
       </Row>
 
       <Row>
-        <DayAgenda days={data.week} overdue={data.overdue} title="Việc chăm sóc 7 ngày tới" empty="Không có việc" className="h-full" />
         <Panel title="Yêu cầu khám đang chờ bác sĩ" to={links.requests} toLabel="Yêu cầu khám" flush className="h-full">
           {data.requests.length === 0 ? (
             <p className="px-5 py-5 text-sm text-gray-500">Không có yêu cầu khám nào đang chờ.</p>
@@ -847,7 +881,7 @@ function OwnerDashboard({ name }: { name: string }) {
           <Stat
             value={data.costs ? formatMoney(data.costs.total) : formatMoney(data.medicalCost)}
             label={data.costs ? 'Chi phí 30 ngày qua' : 'Chi phí y tế đã chốt'}
-            hint={data.costs ? 'Phí nuôi và y tế' : undefined}
+            hint={data.costs ? 'Phí nuôi, phụ phí và y tế' : undefined}
             icon={<Wallet size={18} />}
             onClick={() => navigate(links.myCosts)}
           />
@@ -883,29 +917,25 @@ function OwnerDashboard({ name }: { name: string }) {
       )}
 
       <Row>
-        <Panel title="Chi phí y tế đã chốt" to={links.myCosts} toLabel="Chi phí theo kỳ" flush className="h-full">
+        <Panel title="Chi phí y tế" to={links.myCosts} toLabel="Chi phí theo kỳ" flush className="h-full">
           <div className="px-5 py-4">
             <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(data.medicalCost)}</p>
-            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các bệnh án đã đóng trong thời gian bạn sở hữu.</p>
+            <p className="mt-1 text-xs text-gray-500">Tổng chi phí các buổi khám trong thời gian bạn sở hữu, tính cả bệnh án đang điều trị.</p>
           </div>
-          {data.closedCases.length > 0 && (
+          {data.recentCases.length > 0 && (
             <ul className="divide-y divide-gray-100 border-t border-gray-100">
-              {data.closedCases.map((item) => (
+              {data.recentCases.map((item) => (
                 <li key={item.id}>
                   <Link to={links.case(item.id)} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm transition hover:bg-gray-50">
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-gray-900">
                         {item.horseName} · {item.initialDiagnosis}
                       </span>
-                      <span className="block text-xs text-gray-500">Đóng {formatDate(item.closedAt)}</span>
+                      <span className="block text-xs text-gray-500">{item.closedAt ? `Đóng ${formatDate(item.closedAt)}` : `Mở ${formatDate(item.openedAt)}`}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-3">
                       <CaseStatusPill status={item.status} />
-                      {isCostHidden(item) ? (
-                        <span className="text-xs text-gray-500">{HIDDEN_COST_TEXT}</span>
-                      ) : (
-                        <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
-                      )}
+                      <span className="tabular-nums text-gray-700">{formatMoney(item.totalCost ?? 0)}</span>
                     </span>
                   </Link>
                 </li>

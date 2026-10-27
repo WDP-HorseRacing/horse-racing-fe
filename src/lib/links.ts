@@ -9,6 +9,8 @@ export interface VisitParams {
   conclusion?: 'NORMAL' | 'ISSUE';
   /** Buổi khám đã hủy cần ghi lại. */
   replaces?: string;
+  /** Buổi khám cần sửa (mở form sửa thay vì ghi mới). */
+  edit?: string;
   back?: string;
 }
 
@@ -34,6 +36,8 @@ export const links = {
   horseNew: '/horses/new',
   horse: (id: string, tab?: string) => `/horses/${id}${tab ? `?tab=${tab}` : ''}`,
   horseEdit: (id: string) => `/horses/${id}/edit`,
+  pastHorses: '/horses/past',
+  pastHorse: (id: string) => `/horses/past/${id}`,
   stable: '/stable',
   /** Flow 4 */
   stableCare: (barnId?: string) => withQuery('/stable/care', { barn: barnId }),
@@ -68,20 +72,22 @@ export const links = {
       requestIds: params.requestIds?.join(','),
       conclusion: params.conclusion,
       replaces: params.replaces,
+      edit: params.edit,
       back: params.back,
     }),
   periodic: '/medical/periodic',
   locks: '/medical/locks',
   careSchedules: '/medical/care',
   careNew: (horseId?: string, back?: string) => withQuery('/medical/care/new', { horseId, back }),
-  costReport: '/medical/costs',
+  /** Chi phí y tế nằm ở Báo cáo › Tài chính › Y tế (đường cũ /medical/costs chuyển hướng về đây). */
+  costReport: withQuery('/reports', { tab: 'finance', view: 'medical' }),
 
   adminUsers: '/admin/users',
   adminAudit: '/admin/audit',
   adminFees: '/admin/fees',
   adminSystem: '/admin/system',
 
-  reports: (tab?: 'finance') => withQuery('/reports', { tab }),
+  reports: (tab?: 'finance', view?: 'horses' | 'medical') => withQuery('/reports', { tab, view }),
   /** Chi phí của một chủ ngựa (Quản lý CLB). */
   ownerCosts: (ownerId: string) => `/reports/owners/${ownerId}`,
   /** Chi phí của chính chủ ngựa đang đăng nhập. */

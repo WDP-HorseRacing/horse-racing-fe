@@ -41,7 +41,7 @@ export function StatTile({ label, value, sub, tone, className }: { label: string
       <p className="text-xs text-gray-500">{label}</p>
       <p
         className={cn(
-          'mt-1 font-mono text-2xl font-bold tabular-nums leading-tight',
+          'mt-1 tabular-nums text-2xl font-bold  leading-tight',
           tone === 'amber' ? 'text-amber-700' : tone === 'red' ? 'text-red-700' : tone === 'muted' ? 'text-gray-400' : 'text-gray-900',
         )}
       >

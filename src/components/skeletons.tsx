@@ -104,7 +104,7 @@ export function HorseDetailSkeleton() {
   return (
     <Frame className="space-y-5" label="Đang tải hồ sơ ngựa">
       <Bone className="h-4 w-32" />
-      <div className="grid gap-5 rounded-3xl bg-white p-3 ring-1 ring-gray-200/70 sm:p-4 lg:grid-cols-12">
+      <div className="grid gap-5 rounded-2xl bg-white p-3 ring-1 ring-gray-200/70 sm:p-4 lg:grid-cols-12">
         <Bone className="aspect-[4/3] rounded-2xl lg:col-span-5" />
         <div className="space-y-4 py-2 lg:col-span-7 lg:pr-3">
           <div className="flex gap-2">
@@ -195,7 +195,7 @@ export function MedicalBoardSkeleton() {
 export function DashboardSkeleton() {
   return (
     <Frame className="space-y-5" label="Đang tải tổng quan">
-      <Bone className="h-44 rounded-3xl" />
+      <Bone className="h-44 rounded-2xl" />
       <div className="grid gap-4 lg:grid-cols-12">
         <Bone className="h-80 rounded-2xl lg:col-span-7" />
         <Bone className="h-80 rounded-2xl lg:col-span-5" />
@@ -212,7 +212,7 @@ export function BootScreen({ error, onRetry }: { error?: string; onRetry?: () =>
     <div className="flex min-h-dvh flex-col items-center justify-center gap-5 bg-canvas p-8" role={error ? 'alert' : 'status'} aria-label={error ? undefined : 'Đang khởi động'}>
       <div className="relative h-14 w-14">
         {!error && <span className="absolute inset-0 animate-ping rounded-2xl bg-emerald-500/20" />}
-        <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-[0_18px_36px_-16px_rgba(6,78,59,0.7)]">
+        <span className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-raised">
           <HorseLine size={38} paint="#fdf8ea" />
         </span>
       </div>

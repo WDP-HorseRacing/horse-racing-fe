@@ -16,15 +16,14 @@ import { links } from '../../../lib/links';
 import { formatDate, formatDateTime } from '../../../lib/format';
 import { addDateKey, clubTime, clubToday } from '../../../lib/club-time';
 import { formatMeters, formatMinutes, formatRaceTime } from '../../../lib/training-format';
-import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText, participantStatusText } from '../../../lib/training-labels';
+import { INTENSITIES, alertLevelText, classStatusText, enrollmentStatusText, intensityText, participantStatusText, PARTICIPANT_OUT } from '../../../lib/training-labels';
 import { gsap, useGSAP } from '../../../lib/gsap';
 import { prefersReducedMotion } from '../../../lib/motion';
 import { IntensityBars, ParticipantPill, TrialBadge } from '../../training/components/bits';
 import { ProgressFill } from '../../training/components/motion';
-import ThresholdSheet from '../components/ThresholdSheet';
 import { TrialVideoButton } from '../../training/components/TrialVideo';
 
-export default function TrainingTab({ horse, permissions }: { horse: HorseDetail; permissions: HorsePermissions }) {
+export default function TrainingTab({ horse }: { horse: HorseDetail; permissions: HorsePermissions }) {
   const user = useStore((state) => state.currentUser);
   const role = user?.role;
   const scope = useRef<HTMLDivElement>(null);
@@ -32,7 +31,6 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
   const inMyZone = !!horse.location.barn?.id && !!zone?.myBarnIds.has(horse.location.barn.id);
   // HLV trưởng xem biểu đồ thể lực mọi ngựa (đề tài), nhưng ngưỡng và lịch sử cảnh báo chỉ của ngựa khu mình (BE trả 403 khu khác).
   const staffView = role === 'CLUB_MANAGER' || role === 'VETERINARIAN' || (role === 'HEAD_TRAINER' && inMyZone);
-  const canSetThreshold = role === 'HEAD_TRAINER' && permissions.canAssignStallAndGroom && !horse.isDeleted && horse.lifecycleStatus === 'ACTIVE';
 
   const overview = useService(async () => {
     // BE: "sắp tới" là lượt còn mở (kể cả đang tập) và lượt Không đủ điều kiện của buổi chưa tới giờ, sớm nhất trước.
@@ -50,7 +48,10 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
 
   const active = (overview.data?.classes ?? []).filter((item) => item.enrollmentStatus === 'ACTIVE');
   const past = (overview.data?.classes ?? []).filter((item) => item.enrollmentStatus !== 'ACTIVE');
-  const next = overview.data?.upcoming[0];
+  // Sắp tới có cả lượt đã hủy do khóa tập, không đủ điều kiện: buổi kế tiếp là lượt còn mở đầu tiên.
+  const upcoming = overview.data?.upcoming ?? [];
+  const next = upcoming.find((item) => !PARTICIPANT_OUT.includes(item.participantStatus));
+  const others = upcoming.filter((item) => item !== next);
 
   return (
     <div ref={scope} className="space-y-4 pt-4">
@@ -90,26 +91,33 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
                     <p className="truncate font-semibold">{next.name}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono text-sm font-semibold">{formatDate(next.scheduledStartAt).slice(0, 5)} {clubTime(next.scheduledStartAt)}</p>
+                    <p className="tabular-nums text-sm font-semibold">{formatDate(next.scheduledStartAt).slice(0, 5)} {clubTime(next.scheduledStartAt)}</p>
                     <p className="text-xs text-emerald-100">
                       {next.participantStatus === 'PLANNED' || next.participantStatus === 'ONGOING' ? countdown(next.scheduledStartAt) : participantStatusText[next.participantStatus]}
                     </p>
                   </div>
                 </div>
               )}
-              {(overview.data?.upcoming.length ?? 0) > 1 && (
+              {others.length > 0 && (
                 <ul className="space-y-1">
-                  {overview.data!.upcoming.slice(1).map((item) => (
-                    <li key={item.participantId} className="flex items-center gap-3 rounded-lg bg-white/70 px-3 py-2 text-sm">
-                      <span className="w-24 shrink-0 font-mono text-xs text-gray-500">
-                        {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-gray-800">{item.name}</span>
-                      <TrialBadge type={item.sessionType} />
-                      {item.surface && <span className="text-xs text-gray-500">{item.surface}</span>}
-                      {item.participantStatus !== 'PLANNED' && <ParticipantPill status={item.participantStatus} />}
-                    </li>
-                  ))}
+                  {others.map((item) => {
+                    const out = PARTICIPANT_OUT.includes(item.participantStatus);
+                    const reason = out ? (item.cancelReason ?? item.absenceReason) : null;
+                    return (
+                      <li key={item.participantId} className={cn('rounded-lg px-3 py-2 text-sm', out ? 'bg-amber-50/70 ring-1 ring-amber-100' : 'bg-white/70')}>
+                        <div className="flex items-center gap-3">
+                          <span className="w-24 shrink-0 tabular-nums text-xs text-gray-500">
+                            {formatDate(item.scheduledStartAt).slice(0, 5)} {clubTime(item.scheduledStartAt)}
+                          </span>
+                          <span className={cn('min-w-0 flex-1 truncate', out ? 'text-gray-500 line-through decoration-gray-300' : 'text-gray-800')}>{item.name}</span>
+                          <TrialBadge type={item.sessionType} />
+                          {item.surface && !out && <span className="text-xs text-gray-500">{item.surface}</span>}
+                          {item.participantStatus !== 'PLANNED' && <ParticipantPill status={item.participantStatus} />}
+                        </div>
+                        {reason && <p className="mt-1 pl-27 text-xs text-amber-800">{reason}</p>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {past.length > 0 && (
@@ -126,7 +134,7 @@ export default function TrainingTab({ horse, permissions }: { horse: HorseDetail
 
       <div className="grid gap-4 lg:grid-cols-12">
         <TrendCard horseId={horse.id} className={staffView ? 'lg:col-span-8' : 'lg:col-span-12'} />
-        {staffView && <ThresholdCard horseId={horse.id} horseName={horse.name} canSet={canSetThreshold} className="lg:col-span-4" />}
+        {staffView && <ThresholdCard horseId={horse.id} className="lg:col-span-4" />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
@@ -166,17 +174,23 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
         <Skeleton rows={2} />
       ) : data.error || !load ? (
         <ErrorBox message={data.error ?? 'Không tải được khối lượng tập'} />
-      ) : load.sessionsCompleted === 0 ? (
+      ) : load.sessionsCompleted === 0 && load.sessionsStopped === 0 ? (
         <EmptyState title="Chưa có lượt tập hoàn thành" hint={`Trong ${days} ngày gần nhất.`} className="py-6" />
       ) : (
         <div className="space-y-4">
           <div className="flex items-end gap-6">
             <div>
-              <p className="font-mono text-4xl font-bold tabular-nums text-gray-900">{load.sessionsCompleted}</p>
+              <p className="tabular-nums text-2xl font-semibold  text-gray-900">{load.sessionsCompleted}</p>
               <p className="text-xs text-gray-500">lượt hoàn thành</p>
             </div>
+            {load.sessionsStopped > 0 && (
+              <div>
+                <p className="tabular-nums text-xl font-semibold  text-amber-800">{load.sessionsStopped}</p>
+                <p className="text-xs text-gray-500">dừng sớm</p>
+              </div>
+            )}
             <div>
-              <p className="font-mono text-xl font-semibold tabular-nums">{formatMinutes(load.actualDurationSeconds)}</p>
+              <p className="tabular-nums text-xl font-semibold ">{formatMinutes(load.actualDurationSeconds)}</p>
               <p className="text-xs text-gray-500">thời gian tập thực</p>
             </div>
           </div>
@@ -188,7 +202,7 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
                   <span
                     key={intensity}
                     title={`${intensityText[intensity]}: ${load.byIntensity[intensity]} lượt`}
-                    className={intensity === 'HEAVY' ? 'bg-emerald-700' : intensity === 'MODERATE' ? 'bg-emerald-400' : 'bg-emerald-200'}
+                    className={intensity === 'HEAVY' ? 'bg-emerald-700' : 'bg-emerald-200'}
                     style={{ flexGrow: load.byIntensity[intensity] }}
                   />
                 ) : null,
@@ -197,7 +211,7 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
             <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-gray-600">
               {INTENSITIES.map((intensity) => (
                 <span key={intensity} className="inline-flex items-center gap-1">
-                  <IntensityBars intensity={intensity} showLabel={false} /> {intensityText[intensity]} <b className="font-mono">{load.byIntensity[intensity]}</b>
+                  <IntensityBars intensity={intensity} showLabel={false} /> {intensityText[intensity]} <b className="tabular-nums">{load.byIntensity[intensity]}</b>
                 </span>
               ))}
             </div>
@@ -206,14 +220,14 @@ function WorkloadCard({ horseId, className = '' }: { horseId: string; className?
             <div>
               <div className="mb-1 flex justify-between text-xs text-gray-600">
                 <span>Cự ly dự kiến</span>
-                <span className="font-mono">{formatMeters(load.plannedDistanceM)}</span>
+                <span className="tabular-nums">{formatMeters(load.plannedDistanceM)}</span>
               </div>
               <ProgressFill ratio={load.plannedDistanceM / maxDistance} tone="gray" />
             </div>
             <div>
               <div className="mb-1 flex justify-between text-xs text-gray-600">
                 <span>Cự ly thực (từ cảm biến)</span>
-                <span className="font-mono">{formatMeters(load.actualDistanceM)}</span>
+                <span className="tabular-nums">{formatMeters(load.actualDistanceM)}</span>
               </div>
               <ProgressFill ratio={load.actualDistanceM / maxDistance} delay={0.15} />
             </div>
@@ -283,9 +297,9 @@ function TrendCard({ horseId, className = '' }: { horseId: string; className?: s
 
 /* ===== Ngưỡng ===== */
 
-function ThresholdCard({ horseId, horseName, canSet, className = '' }: { horseId: string; horseName: string; canSet: boolean; className?: string }) {
+/** Mọi ngựa dùng chung ngưỡng câu lạc bộ (BE bỏ ngưỡng riêng từ 18/10), thẻ chỉ để xem. */
+function ThresholdCard({ horseId, className = '' }: { horseId: string; className?: string }) {
   const data = useService(() => getThresholds(horseId), [horseId], { silent: true });
-  const [open, setOpen] = useState(false);
   const current = data.data;
   return (
     <section data-training-block className={cn('rounded-2xl bg-white p-5 ring-1 ring-gray-200/80', className)}>
@@ -293,11 +307,6 @@ function ThresholdCard({ horseId, horseName, canSet, className = '' }: { horseId
         <h3 className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-900">
           <SlidersHorizontal size={16} className="text-emerald-700" /> Ngưỡng cảnh báo
         </h3>
-        {canSet && (
-          <Button variant="inline" size="sm" onClick={() => setOpen(true)}>
-            Đặt ngưỡng mới
-          </Button>
-        )}
       </div>
       {data.loading && !current ? (
         <Skeleton rows={2} />
@@ -305,59 +314,25 @@ function ThresholdCard({ horseId, horseName, canSet, className = '' }: { horseId
         <ErrorBox message={data.error ?? 'Không tải được ngưỡng'} />
       ) : (
         <>
-          <span className={cn('inline-block rounded-md px-2 py-0.5 text-xs font-medium', current.source === 'HORSE' ? 'bg-emerald-50 text-emerald-800' : 'bg-gray-100 text-gray-600')}>
-            {current.source === 'HORSE' ? 'Ngưỡng riêng của ngựa' : 'Mặc định câu lạc bộ'}
-          </span>
-          <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <dl className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-amber-50 p-2.5 ring-1 ring-amber-100">
               <dt className="text-[11px] text-amber-800">Cảnh báo</dt>
-              <dd className="font-mono text-lg font-bold">{current.activeLimits.heartRateWarningBpm}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateWarningBpm}</dd>
               <dd className="text-[10px] text-gray-500">bpm</dd>
             </div>
             <div className="rounded-xl bg-red-50 p-2.5 ring-1 ring-red-100">
               <dt className="text-[11px] text-red-700">Nguy hiểm</dt>
-              <dd className="font-mono text-lg font-bold">{current.activeLimits.heartRateCriticalBpm}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateCriticalBpm}</dd>
               <dd className="text-[10px] text-gray-500">bpm</dd>
             </div>
             <div className="rounded-xl bg-gray-50 p-2.5 ring-1 ring-gray-100">
               <dt className="text-[11px] text-gray-600">Tốc độ tối đa</dt>
-              <dd className="font-mono text-lg font-bold">{current.activeLimits.maxSpeedMps}</dd>
+              <dd className="tabular-nums text-lg font-bold">{current.limits.maxSpeedMps}</dd>
               <dd className="text-[10px] text-gray-500">m/s</dd>
             </div>
           </dl>
-          {current.profiles.length > 0 && (
-            <ol className="mt-4 space-y-1.5 border-l-2 border-gray-100 pl-3">
-              {current.profiles.slice(0, 4).map((profile) => (
-                <li key={profile.id} className="text-xs text-gray-600">
-                  <span className="font-semibold text-gray-800">
-                    Phiên bản {profile.ruleVersion} · {profile.profileName}
-                  </span>
-                  <span className="block font-mono text-gray-500">
-                    {profile.limits.heartRateWarningBpm}/{profile.limits.heartRateCriticalBpm} bpm · {profile.limits.maxSpeedMps} m/s
-                  </span>
-                  <span className="block">
-                    Từ {formatDateTime(profile.effectiveFrom)}
-                    {profile.effectiveTo ? ` đến ${formatDateTime(profile.effectiveTo)}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-          {!canSet && <p className="mt-3 text-xs text-gray-400">Chỉ huấn luyện viên trưởng phụ trách khu của ngựa đặt được ngưỡng.</p>}
+          <p className="mt-3 text-xs text-gray-500">Ngưỡng chung của câu lạc bộ, áp cho mọi ngựa. Vượt ngưỡng nguy hiểm khi tập thì bác sĩ và HLV nhận cảnh báo khẩn.</p>
         </>
-      )}
-      {open && current && (
-        <ThresholdSheet
-          horseId={horseId}
-          horseName={horseName}
-          current={current.activeLimits}
-          nextVersion={(current.profiles[0]?.ruleVersion ?? 0) + 1}
-          onClose={() => setOpen(false)}
-          onSaved={() => {
-            setOpen(false);
-            data.reload();
-          }}
-        />
       )}
     </section>
   );
@@ -405,7 +380,7 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                 <Link to={links.participant(item.participantId, horseId)} className="group block">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-mono text-xs text-gray-500">
+                      <p className="tabular-nums text-xs text-gray-500">
                         {formatDate(item.scheduledStartAt)} {clubTime(item.scheduledStartAt)} · {item.className}
                       </p>
                       <p className="flex items-center gap-2 font-semibold text-gray-900 group-hover:text-emerald-800">
@@ -414,12 +389,12 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                     </div>
                     <div className="flex items-center gap-2">
                       {best !== undefined && (
-                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 font-mono text-xs font-semibold text-amber-800">
+                        <span className="rounded-md bg-amber-50 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-amber-800">
                           <Flag size={11} className="mr-1 inline" />
                           {formatRaceTime(best)}
                         </span>
                       )}
-                      {item.evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono text-xs font-semibold text-white">{item.evaluation.score}/10</span>}
+                      {item.evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums text-xs font-semibold text-white">{item.evaluation.score}/10</span>}
                       <ParticipantPill status={item.participantStatus} />
                     </div>
                   </div>
@@ -429,6 +404,7 @@ function HistoryCard({ horseId, className = '' }: { horseId: string; className?:
                     </p>
                   )}
                   {item.absenceReason && <p className="mt-1 text-xs text-amber-800">Vắng: {item.absenceReason}</p>}
+                  {item.stoppedReason && <p className="mt-1 text-xs text-amber-800">Dừng sớm: {item.stoppedReason}</p>}
                   {item.cancelReason && <p className="mt-1 text-xs text-gray-500">{item.cancelReason}</p>}
                 </Link>
                 {item.trialResults.some((trial) => trial.videoUrl) && (
@@ -502,7 +478,7 @@ function AlertsCard({ horseId, className = '' }: { horseId: string; className?: 
               <Link to={links.participant(group.participantId, horseId)} className={cn('block rounded-xl px-3.5 py-2.5 ring-1 transition hover:ring-2', group.critical ? 'bg-red-50/70 ring-red-200 hover:ring-red-300' : 'bg-amber-50/70 ring-amber-200 hover:ring-amber-300')}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate font-semibold text-gray-900">{group.sessionName ?? 'Buổi đã xóa'}</p>
-                  <span className={cn('font-mono text-sm font-bold', group.critical ? 'text-red-700' : 'text-amber-800')}>{group.peak} bpm</span>
+                  <span className={cn('tabular-nums text-sm font-bold', group.critical ? 'text-red-700' : 'text-amber-800')}>{group.peak} bpm</span>
                 </div>
                 <p className="text-xs text-gray-600">
                   {formatDateTime(group.first)} · {group.count} điểm vượt ngưỡng{group.critical ? `, ${group.critical} nguy hiểm` : ''}

@@ -1,21 +1,21 @@
 // F4 — Chăm sóc theo khu (HLV, Quản lý CLB): bảng ngựa của một khu với Groom phụ trách, checklist hôm nay,
 // tình trạng khẩu phần và số sự cố đang mở. Bấm một dòng để sang tab Chăm sóc của ngựa (lập khẩu phần, gắn việc riêng).
 // BE chưa có API theo khu: mỗi ngựa gọi checklist hôm nay và khẩu phần (khu tối đa 9 ô). Quản lý CLB mở được sheet Loại việc.
-// Checklist do BE tạo sẵn lúc 00:05 cho ngựa có Groom. Ngựa chưa có checklist thì tra Groom đang giao để phân biệt
+// Checklist do BE tạo sẵn lúc 00:05 cho ngựa có Groom, lỗi thì BE tự thử lại; Quản lý CLB bấm được "Tạo lại việc hôm nay". Ngựa chưa có checklist thì tra Groom đang giao để phân biệt
 // "chưa có Groom" với "hôm nay không có việc".
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ListChecks, Package, Settings2, Siren, Utensils } from 'lucide-react';
+import { ListChecks, Package, RefreshCw, Settings2, Siren, Utensils } from 'lucide-react';
 import { listAllHorses } from '../../api/horses';
 import { listBarns, listGroomHistory } from '../../api/stable';
-import { listChecklists, listFeedingPlans, listIncidents } from '../../api/stable-care';
+import { listChecklists, listFeedingPlans, listIncidents, regenerateTodayChecklists, type RegenerateChecklistResult } from '../../api/stable-care';
 import { listLowStock } from '../../api/supplies';
 import type { DailyChecklist, FeedingPlan, HorseListItem } from '../../api/types';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Avatar, Button, ChipFilter, EmptyState, ErrorBox, Meter, NotFound, PageHeader, Pill, Skeleton, Stat, cn } from '../../components/ui';
+import { Avatar, Button, ChipFilter, EmptyState, ErrorBox, Meter, Modal, NotFound, PageHeader, Pill, Skeleton, Stat, cn, useToast } from '../../components/ui';
 import { HealthPill } from '../../components/ui/status';
 import { useMyScope } from '../../hooks/useMyScope';
-import { useService } from '../../hooks/useService';
+import { useAction, useService } from '../../hooks/useService';
 import { clubToday } from '../../lib/club-time';
 import { links } from '../../lib/links';
 import { useStore } from '../../store/store';
@@ -58,6 +58,9 @@ export default function StableCare() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [typesOpen, setTypesOpen] = useState(false);
+  const toast = useToast();
+  const regen = useAction();
+  const [regenFailures, setRegenFailures] = useState<RegenerateChecklistResult | null>(null);
   const manager = user?.role === 'CLUB_MANAGER';
   const trainer = user?.role === 'HEAD_TRAINER';
   const { scope, loading: scopeLoading } = useMyScope();
@@ -79,6 +82,13 @@ export default function StableCare() {
 
   const pickBarn = (id: string) => setParams({ barn: id }, { replace: true });
 
+  const regenerate = () =>
+    void regen.run(regenerateTodayChecklists, (result) => {
+      if (result.failures.length) setRegenFailures(result);
+      else toast.push(result.generated ? `Đã tạo ${result.generated} checklist hôm nay` : 'Checklist hôm nay đã đủ', 'success');
+      data.reload();
+    });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -86,12 +96,37 @@ export default function StableCare() {
         description="Bấm vào ngựa để xem việc, khẩu phần và sự cố."
         actions={
           manager && (
-            <Button variant="secondary" onClick={() => setTypesOpen(true)}>
-              <Settings2 size={16} /> Loại việc
-            </Button>
+            <>
+              <Button variant="secondary" onClick={regenerate} disabled={regen.pending} title="Tạo việc hôm nay cho ngựa còn thiếu. Việc đã có giữ nguyên.">
+                <RefreshCw size={16} className={cn(regen.pending && 'animate-spin')} /> Tạo lại việc hôm nay
+              </Button>
+              <Button variant="secondary" onClick={() => setTypesOpen(true)}>
+                <Settings2 size={16} /> Loại việc
+              </Button>
+            </>
           )
         }
       />
+
+      {regen.error && <ErrorBox message={regen.error} />}
+      {regenFailures && (
+        <Modal
+          open
+          onClose={() => setRegenFailures(null)}
+          title="Còn ngựa chưa có checklist hôm nay"
+          description={`Đã tạo ${regenFailures.generated} checklist. Thử lại sau ít phút.`}
+          footer={<Button onClick={() => setRegenFailures(null)}>Đã hiểu</Button>}
+        >
+          <ul className="space-y-2">
+            {regenFailures.failures.map((item) => (
+              <li key={item.horseId} className="rounded-xl bg-red-50/70 px-3 py-2 text-sm ring-1 ring-red-100">
+                <p className="font-semibold text-red-900">{item.horseName}</p>
+                <p className="text-xs text-red-800">{item.message}</p>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
 
       {barns.length > 1 && <ChipFilter value={barnId ?? ''} onChange={pickBarn} options={barns.map((item) => ({ value: item.id, label: item.name }))} />}
 
@@ -149,7 +184,7 @@ export default function StableCare() {
                           {row.checklist ? (
                             <span className="flex items-center gap-3">
                               <Meter value={progress.done} max={progress.total} tone={row.checklist.status === 'COMPLETED' ? 'green' : 'amber'} className="max-w-40" />
-                              <span className="font-mono text-xs tabular-nums text-gray-700">
+                              <span className="tabular-nums text-xs  text-gray-700">
                                 {progress.done}/{progress.total}
                               </span>
                               <ChecklistPill status={row.checklist.status} />
@@ -162,7 +197,7 @@ export default function StableCare() {
                           <Pill tone={active ? 'green' : 'amber'}>{active ? 'Đang áp dụng' : 'Chưa có'}</Pill>
                           {draft && <span className="ml-1.5 text-xs text-amber-700">có nháp</span>}
                         </span>
-                        <span className={cn('text-right font-mono text-sm md:col-span-2', row.incidents ? 'font-bold text-red-700' : 'text-gray-400')}>{row.incidents}</span>
+                        <span className={cn('text-right tabular-nums text-sm md:col-span-2', row.incidents ? 'font-bold text-red-700' : 'text-gray-400')}>{row.incidents}</span>
                       </Link>
                     </li>
                   );

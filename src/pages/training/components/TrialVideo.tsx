@@ -173,7 +173,7 @@ export function TrialVideoButton({
         >
           {broken ? (
             <div className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-600">
-              <p>Link xem video đã hết hạn.</p>
+              <p>Không mở được video, hãy tải lại trang.</p>
               {onExpired && (
                 <Button
                   variant="secondary"

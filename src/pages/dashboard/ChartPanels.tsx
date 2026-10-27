@@ -10,6 +10,7 @@ import { StackedBars } from '../../components/charts/StackedBars';
 import { ColumnChart } from '../../components/charts/ColumnChart';
 import { ProgressRing } from '../../components/ui/ProgressRing';
 import { formatMoney } from '../../lib/format';
+import { links } from '../../lib/links';
 import { OCCUPANCY_SERIES, checkupSegments, compactMoney, healthSegments, occupancyRate, occupancyRows, weeklyRequests } from './charts';
 
 function ChartCard({ title, sub, to, toLabel = 'Xem chi tiết', children, className = '' }: { title: string; sub?: ReactNode; to?: string; toLabel?: string; children: ReactNode; className?: string }) {
@@ -77,12 +78,12 @@ export function OccupancyCard({ barns, stalls, title = 'Tình trạng ô chuồn
 
 export function CostTrendCard({ months, className }: { months: { key: string; label: string; total: number; count: number }[]; className?: string }) {
   const total = months.reduce((sum, item) => sum + item.total, 0);
-  const cases = months.reduce((sum, item) => sum + item.count, 0);
+  const visits = months.reduce((sum, item) => sum + item.count, 0);
   return (
-    <ChartCard title="Chi phí y tế 6 tháng" sub={`${formatMoney(total)} · ${cases} bệnh án đã đóng`} to="/medical/costs" toLabel="Báo cáo chi phí" className={className}>
+    <ChartCard title="Chi phí y tế 6 tháng" sub={`${formatMoney(total)} · ${visits} buổi khám`} to={links.costReport} toLabel="Báo cáo chi phí" className={className}>
       <ColumnChart
         caption="Chi phí y tế theo tháng"
-        columns={months.map((item) => ({ key: item.key, label: item.label, value: item.total, detail: `${item.count} bệnh án đã đóng` }))}
+        columns={months.map((item) => ({ key: item.key, label: item.label, value: item.total, detail: `${item.count} buổi khám` }))}
         format={(value) => formatMoney(value)}
         formatTick={compactMoney}
       />
