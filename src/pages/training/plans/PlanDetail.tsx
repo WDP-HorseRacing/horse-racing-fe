@@ -72,7 +72,7 @@ export default function PlanDetail() {
         }
       />
 
-      <section className="turf-soft rounded-3xl p-6 shadow-grass-tint ring-1 ring-emerald-900/10">
+      <section className="turf-soft rounded-2xl p-6 shadow-grass-tint ring-1 ring-emerald-900/10">
         <div className="mb-5 flex flex-wrap items-end gap-x-8 gap-y-3">
           <Figure label="Tổng số tuần" value={<span className="text-3xl">{plan.totalWeeks}</span>} />
           <Figure label="Giai đoạn" value={<span className="text-3xl">{plan.phases.length}</span>} />
@@ -93,7 +93,7 @@ export default function PlanDetail() {
                 <span className="absolute -left-[27px] top-5 h-3 w-3 rounded-full bg-emerald-600 ring-4 ring-[#f5f6f4]" aria-hidden />
                 <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                   <p className="font-semibold text-gray-900">Giai đoạn {phase.position}</p>
-                  <p className="font-mono text-xs tabular-nums text-gray-500">
+                  <p className="tabular-nums text-xs  text-gray-500">
                     Tuần {phase.startWeek}
                     {phase.weeks > 1 && ` đến ${phase.startWeek + phase.weeks - 1}`}
                     {` · ${phase.weeks} tuần · ${formatTotalMinutes(phase.minTotalMinutes)}`}
@@ -108,15 +108,15 @@ export default function PlanDetail() {
                           <p className="truncate font-medium text-gray-900">{item.subject.name}</p>
                           <TrialBadge type={item.subject.sessionType} />
                         </div>
-                        <p className="mt-0.5 font-mono text-xs text-emerald-800">
+                        <p className="mt-0.5 tabular-nums text-xs text-emerald-800">
                           Tối thiểu {item.minSessionsPerWeek} buổi/tuần · {item.subject.durationMinutes} phút mỗi buổi
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                         <IntensityBars intensity={item.subject.intensity} />
-                        <span className="font-mono tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
+                        <span className="tabular-nums">{formatMeters(item.subject.plannedDistanceM)}</span>
                         {item.subject.surface && <span>{item.subject.surface}</span>}
-                        {item.subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
+                        {item.subject.targetTimeMs && <span className="tabular-nums text-amber-800">Mục tiêu {formatRaceTime(item.subject.targetTimeMs)}</span>}
                       </div>
                     </li>
                   ))}
@@ -137,7 +137,7 @@ export default function PlanDetail() {
                   <Link to={links.class(item.id)} className="flex items-center justify-between gap-3 rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 transition hover:ring-emerald-200">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-gray-900">{item.name}</p>
-                      <p className="font-mono text-xs text-gray-500">
+                      <p className="tabular-nums text-xs text-gray-500">
                         {item.code} · {formatDate(item.startDate)} đến {formatDate(item.endDate)}
                       </p>
                     </div>

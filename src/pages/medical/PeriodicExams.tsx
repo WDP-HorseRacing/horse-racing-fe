@@ -188,10 +188,11 @@ export default function PeriodicExams() {
           title="Hủy ngày hẹn khám"
           message={
             <>
-              Hủy hẹn khám định kỳ của <b>{cancelling.horseName}</b> lúc {formatDateTime(cancelling.appointment.scheduledAt)}. Hạn khám vẫn tính theo buổi khám định kỳ gần nhất, bạn có thể đặt hẹn mới sau.
+              Hủy hẹn khám định kỳ của <b>{cancelling.horseName}</b> lúc {formatDateTime(cancelling.appointment.scheduledAt)}. Hạn khám không đổi, có thể đặt hẹn mới sau.
             </>
           }
           label="Lý do hủy hẹn"
+          maxLength={500}
           suggestions={['Ngựa đang điều trị bệnh án', 'Đặt nhầm ngày', 'Bác sĩ bận lịch khác']}
           confirmLabel="Hủy hẹn"
           pending={cancel.pending}

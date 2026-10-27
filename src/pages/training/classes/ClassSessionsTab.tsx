@@ -1,24 +1,33 @@
 // Tab Lịch buổi của lớp: lịch tuần kiểu Google Calendar, tuần tính từ ngày bắt đầu lớp.
-// HLV bấm ô trống để thêm buổi (môn chỉ trong giai đoạn của ngày đó, giờ kết thúc theo thời lượng môn), có thể lặp lại
-// hằng tuần đến hết giai đoạn (lưu một lần, một buổi lỗi thì không buổi nào được lưu). Kéo buổi chưa mở điểm danh để đổi giờ,
-// BE từ chối thì buổi về chỗ cũ. Bấm buổi chưa mở điểm danh (30 phút trước giờ bắt đầu) để sửa hoặc hủy, buổi khác mở chi tiết buổi.
-// Khung bên cạnh: tiến độ tuần so với số buổi tối thiểu của giáo án (thiếu hổ phách, đủ xanh). Buổi lưu xong có hiệu lực ngay.
+// Bên phải là bảng môn của giai đoạn chứa tuần đang xem: kéo môn vào lịch thì hiện khối chờ kèm popover (Lưu buổi,
+// Chi tiết, Bỏ) vì BE không xóa được buổi (chỉ hủy, vẫn để lại dòng đã hủy). Bấm môn để xếp vào giờ trống đầu tiên,
+// bấm ô trống để thêm buổi. Kéo buổi chưa mở điểm danh để đổi giờ; FE kiểm luật của BE trước (trùng giờ, nghỉ 3 giờ,
+// tối đa 2 buổi và 1 buổi Nặng mỗi ngày) nên buổi không bị nhảy về chỗ cũ. Bấm buổi chưa mở điểm danh (30 phút trước
+// giờ bắt đầu) để sửa hoặc hủy, buổi khác mở chi tiết buổi.
+// "Áp dụng tuần này cho các tuần còn lại của giai đoạn" chép buổi của tuần sang các tuần sau, xem trước rồi lưu theo lô.
+// Mở lớp mà lưu buổi dở dang (BE từ chối giữa chừng): hiện câu báo số buổi đã lưu và mở đúng tuần có buổi lỗi.
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ExternalLink, Plus } from 'lucide-react';
-import { addSession, addSessions, cancelSession, updateSession } from '../../../api/training';
-import type { SessionInput, TrainingSession, TrainingSubject } from '../../../api/types';
-import { Button, cn, useToast } from '../../../components/ui';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, CopyPlus, ExternalLink } from 'lucide-react';
+import { addSession, cancelSession, updateSession } from '../../../api/training';
+import type { TrainingSession, TrainingSubject } from '../../../api/types';
+import { Button, ErrorBox, Notice, cn, useToast } from '../../../components/ui';
 import { useAction } from '../../../hooks/useService';
 import { formatDate } from '../../../lib/format';
 import { addDateKey, addMinutes, clubDateKey, clubInstant, clubTime, clubToday, diffDateKeys } from '../../../lib/club-time';
+import { now } from '../../../lib/clock';
 import { links } from '../../../lib/links';
 import { windowOpensAt } from '../../../lib/training-window';
+import { intensityText } from '../../../lib/training-labels';
 import { ProgressFill } from '../components/motion';
 import { ReasonDialog } from '../components/ReasonDialog';
 import { SessionEditSheet, draftFromSubject, type SessionDraft } from '../components/SessionEditSheet';
+import { SubjectPalette } from '../components/SubjectPalette';
+import { ApplyWeekDialog } from '../components/ApplyWeekDialog';
 import { WeekCalendar } from '../components/WeekCalendar';
+import { draftToInput } from '../class-template';
 import { INTENSITY_FILL, classPhaseAt, classWeekStart, formatTotalMinutes, shiftEnd } from '../plan-helpers';
+import { problemOf, scheduleIndex, sessionItem, slotText, type PlannedItem, type RuleContext } from '../schedule-rules';
 import type { ClassBundle } from './class-bundle';
 
 const shortDate = (dateKey: string) => `${dateKey.slice(8, 10)}/${dateKey.slice(5, 7)}`;
@@ -26,21 +35,35 @@ const shortDate = (dateKey: string) => `${dateKey.slice(8, 10)}/${dateKey.slice(
 /** Buổi còn sửa, kéo được: đã lên lịch và chưa tới giờ mở điểm danh (30 phút trước giờ bắt đầu), giống BE. Sau mốc đó muốn đổi thì hủy rồi thêm buổi mới. */
 const editable = (session: TrainingSession) => session.status === 'SCHEDULED' && windowOpensAt(session, 'checkIn').getTime() > Date.now();
 
+/** Mở lớp kèm thời khóa biểu mà BE từ chối giữa chừng (trang tạo lớp truyền qua state). */
+export interface ScheduleIssue {
+  saved: number;
+  total: number;
+  message: string;
+  week?: number;
+}
+
 export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: ClassBundle; manage: boolean; reload: () => void }) {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const { item, sessions, subjects, classPlan, progress } = bundle;
   const open = item.status === 'ACTIVE';
   const canEdit = manage && open;
   const range = { from: item.startDate, to: item.endDate };
   const totalWeeks = Math.max(1, Math.floor(diffDateKeys(item.startDate, item.endDate) / 7) + 1);
+  const issue = (location.state as { scheduleIssue?: ScheduleIssue } | null)?.scheduleIssue;
 
-  const [week, setWeek] = useState(() => Math.min(totalWeeks, Math.max(1, Math.floor(diffDateKeys(item.startDate, clubToday()) / 7) + 1)));
+  const [week, setWeek] = useState(() => issue?.week ?? Math.min(totalWeeks, Math.max(1, Math.floor(diffDateKeys(item.startDate, clubToday()) / 7) + 1)));
   const [editing, setEditing] = useState<{ session?: TrainingSession; initial: SessionDraft } | null>(null);
   const [cancelling, setCancelling] = useState<TrainingSession | null>(null);
+  const [incoming, setIncoming] = useState<TrainingSubject | null>(null);
+  const [pending, setPending] = useState<{ subject: TrainingSubject; startAt: string; endAt: string } | null>(null);
+  const [applying, setApplying] = useState(false);
   // Chỗ mới của buổi vừa kéo, giữ tới khi BE trả lời. Chỉ áp khi giờ gốc của buổi chưa đổi (tải lại xong thì tự bỏ).
   const [moved, setMoved] = useState<Record<string, { from: string; start: string; end: string }>>({});
   const save = useAction();
+  const quick = useAction();
   const move = useAction();
   const cancel = useAction();
 
@@ -62,6 +85,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
       }),
     [sessions, moved],
   );
+  const live = useMemo(() => sessions.filter((session) => session.status !== 'CANCELLED').map(sessionItem), [sessions]);
 
   const subjectById = (id: string) => subjects.find((subject) => subject.id === id);
   /** Môn của giai đoạn chứa ngày (đủ thông tin từ danh mục). Không đọc được giáo án của lớp thì cho mọi môn. */
@@ -70,22 +94,41 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     const found = classPhaseAt(classPlan, dateKey);
     return found ? found.subjects.map((entry) => subjectById(entry.subject.id) ?? entry.subject) : [];
   };
-  /** Số tuần còn lại của giai đoạn sau ngày này, cùng thứ, vẫn trong giai đoạn. */
-  const repeatWeeks = (dateKey: string) => {
-    const found = classPlan && classPhaseAt(classPlan, dateKey);
-    return found ? Math.floor(diffDateKeys(dateKey, found.endDate) / 7) : 0;
-  };
 
-  const openAdd = (dateKey: string, time: string) => {
+  const ctx: RuleContext = {
+    range,
+    phaseSubjects: classPlan
+      ? (dateKey) => {
+          const found = classPhaseAt(classPlan, dateKey);
+          return found ? { position: found.position, ids: new Set(found.subjects.map((entry) => entry.subject.id)) } : undefined;
+        }
+      : undefined,
+    pastBefore: now(),
+  };
+  /** Lỗi luật của một buổi so với các buổi chưa hủy khác của lớp (bỏ qua buổi `except`). */
+  const problem = (candidate: PlannedItem, except?: string) =>
+    problemOf(candidate, scheduleIndex(live.filter((other) => other.key !== except && other.key !== candidate.key)), ctx)?.message;
+  const subjectItem = (subject: TrainingSubject, startAt: string): PlannedItem => ({
+    key: 'new',
+    name: subject.name,
+    intensity: subject.intensity,
+    startAt,
+    endAt: addMinutes(startAt, subject.durationMinutes),
+    subjectId: subject.id,
+    sessionType: subject.sessionType,
+    plannedDistanceM: subject.plannedDistanceM,
+  });
+
+  const openAdd = (dateKey: string, time: string, preferred?: TrainingSubject) => {
     const options = subjectsFor(dateKey);
     if (options.length === 0) {
       toast.push('Ngày này không thuộc giai đoạn nào của lớp', 'error');
       return;
     }
-    // Ưu tiên môn còn thiếu buổi trong tuần đó.
+    // Ưu tiên môn được chọn, rồi môn còn thiếu buổi trong tuần đó.
     const dayWeek = Math.floor(diffDateKeys(item.startDate, dateKey) / 7) + 1;
     const short = progress?.weeks.find((entry) => entry.week === dayWeek)?.subjects.find((entry) => entry.scheduledSessions < entry.minSessions);
-    const subject = options.find((option) => option.id === short?.subjectId) ?? options[0];
+    const subject = options.find((option) => option.id === preferred?.id) ?? options.find((option) => option.id === short?.subjectId) ?? options[0];
     const start = clubInstant(dateKey, time);
     save.clearError();
     setEditing({ initial: draftFromSubject(subject, start, addMinutes(start, subject.durationMinutes)) });
@@ -110,12 +153,19 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     });
   };
 
-  // Nút Thêm buổi: ngày sớm nhất còn xếp được trong tuần (không ở quá khứ). Hôm nay thì lấy giờ tròn kế tiếp.
-  const addFromButton = () => {
-    const today = clubToday();
-    const firstDay = [today, weekStart, item.startDate].sort().at(-1)!;
-    const hour = Number(clubTime(new Date().toISOString()).slice(0, 2)) + 1;
-    openAdd(firstDay, firstDay === today && hour > 6 ? `${String(Math.min(hour, 23)).padStart(2, '0')}:00` : '06:00');
+  /** Bấm một môn ở bảng môn: giờ trống đầu tiên của tuần (06:00 đến 18:00, bước 30 phút) không vướng luật. */
+  const pickSubject = (subject: TrainingSubject) => {
+    const firstDay = [clubToday(), weekStart, item.startDate].sort().at(-1)!;
+    for (let day = firstDay; day <= weekEnd && day <= item.endDate; day = addDateKey(day, 1)) {
+      for (let minutes = 6 * 60; minutes <= 18 * 60; minutes += 30) {
+        const time = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+        if (!problem(subjectItem(subject, clubInstant(day, time)))) {
+          openAdd(day, time, subject);
+          return;
+        }
+      }
+    }
+    toast.push(`Tuần ${week} không còn giờ trống hợp lệ cho ${subject.name}`, 'error');
   };
 
   const openSession = (session: TrainingSession) => {
@@ -123,47 +173,28 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     else navigate(links.session(session.id));
   };
 
-  const submitEdit = (draft: SessionDraft, repeat: boolean) => {
+  const submitEdit = (draft: SessionDraft) => {
     const subject = subjectById(draft.subjectId) ?? subjectsFor(clubDateKey(draft.scheduledStartAt)).find((entry) => entry.id === draft.subjectId);
     if (!subject || !editing) return;
-    const trial = subject.sessionType === 'TIME_TRIAL';
-    const body: SessionInput = {
-      name: draft.name.trim(),
-      subjectId: subject.id,
-      intensity: draft.intensity,
-      plannedDistanceM: draft.plannedDistanceM,
-      scheduledStartAt: draft.scheduledStartAt,
-      scheduledEndAt: draft.scheduledEndAt,
-      // Sửa buổi: ô xóa trắng gửi null để BE xóa giá trị cũ. Thêm buổi: bỏ trống thì không gửi.
-      location: draft.location.trim() || (editing.session ? null : undefined),
-      surface: draft.surface.trim() || (editing.session ? null : undefined),
-      notes: draft.notes.trim() || (editing.session ? null : undefined),
-    };
     const existing = editing.session;
-    if (existing) {
-      // Loại buổi theo môn. Môn thường thì BE tự bỏ mục tiêu, không gửi.
-      void save.run(
-        () => updateSession(existing.id, trial ? { ...body, targetTimeMs: draft.targetTimeMs ?? null } : body),
-        () => {
-          toast.push('Đã lưu buổi tập', 'success');
-          setEditing(null);
-          reload();
-        },
-      );
-      return;
-    }
-    const first: SessionInput = { ...body, sessionType: subject.sessionType, ...(trial ? { targetTimeMs: draft.targetTimeMs ?? null } : {}) };
-    const extra = repeat ? repeatWeeks(clubDateKey(draft.scheduledStartAt)) : 0;
-    const all = Array.from({ length: extra + 1 }, (_, index) => ({
-      ...first,
-      scheduledStartAt: addMinutes(first.scheduledStartAt, index * 7 * 24 * 60),
-      scheduledEndAt: addMinutes(first.scheduledEndAt, index * 7 * 24 * 60),
-    }));
     void save.run(
-      (): Promise<unknown> => (all.length > 1 ? addSessions(item.id, all) : addSession(item.id, first)),
+      (): Promise<unknown> => (existing ? updateSession(existing.id, draftToInput(draft, subject, 'update')) : addSession(item.id, draftToInput(draft, subject, 'create'))),
       () => {
-        toast.push(all.length > 1 ? `Đã thêm ${all.length} buổi, mỗi tuần một buổi` : 'Đã thêm buổi tập', 'success');
+        toast.push(existing ? 'Đã lưu buổi tập' : 'Đã thêm buổi tập', 'success');
         setEditing(null);
+        reload();
+      },
+    );
+  };
+
+  const savePending = () => {
+    if (!pending) return;
+    const { subject, startAt, endAt } = pending;
+    void quick.run(
+      () => addSession(item.id, draftToInput(draftFromSubject(subject, startAt, endAt), subject, 'create')),
+      () => {
+        toast.push(`Đã thêm ${subject.name} ${slotText(startAt)}`, 'success');
+        setPending(null);
         reload();
       },
     );
@@ -171,6 +202,11 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
 
   const moveSession = (session: TrainingSession, startAt: string) => {
     const end = shiftEnd(session, startAt);
+    const clash = problem({ ...sessionItem(session), startAt, endAt: end });
+    if (clash) {
+      toast.push(`${clash}. Buổi giữ chỗ cũ.`, 'error');
+      return;
+    }
     setMoved((current) => ({ ...current, [session.id]: { from: session.scheduledStartAt, start: startAt, end } }));
     const revert = () =>
       setMoved((current) => {
@@ -192,14 +228,32 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
     });
   };
 
-  const weekSubjects = weekProgress?.subjects ?? [];
-  const weekMet = weekSubjects.filter((subject) => subject.scheduledSessions >= subject.minSessions).length;
+  const dismissIssue = () => navigate(location.pathname + location.search, { replace: true, state: null });
+
+  const paletteItems = (phase?.subjects ?? []).map((entry) => ({
+    subject: subjectById(entry.subject.id) ?? entry.subject,
+    min: entry.minSessionsPerWeek,
+    placed: weekProgress?.subjects.find((subject) => subject.subjectId === entry.subject.id)?.scheduledSessions ?? 0,
+  }));
+  const hasLaterWeek = !!phase && classWeekStart(item.startDate, week + 1) <= phase.endDate;
+  const weekHasSessions = sessions.some((session) => session.status !== 'CANCELLED' && session.subjectId && clubDateKey(session.scheduledStartAt) >= weekStart && clubDateKey(session.scheduledStartAt) <= weekEnd);
   const scheduledMinutes = progress?.scheduledMinutes ?? 0;
   const minTotal = progress?.minTotalMinutes ?? classPlan?.minTotalMinutes ?? 0;
 
-
   return (
     <div className="space-y-4">
+      {issue && (
+        <Notice tone="warning">
+          <span className="block">
+            Lớp đã tạo, đã lưu {issue.saved}/{issue.total} buổi. Phần còn lại chưa lưu: {issue.message}
+          </span>
+          <span className="mt-1 block">Xếp nốt bằng cách kéo môn vào lịch hoặc dùng Áp dụng tuần này cho các tuần còn lại.</span>
+          <button type="button" onClick={dismissIssue} className="mt-1.5 text-sm font-medium underline">
+            Đã hiểu
+          </button>
+        </Notice>
+      )}
+
       {/* Điều hướng tuần */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-center gap-1">
@@ -215,7 +269,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             Tuần {week}
             {phase && <span className="font-normal text-gray-500"> · Giai đoạn {phase.position}</span>}
           </p>
-          <p className="font-mono text-xs text-gray-500">
+          <p className="text-xs tabular-nums text-gray-500">
             {shortDate(weekStart)} đến {shortDate(weekEnd > item.endDate ? item.endDate : weekEnd)}
           </p>
         </div>
@@ -224,9 +278,9 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             Về tuần này
           </Button>
         )}
-        {canEdit && (
-          <Button size="sm" className="ml-auto" onClick={addFromButton}>
-            <Plus size={14} /> Thêm buổi
+        {canEdit && phase && hasLaterWeek && weekHasSessions && (
+          <Button size="sm" variant="secondary" className="ml-auto" onClick={() => setApplying(true)} title={`Chép các buổi của tuần ${week} sang các tuần sau của giai đoạn ${phase.position}`}>
+            <CopyPlus size={14} /> Áp dụng tuần này cho các tuần còn lại
           </Button>
         )}
       </div>
@@ -239,7 +293,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             type="button"
             onClick={() => setWeek(value)}
             className={cn(
-              'relative shrink-0 rounded-lg px-2.5 py-1 font-mono text-xs font-semibold transition',
+              'relative shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold tabular-nums transition',
               value === week ? 'bg-emerald-700 text-white' : value === currentWeek ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600/30' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
             )}
           >
@@ -249,7 +303,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
         ))}
       </div>
 
-      {(move.error || cancel.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{move.error ?? cancel.error}</p>}
+      {(move.error || cancel.error) && <ErrorBox message={move.error ?? cancel.error ?? ''} />}
 
       <div className="grid gap-4 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-9">
@@ -259,10 +313,55 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             range={range}
             canAdd={canEdit}
             canMove={(session) => canEdit && editable(session) && !move.pending}
-            onAdd={openAdd}
+            onAdd={(dateKey, time) => openAdd(dateKey, time)}
             onOpen={openSession}
             onMove={moveSession}
             onBlocked={(message) => toast.push(message, 'error')}
+            incoming={incoming}
+            checkDrop={(dateKey, time) => (incoming ? problem(subjectItem(incoming, clubInstant(dateKey, time))) : undefined)}
+            onDrop={(dateKey, time) => {
+              if (!incoming) return;
+              const startAt = clubInstant(dateKey, time);
+              quick.clearError();
+              setPending({ subject: incoming, startAt, endAt: addMinutes(startAt, incoming.durationMinutes) });
+            }}
+            pending={
+              pending && {
+                item: { id: 'pending', name: pending.subject.name, sessionType: pending.subject.sessionType, intensity: pending.subject.intensity, scheduledStartAt: pending.startAt, scheduledEndAt: pending.endAt },
+                onDismiss: () => !quick.pending && setPending(null),
+                content: (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{pending.subject.name}</p>
+                      <p className="text-xs tabular-nums text-gray-500">
+                        {slotText(pending.startAt)} đến {clubTime(pending.endAt)} · {intensityText[pending.subject.intensity]}
+                      </p>
+                    </div>
+                    {quick.error && <p className="text-xs text-red-700">{quick.error}</p>}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button variant="ghost" size="sm" disabled={quick.pending} onClick={() => setPending(null)}>
+                        Bỏ
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={quick.pending}
+                        onClick={() => {
+                          save.clearError();
+                          setEditing({ initial: draftFromSubject(pending.subject, pending.startAt, pending.endAt) });
+                          setPending(null);
+                        }}
+                      >
+                        Chi tiết…
+                      </Button>
+                      <Button size="sm" autoFocus disabled={quick.pending} onClick={savePending}>
+                        {quick.pending ? 'Đang lưu…' : 'Lưu buổi'}
+                      </Button>
+                    </div>
+                  </div>
+                ),
+              }
+            }
           />
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
             <span className="inline-flex items-center gap-1.5">
@@ -271,53 +370,29 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
             <span className="inline-flex items-center gap-1.5">
               <span className={cn('h-3 w-3 rounded', INTENSITY_FILL.HEAVY)} /> Nặng
             </span>
-            {canEdit && <span>Bấm ô trống để thêm buổi. Sửa, kéo đổi giờ được tới 30 phút trước giờ bắt đầu (lúc mở điểm danh).</span>}
+            {canEdit && <span>Kéo môn vào lịch hoặc bấm ô trống để thêm buổi. Đổi giờ được tới 30 phút trước giờ tập.</span>}
           </div>
         </div>
 
-        {/* Tiến độ tuần và cả lớp */}
+        {/* Bảng môn của giai đoạn và tiến độ cả lớp */}
         <aside className="space-y-3 lg:col-span-3">
-          <section className="rounded-2xl bg-white p-4 shadow-[0_8px_24px_-16px_rgba(4,120,87,0.35)] ring-1 ring-emerald-900/5">
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="font-semibold text-gray-900">Tuần {week}</h3>
-              {weekSubjects.length > 0 && (
-                <span className={cn('text-xs font-semibold', weekMet === weekSubjects.length ? 'text-emerald-700' : 'text-amber-700')}>
-                  {weekMet === weekSubjects.length ? 'Đủ buổi tối thiểu' : `Còn ${weekSubjects.length - weekMet} môn thiếu`}
-                </span>
-              )}
-            </div>
-            {weekSubjects.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">Chưa có tiến độ của tuần này.</p>
-            ) : (
-              <ul className="mt-3 space-y-2.5">
-                {weekSubjects.map((subject) => {
-                  const enough = subject.scheduledSessions >= subject.minSessions;
-                  return (
-                    <li key={subject.subjectId}>
-                      <div className="flex items-baseline justify-between gap-2 text-sm">
-                        <span className="min-w-0 truncate text-gray-700">{subject.subjectName}</span>
-                        <span className={cn('shrink-0 font-mono text-xs font-semibold', enough ? 'text-emerald-700' : 'text-amber-700')}>
-                          {subject.scheduledSessions}/{subject.minSessions}
-                        </span>
-                      </div>
-                      <ProgressFill ratio={subject.minSessions ? subject.scheduledSessions / subject.minSessions : 1} tone={enough ? 'green' : 'amber'} className="mt-1" />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+          <SubjectPalette
+            title={`Tuần ${week}`}
+            hint={canEdit ? `Môn của giai đoạn ${phase?.position ?? ''}. Kéo vào lịch, hoặc bấm để xếp vào giờ trống đầu tiên.` : undefined}
+            items={paletteItems}
+            disabled={!canEdit}
+            onDragSubject={setIncoming}
+            onPick={canEdit ? pickSubject : undefined}
+          />
 
-          <section className="rounded-2xl bg-emerald-50/60 p-4 ring-1 ring-emerald-700/10">
-            <p className="text-xs text-emerald-900/70">Cả lớp đã xếp</p>
-            <p className="mt-0.5 font-mono text-lg font-semibold text-emerald-950">
+          <section className="rounded-2xl bg-white p-4 shadow-card ring-1 ring-gray-200/80">
+            <p className="text-xs text-gray-500">Cả lớp đã xếp</p>
+            <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900">
               {formatTotalMinutes(scheduledMinutes)}
-              <span className="text-sm font-normal text-emerald-900/60"> / {formatTotalMinutes(minTotal)}</span>
+              <span className="text-sm font-normal text-gray-500"> / {formatTotalMinutes(minTotal)}</span>
             </p>
             <ProgressFill ratio={minTotal ? scheduledMinutes / minTotal : 0} tone={scheduledMinutes >= minTotal && minTotal > 0 ? 'green' : 'amber'} className="mt-2" />
-            <p className="mt-2 text-xs text-emerald-900/70">
-              {shortWeeks.size ? `${shortWeeks.size} tuần còn thiếu buổi. Thiếu không bị chặn, chỉ để nhắc.` : 'Mọi tuần đã đủ số buổi tối thiểu.'}
-            </p>
+            <p className="mt-2 text-xs text-gray-500">{shortWeeks.size ? `${shortWeeks.size} tuần còn thiếu buổi.` : 'Mọi tuần đã đủ số buổi tối thiểu.'}</p>
           </section>
         </aside>
       </div>
@@ -325,15 +400,23 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
       {editing && (
         <SessionEditSheet
           title={editing.session ? 'Sửa buổi tập' : 'Thêm buổi'}
-          description={editing.session ? `${editing.session.name}, ${formatDate(editing.session.scheduledStartAt)}` : 'Buổi lưu xong có hiệu lực ngay, Groom và chủ ngựa thấy lịch.'}
+          description={editing.session ? `${editing.session.name}, ${formatDate(editing.session.scheduledStartAt)}` : 'Groom và chủ ngựa thấy lịch ngay khi lưu.'}
           initial={editing.initial}
           subjects={subjects}
           subjectsFor={subjectsFor}
-          repeatWeeks={editing.session ? undefined : repeatWeeks}
+          conflict={(draft) => {
+            const subject = subjectById(draft.subjectId);
+            return problem(
+              { key: editing.session?.id ?? 'new', name: draft.name, intensity: draft.intensity, startAt: draft.scheduledStartAt, endAt: draft.scheduledEndAt, subjectId: draft.subjectId, sessionType: subject?.sessionType, plannedDistanceM: draft.plannedDistanceM },
+              editing.session?.id,
+            );
+          }}
           range={range}
           pending={save.pending}
           error={save.error}
+          field={save.field}
           fieldErrors={save.fieldErrors}
+          onClearError={save.clearError}
           submitLabel={editing.session ? 'Lưu' : 'Thêm buổi'}
           removeLabel="Hủy buổi"
           onRemove={
@@ -357,6 +440,9 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
           }}
           onSubmit={submitEdit}
         />
+      )}
+      {applying && classPlan && phase && (
+        <ApplyWeekDialog item={item} classPlan={classPlan} sessions={sessions} week={week} phase={phase} onClose={() => setApplying(false)} onDone={reload} />
       )}
       {cancelling && (
         <ReasonDialog

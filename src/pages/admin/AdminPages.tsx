@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
-import { createUser, listAllUsers, setUserStatus, updateUser } from '../../api/users';
+import { useFormErrors } from '../../hooks/useFormErrors';
+import { createUser, listAllUsers, resetUserPassword, setUserStatus, updateUser } from '../../api/users';
 import type { Role, UserAccount } from '../../api/types';
 import {
   Avatar,
   Button,
+  CancelButton,
   ConfirmDialog,
   DataTable,
   ErrorBox,
@@ -13,14 +15,19 @@ import {
   Field,
   Input,
   Modal,
+  NotFound,
   Notice,
   PageHeader,
+  PasswordInput,
   Pill,
   SearchInput,
   Select,
   Skeleton,
+  cn,
+  invalidClass,
   useToast,
 } from '../../components/ui';
+import { can } from '../../auth/permissions';
 import { roleLabel } from '../../lib/labels';
 import { userStatusLabel } from '../../lib/api-labels';
 import { useStore } from '../../store/store';
@@ -30,31 +37,47 @@ import HandoverDialog from './HandoverDialog';
 const ROLES: Role[] = ['CLUB_MANAGER', 'HEAD_TRAINER', 'VETERINARIAN', 'GROOM', 'HORSE_OWNER'];
 const shortRole = (role: Role) => roleLabel[role].replace('Quản lý câu lạc bộ', 'Quản lý').replace('Huấn luyện viên trưởng', 'HLV trưởng');
 
-/* ===== Nhân sự ===== */
+// Giới hạn như backend (users/dto/user.dto.ts).
+const NAME_MAX = 160;
+const EMAIL_MAX = 254;
+const PASSWORD_MIN = 8;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-interface UserForm {
-  fullName: string;
-  email: string;
-  role: Role;
-  password: string;
+function nameError(value: string) {
+  if (!value.trim()) return 'Nhập họ và tên';
+  if (value.trim().length > NAME_MAX) return `Tối đa ${NAME_MAX} ký tự`;
+  return undefined;
 }
 
-const emptyForm: UserForm = { fullName: '', email: '', role: 'GROOM', password: '' };
+function passwordError(value: string) {
+  if (!value) return 'Nhập mật khẩu';
+  if (!value.trim()) return 'Mật khẩu không được chỉ có khoảng trắng';
+  if (value.length < PASSWORD_MIN) return `Mật khẩu tối thiểu ${PASSWORD_MIN} ký tự`;
+  return undefined;
+}
+
+/* ===== Nhân sự ===== */
 
 export function AdminUsers() {
   const me = useStore((state) => state.currentUser);
+  if (!can(me, 'admin.users')) return <NotFound message="Trang này dành cho Quản lý CLB." />;
+  return <UsersPage />;
+}
+
+function UsersPage() {
+  const me = useStore((state) => state.currentUser);
   const { data, loading, error, reload } = useService(() => listAllUsers(), []);
-  const action = useAction();
+  const lockAction = useAction();
+  const unlockAction = useAction();
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | ''>('');
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<UserForm>(emptyForm);
   const [editing, setEditing] = useState<UserAccount | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editRole, setEditRole] = useState<Role>('GROOM');
   const [locking, setLocking] = useState<UserAccount | null>(null);
+  const [unlocking, setUnlocking] = useState<UserAccount | null>(null);
   const [handover, setHandover] = useState<UserAccount | null>(null);
+  const [resettingPassword, setResettingPassword] = useState<UserAccount | null>(null);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -62,7 +85,7 @@ export function AdminUsers() {
       .filter((user) => user.id !== me?.id)
       .filter((user) => !roleFilter || user.role === roleFilter)
       .filter((user) => !term || `${user.fullName} ${user.email}`.toLowerCase().includes(term));
-  }, [data, roleFilter, search]);
+  }, [data, roleFilter, search, me?.id]);
 
   const counts = useMemo(
     () =>
@@ -75,21 +98,13 @@ export function AdminUsers() {
 
   if (loading && !data) return <Skeleton rows={6} />;
 
-  const passwordShort = form.password.length > 0 && form.password.length < 8;
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Nhân sự"
         description="Tạo tài khoản, đổi vai trò, khóa hoặc mở lại tài khoản. Khu phụ trách của HLV trưởng gán trên Sơ đồ chuồng."
         actions={
-          <Button
-            onClick={() => {
-              setForm(emptyForm);
-              action.clearError();
-              setCreating(true);
-            }}
-          >
+          <Button onClick={() => setCreating(true)}>
             <Plus size={16} /> Tạo tài khoản
           </Button>
         }
@@ -147,32 +162,25 @@ export function AdminUsers() {
                       Bàn giao
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      setEditing(row);
-                      setEditName(row.fullName);
-                      setEditRole(row.role ?? 'GROOM');
-                      action.clearError();
-                    }}
-                  >
+                  <Button size="sm" variant="secondary" onClick={() => setEditing(row)}>
                     Sửa
                   </Button>
+                  {row.id !== me?.id && row.role !== 'CLUB_MANAGER' && (
+                    <Button size="sm" variant="inline" onClick={() => setResettingPassword(row)}>
+                      Đặt lại mật khẩu
+                    </Button>
+                  )}
                   {row.id !== me?.id && (
                     <Button
                       size="sm"
                       variant={row.status === 'ACTIVE' ? 'inlineDanger' : 'inline'}
-                      onClick={async () => {
+                      onClick={() => {
                         if (row.status === 'ACTIVE') {
-                          action.clearError();
+                          lockAction.clearError();
                           setLocking(row);
-                          return;
-                        }
-                        const done = await action.run(() => setUserStatus(row.id, 'ACTIVE'));
-                        if (done !== undefined) {
-                          toast.push(`Đã mở lại tài khoản ${row.fullName}`, 'success');
-                          reload();
+                        } else {
+                          unlockAction.clearError();
+                          setUnlocking(row);
                         }
                       }}
                     >
@@ -185,122 +193,10 @@ export function AdminUsers() {
           ]}
         />
       </FilterTabs>
-      {action.error && !creating && !editing && !locking && <ErrorBox message={action.error} />}
 
-      <Modal
-        open={creating}
-        onClose={() => setCreating(false)}
-        title="Tạo tài khoản"
-        dirty={JSON.stringify(form) !== JSON.stringify(emptyForm)}
-        description="Tài khoản dùng email để đăng nhập. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu."
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCreating(false)}>
-              Hủy
-            </Button>
-            <Button
-              disabled={action.pending || !form.fullName.trim() || !form.email.trim() || form.password.length < 8}
-              onClick={async () => {
-                const done = await action.run(() =>
-                  createUser({ fullName: form.fullName.trim(), email: form.email.trim(), role: form.role, password: form.password }),
-                );
-                if (done) {
-                  toast.push(`Đã tạo tài khoản ${done.fullName}`, 'success');
-                  setCreating(false);
-                  reload();
-                }
-              }}
-            >
-              {action.pending ? 'Đang tạo…' : 'Tạo tài khoản'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {action.error && !action.fieldErrors.email && <ErrorBox message={action.error} />}
-          <Field label="Họ và tên" required>
-            <Input value={form.fullName} maxLength={160} onChange={(event) => setForm({ ...form, fullName: event.target.value })} />
-          </Field>
-          <Field label="Email" required error={action.fieldErrors.email}>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(event) => {
-                setForm({ ...form, email: event.target.value });
-                if (action.fieldErrors.email) action.clearError();
-              }}
-              placeholder="ten@horseracing.vn"
-            />
-          </Field>
-          <Field label="Vai trò" required>
-            <Select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as Role })}>
-              {ROLES.filter((r) => r !== 'CLUB_MANAGER').map((value) => (
-                <option key={value} value={value}>
-                  {roleLabel[value]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Mật khẩu ban đầu" required error={passwordShort ? 'Mật khẩu tối thiểu 8 ký tự' : undefined} hint="Tối thiểu 8 ký tự">
-            <Input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
-          </Field>
-        </div>
-      </Modal>
-
-      <Modal
-        open={!!editing}
-        onClose={() => setEditing(null)}
-        title={`Sửa tài khoản: ${editing?.fullName ?? ''}`}
-        dirty={!!editing && (editName !== editing.fullName || editRole !== editing.role)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              Hủy
-            </Button>
-            <Button
-              disabled={action.pending || !editName.trim()}
-              onClick={async () => {
-                if (!editing) return;
-                const input: { fullName?: string; role?: Role } = {};
-                if (editName.trim() !== editing.fullName) input.fullName = editName.trim();
-                if (editRole !== editing.role) input.role = editRole;
-                if (!input.fullName && !input.role) {
-                  setEditing(null);
-                  return;
-                }
-                const done = await action.run(() => updateUser(editing.id, input));
-                if (done) {
-                  toast.push('Đã lưu tài khoản', 'success');
-                  setEditing(null);
-                  reload();
-                }
-              }}
-            >
-              Lưu
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {action.error && <ErrorBox message={action.error} />}
-          <Field label="Họ và tên" required>
-            <Input value={editName} maxLength={160} onChange={(event) => setEditName(event.target.value)} />
-          </Field>
-          <Field label="Vai trò">
-            <Select value={editRole} onChange={(event) => setEditRole(event.target.value as Role)} disabled={editing?.id === me?.id}>
-              {ROLES.filter((r) => r !== 'CLUB_MANAGER' || editing?.role === 'CLUB_MANAGER').map((value) => (
-                <option key={value} value={value}>
-                  {roleLabel[value]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Notice tone="info">
-            Hệ thống không cho đổi vai trò khi tài khoản còn là chủ của ngựa đang ở câu lạc bộ, còn là Groom của ngựa nào, còn lượt tập
-            được giao dắt chưa diễn ra, còn đứng tên HLV trưởng của một khu, hoặc còn lịch chăm sóc chưa làm được bác sĩ giao đích danh. Hãy chuyển trách nhiệm cho người khác trước (lượt dắt nhờ HLV trưởng giao lại, lịch chăm sóc nhờ bác sĩ giao lại).
-          </Notice>
-        </div>
-      </Modal>
+      <CreateUserDialog open={creating} onClose={() => setCreating(false)} onDone={reload} />
+      <EditUserDialog user={editing} isSelf={editing?.id === me?.id} onClose={() => setEditing(null)} onDone={reload} />
+      <ResetPasswordDialog user={resettingPassword} onClose={() => setResettingPassword(null)} onDone={reload} />
 
       <ConfirmDialog
         open={!!locking}
@@ -308,9 +204,9 @@ export function AdminUsers() {
         message={
           <>
             <p>Tài khoản bị khóa không đăng nhập được nữa. Có thể mở lại bất cứ lúc nào.</p>
-            {action.error && (
+            {lockAction.error && (
               <div className="mt-3">
-                <ErrorBox message={action.error} />
+                <ErrorBox message={lockAction.error} />
                 {locking?.role === 'HEAD_TRAINER' && FEATURES.training && (
                   <Button
                     variant="inline"
@@ -328,15 +224,13 @@ export function AdminUsers() {
             )}
           </>
         }
-        consequences={[
-          'Không khóa được khi tài khoản còn phụ trách: Groom còn ngựa được giao hoặc còn lượt tập được giao dắt chưa diễn ra, chủ còn ngựa ở câu lạc bộ, HLV trưởng còn khu, giáo án hoặc lớp đang mở (bàn giao trước).',
-        ]}
+        consequences={['Không khóa được khi tài khoản còn phụ trách ngựa, khu hoặc lịch việc; hãy bàn giao trước.']}
         confirmLabel="Xác nhận khóa"
-        pending={action.pending}
+        pending={lockAction.pending}
         onClose={() => setLocking(null)}
         onConfirm={async () => {
-          if (!locking) return;
-          const done = await action.run(() => setUserStatus(locking.id, 'LOCKED'));
+          if (!locking || lockAction.pending) return;
+          const done = await lockAction.run(() => setUserStatus(locking.id, 'LOCKED'));
           if (done) {
             toast.push(`Đã khóa ${locking.fullName}`, 'success');
             setLocking(null);
@@ -344,6 +238,26 @@ export function AdminUsers() {
           }
         }}
       />
+      <ConfirmDialog
+        open={!!unlocking}
+        title={`Mở lại tài khoản ${unlocking?.fullName ?? ''}`}
+        message="Người dùng đăng nhập lại được bằng mật khẩu hiện tại."
+        confirmLabel="Mở lại"
+        danger={false}
+        pending={unlockAction.pending}
+        onClose={() => setUnlocking(null)}
+        onConfirm={async () => {
+          if (!unlocking || unlockAction.pending) return;
+          const done = await unlockAction.run(() => setUserStatus(unlocking.id, 'ACTIVE'));
+          if (done !== undefined) {
+            toast.push(`Đã mở lại tài khoản ${unlocking.fullName}`, 'success');
+            setUnlocking(null);
+            reload();
+          }
+        }}
+      >
+        {unlockAction.error && <ErrorBox message={unlockAction.error} />}
+      </ConfirmDialog>
       {handover && (
         <HandoverDialog
           from={handover}
@@ -356,5 +270,253 @@ export function AdminUsers() {
         />
       )}
     </div>
+  );
+}
+
+/* ===== Tạo tài khoản ===== */
+
+interface UserForm {
+  fullName: string;
+  email: string;
+  role: Role;
+  password: string;
+}
+
+const emptyForm: UserForm = { fullName: '', email: '', role: 'GROOM', password: '' };
+
+function CreateUserDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const errors = useMemo(
+    () => ({
+      fullName: nameError(form.fullName),
+      email: !form.email.trim() ? 'Nhập email' : !EMAIL_PATTERN.test(form.email.trim()) ? 'Email chưa đúng dạng, ví dụ ten@horseracing.vn' : undefined,
+      password: passwordError(form.password),
+    }),
+    [form],
+  );
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const { reset } = f;
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(emptyForm);
+    action.clearError();
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const set = <K extends keyof UserForm>(key: K, value: UserForm[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    if (action.fieldErrors[key] || action.field === key) action.clearError();
+  };
+  const serverOnField = (['fullName', 'email', 'password'] as const).some((key) => action.fieldErrors[key] || action.field === key);
+
+  const submit = async () => {
+    if (action.pending || !f.attempt()) return;
+    const done = await action.run(() => createUser({ fullName: form.fullName.trim(), email: form.email.trim(), role: form.role, password: form.password }));
+    if (done) {
+      toast.push(`Đã tạo tài khoản ${done.fullName}`, 'success');
+      onDone();
+      onClose();
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Tạo tài khoản"
+      dirty={JSON.stringify(form) !== JSON.stringify(emptyForm)}
+      busy={action.pending}
+      onSave={() => void submit()}
+      saveLabel="Tạo tài khoản"
+      description="Tài khoản dùng email để đăng nhập. Người dùng nên đổi mật khẩu sau lần đăng nhập đầu."
+      footer={
+        <>
+          <CancelButton variant="secondary" />
+          <Button disabled={action.pending} onClick={submit}>
+            {action.pending ? 'Đang tạo…' : 'Tạo tài khoản'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {action.error && !serverOnField && <ErrorBox message={action.error} />}
+        <Field label="Họ và tên" required name="fullName" error={f.show('fullName')} onBlur={f.blur('fullName')}>
+          <Input value={form.fullName} maxLength={NAME_MAX} onChange={(event) => set('fullName', event.target.value)} className={cn(f.show('fullName') && invalidClass)} />
+        </Field>
+        <Field label="Email" required name="email" error={f.show('email')} onBlur={f.blur('email')}>
+          <Input
+            type="email"
+            value={form.email}
+            maxLength={EMAIL_MAX}
+            onChange={(event) => set('email', event.target.value)}
+            placeholder="ten@horseracing.vn"
+            className={cn(f.show('email') && invalidClass)}
+          />
+        </Field>
+        <Field label="Vai trò" required>
+          <Select value={form.role} onChange={(event) => set('role', event.target.value as Role)}>
+            {ROLES.filter((r) => r !== 'CLUB_MANAGER').map((value) => (
+              <option key={value} value={value}>
+                {roleLabel[value]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Mật khẩu ban đầu" required name="password" error={f.show('password')} onBlur={f.blur('password')} hint={`Tối thiểu ${PASSWORD_MIN} ký tự`}>
+          <PasswordInput value={form.password} autoComplete="new-password" onChange={(event) => set('password', event.target.value)} className={cn(f.show('password') && invalidClass)} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Sửa tài khoản ===== */
+
+function EditUserDialog({ user, isSelf, onClose, onDone }: { user: UserAccount | null; isSelf: boolean; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<Role>('GROOM');
+  const errors = useMemo(() => ({ fullName: nameError(name) }), [name]);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const { reset } = f;
+
+  useEffect(() => {
+    if (!user) return;
+    setName(user.fullName);
+    setRole(user.role ?? 'GROOM');
+    action.clearError();
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const submit = async () => {
+    if (!user || action.pending || !f.attempt()) return;
+    const input: { fullName?: string; role?: Role } = {};
+    if (name.trim() !== user.fullName) input.fullName = name.trim();
+    if (role !== user.role) input.role = role;
+    if (!input.fullName && !input.role) {
+      onClose();
+      return;
+    }
+    const done = await action.run(() => updateUser(user.id, input));
+    if (done) {
+      toast.push('Đã lưu tài khoản', 'success');
+      onDone();
+      onClose();
+    }
+  };
+
+  return (
+    <Modal
+      open={!!user}
+      onClose={onClose}
+      title={`Sửa tài khoản: ${user?.fullName ?? ''}`}
+      dirty={!!user && (name !== user.fullName || role !== user.role)}
+      busy={action.pending}
+      onSave={() => void submit()}
+      footer={
+        <>
+          <CancelButton variant="secondary" />
+          <Button disabled={action.pending} onClick={submit}>
+            {action.pending ? 'Đang lưu…' : 'Lưu'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {action.error && !action.fieldErrors.fullName && action.field !== 'fullName' && <ErrorBox message={action.error} />}
+        <Field label="Họ và tên" required name="fullName" error={f.show('fullName')} onBlur={f.blur('fullName')}>
+          <Input
+            value={name}
+            maxLength={NAME_MAX}
+            onChange={(event) => {
+              setName(event.target.value);
+              if (action.error) action.clearError();
+            }}
+            className={cn(f.show('fullName') && invalidClass)}
+          />
+        </Field>
+        <Field label="Vai trò" hint={isSelf ? 'Không tự đổi vai trò của mình.' : undefined}>
+          <Select value={role} onChange={(event) => setRole(event.target.value as Role)} disabled={isSelf}>
+            {ROLES.filter((r) => r !== 'CLUB_MANAGER' || user?.role === 'CLUB_MANAGER').map((value) => (
+              <option key={value} value={value}>
+                {roleLabel[value]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Notice tone="info">Không đổi được vai trò khi tài khoản còn phụ trách ngựa, khu hoặc lịch việc; hãy bàn giao trước.</Notice>
+      </div>
+    </Modal>
+  );
+}
+
+/* ===== Đặt lại mật khẩu ===== */
+
+function ResetPasswordDialog({ user, onClose, onDone }: { user: UserAccount | null; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const action = useAction();
+  const [password, setPassword] = useState('');
+  const errors = useMemo(() => ({ newPassword: passwordError(password) }), [password]);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const { reset } = f;
+
+  useEffect(() => {
+    if (!user) return;
+    setPassword('');
+    action.clearError();
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const submit = async () => {
+    if (!user || action.pending || !f.attempt()) return;
+    const done = await action.run(() => resetUserPassword(user.id, password));
+    if (done !== undefined) {
+      toast.push(`Đã đặt lại mật khẩu cho ${user.fullName}`, 'success');
+      onDone();
+      onClose();
+    }
+  };
+
+  return (
+    <Modal
+      open={!!user}
+      onClose={onClose}
+      title={`Đặt lại mật khẩu cho ${user?.fullName ?? ''}`}
+      dirty={password.length > 0}
+      busy={action.pending}
+      description="Nhân viên đăng nhập ngay bằng mật khẩu này; các phiên đăng nhập cũ bị đăng xuất."
+      footer={
+        <>
+          <CancelButton variant="secondary" />
+          <Button disabled={action.pending} onClick={submit}>
+            {action.pending ? 'Đang lưu…' : 'Xác nhận đặt lại'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {action.error && !action.fieldErrors.newPassword && action.field !== 'newPassword' && <ErrorBox message={action.error} />}
+        <Field label="Mật khẩu mới" required name="newPassword" error={f.show('newPassword')} onBlur={f.blur('newPassword')} hint={`Tối thiểu ${PASSWORD_MIN} ký tự.`}>
+          <PasswordInput
+            autoFocus
+            autoComplete="new-password"
+            placeholder="Nhập mật khẩu mới…"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (action.error) action.clearError();
+            }}
+            className={cn(f.show('newPassword') && invalidClass)}
+          />
+        </Field>
+      </div>
+    </Modal>
   );
 }

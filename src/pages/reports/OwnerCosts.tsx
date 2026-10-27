@@ -48,9 +48,9 @@ export default function OwnerCosts() {
         data && (
           <div className={cn('space-y-5 transition-opacity', report.loading && 'opacity-60')}>
             <div className="grid gap-4 lg:grid-cols-12 [&>*]:min-w-0">
-              <section className="rounded-3xl bg-white p-6 shadow-grass-tint ring-1 ring-emerald-100 lg:col-span-8">
+              <section className="rounded-2xl bg-white p-6 shadow-grass-tint ring-1 ring-emerald-100 lg:col-span-8">
                 <p className="text-sm text-gray-500">Tổng chi phí</p>
-                <p className="mt-1 font-mono text-4xl font-bold tabular-nums text-emerald-900 sm:text-5xl">{formatMoney(data.total)}</p>
+                <p className="mt-1 tabular-nums text-2xl font-semibold  text-emerald-900 sm:text-3xl">{formatMoney(data.total)}</p>
                 <p className="mt-2 text-sm text-gray-600">
                   {formatDate(data.from)} đến {formatDate(data.to)} · {data.horses.length} ngựa
                 </p>

@@ -68,7 +68,7 @@ export function PedigreeMini({
       <p className="mb-2.5 text-sm font-semibold text-gray-900">Phả hệ</p>
       <div className="flex items-stretch">
         <div className="flex w-[28%] shrink-0 items-center">
-          <div className="w-full rounded-lg bg-white px-2 py-2 shadow-[0_6px_14px_-10px_rgba(6,78,59,0.5)] ring-1 ring-gray-200">
+          <div className="w-full rounded-lg bg-white px-2 py-2 shadow-card ring-1 ring-gray-200">
             <p className="text-[10px] font-medium text-gray-500">Ngựa</p>
             <p className="truncate text-[13px] font-bold text-gray-900" title={name}>
               {name.trim() || 'Chưa đặt tên'}

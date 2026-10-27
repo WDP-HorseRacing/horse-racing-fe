@@ -242,16 +242,13 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white/60 px-6 py-10 text-center',
-        className,
-      )}
-    >
-      <Inbox className="mb-3 text-gray-300" size={28} />
-      <p className="font-semibold text-gray-700">{title}</p>
-      {hint && <p className="mt-1 max-w-md text-sm text-gray-500">{hint}</p>}
-      {action && <div className="mt-5">{action}</div>}
+    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-gray-50/80 px-4 py-4', className)}>
+      <Inbox className="shrink-0 text-gray-400" size={20} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-800">{title}</p>
+        {hint && <p className="mt-0.5 max-w-xl text-sm text-gray-500">{hint}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -334,6 +331,7 @@ export function Field({
   required,
   name,
   className = '',
+  onBlur,
 }: {
   label?: ReactNode;
   children: ReactNode;
@@ -345,6 +343,8 @@ export function Field({
   /** Tên ô — để cuộn tới ô lỗi đầu tiên khi bấm lưu (xem scrollToFirstError). */
   name?: string;
   className?: string;
+  /** Rời ô: blur của ô con nổi lên label, thường truyền touch('tên ô') của useFormErrors. */
+  onBlur?: () => void;
 }) {
   const note = error ? (
     <span role="alert" className="block text-xs font-medium text-red-600">
@@ -354,7 +354,7 @@ export function Field({
     <span className="block text-xs font-light text-gray-400">{hint}</span>
   ) : null;
   return (
-    <label className={cn('block', className)} data-field={name} data-invalid={error ? 'true' : undefined} onClick={focusFieldControl}>
+    <label className={cn('block', className)} data-field={name} data-invalid={error ? 'true' : undefined} onClick={focusFieldControl} onBlur={onBlur ? (event) => leftField(event) && onBlur() : undefined}>
       {label && (
         <span className="mb-1.5 block text-sm font-medium text-gray-600">
           {label}
@@ -380,6 +380,16 @@ export function CharCount({ value, max }: { value: string; max: number }) {
       {length}/{max}
     </span>
   );
+}
+
+/**
+ * Con trỏ thật sự rời ô: không chuyển sang phần tử khác trong cùng Field, cũng không vào menu chọn hay lịch
+ * (Radix Popover vẽ ở portal nhưng blur vẫn nổi lên label theo cây React). Select và DatePicker tự báo blur khi đóng menu.
+ */
+function leftField(event: React.FocusEvent<HTMLElement>) {
+  const next = event.relatedTarget as HTMLElement | null;
+  if (!next) return true;
+  return !event.currentTarget.contains(next) && !next.closest('[data-radix-popper-content-wrapper]');
 }
 
 /** Cuộn tới ô đang báo lỗi đầu tiên trong vùng chứa và đặt con trỏ vào đó. */
@@ -610,10 +620,12 @@ export function Segmented<T extends string>({
 /* ===== Hộp thoại (Radix Dialog) ===== */
 
 /**
- * Hỏi trước khi đóng hộp đang nhập dở. Chỉ áp cho bấm ra ngoài hộp và phím Esc (dễ lỡ tay).
- * Bấm Hủy hoặc X là người dùng chủ ý đóng nên đóng luôn.
+ * Hỏi trước khi đóng hộp đang nhập dở: bấm ra ngoài, phím Esc, nút X và nút Hủy dạng <CancelButton>.
+ * Đang lưu (busy) thì không đóng, tránh mất kết quả đang gửi.
  */
 interface CloseGuard {
+  /** Đang gửi lên máy chủ: chặn mọi cách đóng. */
+  busy?: boolean;
   /** Form đã nhập mà chưa lưu. */
   dirty?: boolean;
   /** Nút lưu trong hộp hỏi, thường là hàm của nút chính. Không truyền thì hộp hỏi có Bỏ và Nhập tiếp. */
@@ -622,12 +634,24 @@ interface CloseGuard {
   saveLabel?: string;
 }
 
-function useCloseGuard({ dirty, onSave, saveLabel }: CloseGuard, onClose: () => void) {
+/** Hàm đóng có hỏi của hộp thoại đang mở, cho nút Hủy trong footer. */
+const RequestCloseContext = createContext<(() => void) | null>(null);
+
+function useCloseGuard({ dirty, busy, onSave, saveLabel }: CloseGuard, onClose: () => void) {
   const [asking, setAsking] = useState(false);
   const guard = (event: Event) => {
+    if (busy) {
+      event.preventDefault();
+      return;
+    }
     if (!dirty) return;
     event.preventDefault();
     setAsking(true);
+  };
+  const requestClose = () => {
+    if (busy) return;
+    if (dirty) setAsking(true);
+    else onClose();
   };
   const prompt = (
     <Modal
@@ -660,7 +684,25 @@ function useCloseGuard({ dirty, onSave, saveLabel }: CloseGuard, onClose: () => 
       <p className="text-sm text-gray-600">Thông tin vừa nhập chưa được lưu.</p>
     </Modal>
   );
-  return { guard, prompt };
+  return { guard, requestClose, prompt };
+}
+
+/** Nút Hủy trong footer của Modal/Sheet: đi qua hộp hỏi "Chưa lưu" như nút X. */
+export function CancelButton({ children = 'Hủy', variant = 'ghost' }: { children?: ReactNode; variant?: 'ghost' | 'secondary' }) {
+  const requestClose = useContext(RequestCloseContext);
+  return (
+    <Button variant={variant} onClick={() => requestClose?.()}>
+      {children}
+    </Button>
+  );
+}
+
+function CloseX({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" aria-label="Đóng" onClick={onClick} className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">
+      <X size={18} />
+    </button>
+  );
 }
 
 export function Modal({
@@ -672,6 +714,7 @@ export function Modal({
   width = 'max-w-lg',
   description,
   dirty,
+  busy,
   onSave,
   saveLabel,
 }: {
@@ -683,7 +726,7 @@ export function Modal({
   width?: string;
   description?: ReactNode;
 } & CloseGuard) {
-  const { guard, prompt } = useCloseGuard({ dirty, onSave, saveLabel }, onClose);
+  const { guard, requestClose, prompt } = useCloseGuard({ dirty, busy, onSave, saveLabel }, onClose);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
@@ -704,12 +747,12 @@ export function Modal({
                 <Dialog.Description className="mt-0.5 text-sm font-light text-gray-500">{description}</Dialog.Description>
               )}
             </div>
-            <Dialog.Close className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">
-              <X size={18} />
-            </Dialog.Close>
+            <CloseX onClick={requestClose} />
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          <RequestCloseContext.Provider value={requestClose}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
+            {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          </RequestCloseContext.Provider>
           {prompt}
         </Dialog.Content>
       </Dialog.Portal>
@@ -727,6 +770,7 @@ export function Sheet({
   footer,
   width = 'max-w-xl',
   dirty,
+  busy,
   onSave,
   saveLabel,
 }: {
@@ -738,7 +782,7 @@ export function Sheet({
   footer?: ReactNode;
   width?: string;
 } & CloseGuard) {
-  const { guard, prompt } = useCloseGuard({ dirty, onSave, saveLabel }, onClose);
+  const { guard, requestClose, prompt } = useCloseGuard({ dirty, busy, onSave, saveLabel }, onClose);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
@@ -759,12 +803,12 @@ export function Sheet({
                 <Dialog.Description className="mt-0.5 text-sm font-light text-gray-500">{description}</Dialog.Description>
               )}
             </div>
-            <Dialog.Close className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">
-              <X size={18} />
-            </Dialog.Close>
+            <CloseX onClick={requestClose} />
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-          {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          <RequestCloseContext.Provider value={requestClose}>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
+            {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 px-6 py-4">{footer}</div>}
+          </RequestCloseContext.Provider>
           {prompt}
         </Dialog.Content>
       </Dialog.Portal>
@@ -940,7 +984,7 @@ function TipBubble({ content, variant, side = 'top' }: { content: ReactNode; var
         collisionPadding={12}
         className={
           card
-            ? 'anim-pop z-50 w-60 rounded-xl bg-white p-3 text-sm text-gray-700 shadow-[0_18px_40px_-18px_rgba(6,78,59,0.45)] ring-1 ring-gray-200'
+            ? 'anim-pop z-50 w-60 rounded-xl bg-white p-3 text-sm text-gray-700 shadow-float ring-1 ring-gray-200'
             : 'anim-pop z-50 max-w-xs rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-lg'
         }
       >
@@ -1122,7 +1166,7 @@ export function Tabs({
   }, [active]);
   return (
     <RadixTabs.Root value={active} onValueChange={onChange} className={className}>
-      <RadixTabs.List ref={listRef} className="no-scrollbar relative flex items-end gap-1 overflow-x-auto border-b border-gray-200 px-1">
+      <RadixTabs.List ref={listRef} className="no-scrollbar relative flex items-end gap-5 overflow-x-auto border-b border-gray-200 px-1">
         {tabs.map((tab) => {
           const number = tab.count ?? (tab.badge ? tab.badge : undefined);
           const isActive = tab.key === active;
@@ -1131,10 +1175,8 @@ export function Tabs({
               key={tab.key}
               value={tab.key}
               className={cn(
-                'relative -mb-px flex shrink-0 items-center gap-2 rounded-t-xl border px-4 py-2.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/30',
-                isActive
-                  ? 'z-1 border-gray-200 border-b-white bg-white font-semibold text-emerald-900'
-                  : 'border-transparent font-medium text-gray-500 hover:bg-white/60 hover:text-gray-800',
+                'relative -mb-px flex shrink-0 items-center gap-2 border-b-2 px-0.5 py-2.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/30',
+                isActive ? 'border-emerald-700 font-semibold text-gray-900' : 'border-transparent font-medium text-gray-500 hover:border-gray-300 hover:text-gray-800',
                 tab.count === 0 && !isActive && 'text-gray-400',
               )}
             >
@@ -1160,7 +1202,7 @@ export function Tabs({
 /** Khung nội dung nối liền ngay dưới <Tabs>: cùng viền, bo góc dưới. */
 export function TabPanel({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-b-2xl border border-t-0 border-gray-200 bg-white shadow-[0_14px_32px_-26px_rgba(6,78,59,0.35)]', className)}>
+    <div className={cn('mt-3 rounded-xl border border-gray-200 bg-white', className)}>
       {children}
     </div>
   );
@@ -1295,7 +1337,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
         toastOptions={{
           className: 'font-sans',
           classNames: {
-            toast: 'group rounded-xl border shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur px-4 py-3',
+            toast: 'group rounded-xl border shadow-float backdrop-blur px-4 py-3',
             title: 'text-sm font-semibold',
             success: '!border-emerald-200 !text-emerald-900 !bg-emerald-50/95',
             error: '!border-red-200 !text-red-900 !bg-red-50/95',
@@ -1396,12 +1438,12 @@ export function Stat({
     danger: 'text-red-700',
     warning: 'text-amber-700',
   };
-  // Chấm icon: xanh cỏ khi bình thường, hổ phách / đỏ nhạt khi có việc cần chú ý.
-  const chip: Record<StatTone, string> = {
-    default: 'tint-emerald',
-    success: 'tint-emerald',
-    danger: 'tint-red',
-    warning: 'tint-amber',
+  // Icon nhỏ cạnh nhãn: xám khi bình thường, hổ phách / đỏ khi có việc cần chú ý.
+  const iconTone: Record<StatTone, string> = {
+    default: 'text-gray-400',
+    success: 'text-gray-400',
+    danger: 'text-red-600',
+    warning: 'text-amber-600',
   };
   return (
     <button
@@ -1409,20 +1451,22 @@ export function Stat({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group flex w-full items-start justify-between gap-3 rounded-2xl bg-white px-4 py-4 text-left shadow-[0_10px_26px_-22px_rgba(6,78,59,0.55)] ring-1 ring-gray-200/70 transition duration-150 disabled:cursor-default',
-        onClick && 'hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-22px_rgba(6,78,59,0.6)] hover:ring-emerald-200',
+        'group flex w-full flex-col items-start gap-2 rounded-2xl bg-white px-4 py-4 text-left shadow-card ring-1 ring-gray-200/70 transition duration-150 disabled:cursor-default',
+        onClick && 'hover:shadow-raised hover:ring-emerald-200',
         active && 'ring-2 ring-emerald-500/60',
         className,
       )}
     >
+      <p className="flex items-center gap-1.5 text-sm font-medium text-gray-600">
+        {icon && <span className={cn('flex shrink-0 [&>svg]:h-4 [&>svg]:w-4', iconTone[effective])}>{icon}</span>}
+        {label}
+      </p>
       <div className="min-w-0">
-        <p className={cn('text-[1.75rem] font-bold leading-none tabular-nums', valueTones[effective])}>
+        <p className={cn('text-2xl font-semibold leading-none tabular-nums', valueTones[effective])}>
           <CountUp value={value} />
         </p>
-        <p className="mt-2 text-sm font-medium text-gray-700">{label}</p>
-        {hint && <p className="mt-0.5 truncate text-xs text-gray-500">{hint}</p>}
+        {hint && <p className="mt-1.5 truncate text-xs text-gray-500">{hint}</p>}
       </div>
-      {icon && <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', chip[effective])}>{icon}</div>}
     </button>
   );
 }

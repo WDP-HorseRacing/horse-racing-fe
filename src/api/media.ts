@@ -63,7 +63,7 @@ export async function uploadHorsePhoto(file: File): Promise<string> {
   if (file.size > PHOTO_MAX_BYTES) throw new AppError('Ảnh đại diện không được vượt quá 10 MB', 'mediaId');
   return uploadMedia(file, 'HORSE_PHOTO', mimeType, {
     field: 'mediaId',
-    networkMessage: 'Không tải được ảnh lên kho lưu trữ. Kiểm tra dịch vụ lưu trữ ảnh đang chạy.',
+    networkMessage: 'Chưa tải được ảnh lên, vui lòng thử lại',
   });
 }
 
@@ -83,7 +83,7 @@ export async function uploadTrialVideo(file: File, options: { onProgress?: (perc
   return uploadMedia(file, 'TRIAL_VIDEO', mimeType, {
     ...options,
     field: 'videoMediaId',
-    networkMessage: 'Không tải được video lên kho lưu trữ. Kiểm tra mạng và dịch vụ lưu trữ đang chạy.',
+    networkMessage: 'Chưa tải được video lên, vui lòng kiểm tra mạng rồi thử lại',
   });
 }
 
@@ -104,6 +104,6 @@ export async function uploadIncidentPhoto(file: File, options: { onProgress?: (p
   return uploadMedia(file, 'INCIDENT_PHOTO', mimeType, {
     ...options,
     field: 'photoMediaId',
-    networkMessage: 'Không tải được ảnh lên kho lưu trữ. Kiểm tra mạng và dịch vụ lưu trữ đang chạy.',
+    networkMessage: 'Chưa tải được ảnh lên, vui lòng kiểm tra mạng rồi thử lại',
   });
 }

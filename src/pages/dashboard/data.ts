@@ -142,8 +142,6 @@ function dashboardCare(dashboard: MedicalDashboard): { schedule: CareSchedule; h
       horseId: item.horseId,
       type: item.type,
       dueAt: item.dueDate,
-      // Dashboard chỉ trả người làm hiện tại (đã tra Groom phụ trách), không trả cách giao.
-      assigneeType: null,
       assignedTo: item.assignedTo,
       status: 'SCHEDULED',
       completedAt: null,
@@ -259,25 +257,20 @@ async function loadStableSummary(manager: boolean) {
 
 export async function loadGroom() {
   const horses = (await listAllHorses({ myHorses: true })).filter(inClub);
-  const [care, notes, requests, today, incidents] = await Promise.all([
-    // Groom chỉ nhận lịch được giao cho chính mình.
-    Promise.all(horses.map((horse) => listCareSchedules(horse.id).then((items) => items.map((schedule) => ({ schedule, horseName: horse.name }))).catch(() => []))),
+  // Lịch tiêm phòng, tẩy giun, kiểm tra móng là việc của bác sĩ (BE 27/10): màn của Groom không tải nữa.
+  const [notes, requests, today, incidents] = await Promise.all([
     Promise.all(horses.map((horse) => getCareInstructions(horse.id).then((result) => ({ horse, current: result.current })).catch(() => ({ horse, current: null })))),
     listExamRequests({ status: 'PENDING', limit: 100 }).catch(() => undefined),
     // Flow 4: việc hôm nay (checklist, khẩu phần, lượt dắt tập) và sự cố còn mở của ngựa mình hoặc mình báo. Lỗi thì màn vẫn hiện phần cũ.
     FEATURES.stableCare ? getGroomToday().catch(() => null) : Promise.resolve(null),
     FEATURES.stableCare ? listIncidents({ status: 'OPEN' }).catch(() => []) : Promise.resolve([]),
   ]);
-  const schedules = care.flat().filter((item) => item.schedule.status === 'SCHEDULED');
   return {
     horses,
-    schedules: schedules.sort((a, b) => a.schedule.dueAt.localeCompare(b.schedule.dueAt)),
     notes: notes.filter((item) => item.current),
     requests: requests?.items ?? [],
     today,
     incidents,
-    week: medicalWeek(undefined, schedules),
-    overdue: medicalOverdue(undefined, schedules),
   };
 }
 

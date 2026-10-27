@@ -11,8 +11,9 @@ export const incidentStale = (incident: Incident, at = now()) =>
 
 /** Màu thanh tồn kho: đỏ khi sắp hết, hổ phách khi gần ngưỡng (dưới 1,5 lần), xanh khi đủ. */
 export function stockTone(item: SupplyItem): 'green' | 'amber' | 'red' {
-  if (item.quantityOnHand <= 0 || item.lowStock) return 'red';
-  return item.quantityOnHand <= item.reorderThreshold * 1.5 ? 'amber' : 'green';
+  // Hết hẳn mới đỏ; sắp hết là việc cần chú ý (hổ phách).
+  if (item.quantityOnHand <= 0) return 'red';
+  return item.lowStock || item.quantityOnHand <= item.reorderThreshold * 1.5 ? 'amber' : 'green';
 }
 
 /** Số việc đã xong trên tổng số của một checklist. */

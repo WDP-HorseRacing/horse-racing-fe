@@ -80,7 +80,7 @@ export function HorseMedia({
               type="button"
               onClick={() => input.current?.click()}
               disabled={pending}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3.5 py-2 text-sm font-semibold text-emerald-900 shadow-[0_12px_28px_-16px_rgba(6,78,59,0.7)] ring-1 ring-emerald-900/10 backdrop-blur transition hover:bg-white"
+              className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3.5 py-2 text-sm font-semibold text-emerald-900 shadow-raised ring-1 ring-emerald-900/10 backdrop-blur transition hover:bg-white"
             >
               <ImagePlus size={15} /> Thêm ảnh
             </button>

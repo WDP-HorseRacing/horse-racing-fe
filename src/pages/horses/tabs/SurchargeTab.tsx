@@ -3,14 +3,16 @@
 // - HLV khu hiện tại của ngựa: bấm "Đã áp dụng" một lần khi đã làm theo (khoản chưa kết thúc).
 // - Chủ ngựa: chỉ xem. Groom và bác sĩ không thấy tab.
 // Tiền tính theo ngày trong khoảng, vào chi phí chủ ngựa và báo cáo tài chính dù HLV đã xác nhận hay chưa.
-import { useState } from 'react';
-import { CheckCheck, CircleStop, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CheckCheck, CircleStop, Info, Plus, Trash2 } from 'lucide-react';
 import { applyHorseSurcharge, createHorseSurcharge, deleteHorseSurcharge, endHorseSurcharge, listHorseSurcharges, type HorseSurcharge } from '../../../api/billing';
 import type { HorseDetail } from '../../../api/types';
 import { MoneyInput } from '../../../components/MoneyInput';
-import { Button, CharCount, ConfirmDialog, EmptyState, ErrorBox, Field, Modal, Pill, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, ConfirmDialog, EmptyState, ErrorBox, Field, Modal, Pill, Skeleton, Textarea, Tip, cn, invalidClass, useToast } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
 import { useAction, useService } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
+import { useStore } from '../../../store/store';
 import { clubDateKey, diffDateKeys } from '../../../lib/club-time';
 import { now } from '../../../lib/clock';
 import { formatDate, formatDateTime, formatMoney, moneyError, parseMoney } from '../../../lib/format';
@@ -31,6 +33,8 @@ type Pending = { kind: 'end' | 'delete'; row: HorseSurcharge };
 
 export default function SurchargeTab({ horse, canManage, canApply }: { horse: HorseDetail; canManage: boolean; canApply: boolean }) {
   const toast = useToast();
+  // Chủ ngựa không cần thấy bước HLV xác nhận áp dụng (việc nội bộ của CLB).
+  const isOwner = useStore((state) => state.currentUser?.role === 'HORSE_OWNER');
   const list = useService(() => listHorseSurcharges(horse.id), [horse.id]);
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -86,19 +90,19 @@ export default function SurchargeTab({ horse, canManage, canApply }: { horse: Ho
                   key={row.id}
                   className={cn(
                     'rounded-2xl bg-white p-4 ring-1',
-                    phase === 'running' ? 'shadow-[0_14px_30px_-24px_rgba(4,120,87,0.55)] ring-emerald-200/80' : 'ring-gray-200/80',
+                    phase === 'running' ? 'shadow-raised ring-emerald-200/80' : 'ring-gray-200/80',
                     phase === 'ended' && 'bg-gray-50/60',
                   )}
                 >
                   <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
                     <div className="min-w-0 flex-1 basis-60">
                       <p className={cn('whitespace-pre-line break-words text-sm font-medium', phase === 'ended' ? 'text-gray-600' : 'text-gray-900')}>{row.description}</p>
-                      <p className="mt-1 font-mono text-xs text-gray-500">
+                      <p className="mt-1 tabular-nums text-xs text-gray-500">
                         {formatDate(row.startDate)} đến {formatDate(row.endDate)} · {daysOf(row)} ngày
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono text-base font-semibold tabular-nums text-gray-900">{formatMoney(row.dailyAmount)}</p>
+                      <p className="tabular-nums text-base font-semibold  text-gray-900">{formatMoney(row.dailyAmount)}</p>
                       <p className="text-xs text-gray-500">mỗi ngày, cả khoản {formatMoney(row.dailyAmount * daysOf(row))}</p>
                     </div>
                   </div>
@@ -108,7 +112,7 @@ export default function SurchargeTab({ horse, canManage, canApply }: { horse: Ho
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-800">
                         <CheckCheck size={13} /> {row.appliedByName ?? 'HLV'} đã áp dụng lúc {formatDateTime(row.appliedAt)}
                       </span>
-                    ) : phase === 'ended' ? (
+                    ) : isOwner ? null : phase === 'ended' ? (
                       <span className="text-xs text-gray-500">HLV chưa xác nhận áp dụng</span>
                     ) : (
                       <span className="text-xs font-medium text-amber-800">Chờ HLV khu áp dụng</span>
@@ -139,19 +143,26 @@ export default function SurchargeTab({ horse, canManage, canApply }: { horse: Ho
       </section>
 
       <aside className="space-y-3 lg:col-span-4">
-        <section className="rounded-3xl bg-gradient-to-br from-emerald-700 to-emerald-900 p-5 text-white shadow-[0_24px_48px_-28px_rgba(6,78,59,0.8)]">
-          <p className="text-sm text-emerald-100">Phụ phí đang tính</p>
-          <p className="mt-1 font-mono text-3xl font-bold tabular-nums">{formatMoney(perDay)}</p>
-          <p className="mt-1 text-sm text-emerald-100">{running.length ? `mỗi ngày, từ ${running.length} khoản` : 'Hôm nay không có khoản nào đang tính'}</p>
+        <section className="rounded-2xl bg-white p-4 shadow-card ring-1 ring-gray-200/80">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-gray-600">
+            Phụ phí đang tính
+            <Tip content="Phụ phí cộng thêm vào phí nuôi chung, tính theo ngày trong khoảng đã ghi, vào chi phí của chủ ngựa và báo cáo tài chính. Kết thúc sớm thì tính tới hết hôm nay.">
+              <button type="button" aria-label="Phụ phí tính thế nào" className="text-gray-400 hover:text-gray-600">
+                <Info size={14} />
+              </button>
+            </Tip>
+          </p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">
+            {formatMoney(perDay)}
+            {running.length > 0 && <span className="ml-1 text-sm font-normal text-gray-500">/ ngày</span>}
+          </p>
+          <p className="mt-1 text-sm text-gray-500">{running.length ? `Từ ${running.length} khoản đang chạy` : 'Hôm nay không có khoản nào đang tính'}</p>
         </section>
-        {waiting.length > 0 && (
-          <p className="rounded-2xl bg-amber-50/80 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-100 shadow-[0_18px_36px_-28px_rgba(180,83,9,0.5)]">
+        {waiting.length > 0 && !isOwner && (
+          <p className="rounded-xl bg-amber-50/80 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-100">
             {waiting.length} khoản chờ HLV khu xác nhận đã áp dụng.
           </p>
         )}
-        <p className="px-1 text-xs leading-relaxed text-gray-500">
-          Phụ phí cộng thêm vào phí nuôi chung, tính theo ngày trong khoảng đã ghi, vào chi phí của chủ ngựa và báo cáo tài chính. Kết thúc sớm thì tính tới hết hôm nay.
-        </p>
       </aside>
 
       {creating && <SurchargeDialog horse={horse} today={today} onClose={() => setCreating(false)} onDone={() => list.reload()} />}
@@ -196,16 +207,18 @@ function SurchargeDialog({ horse, today, onClose, onDone }: { horse: HorseDetail
   const [amount, setAmount] = useState('');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState('');
-  const [touched, setTouched] = useState(false);
   const daily = parseMoney(amount);
-  const clientErrors = {
-    description: !description.trim() ? 'Nhập nội dung phụ phí' : description.trim().length > DESCRIPTION_MAX ? `Tối đa ${DESCRIPTION_MAX} ký tự` : undefined,
-    dailyAmount: moneyError(amount, { label: 'Số tiền mỗi ngày' }) ?? (daily < 1 ? 'Số tiền mỗi ngày phải lớn hơn 0' : undefined),
-    startDate: !startDate ? 'Chọn ngày bắt đầu' : startDate < today ? 'Ngày bắt đầu phải từ hôm nay trở đi' : undefined,
-    endDate: !endDate ? 'Chọn ngày kết thúc' : endDate < startDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : undefined,
-  };
-  const errors = Object.fromEntries(Object.entries(clientErrors).map(([key, value]) => [key, value ?? action.fieldErrors[key]])) as Record<keyof typeof clientErrors, string | undefined>;
-  const show = (key: keyof typeof clientErrors) => (touched || action.fieldErrors[key] ? errors[key] : undefined);
+  const errors = useMemo(
+    () => ({
+      description: !description.trim() ? 'Nhập nội dung phụ phí' : description.trim().length > DESCRIPTION_MAX ? `Tối đa ${DESCRIPTION_MAX} ký tự` : undefined,
+      dailyAmount: moneyError(amount, { label: 'Số tiền mỗi ngày' }) ?? (daily < 1 ? 'Số tiền mỗi ngày phải lớn hơn 0' : undefined),
+      startDate: !startDate ? 'Chọn ngày bắt đầu' : startDate < today ? 'Ngày bắt đầu phải từ hôm nay trở đi' : undefined,
+      endDate: !endDate ? 'Chọn ngày kết thúc' : endDate < startDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : undefined,
+    }),
+    [description, amount, daily, startDate, endDate, today],
+  );
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const show = f.show;
   const days = startDate && endDate && endDate >= startDate ? diffDateKeys(startDate, endDate) + 1 : 0;
   const edit = (setter: (value: string) => void) => (value: string) => {
     setter(value);
@@ -213,8 +226,7 @@ function SurchargeDialog({ horse, today, onClose, onDone }: { horse: HorseDetail
   };
 
   const submit = () => {
-    setTouched(true);
-    if (Object.values(clientErrors).some(Boolean)) return;
+    if (!f.attempt()) return;
     void action.run(
       () => createHorseSurcharge(horse.id, { description: description.trim(), dailyAmount: daily, startDate, endDate }),
       () => {
@@ -233,36 +245,36 @@ function SurchargeDialog({ horse, today, onClose, onDone }: { horse: HorseDetail
       description={`Khoản tính riêng cho ${horse.name}, cộng vào chi phí của chủ ngựa.`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Ghi phụ phí'}
           </Button>
         </>
       }
       dirty={!!description || !!amount || !!endDate}
+      busy={action.pending}
       onSave={submit}
+      saveLabel="Ghi phụ phí"
     >
       <div className="space-y-4">
-        {action.error && !Object.values(action.fieldErrors).some(Boolean) && <ErrorBox message={action.error} />}
-        <Field label="Nội dung" required error={show('description')} hint="Vd: thêm 2kg cỏ khô mỗi ngày, thuốc bổ khớp." counter={<CharCount value={description} max={DESCRIPTION_MAX} />}>
-          <Textarea rows={3} maxLength={DESCRIPTION_MAX + 50} value={description} onChange={(event) => edit(setDescription)(event.target.value)} className={cn(show('description') && invalidClass)} />
+        {action.error && !Object.values(action.fieldErrors).some(Boolean) && !action.field && <ErrorBox message={action.error} />}
+        <Field label="Nội dung" required name="description" error={show('description')} onBlur={f.blur('description')} hint="Vd: thêm 2kg cỏ khô mỗi ngày, thuốc bổ khớp." counter={<CharCount value={description} max={DESCRIPTION_MAX} />}>
+          <Textarea rows={3} maxLength={DESCRIPTION_MAX} value={description} onChange={(event) => edit(setDescription)(event.target.value)} className={cn(show('description') && invalidClass)} />
         </Field>
-        <Field label="Tiền mỗi ngày" required error={show('dailyAmount')}>
+        <Field label="Tiền mỗi ngày" required name="dailyAmount" error={show('dailyAmount')} onBlur={f.blur('dailyAmount')}>
           <MoneyInput value={amount} onChange={edit(setAmount)} suffix="đ/ngày" className={cn(show('dailyAmount') && invalidClass)} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Từ ngày" required error={show('startDate')}>
+          <Field label="Từ ngày" required name="startDate" error={show('startDate')} onBlur={f.blur('startDate')}>
             <DatePicker value={startDate} min={today} onChange={edit(setStartDate)} clearable={false} />
           </Field>
-          <Field label="Đến ngày" required error={show('endDate')}>
+          <Field label="Đến ngày" required name="endDate" error={show('endDate')} onBlur={f.blur('endDate')}>
             <DatePicker value={endDate} min={startDate || today} onChange={edit(setEndDate)} />
           </Field>
         </div>
         {days > 0 && daily > 0 && (
           <p className="rounded-xl bg-emerald-50/70 px-3 py-2 text-sm text-emerald-900 ring-1 ring-emerald-100">
-            Tạm tính {days} ngày × {formatMoney(daily)} = <b className="font-mono tabular-nums">{formatMoney(days * daily)}</b>
+            Tạm tính {days} ngày × {formatMoney(daily)} = <b className="tabular-nums">{formatMoney(days * daily)}</b>
           </p>
         )}
       </div>

@@ -197,7 +197,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
       </div>
 
       <div className="mt-5">
-        <div className="mb-1.5 flex justify-between font-mono text-xs text-gray-500">
+        <div className="mb-1.5 flex justify-between tabular-nums text-xs text-gray-500">
           <span>{formatDate(item.startDate)}</span>
           <span>{formatDate(item.endDate)}</span>
         </div>
@@ -212,7 +212,7 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <Layers size={12} /> Buổi xong
           </p>
-          <p className="font-mono text-sm font-semibold tabular-nums">
+          <p className="tabular-nums text-sm font-semibold ">
             {done}/{counted.length}
           </p>
         </div>
@@ -220,13 +220,13 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <Users size={12} /> Ngựa
           </p>
-          <p className="font-mono text-sm font-semibold tabular-nums">
+          <p className="tabular-nums text-sm font-semibold ">
             {active}/{item.maxHorses}
           </p>
         </div>
         <div className={cn('rounded-xl px-3 py-2 ring-1', upcoming.length ? 'bg-gray-50/80 ring-gray-100' : 'bg-amber-50/70 ring-amber-200/70')}>
           <p className="text-xs text-gray-500">Sắp tới</p>
-          <p className="font-mono text-sm font-semibold tabular-nums">{upcoming.length}</p>
+          <p className="tabular-nums text-sm font-semibold ">{upcoming.length}</p>
         </div>
       </div>
 
@@ -238,10 +238,10 @@ function OpenClassCard({ row, plan, trainer, className = '' }: { row: ClassRow; 
             <p className="truncate text-sm font-semibold text-gray-900">{next.name}</p>
           </div>
           <div className="text-right">
-            <p className="font-mono text-xs text-gray-600">
+            <p className="tabular-nums text-xs text-gray-600">
               {weekdayShort[isoWeekdayOf(clubDateKey(next.scheduledStartAt))]} {formatDate(next.scheduledStartAt).slice(0, 5)}
             </p>
-            <p className="font-mono text-sm font-semibold">{clubTime(next.scheduledStartAt)}</p>
+            <p className="tabular-nums text-sm font-semibold">{clubTime(next.scheduledStartAt)}</p>
           </div>
           <div className="hidden flex-col items-end gap-1 sm:flex">
             <IntensityBars intensity={next.intensity} showLabel={false} />

@@ -176,10 +176,10 @@ export default function SubjectsPage() {
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
                         <IntensityBars intensity={subject.intensity} />
-                        <span className="font-mono tabular-nums">{formatMeters(subject.plannedDistanceM)}</span>
-                        <span className="font-mono tabular-nums">{subject.durationMinutes} phút</span>
+                        <span className="tabular-nums">{formatMeters(subject.plannedDistanceM)}</span>
+                        <span className="tabular-nums">{subject.durationMinutes} phút</span>
                         {subject.surface && <span>{subject.surface}</span>}
-                        {subject.targetTimeMs && <span className="font-mono tabular-nums text-amber-800">Mục tiêu {formatRaceTime(subject.targetTimeMs)}</span>}
+                        {subject.targetTimeMs && <span className="tabular-nums text-amber-800">Mục tiêu {formatRaceTime(subject.targetTimeMs)}</span>}
                       </div>
                       {subject.description && <p className="line-clamp-2 text-xs text-gray-500">{subject.description}</p>}
                     </button>

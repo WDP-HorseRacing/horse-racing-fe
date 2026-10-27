@@ -63,8 +63,12 @@ export function useAction() {
   const [field, setField] = useState<string | undefined>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>(NO_FIELD_ERRORS);
   const [conflictIds, setConflictIds] = useState<Record<string, string>>(NO_FIELD_ERRORS);
+  // Chặn bấm đúp nhanh hơn một lần vẽ lại (nút chưa kịp xám): lần gọi thứ hai khi lần đầu chưa xong thì bỏ qua.
+  const inFlight = useRef(false);
 
   const run = useCallback(async <T,>(fn: () => Promise<T>, onDone?: (result: T) => void) => {
+    if (inFlight.current) return undefined;
+    inFlight.current = true;
     setPending(true);
     setError(undefined);
     setField(undefined);
@@ -72,6 +76,7 @@ export function useAction() {
     setConflictIds(NO_FIELD_ERRORS);
     try {
       const result = await track(fn());
+      inFlight.current = false;
       onDone?.(result);
       return result;
     } catch (caught) {
@@ -83,6 +88,7 @@ export function useAction() {
       }
       return undefined;
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }, []);

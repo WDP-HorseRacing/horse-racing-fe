@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import { useStore } from './store/store';
 import { FEATURES } from './config/features';
+import { links } from './lib/links';
 
 import { Login } from './pages/Login';
 import AuthCallback from './pages/AuthCallback';
@@ -42,7 +43,6 @@ import {
   CaseDetail,
   PeriodicExams,
   CareSchedules,
-  CostReport,
   HorseMedical,
   VisitNew,
   CaseClose,
@@ -153,7 +153,7 @@ const router = createBrowserRouter(
           <Route path="medical/periodic" element={<PeriodicExams />} />
           <Route path="medical/care" element={<CareSchedules />} />
           <Route path="medical/care/new" element={<CareNew />} />
-          <Route path="medical/costs" element={<CostReport />} />
+          <Route path="medical/costs" element={<Navigate to={links.costReport} replace />} />
           <Route path="medical/locks" element={<Navigate to="/medical/board" replace />} />
           <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />
 

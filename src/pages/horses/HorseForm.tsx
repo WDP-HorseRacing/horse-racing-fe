@@ -570,10 +570,10 @@ export default function HorseForm() {
                       ))}
                     </Select>
                   </Field>
-                  <Field label="Giống" name="breed" error={err('breed')} className="sm:col-span-3">
+                  <Field label="Giống" name="breed" error={err('breed')} className="sm:col-span-3" onBlur={() => touch('breed')}>
                     <PresetSelect options={BREEDS} value={form.breed} onChange={(value) => set('breed', value)} maxLength={80} placeholder="Tên giống" emptyLabel="Chưa rõ giống" />
                   </Field>
-                  <Field label="Màu lông" name="color" error={err('color')} className="sm:col-span-3">
+                  <Field label="Màu lông" name="color" error={err('color')} className="sm:col-span-3" onBlur={() => touch('color')}>
                     <PresetSelect options={COLORS} value={form.color} onChange={(value) => set('color', value)} maxLength={40} placeholder="Màu lông" emptyLabel="Chưa chọn" />
                   </Field>
                   <Field label="Ngày sinh" name="dateOfBirth" error={err('dateOfBirth')} hint="Ngựa từ 1 đến 40 tuổi" className="sm:col-span-3">
@@ -591,7 +591,8 @@ export default function HorseForm() {
                   <Field label="Số chip" name="microchipId" required={!editing || !!savedChip} error={err('microchipId')} className="sm:col-span-3">
                     <Input
                       value={form.microchipId}
-                      maxLength={15}
+                      // Cho dán dư vài ký tự để báo "đúng 15 chữ số" thay vì cắt im lặng.
+                      maxLength={20}
                       inputMode="numeric"
                       className={cn('font-mono', err('microchipId') && invalidClass)}
                       onChange={(event) => set('microchipId', event.target.value)}
@@ -700,6 +701,7 @@ export default function HorseForm() {
                       set('ownerId', event.target.value);
                       touch('ownerId');
                     }}
+                    onBlur={() => touch('ownerId')}
                     className={cn(err('ownerId') && invalidClass)}
                   >
                     <option value="">{loadingList(owners.loading, owners.data) ? 'Đang tải…' : editing ? 'Chưa có chủ' : 'Chọn chủ sở hữu'}</option>
@@ -741,7 +743,7 @@ export default function HorseForm() {
 
         {/* Cột phải: thẻ hồ sơ — ảnh lớn (bấm / kéo thả để chọn), mức đầy đủ, điều sẽ xảy ra khi lưu, nút lưu */}
         <aside className="lg:sticky lg:top-6 lg:col-span-4">
-          <div className="overflow-hidden rounded-3xl bg-white shadow-[0_24px_50px_-30px_rgba(6,78,59,0.45)] ring-1 ring-gray-200/80">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-card ring-1 ring-gray-200/80">
             {aptitudeOnly ? (
               <div className="relative aspect-[16/9] overflow-hidden">
                 {currentPhoto ? <img src={currentPhoto} alt={form.name} className="absolute inset-0 h-full w-full object-cover" /> : <TurfPlaceholder name={form.name} className="absolute inset-0" />}

@@ -46,7 +46,7 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
             {held.map((session) => (
               <th key={session.id} className="px-1 py-1 text-center text-xs font-medium text-gray-500">
                 <Link to={links.session(session.id)} className="hover:text-emerald-800">
-                  <span className="block font-mono">{formatDate(session.scheduledStartAt).slice(0, 5)}</span>
+                  <span className="block tabular-nums">{formatDate(session.scheduledStartAt).slice(0, 5)}</span>
                   <span className="block max-w-28 truncate">{session.name}</span>
                 </Link>
               </th>
@@ -79,9 +79,9 @@ export default function ClassResultsTab({ bundle }: { bundle: ClassBundle }) {
                           score !== undefined ? SCORE_FILL(score) : entry.participantStatus === 'COMPLETED' ? 'bg-emerald-50 text-emerald-900' : entry.participantStatus === 'STOPPED' ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-500',
                         )}
                       >
-                        {score !== undefined ? <span className="font-mono text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}
+                        {score !== undefined ? <span className="tabular-nums text-lg font-bold leading-none">{score}</span> : <span className="text-[11px]">{participantStatusText[entry.participantStatus]}</span>}
                         {best !== undefined && (
-                          <span className="mt-0.5 font-mono text-[11px] leading-none">
+                          <span className="mt-0.5 tabular-nums text-[11px] leading-none">
                             {formatRaceTime(best)}
                             {target ? ` ${formatDelta(best - target).replace(' giây', 's')}` : ''}
                           </span>

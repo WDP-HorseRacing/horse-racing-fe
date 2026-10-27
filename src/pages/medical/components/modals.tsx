@@ -1,9 +1,10 @@
 // Các hộp thoại ngắn của Flow 3: gửi / đổi mức / bỏ qua yêu cầu khám, đổi sức khỏe,
 // đặt / gỡ khóa huấn luyện, hủy buổi khám, điều chỉnh chi phí, hẹn khám định kỳ. Đóng bệnh án là trang riêng (CaseClose).
-// Lỗi hiển thị nguyên văn câu của backend.
+// Lỗi từng ô hiện khi rời ô hoặc bấm gửi; lỗi backend gắn ô thì hiện dưới ô, còn lại hiện nguyên văn ở cuối hộp.
 import { useEffect, useState, type ReactNode } from 'react';
 import { CheckCircle2, Lock, RotateCcw, Unlock } from 'lucide-react';
 import { useAction } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import {
   adjustVisitCost,
   changeHealthStatus,
@@ -16,7 +17,7 @@ import {
   voidRecord,
 } from '../../../api/medical';
 import type { CheckupItem, ExamRequest, HealthStatus, MedicalCase, MedicalRecord, TrainingLock, VoidVisitResult } from '../../../api/types';
-import { Button, Dot, ErrorBox, Field, Input, Modal, Notice, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, Dot, ErrorBox, Field, Input, Modal, Notice, Select, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { HealthPill, UrgentPill } from '../../../components/ui/status';
 import { healthLabel } from '../../../lib/labels';
 import { visitKindLabel } from '../../../lib/api-labels';
@@ -28,12 +29,55 @@ import { HealthPicker, RequestMeta, RequestText } from './parts';
 import { MAX_COST, dateToIso, formatMoneyInput, localToIso, parseMoney, toLocalInput, todayKey } from './utils';
 import { DatePicker, DateTimePicker } from '../../../components/ui/DatePicker';
 
-function Counter({ value, max }: { value: string; max: number }) {
+/** Ô lý do bắt buộc dạng nhiều dòng, có bộ đếm ký tự. */
+function ReasonField({
+  label = 'Lý do',
+  value,
+  onChange,
+  error,
+  onBlur,
+  max = 500,
+  rows = 3,
+  placeholder,
+  hint,
+  autoFocus,
+}: {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  onBlur?: () => void;
+  max?: number;
+  rows?: number;
+  placeholder?: string;
+  hint?: ReactNode;
+  autoFocus?: boolean;
+}) {
   return (
-    <span className={cn('tabular-nums', value.length > max && 'font-medium text-red-600')}>
-      {value.length}/{max}
-    </span>
+    <Field label={label} required name="reason" error={error} onBlur={onBlur} hint={hint} counter={<CharCount value={value} max={max} />}>
+      <Textarea
+        rows={rows}
+        maxLength={max}
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={cn(error && invalidClass)}
+      />
+    </Field>
   );
+}
+
+/** Lỗi backend không thuộc ô nào đang hiện thì báo ở cuối hộp. */
+function GeneralError({ action, fields }: { action: ReturnType<typeof useAction>; fields: string[] }) {
+  if (!action.error) return null;
+  if (fields.some((field) => action.fieldErrors[field] || action.field === field)) return null;
+  return <ErrorBox message={action.error} />;
+}
+
+/** Lỗi backend của ô `from` đổi tên thành ô `to` của form. */
+function renameServerField(fieldErrors: Record<string, string>, from: string, to: string) {
+  return fieldErrors[from] ? { ...fieldErrors, [to]: fieldErrors[from] } : fieldErrors;
 }
 
 /* ===== Gửi yêu cầu khám (F3.4) ===== */
@@ -62,7 +106,16 @@ export function RequestForm({
   const dirty = text !== '' || urgent || (!horse && horseId !== '');
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 
-  const submit = () =>
+  const f = useFormErrors(
+    {
+      horse: horseId ? undefined : 'Chọn ngựa',
+      description: text ? undefined : 'Mô tả tình trạng của ngựa',
+    },
+    { fieldErrors: action.fieldErrors },
+  );
+
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => createExamRequest(horseId, text, urgent),
       (result) => {
@@ -70,9 +123,11 @@ export function RequestForm({
         setDescription('');
         setUrgent(false);
         if (!horse) setHorseId('');
+        f.reset();
         onDone?.(result);
       },
     );
+  };
 
   if (!horse && options.loading && !options.data) return <Skeleton rows={3} />;
   if (!horse && options.error) return <ErrorBox message={options.error} />;
@@ -94,9 +149,12 @@ export function RequestForm({
         <Field
           label="Ngựa"
           required
+          name="horse"
+          error={f.show('horse')}
+          onBlur={f.blur('horse')}
           hint={scope === 'myBarns' ? 'Ngựa thuộc khu bạn phụ trách' : scope === 'myHorses' ? 'Ngựa bạn đang được phân công chăm sóc' : undefined}
         >
-          <Select value={horseId} onChange={(event) => setHorseId(event.target.value)}>
+          <Select value={horseId} onChange={(event) => setHorseId(event.target.value)} className={cn(f.show('horse') && invalidClass)}>
             <option value="">Chọn ngựa…</option>
             {options.data?.map((item) => {
               const place = horsePlace(item);
@@ -134,23 +192,31 @@ export function RequestForm({
           {urgent ? 'Mọi bác sĩ nhận thông báo Khẩn ngay khi gửi.' : 'Yêu cầu vào hàng đợi, bác sĩ xử lý theo thứ tự.'}
         </p>
       </div>
-      <Field label="Mô tả tình trạng" required hint={<Counter value={text} max={2000} />}>
+      <Field
+        label="Mô tả tình trạng"
+        required
+        name="description"
+        error={f.show('description')}
+        onBlur={f.blur('description')}
+        counter={<CharCount value={description} max={2000} />}
+      >
         <Textarea
           rows={4}
           value={description}
           maxLength={2000}
           onChange={(event) => setDescription(event.target.value)}
           placeholder="Ví dụ: Ngựa đi hơi khập khiễng chân trước trái sau buổi tập, cổ chân hơi nóng"
+          className={cn(f.show('description') && invalidClass)}
         />
       </Field>
-      {action.error && <ErrorBox message={action.error} />}
+      <GeneralError action={action} fields={['description']} />
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="secondary" onClick={onCancel} disabled={action.pending}>
             Hủy
           </Button>
         )}
-        <Button variant={urgent ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || !horseId || !text || text.length > 2000}>
+        <Button variant={urgent ? 'danger' : 'primary'} onClick={submit} disabled={action.pending}>
           {action.pending ? 'Đang gửi…' : 'Gửi yêu cầu'}
         </Button>
       </div>
@@ -199,7 +265,9 @@ export function UrgencyModal({ request, onClose, onDone }: { request: ExamReques
   const action = useAction();
   const [reason, setReason] = useState('');
   const next = !request.urgent;
-  const submit = () =>
+  const f = useFormErrors({ reason: reason.trim() ? undefined : 'Nhập lý do' }, { fieldErrors: action.fieldErrors });
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => changeRequestUrgency(request.id, next, reason.trim()),
       () => {
@@ -207,19 +275,19 @@ export function UrgencyModal({ request, onClose, onDone }: { request: ExamReques
         onDone();
       },
     );
+  };
   return (
     <Modal
       open
       onClose={onClose}
       title={next ? 'Nâng lên Khẩn' : 'Hạ xuống Bình thường'}
       dirty={reason.trim() !== ''}
+      busy={action.pending}
       description={`Yêu cầu khám của ${request.horseName}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button variant={next ? 'danger' : 'primary'} onClick={submit} disabled={action.pending || !reason.trim()}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button variant={next ? 'danger' : 'primary'} onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : next ? 'Nâng lên Khẩn' : 'Hạ mức'}
           </Button>
         </>
@@ -229,10 +297,15 @@ export function UrgencyModal({ request, onClose, onDone }: { request: ExamReques
         <div className="rounded-xl bg-gray-50 p-3">
           <RequestText text={request.description} />
         </div>
-        <Field label="Lý do" required hint={next ? 'Mọi bác sĩ nhận thông báo Khẩn.' : 'Hạ mức không gửi thông báo.'}>
-          <Textarea rows={2} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
-        </Field>
-        {action.error && <ErrorBox message={action.error} />}
+        <ReasonField
+          value={reason}
+          onChange={setReason}
+          rows={2}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          hint={next ? 'Mọi bác sĩ nhận thông báo Khẩn.' : 'Hạ mức không gửi thông báo.'}
+        />
+        <GeneralError action={action} fields={['reason']} />
       </div>
     </Modal>
   );
@@ -244,7 +317,9 @@ export function DismissRequestModal({ request, onClose, onDone }: { request: Exa
   const toast = useToast();
   const action = useAction();
   const [reason, setReason] = useState('');
-  const submit = () =>
+  const f = useFormErrors({ reason: reason.trim() ? undefined : 'Nhập lý do bỏ qua' }, { fieldErrors: action.fieldErrors });
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => dismissExamRequest(request.id, reason.trim()),
       () => {
@@ -252,18 +327,18 @@ export function DismissRequestModal({ request, onClose, onDone }: { request: Exa
         onDone();
       },
     );
+  };
   return (
     <Modal
       open
       onClose={onClose}
       title={`Bỏ qua yêu cầu khám: ${request.horseName}`}
       dirty={reason.trim() !== ''}
+      busy={action.pending}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim()}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button variant="danger" onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Bỏ qua yêu cầu'}
           </Button>
         </>
@@ -273,16 +348,16 @@ export function DismissRequestModal({ request, onClose, onDone }: { request: Exa
         <div className="rounded-xl bg-gray-50 p-3">
           <RequestText text={request.description} />
         </div>
-        <Field label="Lý do bỏ qua" required hint="Yêu cầu chuyển sang Đã bỏ qua, không mở lại được.">
-          <Textarea
-            rows={3}
-            maxLength={500}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: Đã kiểm tra tại chuồng, chỉ là vết xước bề mặt"
-          />
-        </Field>
-        {action.error && <ErrorBox message={action.error} />}
+        <ReasonField
+          label="Lý do bỏ qua"
+          value={reason}
+          onChange={setReason}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          hint="Yêu cầu chuyển sang Đã bỏ qua, không mở lại được."
+          placeholder="Ví dụ: Đã kiểm tra tại chuồng, chỉ là vết xước bề mặt"
+        />
+        <GeneralError action={action} fields={['reason']} />
       </div>
     </Modal>
   );
@@ -319,8 +394,16 @@ function HealthChangeBody({
   const [to, setTo] = useState<HealthStatus | ''>('');
   const [reason, setReason] = useState('');
   const changed = !!to && to !== horse.healthStatus;
+  const f = useFormErrors(
+    {
+      to: !to ? 'Chọn trạng thái mới' : !changed ? `Ngựa đang ${healthLabel[horse.healthStatus]}, chọn trạng thái khác` : undefined,
+      reason: reason.trim() ? undefined : 'Nhập lý do',
+    },
+    { fieldErrors: renameServerField(action.fieldErrors, 'healthStatus', 'to') },
+  );
 
-  const submit = () =>
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => changeHealthStatus(horse.id, to as HealthStatus, reason.trim()),
       (result) => {
@@ -332,6 +415,7 @@ function HealthChangeBody({
         onClose();
       },
     );
+  };
 
   return (
     <Modal
@@ -340,13 +424,12 @@ function HealthChangeBody({
       width="max-w-xl"
       title="Đổi trạng thái sức khỏe"
       dirty={!!to || reason.trim() !== ''}
+      busy={action.pending}
       description="Đổi ngay, không cần ghi buổi khám."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !changed || !reason.trim()}>
+          <CancelButton variant="secondary" />
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Đổi trạng thái'}
           </Button>
         </>
@@ -357,24 +440,32 @@ function HealthChangeBody({
           <span className="font-semibold text-gray-900">{horse.name}</span> hiện đang
           <HealthPill status={horse.healthStatus} />
         </p>
-        <HealthPicker value={to} onChange={setTo} current={horse.healthStatus} />
-        <Field label="Lý do" required>
-          <Textarea
-            rows={3}
-            maxLength={500}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: Nghi cúm ngựa, cách ly theo dõi 14 ngày"
+        <div data-field="to" data-invalid={f.show('to') ? 'true' : undefined}>
+          <HealthPicker
+            value={to}
+            onChange={(value) => {
+              setTo(value);
+              f.touch('to');
+            }}
+            current={horse.healthStatus}
           />
-        </Field>
-        {changed && (to === 'INJURED' || to === 'QUARANTINED') && (
-          <Notice tone="info">
-            Ngựa mất quyền tập và đua. HLV khu, Quản lý CLB và chủ ngựa nhận thông báo. Ngựa không bị rút khỏi lớp, không tự chuyển ô.
-          </Notice>
-        )}
-        {changed && to === 'UNDER_OBSERVATION' && <p className="text-xs text-gray-500">Ngựa vẫn được tập nhưng không được đua. HLV khu nhận thông báo.</p>}
-        {changed && to === 'ELIGIBLE' && <p className="text-xs text-gray-500">Đổi sang Đủ điều kiện không tự gỡ khóa huấn luyện (nếu có).</p>}
-        {action.error && <ErrorBox message={action.error} />}
+          {f.show('to') && (
+            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">
+              {f.show('to')}
+            </p>
+          )}
+        </div>
+        <ReasonField
+          value={reason}
+          onChange={setReason}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          placeholder="Ví dụ: Nghi cúm ngựa, cách ly theo dõi 14 ngày"
+        />
+        {changed && (to === 'INJURED' || to === 'QUARANTINED') && <Notice tone="info">Ngựa tạm ngưng tập và đua. HLV khu, Quản lý CLB và chủ ngựa được báo.</Notice>}
+        {changed && to === 'UNDER_OBSERVATION' && <p className="text-xs text-gray-500">Ngựa vẫn được tập nhưng không được đua. HLV khu được báo.</p>}
+        {changed && to === 'ELIGIBLE' && <p className="text-xs text-gray-500">Khóa huấn luyện (nếu có) vẫn giữ, cần gỡ riêng.</p>}
+        <GeneralError action={action} fields={['reason', 'healthStatus']} />
       </div>
     </Modal>
   );
@@ -398,7 +489,15 @@ export function PlaceLockModal({
   const action = useAction();
   const [reason, setReason] = useState('');
   const [date, setDate] = useState('');
-  const submit = () =>
+  const f = useFormErrors(
+    {
+      reason: reason.trim() ? undefined : 'Nhập lý do khóa',
+      date: date && date < todayKey() ? 'Ngày dự kiến gỡ phải từ hôm nay trở đi' : undefined,
+    },
+    { fieldErrors: renameServerField(action.fieldErrors, 'lockEnd', 'date') },
+  );
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => placeLock(horse.id, reason.trim(), dateToIso(date)),
       (lock) => {
@@ -406,6 +505,7 @@ export function PlaceLockModal({
         onDone(lock);
       },
     );
+  };
   return (
     <Modal
       open
@@ -413,12 +513,11 @@ export function PlaceLockModal({
       title={`Đặt khóa huấn luyện: ${horse.name}`}
       description="Ngựa bị khóa thì không được tập. Mỗi ngựa tối đa một khóa."
       dirty={reason.trim() !== '' || date !== ''}
+      busy={action.pending}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            {intro ? 'Để sau' : 'Hủy'}
-          </Button>
-          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim()}>
+          <CancelButton variant="secondary">{intro ? 'Để sau' : 'Hủy'}</CancelButton>
+          <Button variant="danger" onClick={submit} disabled={action.pending}>
             <Lock size={15} />
             {action.pending ? 'Đang lưu…' : 'Đặt khóa'}
           </Button>
@@ -427,21 +526,20 @@ export function PlaceLockModal({
     >
       <div className="space-y-4">
         {intro}
-        <Field label="Lý do" required>
-          <Input
-            value={reason}
-            maxLength={1000}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: Viêm gân, cấm vận động mạnh"
-          />
+        <ReasonField
+          value={reason}
+          onChange={setReason}
+          max={1000}
+          rows={2}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          placeholder="Ví dụ: Viêm gân, cấm vận động mạnh"
+        />
+        <Field label="Ngày dự kiến gỡ" name="date" error={f.show('date')} onBlur={f.blur('date')} hint="Không bắt buộc. Chỉ để nhắc, khóa không tự gỡ.">
+          <DatePicker value={date} min={todayKey()} onChange={setDate} invalid={!!f.show('date')} />
         </Field>
-        <Field label="Ngày dự kiến gỡ" hint="Không bắt buộc. Chỉ để nhắc, khóa không tự gỡ.">
-          <DatePicker value={date} min={todayKey()} onChange={setDate} />
-        </Field>
-        <p className="text-xs text-gray-500">
-          Ngựa đang có bệnh án mở thì khóa tự gắn vào bệnh án đó. HLV khu và Quản lý CLB nhận thông báo. Các lượt tập sắp tới của ngựa chuyển Hủy do khóa tập, gỡ khóa thì tự mở lại.
-        </p>
-        {action.error && <ErrorBox message={action.error} />}
+        <p className="text-xs text-gray-500">Các buổi tập sắp tới của ngựa sẽ bị hủy, gỡ khóa thì mở lại.</p>
+        <GeneralError action={action} fields={['reason', 'lockEnd']} />
       </div>
     </Modal>
   );
@@ -463,7 +561,9 @@ export function ReleaseLockModal({
   const toast = useToast();
   const action = useAction();
   const [conclusion, setConclusion] = useState('');
-  const submit = () =>
+  const f = useFormErrors({ reason: conclusion.trim() ? undefined : 'Nhập lý do gỡ khóa' }, { fieldErrors: renameServerField(action.fieldErrors, 'conclusion', 'reason') });
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => releaseLock(lock.id, conclusion.trim()),
       () => {
@@ -471,19 +571,19 @@ export function ReleaseLockModal({
         onDone();
       },
     );
+  };
   return (
     <Modal
       open
       onClose={onClose}
       title={`Gỡ khóa huấn luyện: ${horseName}`}
       dirty={conclusion.trim() !== ''}
+      busy={action.pending}
       description={`Khóa từ ${formatDate(lock.lockStart)}: ${lock.reason}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !conclusion.trim()}>
+          <CancelButton variant="secondary" />
+          <Button onClick={submit} disabled={action.pending}>
             <Unlock size={15} />
             {action.pending ? 'Đang lưu…' : 'Gỡ khóa'}
           </Button>
@@ -491,17 +591,17 @@ export function ReleaseLockModal({
       }
     >
       <div className="space-y-3">
-        <Field label="Lý do gỡ" required>
-          <Textarea
-            rows={3}
-            maxLength={1000}
-            value={conclusion}
-            onChange={(event) => setConclusion(event.target.value)}
-            placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ"
-          />
-        </Field>
-        <p className="text-xs text-gray-500">Gỡ khóa không đổi sức khỏe. HLV khu và Quản lý CLB nhận thông báo.</p>
-        {action.error && <ErrorBox message={action.error} />}
+        <ReasonField
+          label="Lý do gỡ"
+          value={conclusion}
+          onChange={setConclusion}
+          max={1000}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          placeholder="Ví dụ: Tái khám ổn, cho tập lại nhẹ"
+        />
+        <p className="text-xs text-gray-500">Gỡ khóa không đổi sức khỏe. HLV khu và Quản lý CLB được báo.</p>
+        <GeneralError action={action} fields={['conclusion']} />
       </div>
     </Modal>
   );
@@ -536,22 +636,24 @@ export function VoidVisitModal({
   const [reason, setReason] = useState('');
   const [voided, setVoided] = useState<VoidVisitResult | null>(null);
   const opening = !!record.caseId && record.conclusion === 'ISSUE';
+  const f = useFormErrors({ reason: reason.trim() ? undefined : 'Nhập lý do hủy' }, { fieldErrors: action.fieldErrors });
 
   const consequences = [
-    'Số đo ghi trong buổi này bị gỡ khỏi bảng chỉ số cơ thể.',
+    'Số đo của buổi này bị gỡ khỏi chỉ số cơ thể.',
     'Sức khỏe ngựa về như trước buổi khám, trừ khi đã có người đổi sau đó.',
-    ...(requestIds.length ? [`${requestIds.length} yêu cầu khám đã gắn quay về hàng đợi chờ khám.`] : []),
-    ...(record.nextVisitAt ? ['Lịch tái khám của buổi này bị hủy, lịch của buổi trước trở lại.'] : []),
-    'Buổi khám không còn được tính vào hạn khám định kỳ.',
+    ...(requestIds.length ? [`${requestIds.length} yêu cầu khám quay về hàng đợi.`] : []),
+    ...(record.nextVisitAt ? ['Lịch tái khám của buổi này bị hủy.'] : []),
+    'Buổi này không còn tính vào hạn khám định kỳ.',
   ];
   let blocked: string | undefined;
   if (opening && caseInfo) {
     if (caseInfo.status === 'CLOSED') blocked = 'Bệnh án đã đóng nên không hủy được buổi mở bệnh án.';
     else if (caseInfo.otherActiveVisits > 0) blocked = 'Bệnh án còn buổi khám khác chưa hủy. Hủy các buổi tái khám trước rồi mới hủy buổi mở bệnh án.';
-    else if (caseInfo.status === 'OPEN') consequences.unshift('Đây là buổi mở bệnh án: bệnh án chuyển sang Đã hủy. Khóa huấn luyện đang gắn được tách ra, vẫn hiệu lực.');
+    else if (caseInfo.status === 'OPEN') consequences.unshift('Bệnh án mở từ buổi này chuyển sang Đã hủy. Khóa tập vẫn giữ.');
   }
 
-  const submit = () =>
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => voidRecord(record.id, reason.trim()),
       (result) => {
@@ -560,6 +662,7 @@ export function VoidVisitModal({
         onVoided();
       },
     );
+  };
 
   if (voided) {
     return (
@@ -587,9 +690,9 @@ export function VoidVisitModal({
         {voided.healthOutcome === 'REVERTED' && <p className="mt-3 text-sm text-gray-700">Sức khỏe ngựa đã về như trước buổi khám.</p>}
         {voided.healthOutcome === 'KEPT_LATER_CHANGE' && (
           <Notice tone="warning" className="mt-3">
-            Sức khỏe hiện tại
-            {voided.laterHealthChange ? ` (${healthLabel[voided.laterHealthChange.to]}) do ${people.name(voided.laterHealthChange.changedBy)} đổi lúc ${formatDateTime(voided.laterHealthChange.changedAt)}` : ' đã được đổi sau buổi khám'}
-            , không tự quay lại. Đổi bằng Đổi trạng thái sức khỏe nếu cần.
+            {voided.laterHealthChange
+              ? `Sức khỏe giữ nguyên ${healthLabel[voided.laterHealthChange.to]} vì ${people.name(voided.laterHealthChange.changedBy)} đã đổi lúc ${formatDateTime(voided.laterHealthChange.changedAt)}.`
+              : 'Sức khỏe giữ nguyên vì đã được đổi sau buổi khám.'}
           </Notice>
         )}
         {requestIds.length > 0 && <p className="mt-3 text-sm text-gray-700">{requestIds.length} yêu cầu khám đã quay về hàng đợi.</p>}
@@ -608,13 +711,13 @@ export function VoidVisitModal({
       onClose={onClose}
       title="Hủy buổi khám"
       dirty={reason.trim() !== ''}
+      busy={action.pending}
       description={`${horseName} · ${visitKindLabel[record.kind]} ${formatDateTime(record.examDate)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button variant="danger" onClick={submit} disabled={action.pending || !reason.trim() || !!blocked}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          {/* Bị chặn thì đã có thông báo lý do ngay trong hộp. */}
+          <Button variant="danger" onClick={submit} disabled={action.pending || !!blocked}>
             {action.pending ? 'Đang hủy…' : 'Hủy buổi khám'}
           </Button>
         </>
@@ -634,16 +737,17 @@ export function VoidVisitModal({
             ))}
           </ul>
         )}
-        <Field label="Lý do hủy" required>
-          <Textarea
-            rows={3}
-            maxLength={500}
+        {!blocked && (
+          <ReasonField
+            label="Lý do hủy"
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={setReason}
+            error={f.show('reason')}
+            onBlur={f.blur('reason')}
             placeholder="Ví dụ: Ghi nhầm sang ngựa khác"
           />
-        </Field>
-        {action.error && <ErrorBox message={action.error} />}
+        )}
+        <GeneralError action={action} fields={['reason']} />
       </div>
     </Modal>
   );
@@ -668,8 +772,22 @@ export function AdjustCostModal({
   const [cost, setCost] = useState(initial);
   const [reason, setReason] = useState('');
   const costValue = parseMoney(cost);
-  const costOk = Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST;
-  const submit = () =>
+  const costOk = !!cost.trim() && Number.isInteger(costValue) && costValue >= 0 && costValue <= MAX_COST;
+  const f = useFormErrors(
+    {
+      cost: !cost.trim()
+        ? 'Nhập chi phí mới'
+        : !costOk
+          ? 'Nhập số nguyên từ 0 đến 10 tỷ đồng'
+          : costValue === (record.cost ?? 0)
+            ? 'Số tiền chưa thay đổi'
+            : undefined,
+      reason: reason.trim() ? undefined : 'Nhập lý do điều chỉnh',
+    },
+    { fieldErrors: action.fieldErrors },
+  );
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => adjustVisitCost(record.id, costValue, reason.trim()),
       () => {
@@ -677,19 +795,19 @@ export function AdjustCostModal({
         onDone();
       },
     );
+  };
   return (
     <Modal
       open
       onClose={onClose}
       title="Điều chỉnh chi phí buổi khám"
       dirty={reason.trim() !== '' || cost !== initial}
+      busy={action.pending}
       description={`${horseName} · buổi khám ${formatDateTime(record.examDate)} · chi phí hiện tại ${formatMoney(record.cost ?? 0)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !costOk || !reason.trim()}>
+          <CancelButton variant="secondary" />
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
@@ -699,22 +817,23 @@ export function AdjustCostModal({
         <Field
           label="Chi phí mới (đồng)"
           required
-          error={cost && !costOk ? 'Nhập số nguyên từ 0 đến 10 tỷ đồng' : undefined}
+          name="cost"
+          error={f.show('cost')}
+          onBlur={f.blur('cost')}
           hint={costOk ? `= ${formatMoney(costValue)}` : undefined}
         >
-          <Input inputMode="numeric" value={cost} onChange={(event) => setCost(formatMoneyInput(event.target.value))} />
+          <Input inputMode="numeric" value={cost} onChange={(event) => setCost(formatMoneyInput(event.target.value))} className={cn('tabular-nums', f.show('cost') && invalidClass)} />
         </Field>
-        <Field label="Lý do điều chỉnh" required>
-          <Textarea
-            rows={3}
-            maxLength={500}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: Bổ sung hóa đơn siêu âm"
-          />
-        </Field>
-        <p className="text-xs text-gray-500">Quản lý và chủ ngựa của ngày khám nhận thông báo chi phí cũ và mới. Tổng chi phí bệnh án tự cộng lại.</p>
-        {action.error && <ErrorBox message={action.error} />}
+        <ReasonField
+          label="Lý do điều chỉnh"
+          value={reason}
+          onChange={setReason}
+          error={f.show('reason')}
+          onBlur={f.blur('reason')}
+          placeholder="Ví dụ: Bổ sung hóa đơn siêu âm"
+        />
+        <p className="text-xs text-gray-500">Quản lý và chủ ngựa được báo chi phí mới.</p>
+        <GeneralError action={action} fields={['cost', 'reason']} />
       </div>
     </Modal>
   );
@@ -726,26 +845,36 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
   const toast = useToast();
   const action = useAction();
   const rescheduling = !!item.appointment;
-  const [value, setValue] = useState(() => {
+  const [initial] = useState(() => {
     if (item.appointment) return toLocalInput(item.appointment.scheduledAt);
     const date = now();
     date.setDate(date.getDate() + 1);
     date.setHours(8, 0, 0, 0);
     return toLocalInput(date);
   });
+  const [value, setValue] = useState(initial);
   const [reason, setReason] = useState('');
   const today = todayKey();
   const overdue = item.dueStatus === 'OVERDUE';
   const day = value.slice(0, 10);
-  const dayError = !day
-    ? undefined
-    : day < today
-      ? 'Ngày hẹn khám không được ở quá khứ'
-      : !overdue && day > item.dueDate
-        ? `Ngày hẹn không được muộn hơn hạn khám ${formatDate(item.dueDate)}`
-        : undefined;
+  const f = useFormErrors(
+    {
+      scheduledAt: !localToIso(value)
+        ? 'Chọn ngày giờ hẹn'
+        : day < today
+          ? 'Ngày hẹn khám không được ở quá khứ'
+          : !overdue && day > item.dueDate
+            ? `Ngày hẹn không được muộn hơn hạn khám ${formatDate(item.dueDate)}`
+            : rescheduling && value === initial
+              ? 'Ngày giờ hẹn chưa thay đổi'
+              : undefined,
+      reason: rescheduling && !reason.trim() ? 'Nhập lý do dời lịch' : undefined,
+    },
+    { fieldErrors: action.fieldErrors },
+  );
 
-  const submit = () =>
+  const submit = () => {
+    if (!f.attempt()) return;
     action.run(
       () => setCheckupAppointment(item.horseId, localToIso(value)!, reason.trim() || undefined),
       () => {
@@ -753,20 +882,20 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
         onDone();
       },
     );
+  };
 
   return (
     <Modal
       open
       onClose={onClose}
       title={rescheduling ? 'Dời ngày hẹn khám' : 'Đặt ngày hẹn khám'}
-      dirty={reason.trim() !== ''}
+      dirty={reason.trim() !== '' || value !== initial}
+      busy={action.pending}
       description={`${item.horseName} · hạn khám ${formatDate(item.dueDate)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Hủy
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !value || !!dayError || (rescheduling && !reason.trim())}>
+          <CancelButton variant="secondary" />
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : rescheduling ? 'Dời lịch' : 'Đặt lịch'}
           </Button>
         </>
@@ -781,16 +910,36 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
         <Field
           label="Ngày giờ hẹn"
           required
-          error={dayError}
+          name="scheduledAt"
+          error={f.show('scheduledAt')}
+          onBlur={f.blur('scheduledAt')}
           hint={overdue ? 'Ngựa đã quá hạn: chọn ngày bất kỳ từ hôm nay.' : `Từ hôm nay đến hạn khám ${formatDate(item.dueDate)}.`}
         >
-          <DateTimePicker value={value} min={`${today}T00:00`} max={overdue ? undefined : `${item.dueDate}T23:59`} onChange={setValue} />
+          <DateTimePicker
+            value={value}
+            min={`${today}T00:00`}
+            max={overdue ? undefined : `${item.dueDate}T23:59`}
+            onChange={setValue}
+            invalid={!!f.show('scheduledAt')}
+          />
         </Field>
-        <Field label="Lý do" required={rescheduling} hint={rescheduling ? undefined : 'Không bắt buộc khi đặt lần đầu'}>
-          <Input maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Trùng lịch thi đấu" />
-        </Field>
-        <p className="text-xs text-gray-500">Ngày hẹn chỉ là kế hoạch. Ghi bất kỳ buổi khám nào cho ngựa thì ngày hẹn tự chuyển sang Đã thực hiện.</p>
-        {action.error && <ErrorBox message={action.error} />}
+        {rescheduling ? (
+          <ReasonField
+            label="Lý do dời"
+            value={reason}
+            onChange={setReason}
+            rows={2}
+            error={f.show('reason')}
+            onBlur={f.blur('reason')}
+            placeholder="Ví dụ: Trùng lịch thi đấu"
+          />
+        ) : (
+          <Field label="Lý do" hint="Không bắt buộc khi đặt lần đầu" counter={<CharCount value={reason} max={500} />}>
+            <Input maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Khám cùng đợt với khu B" />
+          </Field>
+        )}
+        <p className="text-xs text-gray-500">Ghi buổi khám cho ngựa thì hẹn này tự chuyển sang Đã thực hiện.</p>
+        <GeneralError action={action} fields={['scheduledAt', 'reason']} />
       </div>
     </Modal>
   );

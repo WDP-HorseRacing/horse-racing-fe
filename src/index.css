@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/*
+ * Quy tắc giao diện (đọc trước khi thêm màn mới):
+ * - Màu: xanh cỏ cho thương hiệu, hành động, trạng thái ổn. Hổ phách cho việc cần chú ý (sắp hết, chờ duyệt, thiếu buổi).
+ *   Đỏ chỉ cho lỗi, chấn thương, khóa, xóa. Còn lại xám trung tính. Không tô gradient nền cho thẻ.
+ * - Bóng nhuốm xanh, ba mức theo ý nghĩa: shadow-card (thẻ nghỉ), shadow-raised (hover, đang chọn, nút nổi),
+ *   shadow-float (popover, hộp thoại, thanh dính). Không viết shadow-[...] tự chế trong trang.
+ * - Số: tiền, số lượng, ngày giờ dùng chữ thường của app với tabular-nums (lớp .num). font-mono chỉ cho mã
+ *   (mã ô, số chip, mã lớp). Số to nhất cỡ text-2xl, đậm vừa, đơn vị viết nhỏ hơn.
+ * - Bo góc thẻ tối đa rounded-2xl. Chữ giải thích dài để trong Tip (icon i) cạnh tiêu đề, không rải dưới thẻ.
+ */
+
 @theme {
   /* === Primary Emerald / Grass Green === */
   --color-primary: #059669;
@@ -59,19 +70,15 @@
   --color-muted: #66706a;
   --color-line: #e3e7e3;
 
-  /* === Bóng đổ: trung tính, rất nhẹ — thẻ phân tách bằng viền chứ không bằng bóng === */
-  --shadow-sm: 0 1px 2px rgba(20, 30, 25, 0.04);
-  --shadow-md: 0 2px 6px rgba(20, 30, 25, 0.05);
-  --shadow-lg: 0 6px 18px rgba(20, 30, 25, 0.06);
-  --shadow-xl: 0 12px 32px rgba(20, 30, 25, 0.08);
-  --shadow-card: 0 1px 2px rgba(20, 30, 25, 0.04);
-  --shadow-card-hover: 0 4px 14px rgba(20, 30, 25, 0.07);
-  /* Giữ tên cũ để các trang không vỡ, nhưng quy về cùng một bóng trung tính. */
-  --shadow-grass: 0 1px 2px rgba(20, 30, 25, 0.04);
-  --shadow-grass-lift: 0 4px 14px rgba(20, 30, 25, 0.08);
-  --shadow-amber: 0 1px 2px rgba(20, 30, 25, 0.04);
-  --shadow-red: 0 1px 2px rgba(20, 30, 25, 0.04);
-  --shadow-float: 0 18px 48px -12px rgba(20, 30, 25, 0.22);
+  /* === Bóng đổ nhuốm xanh cỏ, ba mức theo ý nghĩa (xem quy tắc ở đầu file) === */
+  --shadow-sm: 0 1px 2px rgba(6, 78, 59, 0.05);
+  --shadow-md: 0 2px 6px rgba(6, 78, 59, 0.06);
+  --shadow-lg: 0 8px 20px -12px rgba(6, 78, 59, 0.24);
+  --shadow-xl: 0 18px 40px -16px rgba(6, 78, 59, 0.28);
+  --shadow-card: 0 1px 2px rgba(6, 78, 59, 0.06), 0 1px 1px rgba(6, 78, 59, 0.03);
+  --shadow-raised: 0 8px 20px -12px rgba(6, 78, 59, 0.3);
+  --shadow-float: 0 18px 40px -16px rgba(6, 78, 59, 0.3);
+  --shadow-card-hover: 0 8px 20px -12px rgba(6, 78, 59, 0.3);
 
   /* === Bo góc: gọn hơn, bớt "tròn phồng" === */
   --radius-sm: 0.375rem;
@@ -96,9 +103,10 @@ body {
   line-height: 1.6;
 }
 
-/* === Tabular Numbers for Data (giữ font Outfit, chỉ đều chữ số) === */
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
+/* === Số liệu: chữ của app, chữ số đều cột (tiền, số lượng, ngày giờ). font-mono chỉ cho mã. === */
+.tabular-nums,
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 /* === Hộp thoại và panel trượt (Radix) === */
@@ -307,10 +315,10 @@ body {
   background-image: linear-gradient(180deg, rgba(6, 78, 59, 0.05), rgba(6, 78, 59, 0) 120px);
 }
 
-/* Bóng nhuốm màu cho thẻ huấn luyện: xanh cỏ khi bình thường, đỏ khi nguy hiểm. */
-.shadow-grass-tint { box-shadow: 0 18px 36px -28px rgba(6, 78, 59, 0.55), 0 1px 2px rgba(6, 78, 59, 0.06); }
-.shadow-amber-tint { box-shadow: 0 18px 36px -24px rgba(180, 83, 9, 0.5), 0 1px 2px rgba(180, 83, 9, 0.08); }
-.shadow-red-tint { box-shadow: 0 20px 40px -22px rgba(185, 28, 28, 0.6), 0 1px 2px rgba(185, 28, 28, 0.1); }
+/* Bóng nhuốm theo ý nghĩa cho thẻ cần nổi: xanh cỏ bình thường, hổ phách cần chú ý, đỏ nguy hiểm. Nhẹ, không phát sáng. */
+.shadow-grass-tint { box-shadow: 0 8px 20px -14px rgba(6, 78, 59, 0.32), 0 1px 2px rgba(6, 78, 59, 0.06); }
+.shadow-amber-tint { box-shadow: 0 8px 20px -14px rgba(180, 83, 9, 0.3), 0 1px 2px rgba(180, 83, 9, 0.06); }
+.shadow-red-tint { box-shadow: 0 8px 20px -14px rgba(185, 28, 28, 0.32), 0 1px 2px rgba(185, 28, 28, 0.08); }
 
 /* Ngày ngoài khoảng của lớp trên lịch tuần: gạch chéo nhạt, không thêm buổi được. */
 .calendar-off { background-image: repeating-linear-gradient(135deg, #f3f4f6 0, #f3f4f6 6px, #ffffff 6px, #ffffff 12px); }

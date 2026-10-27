@@ -1,23 +1,26 @@
 // F3.11 — Trang tạo lịch chăm sóc (VET): tiêm phòng, tẩy giun, kiểm tra móng.
-// Cột trái: ngựa, loại, ngày đến hạn, người thực hiện, ghi chú. Cột phải: lịch đang có của ngựa để tránh tạo trùng.
+// Cột trái: ngựa, loại, ngày đến hạn, bác sĩ được giao (lịch chỉ thuộc bác sĩ), ghi chú. Cột phải: lịch đang có của ngựa để tránh tạo trùng.
 // Tham số URL: horseId (cố định ngựa), back (trang quay về).
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, NotebookPen, Syringe, UserRound } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
+import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { getHorse } from '../../api/horses';
 import { createCareSchedule, listCareSchedules } from '../../api/medical';
 import type { CareTaskType } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Button, CharCount, ErrorBox, Field, NotFound, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { Button, CharCount, ErrorBox, Field, NotFound, PageHeader, Select, Skeleton, Textarea, cn, invalidClass, useToast } from '../../components/ui';
 import { careTypeLabel } from '../../lib/api-labels';
 import { formatDateTime } from '../../lib/format';
 import { links, safeInternalPath } from '../../lib/links';
 import { now } from '../../lib/clock';
-import { CareAssigneeField, CareLine } from './components/care';
-import { ASSIGNEE_MODE_LABEL, CARE_TYPES, assigneeError, assigneeInput, defaultAssignee, fitAssignee, type AssigneeChoice } from './components/care-rules';
+import { CareLine, VetAssigneeField } from './components/care';
+import { CARE_TYPES, careSavedText } from './components/care-rules';
 import { horsePlace, useMedicalHorses } from './components/horses';
 import { usePeople } from './components/people';
 import { localToIso, toLocalInput, todayKey } from './components/utils';
@@ -51,11 +54,13 @@ export default function CareNew() {
   const [horseId, setHorseId] = useState(fixedHorseId ?? '');
   const [type, setType] = useState<CareTaskType>('VACCINATION');
   const [dueAt, setDueAt] = useState(defaultDue);
-  // Mặc định giao Groom phụ trách: đổi Groom thì lịch tự theo Groom mới.
-  const vetId = user?.role === 'VETERINARIAN' ? user.id : undefined;
-  const [assignee, setAssignee] = useState<AssigneeChoice>(() => defaultAssignee('VACCINATION', vetId));
+  // Mặc định giao chính bác sĩ đang tạo; rỗng là chưa giao ai.
+  const [assignee, setAssignee] = useState(user?.role === 'VETERINARIAN' ? user.id : '');
   const [notes, setNotes] = useState('');
-  const [attempted, setAttempted] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const snapshot = JSON.stringify([horseId, type, dueAt, assignee, notes]);
+  const [initialSnapshot] = useState(snapshot);
+  const leaveConfirmModal = useLeaveConfirm(!finished && snapshot !== initialSnapshot, 'Lịch chăm sóc chưa được tạo. Rời trang thì mất phần đã nhập.');
 
   const context = useService(async () => {
     if (!horseId) return null;
@@ -63,44 +68,40 @@ export default function CareNew() {
     return { horse, schedules };
   }, [horseId]);
   const horse = context.data?.horse;
-  const groom = horse?.groom ?? null;
-  const people = usePeople(groom ? [groom] : []);
+  const people = usePeople();
 
   useCrumbs(horse ? [{ label: horse.name, to: links.horseMedical(horse.id) }, { label: 'Tạo lịch chăm sóc' }] : [{ label: 'Tạo lịch' }], fixedHorseId ? [{ label: 'Y tế', to: links.medicalBoard }] : undefined);
 
-  if (!can(user, 'care.manage')) return <NotFound message="Chỉ bác sĩ thú y tạo được lịch chăm sóc." />;
-
-
   const dueIso = localToIso(dueAt);
-  const errors: Record<string, string> = {};
+  const errors: Partial<Record<'horse' | 'dueAt' | 'assignee', string>> = {};
   if (!horseId) errors.horse = 'Chọn ngựa';
   if (!dueIso) errors.dueAt = 'Chọn ngày đến hạn';
   else if (dueAt.slice(0, 10) < todayKey()) errors.dueAt = 'Ngày đến hạn đã qua';
-  const assigneeProblem = assigneeError(assignee);
-  if (assigneeProblem) errors.assignee = assigneeProblem;
-  const show = (key: string) => (attempted ? errors[key] : undefined);
+  const serverErrors = { ...action.fieldErrors };
+  if (serverErrors.assignedTo) serverErrors.assignee = serverErrors.assignedTo;
+  const f = useFormErrors(errors, { fieldErrors: serverErrors, field: action.field, error: action.error });
+  const show = f.show;
+  const errorCount = Object.values(errors).filter(Boolean).length;
+
+  if (!can(user, 'care.manage')) return <NotFound message="Chỉ bác sĩ thú y tạo được lịch chăm sóc." />;
 
   const upcoming = (context.data?.schedules ?? []).filter((row) => row.status === 'SCHEDULED');
   const sameType = upcoming.filter((row) => row.type === type);
   const cancelTo = back ?? (fixedHorseId ? links.horseMedical(fixedHorseId) : links.careSchedules);
 
   const submit = () => {
-    setAttempted(true);
-    if (Object.keys(errors).length > 0 || !horse) {
-      scrollToFirstError(formRef.current ?? document);
-      return;
-    }
+    if (!f.attempt(formRef.current ?? document) || !horse) return;
     action.run(
       () =>
         createCareSchedule(horse.id, {
           type,
           dueAt: dueIso!,
-          ...(assigneeInput(assignee).assigneeType ? { assigneeType: assigneeInput(assignee).assigneeType! } : {}),
-          ...(assigneeInput(assignee).assignedTo ? { assignedTo: assigneeInput(assignee).assignedTo! } : {}),
+          ...(assignee ? { assignedTo: assignee } : {}),
           ...(notes.trim() ? { notes: notes.trim() } : {}),
         }),
       () => {
-        toast.push(`Đã tạo lịch ${careTypeLabel[type].toLowerCase()} cho ${horse.name}`, 'success');
+        flushSync(() => setFinished(true));
+        toast.push(careSavedText('Đã tạo', careTypeLabel[type], horse.name, assignee ? (user?.name ?? null) : null, dueIso!), 'success');
         navigate(back ?? (fixedHorseId ? links.horseMedical(horse.id) : links.careSchedules), { replace: true });
       },
     );
@@ -108,22 +109,19 @@ export default function CareNew() {
 
   return (
     <div className="space-y-5" ref={formRef}>
-      <PageHeader back={<BackLink to={cancelTo}>Quay lại</BackLink>} title="Tạo lịch chăm sóc" description="Nhắc lúc 7 giờ sáng ngày đến hạn." />
+      <PageHeader back={<BackLink to={cancelTo}>Quay lại</BackLink>} title="Tạo lịch chăm sóc" description="Nhắc lúc 5 giờ sáng ngày đến hạn." />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
         <div className="space-y-5 lg:col-span-8">
           <FormSection icon={<Syringe size={16} />} title="Việc cần làm">
             {!fixedHorseId && (
-              <Field label="Ngựa" required name="horse" error={show('horse')}>
+              <Field label="Ngựa" required name="horse" error={show('horse')} onBlur={f.blur('horse')}>
                 {options.loading && !options.data ? (
                   <Skeleton rows={1} />
                 ) : (
                   <Select
                     value={horseId}
-                    onChange={(event) => {
-                      setHorseId(event.target.value);
-                      setAssignee((current) => (current.mode === 'GROOM' ? { mode: 'HORSE_GROOM', userId: '' } : current));
-                    }}
+                    onChange={(event) => setHorseId(event.target.value)}
                     className={cn(show('horse') && invalidClass)}
                   >
                     <option value="">Chọn ngựa…</option>
@@ -146,10 +144,7 @@ export default function CareNew() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => {
-                      setType(value);
-                      setAssignee((prev) => fitAssignee(prev, value, vetId));
-                    }}
+                    onClick={() => setType(value)}
                     aria-pressed={type === value}
                     className={cn('rounded-xl bg-white px-4 py-3 text-left transition', type === value ? 'ring-2 ring-emerald-700' : 'ring-1 ring-gray-200 hover:ring-gray-300')}
                   >
@@ -159,17 +154,34 @@ export default function CareNew() {
                 ))}
               </div>
             </div>
-            <Field label="Ngày đến hạn" required name="dueAt" error={show('dueAt')} className="sm:max-w-xs">
-              <DateTimePicker value={dueAt} min={`${todayKey()}T00:00`} onChange={setDueAt} invalid={!!show('dueAt')} />
+            <Field label="Ngày đến hạn" required name="dueAt" error={show('dueAt')} onBlur={f.blur('dueAt')} className="sm:max-w-xs">
+              <DateTimePicker
+                value={dueAt}
+                min={`${todayKey()}T00:00`}
+                onChange={(value) => {
+                  setDueAt(value);
+                  if (action.field) action.clearError();
+                }}
+                invalid={!!show('dueAt')}
+              />
             </Field>
           </FormSection>
 
-          <FormSection icon={<UserRound size={16} />} title="Người thực hiện">
-            {horseId && context.loading && !context.data ? (
-              <Skeleton rows={1} />
-            ) : (
-              <CareAssigneeField horseId={horse?.id} type={type} groom={groom} value={assignee} onChange={setAssignee} error={show('assignee')} className="sm:max-w-xl" hideLabel />
-            )}
+          <FormSection icon={<UserRound size={16} />} title="Bác sĩ được giao">
+            <VetAssigneeField
+              horseId={horse?.id}
+              type={type}
+              value={assignee}
+              onChange={(value) => {
+                setAssignee(value);
+                if (action.field) action.clearError();
+              }}
+              name="assignee"
+              error={show('assignee')}
+              onBlur={f.blur('assignee')}
+              className="sm:max-w-xl"
+              hideLabel
+            />
           </FormSection>
 
           <FormSection icon={<NotebookPen size={16} />} title="Ghi chú">
@@ -189,7 +201,7 @@ export default function CareNew() {
                 <ul className="space-y-2.5">
                   {upcoming.map((row) => (
                     <li key={row.id}>
-                      <CareLine schedule={row} people={people} groomName={groom?.fullName} />
+                      <CareLine schedule={row} people={people} />
                     </li>
                   ))}
                 </ul>
@@ -206,20 +218,14 @@ export default function CareNew() {
                 {horse ? ` cho ${horse.name}` : ''}
                 {dueIso ? `, đến hạn ${formatDateTime(dueIso)}` : ''}
               </Outcome>
-              <Outcome>
-                {assignee.mode === 'NONE'
-                  ? 'Chưa giao người thực hiện'
-                  : assignee.mode === 'HORSE_GROOM'
-                    ? `Giao Groom phụ trách${groom ? ` (hiện là ${groom.fullName})` : ', ngựa chưa có Groom'}`
-                    : `${ASSIGNEE_MODE_LABEL[assignee.mode]}: ${assignee.userId ? people.name(assignee.userId) : 'chưa chọn người'}`}
-              </Outcome>
+              <Outcome>{assignee ? 'Giao cho bạn' : 'Chưa giao ai, mọi bác sĩ cùng thấy và cùng được nhắc'}</Outcome>
               {sameType.length > 0 && (
                 <Outcome tone="warning">
                   Ngựa đã có {sameType.length} lịch {careTypeLabel[type].toLowerCase()} đang chờ (gần nhất {formatDateTime(sameType[0].dueAt)})
                 </Outcome>
               )}
             </ul>
-            {attempted && Object.keys(errors).length > 0 && <p className="text-sm text-red-600">Còn {Object.keys(errors).length} ô cần sửa ở bên trái.</p>}
+            {f.attempted && errorCount > 0 && <p className="text-sm text-red-600">Còn {errorCount} ô cần sửa ở bên trái.</p>}
             {action.error && <ErrorBox message={action.error} />}
             <div className="space-y-2 border-t border-gray-100 pt-4">
               <Button className="h-11 w-full" onClick={submit} disabled={action.pending}>
@@ -232,6 +238,7 @@ export default function CareNew() {
           </SaveCard>
         </aside>
       </div>
+      {leaveConfirmModal}
     </div>
   );
 }

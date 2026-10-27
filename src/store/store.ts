@@ -14,7 +14,7 @@ import { isApiError } from '../lib/errors';
 const NOTIFICATION_PAGE = 20;
 
 /** Lý do phiên kết thúc mà người dùng không bấm đăng xuất ở tab này. */
-export type SessionEnd = 'expired' | 'elsewhere';
+export type SessionEnd = 'expired' | 'elsewhere' | 'locked';
 
 interface AppState {
   currentUser: User | null;
@@ -84,7 +84,7 @@ export const useStore = create<AppState>((set, get) => {
       const state = get();
       if (state.notifications.some((item) => item.id === payload.id)) return;
       set({ notifications: [payload, ...state.notifications], unreadCount: state.unreadCount + (payload.readAt ? 0 : 1) });
-    });
+    }, () => endSession('locked'));
     void Promise.all([listNotifications({ limit: NOTIFICATION_PAGE }), getUnreadNotificationCount()])
       .then(([page, unread]) => {
         if (seq !== sessionSeq) return;

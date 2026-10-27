@@ -45,7 +45,7 @@ export function ChecklistSection({ horse, canTick, hasGroom, version = 0, classN
         </h3>
         {current && (
           <span className="flex items-center gap-2 text-sm text-gray-600">
-            <span className="font-mono tabular-nums">
+            <span className="tabular-nums">
               {progress.done}/{progress.total}
             </span>
             <ChecklistPill status={current.status} />

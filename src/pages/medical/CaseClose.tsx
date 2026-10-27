@@ -5,15 +5,18 @@
 // Cột trái: kết cục, kết luận cuối, chi phí, quyết định với khóa huấn luyện còn hiệu lực.
 // Cột phải: tóm tắt bệnh án, yêu cầu khám còn chờ của ngựa, nút đóng.
 import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Ban, Bandage, FileCheck2, HeartCrack, ListChecks, Lock, Plus, Wallet } from 'lucide-react';
 import { useAction, useService } from '../../hooks/useService';
+import { useFormErrors } from '../../hooks/useFormErrors';
+import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { getHorse } from '../../api/horses';
 import { closeCase, getCase, getClosePreview, getInjuries, listHorseExamRequests } from '../../api/medical';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { CharCount, ErrorBox, Field, Notice, NotFound, PageHeader, Skeleton, Textarea, Button, cn, invalidClass, scrollToFirstError, useToast } from '../../components/ui';
+import { CharCount, ConfirmDialog, ErrorBox, Field, Notice, NotFound, PageHeader, Skeleton, Textarea, Button, cn, invalidClass, useToast } from '../../components/ui';
 import { bodyRegionLabel, injuryTypeLabel } from '../../lib/api-labels';
 import { RecoveryTag } from './components/ExamTimeline';
 import { healthLabel } from '../../lib/labels';
@@ -53,10 +56,31 @@ export default function CaseClose() {
   const [decision, setDecision] = useState<'RELEASE' | 'KEEP' | ''>('');
   const [keepDate, setKeepDate] = useState('');
   const [deceased, setDeceased] = useState(false);
-  const [attempted, setAttempted] = useState(false);
+  // Ghi nhận ngựa mất không đổi lại được: hỏi lại trước khi gửi.
+  const [confirmDeath, setConfirmDeath] = useState(false);
+  const [finished, setFinished] = useState(false);
 
   const item = data.data?.item;
   const horse = data.data?.horse;
+  // Ngựa mất: BE tự gỡ khóa, không gửi lựa chọn khóa.
+  const lock = deceased ? null : (data.data?.preview?.activeLock ?? null);
+  const errors: Partial<Record<'conclusion' | 'decision' | 'keepDate', string>> = {};
+  if (!conclusion.trim()) errors.conclusion = deceased ? 'Nhập nguyên nhân mất' : 'Nhập kết luận cuối';
+  if (lock && !decision) errors.decision = 'Chọn gỡ hoặc giữ khóa huấn luyện';
+  if (lock && decision === 'KEEP') {
+    if (!keepDate) errors.keepDate = 'Chọn ngày dự kiến gỡ khóa';
+    else if (keepDate < todayKey()) errors.keepDate = 'Ngày dự kiến gỡ phải từ hôm nay trở đi';
+  }
+  const serverErrors: Record<string, string> = { ...action.fieldErrors };
+  if (serverErrors.finalConclusion) serverErrors.conclusion = serverErrors.finalConclusion;
+  if (serverErrors.lockDecision) serverErrors.decision = serverErrors.lockDecision;
+  if (serverErrors.lockExpectedEnd) serverErrors.keepDate = serverErrors.lockExpectedEnd;
+  const f = useFormErrors(errors, { fieldErrors: serverErrors });
+  const show = f.show;
+  const leaveConfirmModal = useLeaveConfirm(
+    !finished && (!!conclusion.trim() || !!decision || !!keepDate || deceased),
+    'Bệnh án chưa được đóng. Rời trang thì mất phần đã nhập.',
+  );
   useCrumbs(item && horse ? [{ label: `${horse.name} · ${item.initialDiagnosis}`, to: links.case(item.id) }, { label: 'Đóng bệnh án' }] : null);
 
   if (!can(user, 'case.close')) return <NotFound message="Chỉ bác sĩ thú y đóng được bệnh án." />;
@@ -74,26 +98,18 @@ export default function CaseClose() {
     );
   }
 
-  // Ngựa mất: BE tự gỡ khóa, không gửi lựa chọn khóa.
-  const lock = deceased ? null : preview.activeLock;
   const unhealed = injuries.filter((injury) => injury.currentRecoveryStatus !== 'HEALED');
   const death = preview.deathImpact;
   const deathBlocked = deceased && !!death && !death.allowed;
   // Đếm của BE là chuẩn, danh sách lấy từ diễn biến chấn thương. Đóng kèm ngựa mất thì không chặn.
   const blocked = deceased ? deathBlocked : preview.unhealedInjuryCount > 0;
   const followUp = links.visitNew({ horseId: horse.id, caseId: item.id, back: links.caseClose(item.id) });
-  const errors: Record<string, string> = {};
-  if (!conclusion.trim()) errors.conclusion = 'Nhập kết luận cuối';
-  if (lock && !decision) errors.decision = 'Chọn gỡ hoặc giữ khóa huấn luyện';
-  if (lock && decision === 'KEEP' && !keepDate) errors.keepDate = 'Chọn ngày dự kiến gỡ khóa';
-  const show = (key: string) => (attempted ? errors[key] : undefined);
   const visits = item.visits.filter((visit) => !visit.voidedAt);
 
-  const submit = () => {
-    setAttempted(true);
-    if (blocked) return;
-    if (Object.keys(errors).length > 0) {
-      scrollToFirstError(formRef.current ?? document);
+  const submit = (confirmed = false) => {
+    if (blocked || !f.attempt(formRef.current ?? document)) return;
+    if (deceased && !confirmed) {
+      setConfirmDeath(true);
       return;
     }
     action.run(
@@ -105,10 +121,11 @@ export default function CaseClose() {
           ...(deceased ? { deceased: true } : {}),
         }),
       () => {
+        flushSync(() => setFinished(true));
         toast.push(deceased ? `Đã đóng bệnh án và ghi nhận ${horse.name} đã mất` : `Đã đóng bệnh án của ${horse.name}`, 'success');
         navigate(links.case(item.id), { replace: true });
       },
-    );
+    ).then(() => setConfirmDeath(false)); // lỗi thì đóng hộp hỏi để thấy câu lỗi
   };
 
   return (
@@ -166,7 +183,7 @@ export default function CaseClose() {
           {!deceased && blocked && (
             <Notice tone="danger" icon={<Bandage size={16} />}>
               <p className="font-medium">Còn {preview.unhealedInjuryCount} chấn thương chưa lành, chưa đóng được bệnh án.</p>
-              <p className="mt-0.5">Ghi một buổi tái khám đánh dấu Đã lành cho từng vết dưới đây rồi quay lại đóng.</p>
+              <p className="mt-0.5">Ghi buổi tái khám đánh dấu Đã lành cho từng vết rồi quay lại đóng.</p>
               {unhealed.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {unhealed.map((injury) => (
@@ -192,14 +209,20 @@ export default function CaseClose() {
 
           <FormSection icon={<FileCheck2 size={16} />} title="Kết luận cuối">
             <Field
+              label={deceased ? 'Nguyên nhân mất' : 'Nội dung kết luận'}
+              required
               name="conclusion"
               error={show('conclusion')}
+              onBlur={f.blur('conclusion')}
               hint={deceased ? 'Ghi nguyên nhân mất. Câu này cũng là lý do ghi nhận mất trong nhật ký hồ sơ.' : undefined} counter={<CharCount value={conclusion} max={CONCLUSION_MAX} />}>
               <Textarea
                 rows={6}
                 maxLength={CONCLUSION_MAX}
                 value={conclusion}
-                onChange={(event) => setConclusion(event.target.value)}
+                onChange={(event) => {
+                  setConclusion(event.target.value);
+                  if (action.fieldErrors.finalConclusion) action.clearError();
+                }}
                 placeholder={deceased ? 'Ví dụ: Đau bụng cấp không qua khỏi' : 'Ví dụ: Hồi phục hoàn toàn sau 2 tuần giảm tải, siêu âm gân bình thường'}
                 className={cn('min-h-36', show('conclusion') && invalidClass)}
               />
@@ -209,7 +232,7 @@ export default function CaseClose() {
           <FormSection icon={<Wallet size={16} />} title="Chi phí điều trị">
             <p className="text-2xl font-bold tabular-nums text-gray-900">{formatMoney(item.totalCost ?? 0)}</p>
             <p className="text-sm text-gray-500">
-              Cộng chi phí {visits.length} buổi khám của bệnh án. Chi phí ghi ở từng buổi khám, sai số thì điều chỉnh ở buổi đó trong trang bệnh án.
+              Tổng chi phí của {visits.length} buổi khám. Sai số thì điều chỉnh ở buổi khám đó.
             </p>
           </FormSection>
 
@@ -224,7 +247,10 @@ export default function CaseClose() {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setDecision(value)}
+                    onClick={() => {
+                      setDecision(value);
+                      f.touch('decision');
+                    }}
                     aria-pressed={decision === value}
                     className={cn(
                       'rounded-xl bg-white px-4 py-3 text-left transition',
@@ -238,7 +264,7 @@ export default function CaseClose() {
               </div>
               {show('decision') && <p className="text-xs font-medium text-red-600">{show('decision')}</p>}
               {decision === 'KEEP' && (
-                <Field label="Ngày dự kiến gỡ" required name="keepDate" error={show('keepDate')} className="sm:max-w-xs">
+                <Field label="Ngày dự kiến gỡ" required name="keepDate" error={show('keepDate')} onBlur={f.blur('keepDate')} className="sm:max-w-xs">
                   <DatePicker value={keepDate} min={todayKey()} onChange={setKeepDate} invalid={!!show('keepDate')} />
                 </Field>
               )}
@@ -304,7 +330,7 @@ export default function CaseClose() {
             </ul>
             {action.error && <ErrorBox message={action.error} />}
             <div className="space-y-2 border-t border-gray-100 pt-4">
-              <Button variant={deceased ? 'danger' : 'primary'} className="h-11 w-full" onClick={submit} disabled={action.pending || blocked}>
+              <Button variant={deceased ? 'danger' : 'primary'} className="h-11 w-full" onClick={() => submit()} disabled={action.pending || blocked}>
                 {action.pending ? 'Đang lưu…' : deceased ? 'Đóng và ghi nhận mất' : 'Đóng bệnh án'}
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => navigate(back)} disabled={action.pending}>
@@ -314,6 +340,16 @@ export default function CaseClose() {
           </SaveCard>
         </aside>
       </div>
+      <ConfirmDialog
+        open={confirmDeath}
+        title={`Ghi nhận ${horse.name} đã mất?`}
+        message="Bệnh án sẽ đóng và hồ sơ ngựa chỉ còn xem được. Không đổi lại được."
+        confirmLabel="Đóng và ghi nhận mất"
+        pending={action.pending}
+        onConfirm={() => submit(true)}
+        onClose={() => !action.pending && setConfirmDeath(false)}
+      />
+      {leaveConfirmModal}
     </div>
   );
 }

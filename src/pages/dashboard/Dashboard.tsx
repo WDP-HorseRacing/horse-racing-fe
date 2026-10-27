@@ -5,7 +5,7 @@
 // Phần huấn luyện (Flow 2) nằm ở TrainingBlocks.tsx, hiện khi bật cờ FEATURES.training.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, ListChecks, Lock, MapPinned, Plus, Siren, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
+import { AlertOctagon, ArrowRight, CalendarClock, Check, ClipboardCheck, Flag, ListChecks, Lock, MapPinned, Plus, Siren, Stethoscope, Syringe, Users, Wallet } from 'lucide-react';
 import { useStore } from '../../store/store';
 import { useService } from '../../hooks/useService';
 import type { DailyChecklist, HorseListItem, Incident, NotificationItem, SupplyItem } from '../../api/types';
@@ -95,7 +95,7 @@ function Row({ children }: { children: ReactNode }) {
 function AttentionList({ items, empty = 'Không có việc nào cần xử lý', className = '' }: { items: Attention[]; empty?: string; className?: string }) {
   const sorted = [...items].sort((a, b) => levelOrder[a.level] - levelOrder[b.level]);
   return (
-    <Card className={cn('flex flex-col p-0 shadow-[inset_3px_0_0_0_#047857,0_18px_40px_-30px_rgba(6,78,59,0.55)] sm:p-0', className)}>
+    <Card className={cn('flex flex-col p-0 shadow-[inset_3px_0_0_0_#047857,0_1px_2px_rgba(6,78,59,0.06)] sm:p-0', className)}>
       <div className="flex items-center justify-between px-5 pb-3 pt-4">
         <h3 className="text-[0.95rem] font-semibold text-gray-900">Cần xử lý</h3>
         {sorted.length > 0 && <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-emerald-800">{sorted.length} việc</span>}
@@ -685,8 +685,6 @@ function GroomDashboard({ name }: { name: string }) {
   if (loading && !data) return <Loading />;
   if (error || !data) return <ErrorBox message={error ?? 'Không tải được dữ liệu'} />;
 
-  const today = todayKey();
-  const due = data.schedules.filter((item) => toDateKey(item.schedule.dueAt) <= today);
   const ticked = local.source === data.today ? local.map : {};
   const work = (data.today?.horses ?? []).reduce(
     (sum, horse) => {
@@ -695,15 +693,9 @@ function GroomDashboard({ name }: { name: string }) {
     },
     { done: 0, total: 0 },
   );
+  // Lượt dắt tập hôm nay: ngựa mình phụ trách cộng lượt dắt hộ.
+  const runCount = (data.today?.horses ?? []).reduce((sum, horse) => sum + horse.trainingRuns.length, 0) + (data.today?.assistedRuns ?? []).length;
   const attention: Attention[] = [
-    ...due.map(({ schedule, horseName }) => ({
-      key: `care-${schedule.id}`,
-      level: toDateKey(schedule.dueAt) < today ? ('danger' as const) : ('warn' as const),
-      title: `${careTypeLabel[schedule.type]} cho ${horseName}`,
-      detail: `${toDateKey(schedule.dueAt) < today ? `Quá hạn từ ${formatDate(schedule.dueAt)}` : 'Đến hạn hôm nay'}${schedule.notes ? ` · ${schedule.notes}` : ''}`,
-      to: links.horseMedical(schedule.horseId),
-      cta: 'Hoàn tất',
-    })),
     ...data.horses
       .filter((horse) => horse.lifecycleStatus === 'ACTIVE' && horse.healthStatus !== 'ELIGIBLE')
       .map((horse) => ({
@@ -756,7 +748,11 @@ function GroomDashboard({ name }: { name: string }) {
             tone={work.total && work.done < work.total ? 'warning' : 'default'}
           />
           <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-          <Stat value={due.length} label="Lịch chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
+          {FEATURES.training ? (
+            <Stat value={runCount} label="Lượt dắt tập hôm nay" hint="kể cả lượt dắt hộ" icon={<Flag size={18} />} onClick={() => navigate(links.today)} />
+          ) : (
+            <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
+          )}
           <Stat value={data.incidents.length} label="Sự cố đang mở" icon={<Siren size={18} />} tone="warning" onClick={() => navigate(links.incidents())} />
         </DashboardHero>
 
@@ -807,8 +803,8 @@ function GroomDashboard({ name }: { name: string }) {
         </Row>
 
         <Row>
-          <DayAgenda days={data.week} overdue={data.overdue} title="Lịch chăm sóc 7 ngày tới" empty="Không có việc" className="h-full" />
-          <AttentionList items={attention} empty="Hôm nay không có lịch chăm sóc nào đến hạn" className="h-full" />
+          <AttentionList items={attention} empty="Ngựa bạn phụ trách đều đủ điều kiện" className="h-full" />
+          <HerdHealthCard counts={countHealth(data.horses.filter((horse) => horse.lifecycleStatus === 'ACTIVE'))} title="Sức khỏe ngựa bạn phụ trách" className="h-full" />
         </Row>
 
         <IncidentReportDialog open={!!reporting} horse={reporting?.horse} onClose={() => setReporting(null)} onDone={reload} />
@@ -820,7 +816,7 @@ function GroomDashboard({ name }: { name: string }) {
     <Reveal className="space-y-5">
       <DashboardHero eyebrow={todayLabel()} title={`${greeting()}, ${name}`}>
         <Stat value={data.horses.length} label="Ngựa phụ trách" icon={<Users size={18} />} onClick={() => navigate(links.horses)} />
-        <Stat value={due.length} label="Việc chăm sóc đến hạn" hint="tiêm phòng, tẩy giun, kiểm tra móng" icon={<CalendarClock size={18} />} tone="warning" />
+        <Stat value={data.incidents.length} label="Sự cố đang mở" icon={<Siren size={18} />} tone="warning" />
         <Stat value={data.notes.length} label="Ngựa có dặn dò của bác sĩ" icon={<ClipboardCheck size={18} />} />
         <Stat value={data.requests.length} label="Yêu cầu khám chờ bác sĩ" icon={<Stethoscope size={18} />} onClick={() => navigate(links.requests)} />
       </DashboardHero>
@@ -834,7 +830,7 @@ function GroomDashboard({ name }: { name: string }) {
         <Panel title="Ngựa bạn phụ trách" to={links.horses} flush className="h-full">
           <HorseRows horses={[...data.horses].sort(byPriority)} empty="Bạn chưa được giao ngựa nào." />
         </Panel>
-        <AttentionList items={attention} empty="Hôm nay không có việc chăm sóc nào đến hạn" className="h-full" />
+        <AttentionList items={attention} empty="Ngựa bạn phụ trách đều đủ điều kiện" className="h-full" />
       </Row>
 
       <Row>
@@ -843,7 +839,6 @@ function GroomDashboard({ name }: { name: string }) {
       </Row>
 
       <Row>
-        <DayAgenda days={data.week} overdue={data.overdue} title="Việc chăm sóc 7 ngày tới" empty="Không có việc" className="h-full" />
         <Panel title="Yêu cầu khám đang chờ bác sĩ" to={links.requests} toLabel="Yêu cầu khám" flush className="h-full">
           {data.requests.length === 0 ? (
             <p className="px-5 py-5 text-sm text-gray-500">Không có yêu cầu khám nào đang chờ.</p>

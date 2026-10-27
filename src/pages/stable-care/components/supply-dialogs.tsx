@@ -1,25 +1,29 @@
 // Các hộp thoại của trang Vật tư: thêm, sửa vật tư và nhập hàng (Quản lý CLB), xuất dùng (Quản lý CLB, HLV, bác sĩ, Groom),
 // gửi, sửa đề xuất (HLV, Groom), cấp hàng và từ chối đề xuất (Quản lý CLB).
-// Mọi ô được kiểm trước khi gửi. Lỗi trùng tên vật tư (409) của BE gắn vào ô Tên vật tư.
+// Mọi ô được kiểm trước khi gửi, lỗi hiện khi rời ô. Lỗi trùng tên vật tư (409) của BE gắn vào ô Tên vật tư.
 // Ô số dùng QuantityInput (dấu phẩy, tối đa 2 chữ số lẻ). Đã nhập mà bấm ra ngoài hộp thì hỏi trước khi đóng.
 import { useState } from 'react';
 import { createSupplyItem, createSupplyRequest, editSupplyRequest, fulfillSupplyRequest, receiveSupply, recordSupplyUsage, reviewSupplyRequest, updateSupplyItem } from '../../../api/supplies';
 import type { SupplyCategory, SupplyItem, SupplyRequest } from '../../../api/types';
-import { Button, ErrorBox, Field, Input, Modal, Select, Textarea, useToast } from '../../../components/ui';
+import { Button, CancelButton, ErrorBox, Field, Input, Modal, Select, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { MoneyInput } from '../../../components/MoneyInput';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction } from '../../../hooks/useService';
 import { formatMoney, moneyError, parseMoney } from '../../../lib/format';
-import { SUPPLY_CATEGORIES, SUPPLY_UNITS, formatAmount, parseQuantity, quantityError, quantityText, supplyCategoryText, textError } from '../../../lib/stable-labels';
+import { SUPPLY_CATEGORIES, SUPPLY_UNIT_HINTS, formatAmount, parseQuantity, quantityError, quantityText, supplyCategoryText, textError } from '../../../lib/stable-labels';
 import { QuantityInput } from './QuantityInput';
 
 const MAX_STOCK = 1_000_000_000;
 
-function Footer({ onClose, onSubmit, pending, label, danger }: { onClose: () => void; onSubmit: () => void; pending: boolean; label: string; danger?: boolean }) {
+/** Đơn giá nhập, cấp hàng: BE nhận 0 nhưng lô 0 đ hiện "Chưa có giá" dễ nhầm, nên bắt nhập giá thật. */
+function unitPriceError(raw: string) {
+  return moneyError(raw, { label: 'Đơn giá' }) ?? (parseMoney(raw) <= 0 ? 'Đơn giá phải lớn hơn 0' : undefined);
+}
+
+function Footer({ onSubmit, pending, label, danger }: { onSubmit: () => void; pending: boolean; label: string; danger?: boolean }) {
   return (
     <>
-      <Button variant="ghost" onClick={onClose}>
-        Hủy
-      </Button>
+      <CancelButton />
       <Button variant={danger ? 'danger' : 'primary'} onClick={onSubmit} disabled={pending}>
         {pending ? 'Đang lưu…' : label}
       </Button>
@@ -44,43 +48,28 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
   const [threshold, setThreshold] = useState(initial.threshold);
   const [stock, setStock] = useState('');
   const [openingPrice, setOpeningPrice] = useState('');
-  const [touched, setTouched] = useState(false);
   const dirty = name !== initial.name || category !== initial.category || unit !== initial.unit || threshold !== initial.threshold || stock !== '' || openingPrice !== '';
   // Đơn giá tồn ban đầu chỉ có nghĩa khi có nhập tồn.
   const stockValue = parseQuantity(stock);
   const hasStock = !item && !Number.isNaN(stockValue) && stockValue > 0;
 
-  // Đơn vị chọn theo loại. Vật tư cũ có đơn vị ngoài danh sách thì vẫn giữ làm một lựa chọn.
-  const units = SUPPLY_UNITS[category];
-  const unitOptions = item && initial.unit && !units.includes(initial.unit) && category === initial.category ? [initial.unit, ...units] : units;
-
-  // Lỗi kiểm ở FE chặn gửi. Lỗi của BE (vd trùng tên) chỉ hiện dưới ô và mất khi sửa ô, không chặn gửi lại.
-  const clientErrors = {
+  // Khóa theo tên ô của BE để lỗi BE (trùng tên, đã có nhập xuất nên không đổi loại, đơn vị) tự gắn vào ô.
+  const errors: Partial<Record<'name' | 'category' | 'unit' | 'reorderThreshold' | 'quantityOnHand' | 'openingUnitPrice', string>> = {
     name: textError(name, { label: 'Tên vật tư', max: 160 }),
-    unit: unit ? undefined : 'Chọn đơn vị',
-    threshold: quantityError(threshold, { label: 'Ngưỡng báo thiếu', positive: false, max: MAX_STOCK }),
-    stock: !item && stock.trim() ? quantityError(stock, { label: 'Tồn ban đầu', positive: false, max: MAX_STOCK }) : undefined,
-    openingPrice: hasStock ? moneyError(openingPrice, { label: 'Đơn giá', required: false }) : undefined,
+    unit: !unit.trim() ? 'Nhập đơn vị' : unit.trim().length > 32 ? 'Đơn vị tối đa 32 ký tự' : undefined,
+    reorderThreshold: quantityError(threshold, { label: 'Ngưỡng báo thiếu', positive: false, max: MAX_STOCK }),
+    quantityOnHand: !item && stock.trim() ? quantityError(stock, { label: 'Tồn ban đầu', positive: false, max: MAX_STOCK }) : undefined,
+    openingUnitPrice: hasStock ? moneyError(openingPrice, { label: 'Đơn giá', required: false }) : undefined,
   };
-  const errors = {
-    name: clientErrors.name ?? action.fieldErrors.name,
-    unit: clientErrors.unit ?? action.fieldErrors.unit,
-    // Vật tư đã có nhập xuất kho thì BE không cho đổi loại, đơn vị (409 gắn ô): báo ngay dưới ô.
-    category: action.fieldErrors.category,
-    threshold: clientErrors.threshold ?? action.fieldErrors.reorderThreshold,
-    stock: clientErrors.stock ?? action.fieldErrors.quantityOnHand,
-    openingPrice: clientErrors.openingPrice ?? action.fieldErrors.openingUnitPrice,
-  };
-  const shown = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const edit = (setter: (value: string) => void) => (value: string) => {
     setter(value);
     if (action.error) action.clearError();
   };
 
   const submit = () => {
-    setTouched(true);
-    if (Object.values(clientErrors).some(Boolean)) return;
-    const base = { name: name.trim(), category, unit, reorderThreshold: parseQuantity(threshold) };
+    if (!f.attempt()) return;
+    const base = { name: name.trim(), category, unit: unit.trim(), reorderThreshold: parseQuantity(threshold) };
     void action.run(
       () =>
         item
@@ -102,26 +91,32 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
       open
       onClose={onClose}
       title={item ? `Sửa vật tư: ${item.name}` : 'Thêm vật tư'}
-      description={item ? 'Số tồn đổi qua Nhập hàng hoặc Xuất dùng. Vật tư đã nhập, xuất kho thì không đổi được loại, đơn vị.' : undefined}
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label={saveLabel} />}
+      description={item ? 'Muốn đổi số tồn thì dùng Nhập hàng hoặc Xuất dùng.' : undefined}
+      footer={<Footer onSubmit={submit} pending={action.pending} label={saveLabel} />}
       dirty={dirty}
+      busy={action.pending}
       onSave={submit}
       saveLabel={saveLabel}
     >
       <div className="grid gap-4 sm:grid-cols-6">
-        <Field label="Tên vật tư" required error={shown('name')} className="sm:col-span-6">
-          <Input value={name} onChange={(event) => edit(setName)(event.target.value)} maxLength={180} placeholder="Ví dụ: Yến mạch, Cỏ khô Timothy, Vitamin E" />
+        <Field label="Tên vật tư" required name="name" error={f.show('name')} onBlur={f.blur('name')} className="sm:col-span-6">
+          <Input
+            value={name}
+            onChange={(event) => edit(setName)(event.target.value)}
+            maxLength={160}
+            placeholder="Ví dụ: Yến mạch, Cỏ khô Timothy, Vitamin E"
+            className={cn(f.show('name') && invalidClass)}
+          />
         </Field>
-        <Field label="Loại" required error={shown('category')} className="sm:col-span-4">
+        <Field label="Loại" required name="category" error={f.show('category')} className="sm:col-span-4">
           <Select
             value={category}
             onChange={(event) => {
               const next = event.target.value as SupplyCategory;
               setCategory(next);
               if (action.error) action.clearError();
-              // Đơn vị đang chọn không có trong loại mới thì bỏ, bắt chọn lại.
-              if (unit && !SUPPLY_UNITS[next].includes(unit)) setUnit('');
             }}
+            className={cn(f.show('category') && invalidClass)}
           >
             {SUPPLY_CATEGORIES.map((value) => (
               <option key={value} value={value}>
@@ -130,27 +125,34 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
             ))}
           </Select>
         </Field>
-        <Field label="Đơn vị" required error={shown('unit')} className="sm:col-span-2">
-          <Select value={unit} onChange={(event) => edit(setUnit)(event.target.value)}>
-            <option value="">Chọn đơn vị</option>
-            {unitOptions.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </Select>
+        <Field label="Đơn vị" required name="unit" error={f.show('unit')} onBlur={f.blur('unit')} className="sm:col-span-2">
+          <Input
+            value={unit}
+            onChange={(event) => edit(setUnit)(event.target.value)}
+            maxLength={32}
+            placeholder={SUPPLY_UNIT_HINTS[category]}
+            className={cn(f.show('unit') && invalidClass)}
+          />
         </Field>
-        <Field label="Ngưỡng báo thiếu" required error={shown('threshold')} hint="Còn từ mức này trở xuống là Sắp hết" className={item ? 'sm:col-span-6' : 'sm:col-span-3'}>
-          <QuantityInput value={threshold} onChange={edit(setThreshold)} placeholder="0" />
+        <Field
+          label="Ngưỡng báo thiếu"
+          required
+          name="reorderThreshold"
+          error={f.show('reorderThreshold')}
+          onBlur={f.blur('reorderThreshold')}
+          hint="Còn từ mức này trở xuống là Sắp hết"
+          className={item ? 'sm:col-span-6' : 'sm:col-span-3'}
+        >
+          <QuantityInput value={threshold} onChange={edit(setThreshold)} placeholder="0" className={cn(f.show('reorderThreshold') && invalidClass)} />
         </Field>
         {!item && (
-          <Field label="Tồn ban đầu" error={shown('stock')} hint="Bỏ trống là 0" className="sm:col-span-3">
-            <QuantityInput value={stock} onChange={edit(setStock)} placeholder="0" />
+          <Field label="Tồn ban đầu" name="quantityOnHand" error={f.show('quantityOnHand')} onBlur={f.blur('quantityOnHand')} hint="Bỏ trống là 0" className="sm:col-span-3">
+            <QuantityInput value={stock} onChange={edit(setStock)} placeholder="0" className={cn(f.show('quantityOnHand') && invalidClass)} />
           </Field>
         )}
         {hasStock && (
-          <Field label="Đơn giá tồn ban đầu" error={shown('openingPrice')} hint="Bỏ trống là 0 đ" className="sm:col-span-6">
-            <MoneyInput value={openingPrice} onChange={edit(setOpeningPrice)} suffix={unit ? `đ/${unit}` : 'đ'} placeholder="Ví dụ: 15.000" />
+          <Field label="Đơn giá tồn ban đầu" name="openingUnitPrice" error={f.show('openingUnitPrice')} onBlur={f.blur('openingUnitPrice')} hint="Bỏ trống là 0 đ" className="sm:col-span-6">
+            <MoneyInput value={openingPrice} onChange={edit(setOpeningPrice)} suffix={unit ? `đ/${unit}` : 'đ'} placeholder="Ví dụ: 15.000" className={cn(f.show('openingUnitPrice') && invalidClass)} />
           </Field>
         )}
       </div>
@@ -171,27 +173,20 @@ export function ReceiveDialog({ item, onClose, onDone }: { item: SupplyItem; onC
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
   const [note, setNote] = useState('');
-  const [touched, setTouched] = useState(false);
-  const clientErrors = {
+  const errors: Partial<Record<'quantity' | 'unitPrice' | 'note', string>> = {
     quantity: quantityError(quantity, { label: 'Số lượng', max: MAX_STOCK }),
-    unitPrice: moneyError(price, { label: 'Đơn giá' }),
+    unitPrice: unitPriceError(price),
     note: textError(note, { label: 'Ghi chú', max: 500, required: false }),
   };
-  const errors = {
-    quantity: clientErrors.quantity ?? action.fieldErrors.quantity,
-    unitPrice: clientErrors.unitPrice ?? action.fieldErrors.unitPrice,
-    note: clientErrors.note ?? action.fieldErrors.note,
-  };
-  const shown = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const edit = (setter: (value: string) => void) => (value: string) => {
     setter(value);
     if (action.error) action.clearError();
   };
-  const total = clientErrors.quantity || clientErrors.unitPrice ? undefined : Math.round(parseQuantity(quantity) * parseMoney(price));
+  const total = errors.quantity || errors.unitPrice ? undefined : Math.round(parseQuantity(quantity) * parseMoney(price));
 
   const submit = () => {
-    setTouched(true);
-    if (Object.values(clientErrors).some(Boolean)) return;
+    if (!f.attempt()) return;
     const amount = parseQuantity(quantity);
     void action.run(
       () => receiveSupply(item.id, { quantity: amount, unitPrice: parseMoney(price), ...(note.trim() ? { note: note.trim() } : {}) }),
@@ -209,25 +204,33 @@ export function ReceiveDialog({ item, onClose, onDone }: { item: SupplyItem; onC
       onClose={onClose}
       title={`Nhập hàng: ${item.name}`}
       description={`Đang còn ${formatAmount(item.quantityOnHand, item.unit)}.`}
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Nhập hàng" />}
+      footer={<Footer onSubmit={submit} pending={action.pending} label="Nhập hàng" />}
       dirty={quantity !== '' || price !== '' || note !== ''}
+      busy={action.pending}
       onSave={submit}
       saveLabel="Nhập hàng"
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={`Số lượng (${item.unit})`} required error={shown('quantity')}>
-          <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 30" />
+        <Field label={`Số lượng (${item.unit})`} required name="quantity" error={f.show('quantity')} onBlur={f.blur('quantity')}>
+          <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 30" className={cn(f.show('quantity') && invalidClass)} />
         </Field>
-        <Field label="Đơn giá" required error={shown('unitPrice')}>
-          <MoneyInput value={price} onChange={edit(setPrice)} suffix={`đ/${item.unit}`} placeholder="Ví dụ: 18.000" />
+        <Field label="Đơn giá" required name="unitPrice" error={f.show('unitPrice')} onBlur={f.blur('unitPrice')}>
+          <MoneyInput value={price} onChange={edit(setPrice)} suffix={`đ/${item.unit}`} placeholder="Ví dụ: 18.000" className={cn(f.show('unitPrice') && invalidClass)} />
         </Field>
         {total !== undefined && (
           <p className="text-sm text-gray-600 sm:col-span-2">
             Thành tiền <span className="font-semibold text-gray-900 tabular-nums">{formatMoney(total)}</span>
           </p>
         )}
-        <Field label="Ghi chú" error={shown('note')} className="sm:col-span-2">
-          <Textarea rows={2} value={note} onChange={(event) => edit(setNote)(event.target.value)} placeholder="Ví dụ: Mua của đại lý Minh Phát" />
+        <Field label="Ghi chú" name="note" error={f.show('note')} onBlur={f.blur('note')} className="sm:col-span-2">
+          <Textarea
+            rows={2}
+            maxLength={500}
+            value={note}
+            onChange={(event) => edit(setNote)(event.target.value)}
+            placeholder="Ví dụ: Mua của đại lý Minh Phát"
+            className={cn(f.show('note') && invalidClass)}
+          />
         </Field>
       </div>
       {action.error && !Object.keys(action.fieldErrors).length && (
@@ -246,29 +249,23 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
   const action = useAction();
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
-  const [touched, setTouched] = useState(false);
   const value = parseQuantity(quantity);
   const overStock = !Number.isNaN(value) && value > item.quantityOnHand;
-  const clientErrors = {
+  const errors: Partial<Record<'quantity' | 'note', string>> = {
     quantity: quantityError(quantity, { label: 'Số lượng', max: MAX_STOCK }) ?? (overStock ? `Chỉ còn ${formatAmount(item.quantityOnHand, item.unit)}` : undefined),
     note: note.trim() ? textError(note, { label: 'Ghi chú', max: 500, required: false }) : 'Phải ghi chú lần xuất',
   };
-  const errors = {
-    quantity: clientErrors.quantity ?? action.fieldErrors.quantity,
-    note: clientErrors.note ?? action.fieldErrors.note,
-  };
-  const shown = (key: keyof typeof errors) => (touched ? errors[key] : undefined);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const edit = (setter: (value: string) => void) => (next: string) => {
     setter(next);
     if (action.error) action.clearError();
   };
   // Số còn lại sau khi lấy, làm tròn 2 chữ số lẻ như BE.
-  const after = clientErrors.quantity ? undefined : Math.round((item.quantityOnHand - value) * 100) / 100;
+  const after = errors.quantity ? undefined : Math.round((item.quantityOnHand - value) * 100) / 100;
   const crossesThreshold = after !== undefined && !item.lowStock && after <= item.reorderThreshold;
 
   const submit = () => {
-    setTouched(true);
-    if (Object.values(clientErrors).some(Boolean)) return;
+    if (!f.attempt()) return;
     void action.run(
       () => recordSupplyUsage(item.id, { quantity: value, note: note.trim() }),
       (saved) => {
@@ -285,14 +282,15 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
       onClose={onClose}
       title={`Xuất dùng: ${item.name}`}
       description={`Đang còn ${formatAmount(item.quantityOnHand, item.unit)}.`}
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Xuất dùng" />}
+      footer={<Footer onSubmit={submit} pending={action.pending} label="Xuất dùng" />}
       dirty={quantity !== '' || note !== ''}
+      busy={action.pending}
       onSave={submit}
       saveLabel="Xuất dùng"
     >
       <div className="space-y-4">
-        <Field label={`Số lượng lấy ra (${item.unit})`} required error={shown('quantity')}>
-          <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 5" />
+        <Field label={`Số lượng lấy ra (${item.unit})`} required name="quantity" error={f.show('quantity')} onBlur={f.blur('quantity')}>
+          <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 5" className={cn(f.show('quantity') && invalidClass)} />
         </Field>
         {after !== undefined && (
           <p className={crossesThreshold ? 'text-sm text-amber-800' : 'text-sm text-gray-600'}>
@@ -300,8 +298,15 @@ export function UsageDialog({ item, onClose, onDone }: { item: SupplyItem; onClo
             {crossesThreshold ? '. Xuống mức sắp hết, Quản lý CLB sẽ được báo.' : ''}
           </p>
         )}
-        <Field label="Ghi chú" required error={shown('note')} hint="Lấy cho ai, việc gì. Sổ nhập xuất giữ ghi chú này.">
-          <Textarea rows={2} maxLength={500} value={note} onChange={(event) => edit(setNote)(event.target.value)} placeholder="Ví dụ: Cho ngựa ô A3, hoặc Hao hụt khi kiểm kho" />
+        <Field label="Ghi chú" required name="note" error={f.show('note')} onBlur={f.blur('note')} hint="Lấy cho ai, việc gì. Sổ nhập xuất giữ ghi chú này.">
+          <Textarea
+            rows={2}
+            maxLength={500}
+            value={note}
+            onChange={(event) => edit(setNote)(event.target.value)}
+            placeholder="Ví dụ: Cho ngựa ô A3, hoặc Hao hụt khi kiểm kho"
+            className={cn(f.show('note') && invalidClass)}
+          />
         </Field>
         {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}
       </div>
@@ -332,15 +337,17 @@ export function SupplyRequestDialog({
   const initial = { itemId: fixed?.id ?? '', note: request?.note ?? '' };
   const [itemId, setItemId] = useState(initial.itemId);
   const [note, setNote] = useState(initial.note);
-  const [touched, setTouched] = useState(false);
   const picked = fixed ?? items?.find((entry) => entry.id === itemId);
   // Không ghi số lượng: nhu cầu ghi bằng chữ, Quản lý cấp theo số thực nhận.
-  const noteError = textError(note, { label: 'Nhu cầu', max: 500 }) ?? action.fieldErrors.note;
+  const errors: Partial<Record<'itemId' | 'note', string>> = {
+    itemId: itemId ? undefined : 'Chọn vật tư',
+    note: textError(note, { label: 'Nhu cầu', max: 500 }),
+  };
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const dirty = itemId !== initial.itemId || note !== initial.note;
 
   const submit = () => {
-    setTouched(true);
-    if (!itemId || noteError) return;
+    if (!f.attempt()) return;
     void action.run(
       () => (request ? editSupplyRequest(request.id, { note: note.trim() }) : createSupplyRequest({ itemId, note: note.trim() })),
       () => {
@@ -358,15 +365,24 @@ export function SupplyRequestDialog({
       onClose={onClose}
       title={request ? 'Sửa đề xuất' : picked && fixed ? `Đề xuất thêm ${picked.name}` : 'Đề xuất thêm vật tư'}
       description="Quản lý CLB sẽ duyệt và cấp hàng."
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label={saveLabel} />}
+      footer={<Footer onSubmit={submit} pending={action.pending} label={saveLabel} />}
       dirty={dirty}
+      busy={action.pending}
       onSave={submit}
       saveLabel={saveLabel}
     >
       <div className="space-y-4">
         {!fixed && (
-          <Field label="Vật tư" required error={touched && !itemId ? 'Chọn vật tư' : undefined}>
-            <Select value={itemId} onChange={(event) => setItemId(event.target.value)}>
+          <Field label="Vật tư" required name="itemId" error={f.show('itemId')} onBlur={f.blur('itemId')}>
+            <Select
+              value={itemId}
+              onChange={(event) => {
+                setItemId(event.target.value);
+                if (action.error) action.clearError();
+              }}
+              onBlur={f.blur('itemId')}
+              className={cn(f.show('itemId') && invalidClass)}
+            >
               <option value="">Chọn vật tư…</option>
               {items?.map((entry) => (
                 <option key={entry.id} value={entry.id}>
@@ -381,16 +397,20 @@ export function SupplyRequestDialog({
             Còn <span className="font-semibold text-gray-900">{formatAmount(picked.quantityOnHand, picked.unit)}</span>. Báo sắp hết ở {formatAmount(picked.reorderThreshold, picked.unit)}.
           </p>
         )}
-        <Field label="Nhu cầu" required error={touched ? noteError : undefined} hint="Ghi khoảng bao nhiêu, dùng cho việc gì. Quản lý cấp theo số thực nhận.">
+        <Field label="Nhu cầu" required name="note" error={f.show('note')} onBlur={f.blur('note')} hint="Ghi khoảng bao nhiêu, dùng cho việc gì. Quản lý cấp theo số thực nhận.">
           <Textarea
             rows={3}
             value={note}
             maxLength={500}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(event) => {
+              setNote(event.target.value);
+              if (action.error) action.clearError();
+            }}
             placeholder={`Ví dụ: Cần thêm khoảng 20 ${picked?.unit ?? 'bao'} cho tuần sau`}
+            className={cn(f.show('note') && invalidClass)}
           />
         </Field>
-        {action.error && <ErrorBox message={action.error} />}
+        {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
@@ -402,11 +422,10 @@ export function RejectRequestDialog({ request, onClose, onDone }: { request: Sup
   const toast = useToast();
   const action = useAction();
   const [reason, setReason] = useState('');
-  const [touched, setTouched] = useState(false);
-  const error = textError(reason, { label: 'Lý do', max: 500 });
+  const errors: Partial<Record<'reason', string>> = { reason: textError(reason, { label: 'Lý do', max: 500 }) };
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const submit = () => {
-    setTouched(true);
-    if (error) return;
+    if (!f.attempt()) return;
     void action.run(
       () => reviewSupplyRequest(request.id, 'REJECTED', reason.trim()),
       () => {
@@ -422,15 +441,26 @@ export function RejectRequestDialog({ request, onClose, onDone }: { request: Sup
       onClose={onClose}
       title={`Từ chối đề xuất ${request.item.name}`}
       description={request.note ? `${request.requester.fullName}: ${request.note}` : `Đề xuất của ${request.requester.fullName}.`}
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Từ chối" danger />}
+      footer={<Footer onSubmit={submit} pending={action.pending} label="Từ chối" danger />}
       dirty={reason.trim() !== ''}
+      busy={action.pending}
       onSave={submit}
       saveLabel="Từ chối"
     >
-      <Field label="Lý do" required error={touched ? error : undefined}>
-        <Textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Ví dụ: Kho còn đủ dùng 3 tuần, đề xuất lại cuối tháng" />
+      <Field label="Lý do" required name="reason" error={f.show('reason')} onBlur={f.blur('reason')}>
+        <Textarea
+          rows={3}
+          maxLength={500}
+          value={reason}
+          onChange={(event) => {
+            setReason(event.target.value);
+            if (action.error) action.clearError();
+          }}
+          placeholder="Ví dụ: Kho còn đủ dùng 3 tuần, đề xuất lại cuối tháng"
+          className={cn(f.show('reason') && invalidClass)}
+        />
       </Field>
-      {action.error && (
+      {action.error && !Object.keys(action.fieldErrors).length && (
         <div className="mt-3">
           <ErrorBox message={action.error} />
         </div>
@@ -439,39 +469,48 @@ export function RejectRequestDialog({ request, onClose, onDone }: { request: Sup
   );
 }
 
-/* ===== Cấp hàng theo đề xuất (Quản lý CLB) ===== */
+/* ===== Cấp hàng theo đề xuất (Quản lý CLB) =====
+ * approveFirst: mở từ nút Duyệt ở đề xuất Chờ duyệt, gửi duyệt rồi nhập kho trong một lần bấm (BE không có route gộp).
+ * Đóng hộp trước khi gửi thì đề xuất vẫn Chờ duyệt. Duyệt được mà nhập lỗi thì giữ hộp, thử lại chỉ gọi bước nhập. */
 
-export function FulfillRequestDialog({ request, onClose, onDone }: { request: SupplyRequest; onClose: () => void; onDone: () => void }) {
+export function FulfillRequestDialog({ request, approveFirst, onClose, onDone }: { request: SupplyRequest; approveFirst?: boolean; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const action = useAction();
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
-  const [touched, setTouched] = useState(false);
+  const [approved, setApproved] = useState(false);
   const { item } = request;
-  const clientErrors = {
+  const label = approveFirst ? 'Duyệt và nhập kho' : 'Cấp hàng';
+  // Đã duyệt mà chưa nhập được thì danh sách đổi trạng thái, nên đóng hộp phải tải lại.
+  const close = () => {
+    if (approved) onDone();
+    onClose();
+  };
+  const errors: Partial<Record<'quantity' | 'unitPrice', string>> = {
     quantity: quantityError(quantity, { label: 'Số lượng thực nhận', max: MAX_STOCK }),
-    unitPrice: moneyError(price, { label: 'Đơn giá' }),
+    unitPrice: unitPriceError(price),
   };
-  const errors = {
-    quantity: clientErrors.quantity ?? action.fieldErrors.quantity,
-    unitPrice: clientErrors.unitPrice ?? action.fieldErrors.unitPrice,
-  };
-  const shown = (key: keyof typeof errors) => (touched || action.fieldErrors[key] ? errors[key] : undefined);
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
   const edit = (setter: (value: string) => void) => (value: string) => {
     setter(value);
     if (action.error) action.clearError();
   };
-  const amount = clientErrors.quantity ? undefined : parseQuantity(quantity);
-  const total = amount === undefined || clientErrors.unitPrice ? undefined : Math.round(amount * parseMoney(price));
+  const amount = errors.quantity ? undefined : parseQuantity(quantity);
+  const total = amount === undefined || errors.unitPrice ? undefined : Math.round(amount * parseMoney(price));
   const after = amount === undefined ? undefined : Math.round((item.quantityOnHand + amount) * 100) / 100;
 
   const submit = () => {
-    setTouched(true);
-    if (amount === undefined || clientErrors.unitPrice) return;
+    if (!f.attempt() || amount === undefined) return;
     void action.run(
-      () => fulfillSupplyRequest(request.id, { quantity: amount, unitPrice: parseMoney(price) }),
+      async () => {
+        if (approveFirst && !approved) {
+          await reviewSupplyRequest(request.id, 'APPROVED');
+          setApproved(true);
+        }
+        return fulfillSupplyRequest(request.id, { quantity: amount, unitPrice: parseMoney(price) });
+      },
       () => {
-        toast.push(`Đã cấp ${formatAmount(amount, item.unit)} ${item.name}`, 'success');
+        toast.push(approveFirst ? `Đã duyệt và nhập ${formatAmount(amount, item.unit)} ${item.name}` : `Đã cấp ${formatAmount(amount, item.unit)} ${item.name}`, 'success');
         onDone();
         onClose();
       },
@@ -481,13 +520,14 @@ export function FulfillRequestDialog({ request, onClose, onDone }: { request: Su
   return (
     <Modal
       open
-      onClose={onClose}
-      title={`Cấp hàng: ${item.name}`}
+      onClose={close}
+      title={`${approveFirst ? 'Duyệt và nhập kho' : 'Cấp hàng'}: ${item.name}`}
       description={`Đề xuất của ${request.requester.fullName}. Kho đang còn ${formatAmount(item.quantityOnHand, item.unit)}.`}
-      footer={<Footer onClose={onClose} onSubmit={submit} pending={action.pending} label="Cấp hàng" />}
+      footer={<Footer onSubmit={submit} pending={action.pending} label={label} />}
       dirty={quantity !== '' || price !== ''}
+      busy={action.pending}
       onSave={submit}
-      saveLabel="Cấp hàng"
+      saveLabel={label}
     >
       <div className="space-y-4">
         {request.note && (
@@ -497,11 +537,11 @@ export function FulfillRequestDialog({ request, onClose, onDone }: { request: Su
           </p>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={`Số lượng thực nhận (${item.unit})`} required error={shown('quantity')} hint="Số hàng thật sự về kho">
-            <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 40" />
+          <Field label={`Số lượng thực nhận (${item.unit})`} required name="quantity" error={f.show('quantity')} onBlur={f.blur('quantity')} hint="Số hàng thật sự về kho">
+            <QuantityInput value={quantity} onChange={edit(setQuantity)} autoFocus placeholder="Ví dụ: 40" className={cn(f.show('quantity') && invalidClass)} />
           </Field>
-          <Field label="Đơn giá" required error={shown('unitPrice')}>
-            <MoneyInput value={price} onChange={edit(setPrice)} suffix={`đ/${item.unit}`} placeholder="Ví dụ: 20.000" />
+          <Field label="Đơn giá" required name="unitPrice" error={f.show('unitPrice')} onBlur={f.blur('unitPrice')}>
+            <MoneyInput value={price} onChange={edit(setPrice)} suffix={`đ/${item.unit}`} placeholder="Ví dụ: 20.000" className={cn(f.show('unitPrice') && invalidClass)} />
           </Field>
         </div>
         {(total !== undefined || after !== undefined) && (
@@ -519,7 +559,11 @@ export function FulfillRequestDialog({ request, onClose, onDone }: { request: Su
             )}
           </p>
         )}
-        {action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />}
+        {action.error && approved ? (
+          <ErrorBox message={`Đã duyệt nhưng chưa nhập được hàng: ${action.error}`} />
+        ) : (
+          action.error && !Object.keys(action.fieldErrors).length && <ErrorBox message={action.error} />
+        )}
       </div>
     </Modal>
   );

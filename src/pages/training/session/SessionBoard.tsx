@@ -28,7 +28,7 @@ import { useStore } from '../../../store/store';
 import { useCrumbs } from '../../../components/Breadcrumb';
 import { links } from '../../../lib/links';
 import { formatDate, formatTime } from '../../../lib/format';
-import { addMinutes, clubTime } from '../../../lib/club-time';
+import { clubTime } from '../../../lib/club-time';
 import { now } from '../../../lib/clock';
 import { actionWindow, lockedText, openingText, windowOpensAt, type WindowKind } from '../../../lib/training-window';
 import { leftClub } from '../../../lib/horse-rules';
@@ -243,7 +243,7 @@ export default function SessionBoard() {
   if (board.loading && !board.data) {
     return (
       <div className="space-y-4">
-        <div className="skeleton h-36 w-full rounded-3xl" />
+        <div className="skeleton h-36 w-full rounded-2xl" />
         <div className="skeleton h-10 w-full rounded-xl" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }, (_, index) => (
@@ -388,7 +388,7 @@ export default function SessionBoard() {
         </div>
       )}
 
-      <section className="turf-soft rounded-3xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
+      <section className="turf-soft rounded-2xl p-5 shadow-grass-tint ring-1 ring-emerald-900/10 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-gray-500">Sân tập · {formatDate(session.scheduledStartAt)}</p>
@@ -402,18 +402,18 @@ export default function SessionBoard() {
                   Bắt đầu sớm hơn lịch
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 font-mono">
+              <span className="inline-flex items-center gap-1 tabular-nums">
                 <Clock3 size={13} /> {clubTime(session.scheduledStartAt)} đến {clubTime(session.scheduledEndAt)}
               </span>
               <IntensityBars intensity={session.intensity} />
-              <span className="font-mono">{formatMeters(session.plannedDistanceM)}</span>
+              <span className="tabular-nums">{formatMeters(session.plannedDistanceM)}</span>
               {session.surface && <span>{session.surface}</span>}
               {session.location && (
                 <span className="inline-flex items-center gap-1">
                   <MapPin size={13} /> {session.location}
                 </span>
               )}
-              {target && <span className="font-mono text-amber-800">Mục tiêu {formatRaceTime(target)}</span>}
+              {target && <span className="tabular-nums text-amber-800">Mục tiêu {formatRaceTime(target)}</span>}
             </div>
             {session.status === 'SCHEDULED' && actionWindow(session, 'checkIn', clock).state === 'early' && (
               <p className="mt-2 inline-flex items-center gap-1.5 text-sm text-gray-600">
@@ -426,7 +426,7 @@ export default function SessionBoard() {
           <div className="flex flex-col items-end gap-2">
             {ongoing.length > 0 && seesMetrics && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200">
-                <Radio size={13} className="animate-pulse" /> {manage ? 'Nhận nhịp tim trực tiếp' : 'Cập nhật mỗi 3 giây'}
+                <Radio size={13} className="animate-pulse" /> {manage ? 'Nhận nhịp tim trực tiếp' : 'Trực tiếp'}
               </span>
             )}
             {manage && (
@@ -460,7 +460,7 @@ export default function SessionBoard() {
       {(action.error || sessionAction.error) && <ErrorBox message={(action.error ?? sessionAction.error)!} />}
       {ongoing.length > 0 && clock.getTime() > new Date(session.scheduledEndAt).getTime() && (
         <Notice tone="info">
-          Đã qua giờ kết thúc buổi. Lượt còn Đang chạy sẽ được hệ thống tự hoàn thành 30 phút sau giờ kết thúc ({clubTime(addMinutes(session.scheduledEndAt, 30))}), giờ xong ghi theo giờ kết thúc buổi.
+          Lượt chưa xong sẽ tự hoàn thành sau giờ kết thúc buổi.
         </Notice>
       )}
 
@@ -468,7 +468,7 @@ export default function SessionBoard() {
         <section className="rounded-2xl bg-amber-50/50 p-3 ring-1 ring-amber-200/60 sm:p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-amber-900">
-              Không tập buổi này <span className="font-mono text-amber-700">{out.length}</span>
+              Không tập buổi này <span className="tabular-nums text-amber-700">{out.length}</span>
             </h3>
             {/* Gập còn 2 thẻ trên điện thoại, 6 thẻ trên màn rộng, để phần thao tác bên dưới không bị đẩy xa. */}
             {out.length > 2 && (
@@ -593,7 +593,10 @@ export default function SessionBoard() {
           confirmLabel="Báo vắng"
           pending={action.pending}
           error={action.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            action.clearError();
+          }}
           onConfirm={(reason) =>
             void action.run(
               () => markParticipantAbsent(dialog.participant.id, reason),
@@ -609,14 +612,17 @@ export default function SessionBoard() {
       {dialog?.kind === 'stop' && (
         <ReasonDialog
           title={`Dừng sớm ${horseName(dialog.participant)}`}
-          message="Lượt kết thúc ngay, ghi là Dừng sớm kèm lý do. Vẫn ghi thời gian chạy thử và đánh giá được. Lượt cuối còn mở dừng thì buổi tự đóng."
+          message="Lượt kết thúc ngay, ghi là Dừng sớm kèm lý do. Vẫn ghi thời gian chạy thử và đánh giá được."
           label="Lý do dừng"
           suggestions={['Ngựa đi khập khiễng', 'Nhịp tim cao kéo dài', 'Thời tiết xấu']}
           confirmLabel="Dừng sớm"
           danger
           pending={action.pending}
           error={action.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            action.clearError();
+          }}
           onConfirm={(reason) =>
             void action.run(
               () => stopParticipant(dialog.participant.id, reason),
@@ -667,7 +673,10 @@ export default function SessionBoard() {
           confirmLabel="Hủy buổi"
           pending={sessionAction.pending}
           error={sessionAction.error}
-          onClose={() => setDialog(null)}
+          onClose={() => {
+            setDialog(null);
+            sessionAction.clearError();
+          }}
           onConfirm={(reason) =>
             void sessionAction.run(
               () => cancelSession(session.id, reason),
@@ -720,7 +729,7 @@ function ParticipantCard({
       className={cn(
         'flex h-full gap-3.5 rounded-2xl bg-white p-3.5 ring-1 transition-colors',
         participant.status === 'ONGOING' ? (level === 'CRITICAL' ? 'ring-2 ring-red-400' : level === 'WARNING' ? 'ring-2 ring-amber-300' : 'ring-2 ring-emerald-400/70') : 'ring-gray-200/80',
-        'shadow-[0_12px_26px_-22px_rgba(6,78,59,0.6)]',
+        'shadow-card',
       )}
     >
       <Link to={links.horse(participant.horseId)} className="shrink-0" tabIndex={-1} aria-hidden>
@@ -760,17 +769,17 @@ function ParticipantCard({
           )}
           {participant.status === 'STOPPED' && <ParticipantPill status="STOPPED" title={participant.stoppedReason ?? undefined} />}
           {participant.status === 'ONGOING' && live?.latest && (
-            <span className={cn('inline-flex items-center gap-1 font-mono text-sm font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
+            <span className={cn('inline-flex items-center gap-1 tabular-nums text-sm font-semibold', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-800')}>
               <HeartbeatIcon bpm={live.latest.heartRateBpm} level={level} size={14} />
               <LiveNumber value={live.latest.heartRateBpm} />
             </span>
           )}
           {best !== undefined && (
-            <span className={cn('rounded-md px-1.5 py-0.5 font-mono font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
+            <span className={cn('rounded-md px-1.5 py-0.5 tabular-nums font-semibold', target && best <= target ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800')}>
               {formatRaceTime(best)}
             </span>
           )}
-          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 font-mono font-semibold text-white">{evaluation.score} điểm</span>}
+          {evaluation && <span className="rounded-md bg-emerald-700 px-1.5 py-0.5 tabular-nums font-semibold text-white">{evaluation.score} điểm</span>}
         </div>
 
         {participant.status === 'STOPPED' && participant.stoppedReason && <p className="mt-1.5 text-xs text-amber-800">Lý do dừng: {participant.stoppedReason}</p>}
@@ -816,10 +825,10 @@ function Leaderboard({ rows, target, horseName }: { rows: { participant: Partici
       <ol className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map((row, index) => (
           <li key={row.participant.id} className={cn('flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm', index === 0 ? 'bg-emerald-50 ring-1 ring-emerald-200' : 'bg-gray-50')}>
-            <span className="w-5 font-mono text-xs text-gray-400">{index + 1}</span>
+            <span className="w-5 tabular-nums text-xs text-gray-400">{index + 1}</span>
             <span className="min-w-0 flex-1 truncate font-medium text-gray-900">{horseName(row.participant)}</span>
-            <span className="font-mono font-semibold">{formatRaceTime(row.best)}</span>
-            {target && <span className={cn('font-mono text-xs', row.best <= target ? 'text-emerald-700' : 'text-amber-700')}>{row.best <= target ? 'đạt' : `+${((row.best - target) / 1000).toFixed(2)}`}</span>}
+            <span className="tabular-nums font-semibold">{formatRaceTime(row.best)}</span>
+            {target && <span className={cn('tabular-nums text-xs', row.best <= target ? 'text-emerald-700' : 'text-amber-700')}>{row.best <= target ? 'đạt' : `+${((row.best - target) / 1000).toFixed(2)}`}</span>}
           </li>
         ))}
       </ol>

@@ -79,14 +79,15 @@ export const links = {
   locks: '/medical/locks',
   careSchedules: '/medical/care',
   careNew: (horseId?: string, back?: string) => withQuery('/medical/care/new', { horseId, back }),
-  costReport: '/medical/costs',
+  /** Chi phí y tế nằm ở Báo cáo › Tài chính › Y tế (đường cũ /medical/costs chuyển hướng về đây). */
+  costReport: withQuery('/reports', { tab: 'finance', view: 'medical' }),
 
   adminUsers: '/admin/users',
   adminAudit: '/admin/audit',
   adminFees: '/admin/fees',
   adminSystem: '/admin/system',
 
-  reports: (tab?: 'finance') => withQuery('/reports', { tab }),
+  reports: (tab?: 'finance', view?: 'horses' | 'medical') => withQuery('/reports', { tab, view }),
   /** Chi phí của một chủ ngựa (Quản lý CLB). */
   ownerCosts: (ownerId: string) => `/reports/owners/${ownerId}`,
   /** Chi phí của chính chủ ngựa đang đăng nhập. */

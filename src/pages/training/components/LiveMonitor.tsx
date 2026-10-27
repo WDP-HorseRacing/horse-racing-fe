@@ -26,7 +26,7 @@ export function Elapsed({ since, until, className = '' }: { since?: string | nul
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [since, until]);
-  return <span ref={ref} className={cn('font-mono tabular-nums', className)}>{since ? '' : '—'}</span>;
+  return <span ref={ref} className={cn('tabular-nums', className)}>{since ? '' : '—'}</span>;
 }
 
 /** Thước ngang ba vùng (bình thường, cảnh báo, nguy hiểm) với kim chỉ nhịp tim hiện tại. */
@@ -49,7 +49,7 @@ export function ZoneGauge({ bpm, limits, className = '' }: { bpm?: number; limit
       {bpm !== undefined && (
         <span ref={needle} className="absolute top-0 h-5 w-1 -translate-x-1/2 rounded-full bg-gray-900 ring-2 ring-white transition-[left] duration-500 ease-out" style={{ left: pos(bpm) }} aria-hidden />
       )}
-      <div className="relative mt-1 h-3 font-mono text-[10px] leading-none">
+      <div className="relative mt-1 h-3 tabular-nums text-[10px] leading-none">
         <span className="absolute left-0 text-gray-400">{min}</span>
         <span className="absolute -translate-x-1/2 text-amber-700" style={{ left: pos(limits.heartRateWarningBpm) }}>
           {limits.heartRateWarningBpm}
@@ -122,18 +122,18 @@ export function LiveMonitorCard({
 
       <div className="mt-3 flex items-end gap-4">
         <div>
-          <p className={cn('font-mono text-4xl font-bold leading-none', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-900')}>
+          <p className={cn('tabular-nums text-2xl font-semibold leading-none', level === 'CRITICAL' ? 'text-red-700' : level === 'WARNING' ? 'text-amber-800' : 'text-gray-900')}>
             <LiveNumber value={latest?.heartRateBpm} />
           </p>
           <p className="mt-1 text-xs text-gray-500">nhịp/phút</p>
         </div>
         <div className="pb-0.5">
-          <p className="flex items-baseline gap-1 font-mono text-lg font-semibold text-gray-800">
+          <p className="flex items-baseline gap-1 tabular-nums text-lg font-semibold text-gray-800">
             <Gauge size={14} className="self-center text-gray-400" />
             <LiveNumber value={latest?.speedMps} digits={1} />
             <span className="text-xs font-normal text-gray-500">m/s</span>
           </p>
-          <p className="font-mono text-xs text-gray-500">{latest ? `${toKmh(latest.speedMps).toFixed(1)} km/h` : 'chưa có số đo'}</p>
+          <p className="tabular-nums text-xs text-gray-500">{latest ? `${toKmh(latest.speedMps).toFixed(1)} km/h` : 'chưa có số đo'}</p>
         </div>
         <span className={cn('ml-auto rounded-md px-1.5 py-0.5 text-[10px] font-semibold', stale ? 'bg-gray-100 text-gray-500' : 'bg-emerald-100 text-emerald-800')}>
           {stale ? 'Chờ cảm biến' : 'Trực tiếp'}
@@ -171,22 +171,7 @@ function SimulatorControls({ participantId, horseName, criticalBpm }: { particip
   const sim = useSensorSims()[participantId];
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-emerald-300/80 bg-emerald-50/40 px-3 py-2">
-      <p className="w-full text-xs">
-        {!sim ? (
-          <span className="text-gray-600">Chưa gắn thiết bị đo thật. Bật cảm biến giả lập để gửi nhịp tim mỗi giây.</span>
-        ) : sim.offline ? (
-          <span className="font-medium text-amber-800">Mất kết nối máy chủ, đang giữ {sim.pending} điểm để gửi bù</span>
-        ) : (
-          <span className="text-gray-600">
-            Máy chủ đã nhận <b className="font-mono text-gray-900">{sim.sent}</b> điểm từ cảm biến giả lập
-          </span>
-        )}
-        {sim && sim.rejected > 0 && (
-          <span className="mt-0.5 block font-medium text-amber-800">
-            Máy chủ bỏ {sim.rejected} điểm vì thời điểm đo lệch giờ máy chủ. Kiểm tra đồng hồ máy tính.
-          </span>
-        )}
-      </p>
+      {!sim && <p className="w-full text-xs text-gray-600">Chưa có thiết bị đo. Bật cảm biến giả lập để xem nhịp tim.</p>}
       {!sim ? (
         <Button size="sm" variant="inline" onClick={() => startSim(participantId, horseName)}>
           <Radio size={13} /> Bật cảm biến giả lập

@@ -1,9 +1,10 @@
 // Luật nhỏ của lịch chăm sóc (F3.11) dùng chung giữa các màn hình.
-import type { CareAssigneeType, CareSchedule, CareTaskType, CareType } from '../../../api/types';
-import { daysBetween } from '../../../lib/format';
+import type { CareSchedule, CareTaskType } from '../../../api/types';
+import { daysBetween, formatDate } from '../../../lib/format';
 import { now } from '../../../lib/clock';
 import { useStore } from '../../../store/store';
 import { can } from '../../../auth/permissions';
+import { links } from '../../../lib/links';
 
 export const CARE_TYPES: CareTaskType[] = ['VACCINATION', 'DEWORMING', 'FARRIER'];
 
@@ -12,79 +13,34 @@ export function careDaysLeft(dueAt: string): number {
   return daysBetween(now(), dueAt);
 }
 
-/**
- * Quyền thao tác trên một lịch theo vai trò của người xem (backend kiểm lại).
- * Groom hoàn tất lịch giao đích danh cho mình, hoặc lịch giao "Groom phụ trách" ở ngựa mình phụ trách.
- * Không biết Groom của ngựa (`horseGroomId` undefined) thì tin danh sách BE đã lọc cho Groom.
- */
+/** Quyền thao tác theo vai trò (backend kiểm lại): lịch chỉ thuộc bác sĩ, chỉ bác sĩ tạo, sửa, hủy, hoàn tất. */
 export function useCareRights() {
   const user = useStore((state) => state.currentUser);
   const manage = can(user, 'care.manage');
+  const complete = can(user, 'care.complete');
   return {
     manage,
-    canComplete: (schedule: CareSchedule, horseGroomId?: string | null) => {
-      if (schedule.status !== 'SCHEDULED') return false;
-      if (manage) return true;
-      if (!can(user, 'care.complete') || !user) return false;
-      if (schedule.assignedTo) return schedule.assignedTo === user.id;
-      return schedule.assigneeType === 'GROOM' && (horseGroomId === undefined || horseGroomId === user.id);
-    },
+    canComplete: (schedule: CareSchedule) => schedule.status === 'SCHEDULED' && complete,
   };
 }
 
-/* ===== Cách giao lịch ===== */
+/* ===== Bác sĩ được giao ===== */
+// Từ BE 27/10 lịch chỉ giao bác sĩ (bỏ giao Groom). Bác sĩ không tải được danh sách bác sĩ khác (chỉ Quản lý CLB),
+// nên chọn được: chưa giao ai, chính mình, hoặc giữ bác sĩ đang được giao khi sửa.
 
-/** Lựa chọn trên form: chưa giao, Groom phụ trách, một Groom cụ thể, một bác sĩ cụ thể. */
-export type AssigneeMode = 'NONE' | 'HORSE_GROOM' | 'GROOM' | 'VET';
-export interface AssigneeChoice {
-  mode: AssigneeMode;
-  userId: string;
+/** "BS Lan". Tên chung khi không tra được người (vd "Bác sĩ thú y") thì giữ nguyên, không thêm "BS". */
+export const vetLabel = (name: string) => (name.startsWith('Bác sĩ') ? name : `BS ${name}`);
+
+/** Chữ "bác sĩ được giao" của một lịch. */
+export function assigneeText(schedule: Pick<CareSchedule, 'assignedTo'>, name: (id: string) => string) {
+  return schedule.assignedTo ? vetLabel(name(schedule.assignedTo)) : 'Chưa giao, mọi bác sĩ cùng thấy';
 }
 
-export const ASSIGNEE_MODE_LABEL: Record<AssigneeMode, string> = {
-  NONE: 'Chưa giao',
-  HORSE_GROOM: 'Groom phụ trách',
-  GROOM: 'Groom cụ thể',
-  VET: 'Bác sĩ',
-};
-
-export function assigneeOf(schedule?: Pick<CareSchedule, 'assigneeType' | 'assignedTo'>): AssigneeChoice {
-  if (!schedule?.assigneeType) return { mode: 'NONE', userId: '' };
-  if (schedule.assigneeType === 'VET') return { mode: 'VET', userId: schedule.assignedTo ?? '' };
-  return schedule.assignedTo ? { mode: 'GROOM', userId: schedule.assignedTo } : { mode: 'HORSE_GROOM', userId: '' };
+/** Thông báo sau khi lưu lịch: giao ai, nhắc lúc 5 giờ sáng ngày đến hạn. */
+export function careSavedText(action: string, typeLabel: string, horseName: string, vetName: string | null, dueAt: string): string {
+  const who = vetName ? `giao ${vetLabel(vetName)}` : 'chưa giao ai, mọi bác sĩ cùng thấy';
+  return `${action} lịch ${typeLabel.toLowerCase()} cho ${horseName}, ${who}, nhắc lúc 5 giờ sáng ngày ${formatDate(dueAt)}`;
 }
 
-/** Body gửi BE. Chưa giao: cả hai null. */
-export function assigneeInput(choice: AssigneeChoice): { assigneeType: CareAssigneeType | null; assignedTo: string | null } {
-  if (choice.mode === 'NONE') return { assigneeType: null, assignedTo: null };
-  if (choice.mode === 'HORSE_GROOM') return { assigneeType: 'GROOM', assignedTo: null };
-  return { assigneeType: choice.mode, assignedTo: choice.userId || null };
-}
-
-const ALL_MODES: AssigneeMode[] = ['NONE', 'HORSE_GROOM', 'GROOM', 'VET'];
-
-/** Tiêm phòng, tẩy giun chỉ giao được bác sĩ (hoặc chưa giao). Kiểm tra móng giao Groom hoặc bác sĩ. */
-export const isVetOnlyCare = (type?: CareType) => type === 'VACCINATION' || type === 'DEWORMING';
-
-export const assigneeModesFor = (type?: CareType): AssigneeMode[] => (isVetOnlyCare(type) ? ['NONE', 'VET'] : ALL_MODES);
-
-/** Cách giao mặc định khi tạo lịch: loại chỉ bác sĩ thì giao chính bác sĩ đang tạo, còn lại giao Groom phụ trách. */
-export function defaultAssignee(type: CareType, vetId?: string): AssigneeChoice {
-  if (!isVetOnlyCare(type)) return { mode: 'HORSE_GROOM', userId: '' };
-  return vetId ? { mode: 'VET', userId: vetId } : { mode: 'NONE', userId: '' };
-}
-
-/** Đổi loại lịch mà cách giao cũ không còn hợp lệ thì về mặc định của loại mới. */
-export const fitAssignee = (choice: AssigneeChoice, type: CareType, vetId?: string): AssigneeChoice =>
-  assigneeModesFor(type).includes(choice.mode) ? choice : defaultAssignee(type, vetId);
-
-export const sameAssignee = (a: AssigneeChoice, b: AssigneeChoice) => a.mode === b.mode && (a.mode === 'NONE' || a.mode === 'HORSE_GROOM' || a.userId === b.userId);
-
-export const assigneeError = (choice: AssigneeChoice) => ((choice.mode === 'GROOM' || choice.mode === 'VET') && !choice.userId ? 'Chọn người thực hiện' : undefined);
-
-/** Chữ "người làm" của một lịch. `name` tra tên theo id, `groomName` là Groom đang phụ trách ngựa nếu biết. */
-export function assigneeText(schedule: Pick<CareSchedule, 'assigneeType' | 'assignedTo'>, name: (id: string) => string, groomName?: string | null) {
-  if (!schedule.assigneeType) return 'chưa giao người thực hiện';
-  if (schedule.assignedTo) return name(schedule.assignedTo);
-  return groomName ? `Groom phụ trách (${groomName})` : 'Groom phụ trách';
-}
+/** Link sang tab Chăm sóc của ngựa, mở sẵn hộp gắn việc riêng (vd giữ ngựa cho thợ móng). */
+export const groomAssistLink = (horseId: string) => `${links.horse(horseId, 'care')}&addTask=1`;

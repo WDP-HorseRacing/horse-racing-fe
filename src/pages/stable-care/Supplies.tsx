@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowDownToLine, PackageMinus, PackagePlus, Plus } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
-import { cancelSupplyRequest, deleteSupplyItem, listSupplyItems, listSupplyRequests, reviewSupplyRequest } from '../../api/supplies';
+import { cancelSupplyRequest, deleteSupplyItem, listSupplyItems, listSupplyRequests } from '../../api/supplies';
 import type { NotificationItem, SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -47,7 +47,7 @@ type Dialog =
   | { kind: 'request'; item?: SupplyItem; request?: SupplyRequest }
   | { kind: 'delete'; item: SupplyItem }
   | { kind: 'reject'; request: SupplyRequest }
-  | { kind: 'fulfill'; request: SupplyRequest }
+  | { kind: 'fulfill'; request: SupplyRequest; approveFirst?: boolean }
   | { kind: 'cancel'; request: SupplyRequest };
 
 const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red', CANCELLED: 'gray' };
@@ -183,18 +183,18 @@ export default function Supplies() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {visible.map((item) => (
-                  <li key={item.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap', item.lowStock && 'bg-red-50/30')}>
+                  <li key={item.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap', item.lowStock && 'bg-amber-50/40')}>
                     <button type="button" onClick={() => setOpenId(item.id)} className="min-w-0 flex-1 text-left">
                       <span className="flex items-center gap-2">
                         <span className="truncate font-semibold text-gray-900 hover:underline">{item.name}</span>
-                        {item.lowStock && <Pill tone="red">Sắp hết</Pill>}
+                        {item.lowStock && <Pill tone="amber">Sắp hết</Pill>}
                       </span>
                       <span className="block text-xs text-gray-500">
                         {supplyCategoryText[item.category]} · báo sắp hết ở {formatAmount(item.reorderThreshold, item.unit)}
                       </span>
                     </button>
                     <div className="w-36 shrink-0">
-                      <p className="text-right font-mono text-sm font-semibold tabular-nums text-gray-900">
+                      <p className="text-right tabular-nums text-sm font-semibold  text-gray-900">
                         {formatQuantity(item.quantityOnHand)} <span className="font-sans text-xs font-normal text-gray-500">{item.unit}</span>
                       </p>
                       <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
@@ -231,20 +231,26 @@ export default function Supplies() {
           </section>
 
           <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4">
-            <section className={cn('rounded-2xl p-4 ring-1', low.length ? 'bg-red-50/70 shadow-[0_18px_40px_-28px_rgba(185,28,28,0.55)] ring-red-100' : 'bg-white shadow-card ring-gray-200/80')}>
+            <section className={cn('rounded-2xl bg-white p-4 ring-1 ring-gray-200/80', low.length ? 'shadow-amber-tint' : 'shadow-card')}>
               <h2 className="flex items-center justify-between text-sm font-semibold text-gray-900">
-                Sắp hết <span className={cn('font-mono text-lg', low.length ? 'text-red-700' : 'text-gray-400')}>{low.length}</span>
+                Sắp hết
+                <span className={cn('rounded-md px-1.5 text-sm font-semibold tabular-nums', low.length ? 'bg-amber-50 text-amber-800' : 'text-gray-400')}>{low.length}</span>
               </h2>
               {low.length === 0 ? (
                 <p className="mt-1 text-sm text-gray-500">Chưa có vật tư nào sắp hết.</p>
               ) : (
-                <ul className="mt-2 space-y-1.5">
+                <ul className="mt-2">
                   {low.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-red-100">
-                      <button type="button" onClick={() => setOpenId(item.id)} className="min-w-0 truncate text-left text-sm font-medium text-gray-900 hover:underline">
-                        {item.name}
-                      </button>
-                      <span className="shrink-0 font-mono text-xs text-red-700">{formatAmount(item.quantityOnHand, item.unit)}</span>
+                    <li key={item.id} className="flex items-center gap-2 border-t border-gray-100 py-2 first:border-t-0">
+                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                      <span className="min-w-0 flex-1">
+                        <button type="button" onClick={() => setOpenId(item.id)} className="block max-w-full truncate text-left text-sm font-medium text-gray-900 hover:underline">
+                          {item.name}
+                        </button>
+                        <span className="block text-xs tabular-nums text-gray-500">
+                          Còn <span className="font-semibold text-amber-800">{formatAmount(item.quantityOnHand, item.unit)}</span> / ngưỡng {formatAmount(item.reorderThreshold, item.unit)}
+                        </span>
+                      </span>
                       {canRequest && (
                         <Button variant="inline" size="sm" onClick={() => setDialog({ kind: 'request', item })}>
                           Đề xuất thêm
@@ -268,7 +274,7 @@ export default function Supplies() {
                   )}
                 >
                   <p className="text-xs text-gray-500">{supplyCategoryText[value]}</p>
-                  <p className="font-mono text-xl font-bold text-gray-900">{all.filter((item) => item.category === value).length}</p>
+                  <p className="tabular-nums text-xl font-bold text-gray-900">{all.filter((item) => item.category === value).length}</p>
                 </button>
               ))}
             </section>
@@ -335,6 +341,7 @@ export default function Supplies() {
           title={`Hủy đề xuất ${dialog.request.item.name}`}
           message={<>Đề xuất của <b>{dialog.request.requester.fullName}</b> đã duyệt nhưng chưa cấp. Người gửi nhận thông báo kèm lý do, muốn thì gửi đề xuất mới.</>}
           label="Lý do hủy"
+          maxLength={500}
           suggestions={['Nhà cung cấp hết hàng', 'Đã mua loại khác thay thế', 'Duyệt nhầm']}
           confirmLabel="Hủy đề xuất"
           pending={cancelRequest.pending}
@@ -359,6 +366,7 @@ export default function Supplies() {
       {dialog?.kind === 'fulfill' && (
         <FulfillRequestDialog
           request={dialog.request}
+          approveFirst={dialog.approveFirst}
           onClose={() => setDialog(null)}
           onDone={() => {
             reloadRequests();
@@ -373,11 +381,8 @@ export default function Supplies() {
 /* ===== Đề xuất ===== */
 
 function RequestsPanel({ manager, version, onDialog }: { manager: boolean; version: number; onDialog: (dialog: Dialog) => void }) {
-  const toast = useToast();
   const [status, setStatus] = useState<SupplyRequestStatus | 'ALL'>(manager ? 'PENDING' : 'ALL');
-  const [approved, setApproved] = useState(0);
-  const list = useService(() => listSupplyRequests(status === 'ALL' ? undefined : status), [status, version, approved]);
-  const approve = useAction();
+  const list = useService(() => listSupplyRequests(status === 'ALL' ? undefined : status), [status, version]);
   const rows = list.data ?? [];
 
   return (
@@ -390,7 +395,6 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
           { value: 'ALL' as const, label: 'Tất cả' },
         ]}
       />
-      {approve.error && <ErrorBox message={approve.error} />}
       {list.loading && !list.data ? (
         <Skeleton rows={3} />
       ) : list.error ? (
@@ -404,7 +408,7 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900">
                   {request.item.name}{' '}
-                  {request.status === 'FULFILLED' && request.quantity !== null && <span className="font-mono text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>}
+                  {request.status === 'FULFILLED' && request.quantity !== null && <span className="tabular-nums text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>}
                 </p>
                 <p className="text-xs text-gray-500" title={formatDateTime(request.createdAt)}>
                   {manager ? `${request.requester.fullName} · ` : ''}
@@ -443,19 +447,7 @@ function RequestsPanel({ manager, version, onDialog }: { manager: boolean; versi
                     <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'reject', request })}>
                       Từ chối
                     </Button>
-                    <Button
-                      size="sm"
-                      disabled={approve.pending}
-                      onClick={() =>
-                        void approve.run(
-                          () => reviewSupplyRequest(request.id, 'APPROVED'),
-                          () => {
-                            toast.push(`Đã duyệt đề xuất ${request.item.name}`, 'success');
-                            setApproved((key) => key + 1);
-                          },
-                        )
-                      }
-                    >
+                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request, approveFirst: true })}>
                       Duyệt
                     </Button>
                   </>

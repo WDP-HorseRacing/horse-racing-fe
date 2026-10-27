@@ -1,14 +1,20 @@
 // Hộp thoại quản lý khu và ô chuồng trên Sơ đồ chuồng (CM). Backend kiểm lại mọi luật: khu còn ngựa không đóng/bảo trì/gỡ HT/xóa,
 // khu còn ô không xóa, ô có ngựa không bảo trì/xóa, không làm khu thiếu ô cho ngựa đang chờ xếp ô.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAction } from '../../../hooks/useService';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { createBarn, createStall, updateBarn, updateStall } from '../../../api/stable';
 import type { BarnListItem, BarnStatus, Stall, StallType, UserAccount } from '../../../api/types';
-import { Button, ConfirmDialog, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToast } from '../../../components/ui';
+import { Button, CancelButton, CharCount, ConfirmDialog, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, cn, invalidClass, scrollToFirstError, useToast } from '../../../components/ui';
 import { ChoiceList } from '../../../components/ui/ChoiceList';
 import { zoneStatusLabel } from '../../../lib/labels';
 import { stallTypeLabel } from '../../../lib/api-labels';
 import { MAX_STALLS_PER_BARN, stallLimit, stallRoom } from './barn';
+
+const ZONE_NAME_MAX = 80;
+const ZONE_DESCRIPTION_MAX = 1000;
+const STALL_CODE_MAX = 80;
+const STALL_NOTE_MAX = 500;
 
 /** Loại ô được chọn khi thêm ô. */
 const SELECTABLE_STALL_TYPES: StallType[] = ['STANDARD', 'ISOLATION', 'RECOVERY'];
@@ -18,12 +24,15 @@ const SELECTABLE_STALL_TYPES: StallType[] = ['STANDARD', 'ISOLATION', 'RECOVERY'
 export function ZoneFormDialog({
   open,
   zone,
+  stallCount = 0,
   headTrainers,
   onClose,
   onDone,
 }: {
   open: boolean;
   zone?: BarnListItem;
+  /** Số ô hiện có của khu (khi sửa): sức chứa không được nhỏ hơn. */
+  stallCount?: number;
   headTrainers: UserAccount[];
   onClose: () => void;
   onDone: () => void;
@@ -35,6 +44,25 @@ export function ZoneFormDialog({
   const [capacity, setCapacity] = useState('');
   const [headTrainerId, setHeadTrainerId] = useState('');
 
+  const capacityValue = capacity.trim() ? Number(capacity) : undefined;
+  // Sơ đồ mỗi khu tối đa 9 ô; để trống = không đặt sức chứa (tối đa 9 ô).
+  const errors = useMemo(
+    () => ({
+      name: !name.trim() ? 'Nhập tên khu' : undefined,
+      capacity: !capacity.trim()
+        ? undefined
+        : !/^\d+$/.test(capacity.trim()) || Number(capacity) < 1 || Number(capacity) > MAX_STALLS_PER_BARN
+          ? `Sức chứa là số nguyên từ 1 đến ${MAX_STALLS_PER_BARN}`
+          : zone && Number(capacity) < stallCount
+            ? `Khu đang có ${stallCount} ô, sức chứa không được nhỏ hơn`
+            : undefined,
+      description: description.trim().length > ZONE_DESCRIPTION_MAX ? `Tối đa ${ZONE_DESCRIPTION_MAX} ký tự` : undefined,
+    }),
+    [name, capacity, zone, stallCount, description],
+  );
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const { reset } = f;
+
   useEffect(() => {
     if (!open) return;
     setName(zone?.name ?? '');
@@ -42,14 +70,14 @@ export function ZoneFormDialog({
     setCapacity(zone?.capacity ? String(zone.capacity) : '');
     setHeadTrainerId('');
     action.clearError();
+    reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, zone?.id]);
 
-  const capacityValue = capacity.trim() ? Number(capacity) : undefined;
-  // Lưới mỗi khu 3×3 nên sức chứa tối đa 9; để trống = không đặt sức chứa (tối đa 9 ô).
-  const capacityInvalid = capacityValue !== undefined && (!Number.isInteger(capacityValue) || capacityValue < 1 || capacityValue > MAX_STALLS_PER_BARN);
+  const serverOnField = ['name', 'capacity', 'description'].some((key) => action.fieldErrors[key] || action.field === key);
 
   const submit = async () => {
+    if (action.pending || !f.attempt()) return;
     const done = await action.run(async () => {
       const input = { name: name.trim(), description: description.trim() || undefined, capacity: capacityValue };
       // Sửa khu: xóa trống sức chứa thì gửi null để bỏ giới hạn (undefined = giữ nguyên).
@@ -72,39 +100,48 @@ export function ZoneFormDialog({
       onClose={onClose}
       title={zone ? `Sửa ${zone.name}` : 'Thêm khu chuồng'}
       dirty={name !== (zone?.name ?? '') || description !== (zone?.description ?? '') || capacity !== (zone?.capacity ? String(zone.capacity) : '') || headTrainerId !== ''}
-      description="Tên khu không trùng với khu khác đang dùng. Sức chứa là số ô tối đa của khu (1–9)."
+      busy={action.pending}
+      description="Tên khu không trùng với khu khác đang dùng."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button onClick={submit} disabled={!name.trim() || capacityInvalid || action.pending}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : zone ? 'Lưu' : 'Tạo khu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Tên khu" required error={action.fieldErrors.name}>
+        <Field label="Tên khu" required name="name" error={f.show('name')} onBlur={f.blur('name')}>
           <Input
             value={name}
-            maxLength={80}
+            maxLength={ZONE_NAME_MAX}
             onChange={(event) => {
               setName(event.target.value);
-              if (action.fieldErrors.name) action.clearError();
+              if (action.fieldErrors.name || action.field === 'name') action.clearError();
             }}
             placeholder="Ví dụ: Khu D"
+            className={cn(f.show('name') && invalidClass)}
           />
         </Field>
         <Field
           label="Sức chứa (số ô tối đa)"
-          error={capacityInvalid ? `Sức chứa là số nguyên từ 1 đến ${MAX_STALLS_PER_BARN}` : undefined}
-          hint={`Không tạo được nhiều ô hơn sức chứa. Tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3), để trống = ${MAX_STALLS_PER_BARN} ô.`}
+          name="capacity"
+          error={f.show('capacity')}
+          onBlur={f.blur('capacity')}
+          hint={`Tối đa ${MAX_STALLS_PER_BARN} ô, để trống = ${MAX_STALLS_PER_BARN} ô.`}
         >
-          <Input inputMode="numeric" value={capacity} onChange={(event) => setCapacity(event.target.value)} placeholder={`Để trống = ${MAX_STALLS_PER_BARN} ô`} />
+          <Input
+            inputMode="numeric"
+            maxLength={2}
+            value={capacity}
+            onChange={(event) => setCapacity(event.target.value)}
+            placeholder={`Để trống = ${MAX_STALLS_PER_BARN} ô`}
+            className={cn(f.show('capacity') && invalidClass)}
+          />
         </Field>
-        <Field label="Mô tả">
-          <Textarea value={description} onChange={(event) => setDescription(event.target.value)} className="min-h-16" placeholder="Vị trí, tiện nghi…" />
+        <Field label="Mô tả" name="description" error={f.show('description')} onBlur={f.blur('description')} counter={<CharCount value={description} max={ZONE_DESCRIPTION_MAX} />}>
+          <Textarea value={description} maxLength={ZONE_DESCRIPTION_MAX} onChange={(event) => setDescription(event.target.value)} className="min-h-16" placeholder="Vị trí, tiện nghi…" />
         </Field>
         {!zone && (
           <Field label="HLV phụ trách" hint="Có thể gán sau. Khu chưa có HLV thì chưa nhận ngựa.">
@@ -118,7 +155,7 @@ export function ZoneFormDialog({
             </Select>
           </Field>
         )}
-        {action.error && !action.fieldErrors.name && <ErrorBox message={action.error} />}
+        {action.error && !serverOnField && <ErrorBox message={action.error} />}
       </div>
     </Modal>
   );
@@ -143,15 +180,20 @@ export function HeadTrainerDialog({
   const toast = useToast();
   const action = useAction();
   const [headTrainerId, setHeadTrainerId] = useState('');
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     setHeadTrainerId(zone?.headTrainerId ?? '');
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
+  const choiceError = !headTrainerId ? 'Chọn HLV phụ trách' : headTrainerId === (zone?.headTrainerId ?? '') ? 'Chọn HLV khác HLV hiện tại' : undefined;
+
   const submit = async () => {
-    if (!zone || !headTrainerId) return;
+    setAttempted(true);
+    if (!zone || choiceError || action.pending) return;
     const done = await action.run(() => updateBarn(zone.id, { headTrainerId }));
     if (done) {
       toast.push(zone.headTrainerId ? 'Đã đổi HLV phụ trách' : 'Đã gán HLV phụ trách', 'success');
@@ -169,13 +211,12 @@ export function HeadTrainerDialog({
       width="max-w-2xl"
       title={`${zone?.headTrainerId ? 'Đổi' : 'Gán'} HLV phụ trách ${zone?.name ?? ''}`}
       dirty={headTrainerId !== (zone?.headTrainerId ?? '')}
+      busy={action.pending}
       description={zone?.headTrainerFullName ? `Hiện tại: ${zone.headTrainerFullName}` : 'Khu chưa có HLV phụ trách'}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
-          <Button onClick={submit} disabled={action.pending || !headTrainerId || headTrainerId === (zone?.headTrainerId ?? '')}>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
@@ -197,9 +238,12 @@ export function HeadTrainerDialog({
             };
           })}
         />
-        <Notice tone="info">
-          Ngựa của khu chuyển sang phạm vi của HLV mới ngay. Nếu HLV hiện tại còn lớp đang chạy có ngựa của khu này thì chưa đổi được: cho ngựa rời lớp hoặc hoàn thành lớp trước, hoặc dùng Bàn giao ở trang Nhân sự khi HLV nghỉ. Muốn bỏ trống HLV, dùng mục "Gỡ HLV phụ trách" trong menu khu.
-        </Notice>
+        {attempted && choiceError && (
+          <p role="alert" data-invalid="true" className="text-xs font-medium text-red-600">
+            {choiceError}
+          </p>
+        )}
+        <Notice tone="info">Ngựa của khu chuyển sang HLV mới ngay khi lưu.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
@@ -270,15 +314,20 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem
   const toast = useToast();
   const action = useAction();
   const [status, setStatus] = useState<BarnStatus>('ACTIVE');
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     setStatus(zone?.status ?? 'ACTIVE');
+    setAttempted(false);
     action.clearError();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
+  const unchanged = status === zone?.status;
+
   const submit = async () => {
-    if (!zone) return;
+    setAttempted(true);
+    if (!zone || unchanged || action.pending) return;
     const done = await action.run(() => updateBarn(zone.id, { status }));
     if (done) {
       toast.push(`${zone.name}: ${zoneStatusLabel[status].toLowerCase()}`, 'success');
@@ -292,19 +341,20 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem
       open={!!zone}
       onClose={onClose}
       title={`Trạng thái ${zone?.name ?? ''}`}
+      busy={action.pending}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={action.pending || status === zone?.status}>
+          <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Lưu'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Trạng thái">
+        <Field label="Trạng thái" name="status" error={attempted && unchanged ? 'Chọn trạng thái khác trạng thái hiện tại' : undefined}>
           <Select value={status} onChange={(event) => setStatus(event.target.value as BarnStatus)}>
             {(Object.keys(zoneStatusLabel) as BarnStatus[]).map((item) => (
               <option key={item} value={item}>
@@ -313,7 +363,7 @@ export function ZoneStatusDialog({ zone, onClose, onDone }: { zone: BarnListItem
             ))}
           </Select>
         </Field>
-        <Notice tone="info">Khu còn ngựa thì không chuyển sang Bảo trì hoặc Đóng. Hãy đổi khu cho các ngựa trước. Khu không hoạt động không nhận ngựa mới.</Notice>
+        <Notice tone="info">Khu còn ngựa thì chưa đóng hoặc bảo trì được.</Notice>
         {action.error && <ErrorBox message={action.error} />}
       </div>
     </Modal>
@@ -364,6 +414,8 @@ export function AddStallsDialog({
   const [type, setType] = useState<StallType>('STANDARD');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const [touched, setTouched] = useState<Partial<Record<'count' | 'prefix' | 'start', boolean>>>({});
+  const [attempted, setAttempted] = useState(false);
   // Ô vừa tạo trong lần mở hộp thoại này: tính vào số ô hiện có và gợi ý mã tiếp theo,
   // để thử lại sau khi lỗi giữa chừng không bị trùng mã.
   const [created, setCreated] = useState<string[]>([]);
@@ -381,6 +433,8 @@ export function AddStallsDialog({
     setType('STANDARD');
     setError(undefined);
     setCreated([]);
+    setTouched({});
+    setAttempted(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone?.id]);
 
@@ -388,14 +442,42 @@ export function AddStallsDialog({
   const limit = zone ? stallLimit(zone) : MAX_STALLS_PER_BARN;
   const room = zone ? stallRoom(zone, current) : 0;
   const capped = !!zone?.capacity && zone.capacity < MAX_STALLS_PER_BARN;
-  const n = Number(count);
-  const first = Number(start);
-  const valid = Number.isInteger(n) && n >= 1 && n <= room && Number.isInteger(first) && first >= 0 && prefix.trim().length > 0;
-  const tooMany = Number.isInteger(n) && n > room && room > 0;
+  const digits = (value: string) => /^\d+$/.test(value.trim());
+  const n = Number(count.trim());
+  const first = Number(start.trim());
+  // Mã dài nhất là mã của ô cuối (backend giới hạn mã ô 80 ký tự).
+  const lastCode = digits(count) && digits(start) ? `${prefix.trim()}${String(first + n - 1).padStart(width, '0')}` : '';
+  const errors = {
+    count: !count.trim()
+      ? 'Nhập số ô'
+      : !digits(count) || n < 1
+        ? 'Số ô là số nguyên từ 1'
+        : n > room
+          ? room > 0
+            ? `Chỉ thêm được ${room} ô nữa`
+            : 'Khu không thêm được ô nào nữa'
+          : undefined,
+    prefix: !prefix.trim() ? 'Nhập tiền tố mã' : undefined,
+    start: !start.trim()
+      ? 'Nhập số bắt đầu'
+      : !digits(start) || first < 1
+        ? 'Số bắt đầu là số nguyên từ 1'
+        : lastCode.length > STALL_CODE_MAX
+          ? `Mã ô tối đa ${STALL_CODE_MAX} ký tự, hãy rút ngắn tiền tố`
+          : undefined,
+  };
+  const show = (key: keyof typeof errors) => (touched[key] || attempted ? errors[key] : undefined);
+  const touch = (key: keyof typeof errors) => () => setTouched((current) => ({ ...current, [key]: true }));
+  const valid = !Object.values(errors).some(Boolean);
   const codes = valid ? Array.from({ length: n }, (_, index) => `${prefix.trim()}${String(first + index).padStart(width, '0')}`) : [];
 
   const submit = async () => {
-    if (!zone) return;
+    if (!zone || pending) return;
+    setAttempted(true);
+    if (!valid) {
+      scrollToFirstError();
+      return;
+    }
     setPending(true);
     setError(undefined);
     const done: string[] = [];
@@ -430,12 +512,13 @@ export function AddStallsDialog({
       onClose={onClose}
       title={`Thêm ô cho ${zone?.name ?? ''}`}
       description="Mã ô không trùng trong toàn câu lạc bộ. Ô mới luôn ở trạng thái Trống."
+      busy={pending}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Quay lại
           </Button>
-          <Button onClick={submit} disabled={!valid || pending}>
+          <Button onClick={submit} disabled={pending || room === 0}>
             {pending ? 'Đang thêm…' : `Thêm ${valid ? n : ''} ô`}
           </Button>
         </>
@@ -448,19 +531,26 @@ export function AddStallsDialog({
             <span className="text-base font-semibold text-gray-400">/{limit}</span>
           </span>
           <span className="min-w-0 flex-1">
-            Khu đang có {current} ô · {capped ? `sức chứa ${zone?.capacity} ô` : `tối đa ${MAX_STALLS_PER_BARN} ô (lưới 3×3)`}
+            Khu đang có {current} ô · {capped ? `sức chứa ${zone?.capacity} ô` : `tối đa ${MAX_STALLS_PER_BARN} ô`}
             <span className="block text-xs text-gray-500">{room > 0 ? `Thêm được ${room} ô nữa.` : 'Không thêm được ô nào nữa.'}</span>
           </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Số ô" required error={tooMany ? `Chỉ thêm được ${room} ô nữa` : undefined}>
-            <Input inputMode="numeric" value={count} disabled={room === 0} onChange={(event) => setCount(event.target.value)} />
+          <Field label="Số ô" required name="count" error={room === 0 ? undefined : show('count')} onBlur={touch('count')}>
+            <Input
+              inputMode="numeric"
+              maxLength={2}
+              value={count}
+              disabled={room === 0}
+              onChange={(event) => setCount(event.target.value)}
+              className={cn(room > 0 && show('count') && invalidClass)}
+            />
           </Field>
-          <Field label="Tiền tố mã" required>
-            <Input value={prefix} maxLength={70} className="font-mono" onChange={(event) => setPrefix(event.target.value)} />
+          <Field label="Tiền tố mã" required name="prefix" error={show('prefix')} onBlur={touch('prefix')}>
+            <Input value={prefix} maxLength={STALL_CODE_MAX - 1} className={cn('font-mono', show('prefix') && invalidClass)} onChange={(event) => setPrefix(event.target.value)} />
           </Field>
-          <Field label="Bắt đầu từ số" required>
-            <Input inputMode="numeric" value={start} onChange={(event) => setStart(event.target.value)} />
+          <Field label="Bắt đầu từ số" required name="start" error={show('start')} onBlur={touch('start')}>
+            <Input inputMode="numeric" maxLength={6} value={start} onChange={(event) => setStart(event.target.value)} className={cn(show('start') && invalidClass)} />
           </Field>
         </div>
         <Field label="Loại ô">
@@ -490,7 +580,7 @@ export function AddStallsDialog({
               </span>
             </Notice>
           ) : (
-            <Notice tone="warning">Khu đã đủ {MAX_STALLS_PER_BARN} ô (lưới 3×3), không thêm được nữa.</Notice>
+            <Notice tone="warning">Khu đã đủ {MAX_STALLS_PER_BARN} ô, không thêm được nữa.</Notice>
           ))}
         {error && <ErrorBox message={error} />}
       </div>
@@ -527,12 +617,11 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: Stall | n
       onClose={onClose}
       title={`Bảo trì ô ${stall?.code ?? ''}`}
       dirty={note.trim() !== ''}
+      busy={action.pending}
       description="Ô bảo trì không nhận ngựa cho tới khi kết thúc bảo trì."
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            Quay lại
-          </Button>
+          <CancelButton variant="secondary">Quay lại</CancelButton>
           <Button onClick={submit} disabled={action.pending}>
             {action.pending ? 'Đang lưu…' : 'Chuyển sang bảo trì'}
           </Button>
@@ -540,8 +629,8 @@ export function MaintenanceDialog({ stall, onClose, onDone }: { stall: Stall | n
       }
     >
       <div className="space-y-4">
-        <Field label="Ghi chú bảo trì" hint="Lưu vào mô tả của ô">
-          <Textarea value={note} onChange={(event) => setNote(event.target.value)} className="min-h-16" placeholder="Ví dụ: thay máng nước" />
+        <Field label="Ghi chú bảo trì" hint="Lưu vào mô tả của ô" counter={<CharCount value={note} max={STALL_NOTE_MAX} />}>
+          <Textarea value={note} maxLength={STALL_NOTE_MAX} onChange={(event) => setNote(event.target.value)} className="min-h-16" placeholder="Ví dụ: thay máng nước" />
         </Field>
         {action.error && <ErrorBox message={action.error} />}
       </div>

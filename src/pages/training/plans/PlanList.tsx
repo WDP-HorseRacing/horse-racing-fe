@@ -140,7 +140,7 @@ function PlanCard({
       data-plan-card
       className={cn(
         'group flex min-w-0 flex-col rounded-2xl bg-white ring-1 ring-gray-200/80 transition hover:ring-emerald-200',
-        large ? 'turf-soft p-6 shadow-grass-tint' : 'p-5 shadow-[0_14px_30px_-26px_rgba(6,78,59,0.5)]',
+        large ? 'turf-soft p-6 shadow-grass-tint' : 'p-5 shadow-raised',
         className,
       )}
     >
@@ -153,7 +153,7 @@ function PlanCard({
           {plan.description && <p className={cn('mt-1 text-sm text-gray-600', large ? 'line-clamp-3' : 'line-clamp-2')}>{plan.description}</p>}
         </div>
         <div className={cn('flex shrink-0 flex-col items-end rounded-xl bg-white/80 px-3 py-1.5 ring-1 ring-emerald-900/10', large && 'px-4 py-2')}>
-          <span className={cn('font-mono font-bold tabular-nums text-emerald-800', large ? 'text-3xl' : 'text-xl')}>{plan.totalWeeks}</span>
+          <span className={cn('tabular-nums font-bold  text-emerald-800', large ? 'text-3xl' : 'text-xl')}>{plan.totalWeeks}</span>
           <span className="text-xs text-gray-500">tuần</span>
         </div>
       </div>
@@ -164,7 +164,7 @@ function PlanCard({
         <ol className="mt-5 grid gap-1.5 sm:grid-cols-2">
           {plan.phases.map((phase) => (
             <li key={phase.position} className="flex min-w-0 items-center gap-2 text-sm">
-              <span className="w-16 shrink-0 font-mono text-xs tabular-nums text-gray-500">
+              <span className="w-16 shrink-0 tabular-nums text-xs  text-gray-500">
                 T{phase.startWeek}
                 {phase.weeks > 1 && `-${phase.startWeek + phase.weeks - 1}`}
               </span>

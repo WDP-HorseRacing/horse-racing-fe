@@ -679,17 +679,12 @@ export interface HealthChangeResult {
   changed: boolean;
 }
 
-/** Cách giao lịch chăm sóc: GROOM không kèm người là "Groom phụ trách ngựa" (tự theo Groom mới), VET luôn kèm bác sĩ. */
-export type CareAssigneeType = 'GROOM' | 'VET';
-
 export interface CareSchedule {
   id: string;
   horseId: string;
   type: CareType;
   dueAt: string;
-  /** null là chưa giao ai. */
-  assigneeType: CareAssigneeType | null;
-  /** null kèm `assigneeType = GROOM` nghĩa là Groom đang phụ trách ngựa. */
+  /** Bác sĩ được giao; null là chưa giao ai (mọi bác sĩ cùng thấy và cùng được nhắc). Lịch chỉ thuộc bác sĩ từ BE 27/10. */
   assignedTo: string | null;
   status: CareStatus;
   completedAt: string | null;
@@ -737,7 +732,7 @@ export interface MedicalDashboard {
     horseName: string;
     type: CareType;
     dueDate: string;
-    /** Người làm hiện tại (đã tra Groom phụ trách), null nếu chưa có ai. */
+    /** Bác sĩ được giao (còn hoạt động), null nếu chưa giao ai. */
     assignedTo: string | null;
     assignedToName: string | null;
   }[];
@@ -814,7 +809,9 @@ export type NotificationCategory =
   /** Phụ phí mới của ngựa: HLV khu hiện tại và chủ ngựa được báo. resource là ngựa. */
   | 'SURCHARGE'
   /** Buổi tập có ngựa mình dắt bị hủy: Groom được báo (HIGH), liệt kê ngựa của mình. resource null. */
-  | 'TRAINING_SESSION';
+  | 'TRAINING_SESSION'
+  /** Ngựa bị rút khỏi lớp do đổi khu hoặc đổi vòng đời: HLV phụ trách lớp được báo. resource là ngựa. */
+  | 'TRAINING_CLASS';
 export type NotificationPriority = 'NORMAL' | 'HIGH' | 'URGENT';
 
 /** Đối tượng mà thông báo nói tới. Mỗi ứng dụng tự đổi sang màn hình của mình (BE không gửi link). */

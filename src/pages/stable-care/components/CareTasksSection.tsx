@@ -2,12 +2,15 @@
 // - Gắn thêm (vd "Ngâm chân nước đá 10/10 đến 17/10"): loại việc không áp mọi ngựa, cộng vào checklist mỗi ngày trong khoảng.
 // - Miễn việc chung (vd không tắm 5 ngày vì ngựa sốt): loại việc đang áp mọi ngựa, bỏ khỏi checklist trong khoảng, lý do bắt buộc.
 // Gắn từ hôm nay thì checklist hôm nay đổi ngay. Gỡ: chưa tới ngày bắt đầu thì xóa hẳn, đang chạy thì kết thúc sớm.
+// Mở từ nút "Nhờ Groom giữ ngựa" của lịch kiểm tra móng (?addTask=1): hộp gắn việc mở sẵn, chọn sẵn loại việc có chữ "móng".
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronDown, Trash2 } from 'lucide-react';
 import { attachCareTask, listHorseCareTasks, listTaskTypes, removeCareTask } from '../../../api/stable-care';
 import type { HorseCareTask, HorseCareTaskMode } from '../../../api/types';
-import { Button, ConfirmDialog, ErrorBox, Field, Modal, Pill, Segmented, Select, Skeleton, Textarea, cn, useToast } from '../../../components/ui';
+import { Button, CancelButton, ConfirmDialog, ErrorBox, Field, Modal, Pill, Segmented, Select, Skeleton, Textarea, cn, invalidClass, useToast } from '../../../components/ui';
 import { DatePicker } from '../../../components/ui/DatePicker';
+import { useFormErrors } from '../../../hooks/useFormErrors';
 import { useAction, useService } from '../../../hooks/useService';
 import { addDateKey, clubToday, diffDateKeys } from '../../../lib/club-time';
 import { formatDateShort } from '../../../lib/format';
@@ -37,7 +40,16 @@ export function CareTasksSection({
   const toast = useToast();
   const today = clubToday();
   const tasks = useService(() => listHorseCareTasks(horse.id), [horse.id]);
-  const [attaching, setAttaching] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const assist = canManage && params.get('addTask') === '1';
+  const [attaching, setAttaching] = useState(assist);
+  const closeAttach = () => {
+    setAttaching(false);
+    if (params.has('addTask')) {
+      params.delete('addTask');
+      setParams(params, { replace: true });
+    }
+  };
   const [removing, setRemoving] = useState<HorseCareTask | null>(null);
   const [showEnded, setShowEnded] = useState(false);
   const remove = useAction();
@@ -110,7 +122,8 @@ export function CareTasksSection({
       {attaching && (
         <AttachTaskDialog
           horse={horse}
-          onClose={() => setAttaching(false)}
+          farrierAssist={assist}
+          onClose={closeAttach}
           onDone={(task) => {
             const what = task.mode === 'EXEMPT' ? `Đã miễn ${task.taskType.name}` : `Đã thêm ${task.taskType.name}`;
             toast.push(task.fromDate === today ? what : `${what} từ ${formatDateShort(task.fromDate)}`, 'success');
@@ -154,7 +167,18 @@ export function CareTasksSection({
   );
 }
 
-function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; name: string }; onClose: () => void; onDone: (task: HorseCareTask) => void }) {
+function AttachTaskDialog({
+  horse,
+  farrierAssist = false,
+  onClose,
+  onDone,
+}: {
+  horse: { id: string; name: string };
+  /** Mở từ lịch kiểm tra móng: một ngày, chọn sẵn loại việc có chữ "móng". */
+  farrierAssist?: boolean;
+  onClose: () => void;
+  onDone: (task: HorseCareTask) => void;
+}) {
   const today = clubToday();
   const action = useAction();
   const [mode, setMode] = useState<HorseCareTaskMode>('EXTRA');
@@ -164,21 +188,26 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
   const types = { ...allTypes, data: allTypes.data?.filter((type) => type.appliesToAll === exempt) };
   const [typeId, setTypeId] = useState('');
   const [fromDate, setFromDate] = useState(today);
-  const [toDate, setToDate] = useState(addDateKey(today, 6));
+  const [toDate, setToDate] = useState(farrierAssist ? today : addDateKey(today, 6));
   const [note, setNote] = useState('');
-  const [touched, setTouched] = useState(false);
-  const chosenType = (types.data?.some((type) => type.id === typeId) ? typeId : '') || types.data?.[0]?.id || '';
+  const farrierType = farrierAssist && !exempt ? types.data?.find((type) => type.name.toLocaleLowerCase('vi').includes('móng')) : undefined;
+  const chosenType = (types.data?.some((type) => type.id === typeId) ? typeId : '') || farrierType?.id || types.data?.[0]?.id || '';
 
-  const errors = {
-    type: !chosenType ? 'Chọn loại việc' : undefined,
-    from: !fromDate ? 'Chọn ngày bắt đầu' : fromDate < today ? 'Không chọn ngày đã qua' : undefined,
-    to: !toDate ? 'Chọn ngày kết thúc' : toDate < fromDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : diffDateKeys(fromDate, toDate) + 1 > MAX_DAYS ? `Tối đa ${MAX_DAYS} ngày` : undefined,
+  // Khóa trùng tên ô của BE để lỗi BE gắn vào đúng ô.
+  const errors: Partial<Record<'taskTypeId' | 'fromDate' | 'toDate' | 'note', string>> = {
+    taskTypeId: !chosenType ? 'Chọn loại việc' : undefined,
+    fromDate: !fromDate ? 'Chọn ngày bắt đầu' : fromDate < today ? 'Không chọn ngày đã qua' : undefined,
+    toDate: !toDate ? 'Chọn ngày kết thúc' : toDate < fromDate ? 'Ngày kết thúc không được trước ngày bắt đầu' : diffDateKeys(fromDate, toDate) + 1 > MAX_DAYS ? `Tối đa ${MAX_DAYS} ngày` : undefined,
     note: textError(note, { label: exempt ? 'Lý do' : 'Ghi chú', max: 200, required: exempt }),
+  };
+  const f = useFormErrors(errors, { fieldErrors: action.fieldErrors, field: action.field, error: action.error });
+  const edit = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    if (action.error) action.clearError();
   };
 
   const submit = () => {
-    setTouched(true);
-    if (Object.values(errors).some(Boolean)) return;
+    if (!f.attempt()) return;
     void action.run(
       () => attachCareTask(horse.id, { taskTypeId: chosenType, fromDate, toDate, mode, ...(note.trim() ? { note: note.trim() } : {}) }),
       (task) => {
@@ -194,14 +223,13 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
       onClose={onClose}
       title={`Việc riêng của ${horse.name}`}
       description={exempt ? 'Checklist của ngựa không có việc này trong khoảng đã chọn, hết hạn thì tự có lại.' : 'Groom sẽ thấy việc này mỗi ngày trong khoảng đã chọn.'}
-      dirty={!!typeId || exempt || fromDate !== today || toDate !== addDateKey(today, 6) || note !== ''}
+      dirty={!!typeId || exempt || fromDate !== today || toDate !== (farrierAssist ? today : addDateKey(today, 6)) || note !== ''}
+      busy={action.pending}
       onSave={submit}
       saveLabel={exempt ? 'Miễn' : 'Thêm'}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Hủy
-          </Button>
+          <CancelButton />
           <Button onClick={submit} disabled={action.pending || types.loading}>
             {action.pending ? 'Đang lưu…' : exempt ? 'Miễn việc' : 'Thêm'}
           </Button>
@@ -212,7 +240,7 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
         value={mode}
         onChange={(value) => {
           setMode(value);
-          setTouched(false);
+          f.reset();
           action.clearError();
         }}
         options={[
@@ -220,7 +248,18 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
           { value: 'EXEMPT', label: 'Miễn việc chung' },
         ]}
       />
-      <div className="mt-4" />
+      {exempt ? (
+        <div className="mt-4" />
+      ) : (
+        <p className="mb-4 mt-3 text-xs text-gray-500">
+          Tiêm phòng, tẩy giun, kiểm tra móng là lịch của bác sĩ, xem ở Lịch định kỳ. Giữ ngựa cho thợ móng thì gắn việc ở đây.
+        </p>
+      )}
+      {farrierAssist && !exempt && types.data && types.data.length > 0 && !farrierType && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-100">
+          Chưa có loại việc giữ ngựa cho thợ móng. Nhờ Quản lý CLB thêm loại việc "Giữ ngựa cho thợ móng" (không áp mọi ngựa) ở trang Chăm sóc khu, hoặc chọn loại khác và ghi chú bên dưới.
+        </p>
+      )}
       {types.loading && !types.data ? (
         <Skeleton rows={3} />
       ) : types.error ? (
@@ -229,8 +268,8 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
         <ErrorBox message={exempt ? 'Chưa có loại việc nào áp mọi ngựa để miễn.' : 'Chưa có loại việc riêng nào. Nhờ Quản lý CLB thêm ở trang Chăm sóc khu.'} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={exempt ? 'Việc chung được miễn' : 'Loại việc'} required error={touched ? errors.type : undefined} className="sm:col-span-2">
-            <Select value={chosenType} onChange={(event) => setTypeId(event.target.value)}>
+          <Field label={exempt ? 'Việc chung được miễn' : 'Loại việc'} required name="taskTypeId" error={f.show('taskTypeId')} onBlur={f.blur('taskTypeId')} className="sm:col-span-2">
+            <Select value={chosenType} onChange={(event) => edit(setTypeId)(event.target.value)} onBlur={f.blur('taskTypeId')} className={cn(f.show('taskTypeId') && invalidClass)}>
               {types.data?.map((type) => (
                 <option key={type.id} value={type.id}>
                   {type.name}
@@ -238,21 +277,23 @@ function AttachTaskDialog({ horse, onClose, onDone }: { horse: { id: string; nam
               ))}
             </Select>
           </Field>
-          <Field label="Từ ngày" required error={touched ? errors.from : undefined}>
-            <DatePicker value={fromDate} onChange={setFromDate} min={today} clearable={false} invalid={touched && !!errors.from} />
+          <Field label="Từ ngày" required name="fromDate" error={f.show('fromDate')} onBlur={f.blur('fromDate')}>
+            <DatePicker value={fromDate} onChange={edit(setFromDate)} onBlur={f.blur('fromDate')} min={today} clearable={false} invalid={!!f.show('fromDate')} />
           </Field>
-          <Field label="Đến ngày" required error={touched ? errors.to : undefined}>
-            <DatePicker value={toDate} onChange={setToDate} min={fromDate || today} clearable={false} invalid={touched && !!errors.to} />
+          <Field label="Đến ngày" required name="toDate" error={f.show('toDate')} onBlur={f.blur('toDate')}>
+            <DatePicker value={toDate} onChange={edit(setToDate)} onBlur={f.blur('toDate')} min={fromDate || today} clearable={false} invalid={!!f.show('toDate')} />
           </Field>
-          <Field label={exempt ? 'Lý do miễn' : 'Ghi chú'} required={exempt} error={touched ? errors.note : undefined} className="sm:col-span-2">
+          <Field label={exempt ? 'Lý do miễn' : 'Ghi chú'} required={exempt} name="note" error={f.show('note')} onBlur={f.blur('note')} className="sm:col-span-2">
             <Textarea
               rows={2}
+              maxLength={200}
               value={note}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => edit(setNote)(event.target.value)}
+              className={cn(f.show('note') && invalidClass)}
               placeholder={exempt ? 'Ví dụ: Ngựa sốt, không tắm trong 5 ngày' : 'Ví dụ: Ngâm 15 phút sau buổi tập, nước có đá'}
             />
           </Field>
-          {action.error && (
+          {action.error && !Object.keys(action.fieldErrors).length && (
             <div className="sm:col-span-2">
               <ErrorBox message={action.error} />
             </div>

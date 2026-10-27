@@ -1,21 +1,21 @@
 // F4.4 — Sự cố tại chuồng.
-// Groom: khung báo sự cố (trái, dính khi cuộn) và các sự cố mình đã báo hoặc của ngựa mình phụ trách, kể cả do Groom khác báo hộ (phải).
+// Groom: các sự cố mình đã báo hoặc của ngựa mình phụ trách, kể cả do Groom khác báo hộ; nút Báo sự cố mở hộp thoại (đang lọc ngựa thì chọn sẵn).
 // HLV: sự cố của ngựa đang ở khu mình (BE lọc), chuyển bác sĩ và đóng sự cố.
 // Quản lý CLB, bác sĩ: xem mọi sự cố, Quản lý CLB lọc theo khu. Mở từ thông báo thì lọc theo ngựa (?horse=).
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Send, X } from 'lucide-react';
+import { Siren, X } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
 import { listIncidents } from '../../api/stable-care';
 import { listBarns } from '../../api/stable';
 import type { IncidentStatus, NotificationItem } from '../../api/types';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Card, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, TabPanel, Tabs, NotFound } from '../../components/ui';
+import { Button, EmptyState, ErrorBox, FilterSelect, PageHeader, SectionTitle, Skeleton, TabPanel, Tabs, NotFound } from '../../components/ui';
 import { useService } from '../../hooks/useService';
 import { links } from '../../lib/links';
 import { useStore } from '../../store/store';
 import { IncidentCard } from './components/IncidentCard';
-import { IncidentReportForm } from './components/IncidentReport';
+import { IncidentReportDialog } from './components/IncidentReport';
 import { incidentStale } from './care-helpers';
 
 const TABS: { key: IncidentStatus; label: string }[] = [
@@ -29,6 +29,7 @@ export default function Incidents() {
   const horseId = params.get('horse') ?? undefined;
   const [status, setStatus] = useState<IncidentStatus>('OPEN');
   const [barnId, setBarnId] = useState('');
+  const [reporting, setReporting] = useState(false);
   const groom = role === 'GROOM';
   const trainer = role === 'HEAD_TRAINER';
   const manager = role === 'CLUB_MANAGER';
@@ -82,18 +83,21 @@ export default function Incidents() {
   if (groom) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Sự cố tại chuồng" description="Thấy ngựa có dấu hiệu lạ thì báo ngay." />
-        <div className="grid gap-5 lg:grid-cols-12">
-          <Card className="lg:sticky lg:top-6 lg:col-span-5 lg:self-start">
-            <SectionTitle icon={<Send size={16} />}>Báo sự cố</SectionTitle>
-            <IncidentReportForm onDone={reload} />
-          </Card>
-          <div className="space-y-3 lg:col-span-7">
-            <SectionTitle className="mb-0">Sự cố ngựa tôi phụ trách và tôi đã báo</SectionTitle>
-            <Tabs active={status} onChange={(key) => setStatus(key as IncidentStatus)} tabs={tabs} />
-            {listBody}
-          </div>
+        <PageHeader
+          title="Sự cố tại chuồng"
+          description="Thấy ngựa có dấu hiệu lạ thì báo ngay."
+          actions={
+            <Button onClick={() => setReporting(true)}>
+              <Siren size={15} /> Báo sự cố
+            </Button>
+          }
+        />
+        <div className="space-y-3">
+          <SectionTitle className="mb-0">Sự cố ngựa tôi phụ trách và tôi đã báo</SectionTitle>
+          <Tabs active={status} onChange={(key) => setStatus(key as IncidentStatus)} tabs={tabs} />
+          {listBody}
         </div>
+        <IncidentReportDialog open={reporting} initialHorseId={horseId} onClose={() => setReporting(false)} onDone={reload} />
       </div>
     );
   }
