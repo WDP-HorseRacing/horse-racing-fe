@@ -12,18 +12,13 @@
 
 ## Cấu hình build production
 
-Trong GitHub repository, vào **Settings → Secrets and variables → Actions → Variables** và thêm:
+Workflow tham chiếu GitHub Environment tên `production`. Trong **Settings → Environments → production → Environment variables**, thêm `VITE_API_URL` và `VITE_SOCKET_URL`.
 
-| Tên | Giá trị |
-| --- | --- |
-| `VITE_API_URL` | URL backend production, gồm base path, ví dụ `https://api.example.com/api/v1` |
-| `VITE_SOCKET_URL` | URL Socket.IO/WebSocket production, ví dụ `https://api.example.com/events` |
-
-Workflow lấy hai giá trị này khi chạy `pnpm build`. Chúng được đóng gói vào frontend nên người dùng có thể xem; không đặt password hoặc token riêng tư ở đây. File env bị `.gitignore` bỏ qua sẽ không được GitHub Actions checkout.
+Hai biến được đóng gói vào frontend nên người dùng có thể xem; không đặt password hoặc token riêng tư ở đây. File `deploy/portainer/env.production` trên máy local vẫn bị ignore và không tham gia CI.
 
 ## Cấu hình Portainer
 
-Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo trong GitHub repository **Settings → Secrets and variables → Actions**.
+Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo `PORTAINER_URL`, `PORTAINER_ENDPOINT_ID` và các biến liên quan trong Environment `production`; lưu token `PORTAINER_API_KEY` dưới Environment secrets.
 
 **Variables**
 
