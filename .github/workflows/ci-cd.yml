@@ -19,7 +19,6 @@ jobs:
   build:
     name: Build frontend
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -36,12 +35,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Vite app
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
         run: |
-          : "${VITE_API_URL:?Set VITE_API_URL in the production Environment}"
-          : "${VITE_SOCKET_URL:?Set VITE_SOCKET_URL in the production Environment}"
+          test -s deploy/portainer/env.production
+          grep -q '^VITE_API_URL=.' deploy/portainer/env.production
+          grep -q '^VITE_SOCKET_URL=.' deploy/portainer/env.production
+          cp deploy/portainer/env.production .env.production
           pnpm build
 
       - name: Upload built app
@@ -57,7 +55,6 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
-    environment: production
     permissions:
       contents: read
       packages: write
