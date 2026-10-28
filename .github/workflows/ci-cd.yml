@@ -19,6 +19,7 @@ jobs:
   build:
     name: Build frontend
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -39,8 +40,8 @@ jobs:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
         run: |
-          : "${VITE_API_URL:?Set the VITE_API_URL Actions variable}"
-          : "${VITE_SOCKET_URL:?Set the VITE_SOCKET_URL Actions variable}"
+          : "${VITE_API_URL:?Set VITE_API_URL in the production Environment}"
+          : "${VITE_SOCKET_URL:?Set VITE_SOCKET_URL in the production Environment}"
           pnpm build
 
       - name: Upload built app
@@ -56,6 +57,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       packages: write
