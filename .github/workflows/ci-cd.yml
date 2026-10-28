@@ -113,6 +113,7 @@ jobs:
           PORTAINER_REGISTRY_ID: ${{ vars.PORTAINER_REGISTRY_ID }}
           GHCR_IMAGE: ${{ steps.image.outputs.name }}
           IMAGE_TAG: sha-${{ github.sha }}
+          WEB_PORT: ${{ vars.WEB_PORT || '8081' }}
         run: |
           set -euo pipefail
           : "${PORTAINER_URL:?Set the PORTAINER_URL Actions variable}"
@@ -121,7 +122,7 @@ jobs:
 
           PORTAINER_URL="${PORTAINER_URL%/}"
 
-          STACK_NAME=horse-racing-fe
+          STACK_NAME=horse-fe
           STACKS_JSON="$(curl --fail --silent --show-error \
             --header "X-API-Key: $PORTAINER_API_KEY" \
             "$PORTAINER_URL/api/stacks")"
@@ -136,13 +137,15 @@ jobs:
             --rawfile stack deploy/portainer/stack.yml \
             --arg ghcr_image "$GHCR_IMAGE" \
             --arg image_tag "$IMAGE_TAG" \
+            --arg web_port "$WEB_PORT" \
             --arg registry_id "${PORTAINER_REGISTRY_ID:-}" \
             '{
-              Name: "horse-racing-fe",
+              Name: "horse-fe",
               StackFileContent: $stack,
               Env: [
                 {name: "GHCR_IMAGE", value: $ghcr_image},
-                {name: "IMAGE_TAG", value: $image_tag}
+                {name: "IMAGE_TAG", value: $image_tag},
+                {name: "WEB_PORT", value: $web_port}
               ]
             } + (if $registry_id == "" then {} else {Registries: [($registry_id | tonumber)]} end)')"
 

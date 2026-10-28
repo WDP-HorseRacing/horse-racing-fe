@@ -2,7 +2,7 @@
 
 - Workflow: `.github/workflows/ci-cd.yml`
 - Docker image dùng Caddy để phục vụ FE: GHCR, theo tên repository GitHub
-- Portainer stack: `horse-racing-fe`, cấu hình trong `deploy/portainer/stack.yml`
+- Portainer stack: `horse-fe`, cấu hình trong `deploy/portainer/stack.yml`
 
 ## Quy trình
 
@@ -34,9 +34,9 @@ Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo 
 | --- | --- |
 | `PORTAINER_API_KEY` | API access token của Portainer |
 
-Stack được tạo tự động với tên `horse-racing-fe`. Nếu GHCR package là private, hãy tạo registry GHCR trong Portainer bằng credential có quyền `read:packages`, rồi đặt `PORTAINER_REGISTRY_ID` trước lần deploy đầu tiên. Nếu package public thì không cần biến registry này.
+Stack được tạo tự động với tên `horse-fe`. Nếu GHCR package là private, hãy tạo registry GHCR trong Portainer bằng credential có quyền `read:packages`, rồi đặt `PORTAINER_REGISTRY_ID` trước lần deploy đầu tiên. Nếu package public thì không cần biến registry này. Biến Actions `WEB_PORT` tùy chọn, mặc định là `8081`.
 
-Stack dùng Docker network external `racehorse-net`. Tạo network này một lần trong Portainer **Networks → Add network** với driver `bridge`, nếu chưa có; sau đó gắn cả stack Caddy và FE vào network này. FE cũng bind cổng `8081` trên loopback của VPS (`127.0.0.1:8081`), nên Caddy cài trực tiếp trên VPS có thể proxy tới `localhost:8081`. Có thể đổi cổng bằng biến stack `WEB_PORT`.
+Stack dùng Docker network external `racehorse-net`. Tạo network này một lần trong Portainer **Networks → Add network** với driver `bridge`, nếu chưa có; sau đó gắn cả stack Caddy và FE vào network này. FE publish cổng `8081` trên các interface của VPS, nên có thể truy cập `http://<IP-VPS>:8081` sau khi mở TCP `8081` trong firewall/security group. Caddy cài trực tiếp trên VPS có thể proxy tới `localhost:8081`.
 
 Nếu Caddy chạy trong Docker, proxy qua network chung bằng alias `horse-racing-fe:80`:
 
@@ -61,4 +61,4 @@ fe.example.com {
 }
 ```
 
-Đổi `fe.example.com` theo domain. Caddy ngoài xử lý domain/HTTPS; Caddy trong container FE phục vụ file frontend. Mapping chỉ mở trên loopback, không chiếm cổng HTTP/HTTPS công khai `80/443` của Caddy. Nếu `8081` đã được dùng, đổi `WEB_PORT` trong biến môi trường của stack Portainer.
+Đổi `fe.example.com` theo domain. Caddy ngoài xử lý domain/HTTPS; Caddy trong container FE phục vụ file frontend. Nếu `8081` đã được dùng, đặt `WEB_PORT` trong GitHub Actions Variables thành cổng trống khác và mở cổng TCP tương ứng trong firewall/security group.
