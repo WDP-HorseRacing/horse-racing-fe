@@ -3,7 +3,7 @@ name: CI/CD
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -111,7 +111,6 @@ jobs:
           PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
           PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID }}
           PORTAINER_REGISTRY_ID: ${{ vars.PORTAINER_REGISTRY_ID }}
-          WEB_PORT: ${{ vars.WEB_PORT || '8080' }}
           GHCR_IMAGE: ${{ steps.image.outputs.name }}
           IMAGE_TAG: sha-${{ github.sha }}
         run: |
@@ -137,15 +136,13 @@ jobs:
             --rawfile stack deploy/portainer/stack.yml \
             --arg ghcr_image "$GHCR_IMAGE" \
             --arg image_tag "$IMAGE_TAG" \
-            --arg web_port "$WEB_PORT" \
             --arg registry_id "${PORTAINER_REGISTRY_ID:-}" \
             '{
               Name: "horse-racing-fe",
               StackFileContent: $stack,
               Env: [
                 {name: "GHCR_IMAGE", value: $ghcr_image},
-                {name: "IMAGE_TAG", value: $image_tag},
-                {name: "WEB_PORT", value: $web_port}
+                {name: "IMAGE_TAG", value: $image_tag}
               ]
             } + (if $registry_id == "" then {} else {Registries: [($registry_id | tonumber)]} end)')"
 
