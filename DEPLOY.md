@@ -12,13 +12,13 @@
 
 ## Cấu hình build production
 
-Workflow đọc `VITE_API_URL` và `VITE_SOCKET_URL` từ `deploy/portainer/env.production`, rồi chép file này thành `.env.production` ở thư mục gốc trước khi chạy Vite build.
+Workflow gắn hai job build và deploy với GitHub Environment `Deploy-FE`. Build đọc `VITE_API_URL` và `VITE_SOCKET_URL` từ **Settings → Environments → Deploy-FE → Variables**. Khai báo hai biến này để cấu hình địa chỉ BE và WebSocket cho FE.
 
-Commit file `deploy/portainer/env.production` cùng source để GitHub Actions nhận được. File này chỉ nên chứa URL production; các biến `VITE_` được đóng gói vào frontend nên người dùng có thể xem, không đặt password hoặc token riêng tư ở đây.
+Nếu thiếu một trong hai biến `VITE_*`, workflow dùng giá trị tương ứng trong `deploy/portainer/env.production` làm phương án dự phòng. Các biến `VITE_` được đóng gói vào frontend nên người dùng có thể xem; không đặt password hoặc token riêng tư ở đây.
 
 ## Cấu hình Portainer
 
-Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo `PORTAINER_URL`, `PORTAINER_ENDPOINT_ID` và các biến liên quan tại **Settings → Secrets and variables → Actions → Variables**; lưu token `PORTAINER_API_KEY` dưới **Secrets**.
+Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo `PORTAINER_URL`, `PORTAINER_ENDPOINT_ID` và các biến liên quan dưới **Deploy-FE → Variables** hoặc **Actions → Variables**. Lưu token `PORTAINER_API_KEY` dưới **Deploy-FE → Secrets** hoặc **Actions → Secrets**.
 
 **Variables**
 
