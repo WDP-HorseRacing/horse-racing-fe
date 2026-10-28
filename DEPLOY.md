@@ -36,7 +36,9 @@ Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo 
 
 Stack được tạo tự động với tên `horse-racing-fe`. Nếu GHCR package là private, hãy tạo registry GHCR trong Portainer bằng credential có quyền `read:packages`, rồi đặt `PORTAINER_REGISTRY_ID` trước lần deploy đầu tiên. Nếu package public thì không cần biến registry này.
 
-Stack dùng Docker network external `racehorse-net`. Tạo network này một lần trong Portainer **Networks → Add network** với driver `bridge`, nếu chưa có; sau đó gắn cả stack Caddy và FE vào network này. Caddy trong Docker proxy tới alias `horse-racing-fe:80`:
+Stack dùng Docker network external `racehorse-net`. Tạo network này một lần trong Portainer **Networks → Add network** với driver `bridge`, nếu chưa có; sau đó gắn cả stack Caddy và FE vào network này. FE cũng bind cổng `8081` trên loopback của VPS (`127.0.0.1:8081`), nên Caddy cài trực tiếp trên VPS có thể proxy tới `localhost:8081`. Có thể đổi cổng bằng biến stack `WEB_PORT`.
+
+Nếu Caddy chạy trong Docker, proxy qua network chung bằng alias `horse-racing-fe:80`:
 
 Trong stack Caddy, khai báo network dùng chung:
 
@@ -59,4 +61,4 @@ fe.example.com {
 }
 ```
 
-Đổi `fe.example.com` theo domain. Caddy ngoài xử lý domain/HTTPS; Caddy trong container FE phục vụ file frontend. FE không publish cổng lên host, nên không xung đột với cổng đã dùng trên VPS.
+Đổi `fe.example.com` theo domain. Caddy ngoài xử lý domain/HTTPS; Caddy trong container FE phục vụ file frontend. Mapping chỉ mở trên loopback, không chiếm cổng HTTP/HTTPS công khai `80/443` của Caddy. Nếu `8081` đã được dùng, đổi `WEB_PORT` trong biến môi trường của stack Portainer.
