@@ -12,16 +12,14 @@
 
 ## Cấu hình build production
 
-Workflow dùng `deploy/portainer/env.production` làm cấu hình build production. File này cần có:
+Trong GitHub repository, vào **Settings → Secrets and variables → Actions → Variables** và thêm:
 
-```dotenv
-VITE_API_URL=https://api.example.com/api/v1
-VITE_SOCKET_URL=https://api.example.com/events
-```
+| Tên | Giá trị |
+| --- | --- |
+| `VITE_API_URL` | URL backend production, gồm base path, ví dụ `https://api.example.com/api/v1` |
+| `VITE_SOCKET_URL` | URL Socket.IO/WebSocket production, ví dụ `https://api.example.com/events` |
 
-Thay bằng URL production thật trước khi push. Các biến `VITE_` được đóng gói vào frontend và người dùng có thể xem được; không đặt secret trong đó.
-
-Commit file này cùng source. Workflow chép nó thành `.env.production` ở thư mục gốc ngay trước khi chạy Vite build.
+Workflow lấy hai giá trị này khi chạy `pnpm build`. Chúng được đóng gói vào frontend nên người dùng có thể xem; không đặt password hoặc token riêng tư ở đây. File env bị `.gitignore` bỏ qua sẽ không được GitHub Actions checkout.
 
 ## Cấu hình Portainer
 

@@ -35,11 +35,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Vite app
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_SOCKET_URL: ${{ vars.VITE_SOCKET_URL }}
         run: |
-          test -s deploy/portainer/env.production
-          grep -q '^VITE_API_URL=.' deploy/portainer/env.production
-          grep -q '^VITE_SOCKET_URL=.' deploy/portainer/env.production
-          cp deploy/portainer/env.production .env.production
+          : "${VITE_API_URL:?Set the VITE_API_URL Actions variable}"
+          : "${VITE_SOCKET_URL:?Set the VITE_SOCKET_URL Actions variable}"
           pnpm build
 
       - name: Upload built app
