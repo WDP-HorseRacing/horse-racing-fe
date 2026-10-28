@@ -12,13 +12,13 @@
 
 ## Cấu hình build production
 
-Workflow tham chiếu GitHub Environment tên `production`. Trong **Settings → Environments → production → Environment variables**, thêm `VITE_API_URL` và `VITE_SOCKET_URL`.
+Workflow đọc `VITE_API_URL` và `VITE_SOCKET_URL` từ `deploy/portainer/env.production`, rồi chép file này thành `.env.production` ở thư mục gốc trước khi chạy Vite build.
 
-Hai biến được đóng gói vào frontend nên người dùng có thể xem; không đặt password hoặc token riêng tư ở đây. File `deploy/portainer/env.production` trên máy local vẫn bị ignore và không tham gia CI.
+Commit file `deploy/portainer/env.production` cùng source để GitHub Actions nhận được. File này chỉ nên chứa URL production; các biến `VITE_` được đóng gói vào frontend nên người dùng có thể xem, không đặt password hoặc token riêng tư ở đây.
 
 ## Cấu hình Portainer
 
-Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo `PORTAINER_URL`, `PORTAINER_ENDPOINT_ID` và các biến liên quan trong Environment `production`; lưu token `PORTAINER_API_KEY` dưới Environment secrets.
+Portainer cần được truy cập từ GitHub Actions runner qua HTTPS. Tạo API access token trong Portainer tại **My account → Access tokens**, rồi khai báo `PORTAINER_URL`, `PORTAINER_ENDPOINT_ID` và các biến liên quan tại **Settings → Secrets and variables → Actions → Variables**; lưu token `PORTAINER_API_KEY` dưới **Secrets**.
 
 **Variables**
 
