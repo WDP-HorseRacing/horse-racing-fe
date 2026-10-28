@@ -2,7 +2,7 @@ services:
   web:
     image: ${GHCR_IMAGE:-ghcr.io/wdp-horseracing/horse-racing-fe}:${IMAGE_TAG:-latest}
     ports:
-      - "127.0.0.1:${WEB_PORT:-8081}:80"
+      - "${WEB_PORT:-8081}:80"
     restart: unless-stopped
     networks:
       app:
