@@ -1,0 +1,177 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: horse-racing-fe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v3
+        with:
+          version: 11.15.1
+          runtime: node@22
+          install: false
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Vite app
+        run: |
+          test -s deploy/portainer/env.production
+          grep -q '^VITE_API_URL=.' deploy/portainer/env.production
+          grep -q '^VITE_SOCKET_URL=.' deploy/portainer/env.production
+          cp deploy/portainer/env.production .env.production
+          pnpm build
+
+      - name: Upload built app
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-and-deploy:
+    name: Publish image and deploy Portainer stack
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout deployment files
+        uses: actions/checkout@v7
+
+      - name: Download built app
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Normalize GHCR image name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "name=ghcr.io/$(printf '%s' "$REPOSITORY" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=sha,prefix=sha-,format=long
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create or update Portainer stack
+        if: >-
+          (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') &&
+          vars.PORTAINER_URL != '' &&
+          vars.PORTAINER_ENDPOINT_ID != ''
+        env:
+          PORTAINER_URL: ${{ vars.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_ENDPOINT_ID: ${{ vars.PORTAINER_ENDPOINT_ID }}
+          PORTAINER_REGISTRY_ID: ${{ vars.PORTAINER_REGISTRY_ID }}
+          WEB_PORT: ${{ vars.WEB_PORT || '8080' }}
+          GHCR_IMAGE: ${{ steps.image.outputs.name }}
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          : "${PORTAINER_URL:?Set the PORTAINER_URL Actions variable}"
+          : "${PORTAINER_API_KEY:?Set the PORTAINER_API_KEY Actions secret}"
+          : "${PORTAINER_ENDPOINT_ID:?Set the PORTAINER_ENDPOINT_ID Actions variable}"
+
+          PORTAINER_URL="${PORTAINER_URL%/}"
+
+          STACK_NAME=horse-racing-fe
+          STACKS_JSON="$(curl --fail --silent --show-error \
+            --header "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks")"
+          STACKS_JSON="${STACKS_JSON:-[]}"
+
+          STACK_ID="$(printf '%s' "$STACKS_JSON" | jq -r \
+            --arg name "$STACK_NAME" \
+            --arg endpoint_id "$PORTAINER_ENDPOINT_ID" \
+            '[.[]? | select(.Name == $name and ((.EndpointId // .EndpointID // "") | tostring) == $endpoint_id)] | first | .Id // empty | tostring')"
+
+          STACK_PAYLOAD="$(jq -n \
+            --rawfile stack deploy/portainer/stack.yml \
+            --arg ghcr_image "$GHCR_IMAGE" \
+            --arg image_tag "$IMAGE_TAG" \
+            --arg web_port "$WEB_PORT" \
+            --arg registry_id "${PORTAINER_REGISTRY_ID:-}" \
+            '{
+              Name: "horse-racing-fe",
+              StackFileContent: $stack,
+              Env: [
+                {name: "GHCR_IMAGE", value: $ghcr_image},
+                {name: "IMAGE_TAG", value: $image_tag},
+                {name: "WEB_PORT", value: $web_port}
+              ]
+            } + (if $registry_id == "" then {} else {Registries: [($registry_id | tonumber)]} end)')"
+
+          if [ -n "$STACK_ID" ]; then
+            UPDATE_PAYLOAD="$(printf '%s' "$STACK_PAYLOAD" | jq \
+              'del(.Name, .Registries) + {
+                PullImage: true,
+                RepullImageAndRedeploy: true,
+                Prune: false
+              }')"
+
+            curl --fail --silent --show-error \
+                --request PUT \
+                --header "X-API-Key: $PORTAINER_API_KEY" \
+                --header 'Content-Type: application/json' \
+                --data "$UPDATE_PAYLOAD" \
+                "$PORTAINER_URL/api/stacks/$STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
+                --output /dev/null
+            echo "Updated Portainer stack $STACK_NAME (ID $STACK_ID)."
+          else
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "X-API-Key: $PORTAINER_API_KEY" \
+              --header 'Content-Type: application/json' \
+              --data "$STACK_PAYLOAD" \
+              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$PORTAINER_ENDPOINT_ID" \
+              --output /dev/null
+            echo "Created Portainer stack $STACK_NAME."
+          fi
