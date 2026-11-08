@@ -61,7 +61,6 @@ export function GroomDay({
   onReport: (horse: { id: string; name: string }) => void;
 }) {
   const byId = new Map(horses.map((horse) => [horse.id, horse]));
-
   const assisted = today.assistedRuns ?? [];
   // Lượt dắt hộ: HLV giao Groom dắt ngựa của Groom khác, Groom vẫn có lượt dù không phụ trách ngựa nào.
   const assistedBlock = assisted.length > 0 && (
