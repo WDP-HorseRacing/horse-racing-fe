@@ -185,6 +185,8 @@ export interface ChecklistItem {
   doneAt: string | null;
   doer: UserBrief | null;
   note: string | null;
+  evidenceMediaId?: string | null;
+  evidenceImageUrl?: string | null;
 }
 
 export interface DailyChecklist {
