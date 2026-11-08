@@ -14,7 +14,7 @@ import { primeZoneScope } from '../../hooks/useMyScope';
 import { now } from '../../lib/clock';
 import { isReadOnlyHorse } from '../../lib/horse-rules';
 import { getGroomToday, listIncidents } from '../../api/stable-care';
-import { countSupplyRequests, listLowStock } from '../../api/supplies';
+import { listLowStock } from '../../api/supplies';
 import { getOwnerCosts } from '../../api/reports';
 import { listHorseSurcharges, listUnappliedSurcharges, type UnappliedSurcharge } from '../../api/billing';
 import { clubDateKey } from '../../lib/club-time';
@@ -172,7 +172,7 @@ export async function loadManager() {
           .catch(() => ({ key: month.key, label: month.label, total: 0, count: 0 })),
       ),
     ),
-    loadStableSummary(true),
+    loadStableSummary(),
     // Phụ phí HLV khu chưa xác nhận áp dụng (chưa kết thúc).
     listUnappliedSurcharges().catch(() => [] as UnappliedSurcharge[]),
   ]);
@@ -195,7 +195,7 @@ export async function loadManager() {
 /* ===== Huấn luyện viên trưởng ===== */
 
 export async function loadTrainer(userId: string) {
-  const [horses, barns, stalls, medical, stable] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard({ mine: true }), loadStableSummary(false)]);
+  const [horses, barns, stalls, medical, stable] = await Promise.all([listAllHorses({ myBarns: true }), listBarns(), listStalls(), getMedicalDashboard({ mine: true }), loadStableSummary()]);
   const mine = horses.filter(inClub);
   const ids = new Set(mine.map((horse) => horse.id));
   const care = dashboardCare(medical);
@@ -242,15 +242,14 @@ export async function loadVet() {
 
 /* ===== Chăm sóc chuồng (Flow 4) cho HLV và Quản lý CLB ===== */
 
-/** Sự cố đang mở (HLV: BE lọc theo khu mình), vật tư sắp hết, đề xuất chờ duyệt (chỉ Quản lý CLB). Lỗi thì coi như rỗng. */
-async function loadStableSummary(manager: boolean) {
-  if (!FEATURES.stableCare) return { incidents: [], lowStock: [], pendingSupply: 0 };
-  const [incidents, lowStock, pendingSupply] = await Promise.all([
+/** Sự cố đang mở (HLV: BE lọc theo khu mình) và vật tư sắp hết. Lỗi thì coi như rỗng. */
+async function loadStableSummary() {
+  if (!FEATURES.stableCare) return { incidents: [], lowStock: [] };
+  const [incidents, lowStock] = await Promise.all([
     listIncidents({ status: 'OPEN' }).catch(() => []),
     listLowStock().catch(() => []),
-    manager ? countSupplyRequests('PENDING').catch(() => 0) : Promise.resolve(0),
   ]);
-  return { incidents, lowStock, pendingSupply };
+  return { incidents, lowStock };
 }
 
 /* ===== Nhân viên chăm sóc ===== */

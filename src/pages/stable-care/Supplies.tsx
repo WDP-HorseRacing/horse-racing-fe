@@ -1,82 +1,29 @@
-// F4.5 — Vật tư: kho chung của câu lạc bộ (không chia theo khu), quản lý theo lô.
-// Quản lý CLB: thêm, sửa, xóa vật tư, nhập hàng kèm đơn giá, duyệt hoặc từ chối đề xuất rồi cấp hàng (kèm đơn giá).
-// HLV, Groom: theo dõi tồn, xuất dùng (trừ thuốc), đề xuất bổ sung và theo dõi đề xuất của mình. Bác sĩ: xem kho, xuất dùng cả thuốc.
-// Mọi lần xuất bắt buộc ghi chú.
-// Hệ thống không tự trừ tồn theo khẩu phần hay đơn thuốc: ai lấy hàng thì bấm Xuất dùng, lô nhập trước trừ trước.
-// Tiền (đơn giá, thành tiền, giá trị tồn) chỉ Quản lý CLB thấy.
+// F4.5 — Danh sách vật tư CLB. Nhập và xuất do bên thứ ba đảm nhận; Quản lý CLB thêm và sửa thông tin.
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { ArrowDownToLine, PackageMinus, PackagePlus, Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
-import { cancelSupplyRequest, deleteSupplyItem, listSupplyItems, listSupplyRequests } from '../../api/supplies';
-import type { NotificationItem, SupplyCategory, SupplyItem, SupplyRequest, SupplyRequestStatus } from '../../api/types';
+import { listSupplyItems } from '../../api/supplies';
+import type { NotificationItem, SupplyCategory, SupplyItem } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import {
-  ActionMenu,
-  Button,
-  ChipFilter,
-  ConfirmDialog,
-  EmptyState,
-  ErrorBox,
-  Meter,
-  NotFound,
-  PageHeader,
-  Pill,
-  SearchInput,
-  Skeleton,
-  TabPanel,
-  Tabs,
-  cn,
-  useToast,
-} from '../../components/ui';
-import { useAction, useService } from '../../hooks/useService';
-import { now } from '../../lib/clock';
-import { formatDateTime, formatRelative } from '../../lib/format';
-import { SUPPLY_CATEGORIES, formatAmount, formatQuantity, supplyCategoryText, supplyRequestStatusText } from '../../lib/stable-labels';
+import { Button, ChipFilter, EmptyState, ErrorBox, Meter, NotFound, PageHeader, Pill, SearchInput, Skeleton, cn } from '../../components/ui';
+import { useService } from '../../hooks/useService';
+import { SUPPLY_CATEGORIES, formatAmount, formatQuantity, supplyCategoryText } from '../../lib/stable-labels';
 import { useStore } from '../../store/store';
 import { stockTone } from './care-helpers';
 import { SupplyItemSheet } from './components/SupplyItemSheet';
-import { FulfillRequestDialog, ReceiveDialog, RejectRequestDialog, SupplyItemDialog, SupplyRequestDialog, UsageDialog } from './components/supply-dialogs';
-import { ReasonDialog } from '../training/components/ReasonDialog';
+import { SupplyItemDialog } from './components/supply-dialogs';
 
-type Dialog =
-  | { kind: 'item'; item?: SupplyItem }
-  | { kind: 'receive'; item: SupplyItem }
-  | { kind: 'use'; item: SupplyItem }
-  | { kind: 'request'; item?: SupplyItem; request?: SupplyRequest }
-  | { kind: 'delete'; item: SupplyItem }
-  | { kind: 'reject'; request: SupplyRequest }
-  | { kind: 'fulfill'; request: SupplyRequest; approveFirst?: boolean }
-  | { kind: 'cancel'; request: SupplyRequest };
-
-const REQUEST_TONE: Record<SupplyRequestStatus, 'amber' | 'green' | 'gray' | 'red'> = { PENDING: 'amber', APPROVED: 'green', FULFILLED: 'gray', REJECTED: 'red', CANCELLED: 'gray' };
+type ItemDialog = { item?: SupplyItem };
 
 export default function Supplies() {
   const user = useStore((state) => state.currentUser);
-  const toast = useToast();
-  const [params, setParams] = useSearchParams();
   const [category, setCategory] = useState<SupplyCategory | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<Dialog | null>(null);
-  // Tăng để bảng đề xuất tải lại sau khi gửi, sửa, từ chối, cấp.
-  const [requestsVersion, setRequestsVersion] = useState(0);
-  const reloadRequests = () => setRequestsVersion((version) => version + 1);
-  const remove = useAction();
-  const cancelRequest = useAction();
+  const [dialog, setDialog] = useState<ItemDialog | null>(null);
 
   const canManage = can(user, 'supply.manage');
-  const canReceive = can(user, 'supply.receive');
-  const canUseAny = can(user, 'supply.use');
-  const canUseMedicine = can(user, 'supply.useMedicine');
-  // Thuốc chỉ Quản lý CLB và bác sĩ xuất (BE trả 403 với HLV, Groom).
-  const canUse = (item: SupplyItem) => canUseAny && (item.category !== 'MEDICINE' || canUseMedicine);
-  const showPrice = can(user, 'supply.price');
-  const canRequest = can(user, 'supplyRequest.create');
-  const canViewRequests = can(user, 'supplyRequest.view');
-  const tab = canViewRequests && params.get('tab') === 'requests' ? 'requests' : 'stock';
-
   const items = useService(() => listSupplyItems(), []);
   const all = useMemo(() => items.data ?? [], [items.data]);
   const visible = useMemo(() => {
@@ -87,25 +34,16 @@ export default function Supplies() {
   const opened = openId ? all.find((item) => item.id === openId) : undefined;
   useCrumbs([{ label: 'Vật tư' }]);
 
-  // Thông báo vật tư (đề xuất mới, đã duyệt, đã cấp, sắp hết): tải lại kho và đề xuất.
   const reloadItems = items.reload;
   useEffect(
     () =>
-      onRealtime<NotificationItem>('notification.created', (item) => {
-        if (item.category !== 'SUPPLY') return;
-        reloadItems();
-        setRequestsVersion((version) => version + 1);
+      onRealtime<NotificationItem>('notification.created', (notification) => {
+        if (notification.category === 'SUPPLY') reloadItems();
       }),
     [reloadItems],
   );
 
   if (!can(user, 'supply.view')) return <NotFound message="Trang này dành cho nhân viên câu lạc bộ." />;
-
-  const setTab = (next: string) => {
-    if (next === 'requests') params.set('tab', 'requests');
-    else params.delete('tab');
-    setParams(params, { replace: true });
-  };
 
   const afterItemChange = () => items.reload();
 
@@ -115,41 +53,13 @@ export default function Supplies() {
         title="Vật tư"
         description={
           canManage
-            ? 'Thức ăn, thuốc và dụng cụ dùng chung của CLB.'
-            : canRequest
-              ? `Lấy hàng ra dùng thì bấm Xuất dùng, ghi rõ lấy cho việc gì${canUseMedicine ? '' : ' (thuốc do bác sĩ xuất)'}. Sắp hết thì đề xuất thêm.`
-              : 'Lấy hàng ra dùng thì bấm Xuất dùng.'
+            ? 'Danh sách vật tư CLB. Quản lý CLB có thể thêm và sửa thông tin; số tồn chỉ xem, nhập và xuất do bên thứ ba đảm nhận.'
+            : 'Danh sách vật tư CLB để tra cứu; số tồn chỉ xem. Nhập và xuất do bên thứ ba đảm nhận.'
         }
-        actions={
-          <>
-            {canRequest && (
-              <Button variant={canManage ? 'secondary' : 'primary'} onClick={() => setDialog({ kind: 'request' })}>
-                <PackagePlus size={16} /> Đề xuất thêm
-              </Button>
-            )}
-            {canManage && (
-              <Button onClick={() => setDialog({ kind: 'item' })}>
-                <Plus size={16} /> Thêm vật tư
-              </Button>
-            )}
-          </>
-        }
+        actions={canManage && <Button onClick={() => setDialog({})}><Plus size={16} /> Thêm vật tư</Button>}
       />
 
-      {canViewRequests && (
-        <Tabs
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: 'stock', label: 'Kho', count: all.length },
-            { key: 'requests', label: canManage ? 'Đề xuất' : 'Đề xuất của tôi' },
-          ]}
-        />
-      )}
-
-      {tab === 'requests' ? (
-        <RequestsPanel manager={can(user, 'supplyRequest.review')} version={requestsVersion} onDialog={setDialog} />
-      ) : items.loading && !items.data ? (
+      {items.loading && !items.data ? (
         <Skeleton rows={6} />
       ) : items.error ? (
         <ErrorBox message={items.error} />
@@ -162,23 +72,20 @@ export default function Supplies() {
                 onChange={setCategory}
                 options={[
                   { value: 'ALL' as const, label: 'Tất cả', count: all.length },
-                  ...SUPPLY_CATEGORIES.map((value) => ({ value, label: supplyCategoryText[value], count: all.filter((item) => item.category === value).length })),
+                  ...SUPPLY_CATEGORIES.map((value) => ({
+                    value,
+                    label: supplyCategoryText[value],
+                    count: all.filter((item) => item.category === value).length,
+                  })),
                 ]}
               />
               <SearchInput value={search} onChange={setSearch} placeholder="Tìm vật tư" className="ml-auto w-full sm:w-56" />
             </div>
             {visible.length === 0 ? (
               <EmptyState
-                title={all.length === 0 ? 'Kho chưa có vật tư nào' : 'Không có vật tư phù hợp'}
-                hint={all.length === 0 ? (canManage ? 'Thêm thức ăn và thực phẩm bổ sung để HLV lập được khẩu phần.' : 'Quản lý CLB chưa thêm vật tư vào kho.') : undefined}
-                action={
-                  all.length === 0 &&
-                  canManage && (
-                    <Button onClick={() => setDialog({ kind: 'item' })}>
-                      <Plus size={15} /> Thêm vật tư
-                    </Button>
-                  )
-                }
+                title={all.length === 0 ? 'Danh sách vật tư đang trống' : 'Không có vật tư phù hợp'}
+                hint={all.length === 0 ? (canManage ? 'Thêm vật tư để nhân viên CLB tra cứu.' : 'Quản lý CLB chưa thêm vật tư vào danh sách.') : undefined}
+                action={all.length === 0 && canManage && <Button onClick={() => setDialog({})}><Plus size={15} /> Thêm vật tư</Button>}
               />
             ) : (
               <ul className="divide-y divide-gray-100">
@@ -194,36 +101,16 @@ export default function Supplies() {
                       </span>
                     </button>
                     <div className="w-36 shrink-0">
-                      <p className="text-right tabular-nums text-sm font-semibold  text-gray-900">
+                      <p className="text-right tabular-nums text-sm font-semibold text-gray-900">
                         {formatQuantity(item.quantityOnHand)} <span className="font-sans text-xs font-normal text-gray-500">{item.unit}</span>
                       </p>
                       <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {canUse(item) && (
-                        <Button variant="ghost" size="icon" title={item.quantityOnHand > 0 ? 'Xuất dùng' : 'Hết hàng'} disabled={item.quantityOnHand <= 0} onClick={() => setDialog({ kind: 'use', item })}>
-                          <PackageMinus size={16} />
-                        </Button>
-                      )}
-                      {canReceive && (
-                        <Button variant="ghost" size="icon" title="Nhập hàng" onClick={() => setDialog({ kind: 'receive', item })}>
-                          <ArrowDownToLine size={16} />
-                        </Button>
-                      )}
-                      {canRequest && (
-                        <Button variant="ghost" size="icon" title="Đề xuất thêm" onClick={() => setDialog({ kind: 'request', item })}>
-                          <PackagePlus size={16} />
-                        </Button>
-                      )}
-                      {canManage && (
-                        <ActionMenu
-                          items={[
-                            { label: 'Sửa', onSelect: () => setDialog({ kind: 'item', item }) },
-                            { label: 'Xóa', danger: true, onSelect: () => setDialog({ kind: 'delete', item }) },
-                          ]}
-                        />
-                      )}
-                    </div>
+                    {canManage && (
+                      <Button variant="ghost" size="icon" title="Sửa vật tư" onClick={() => setDialog({ item })}>
+                        <Pencil size={15} />
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -251,11 +138,6 @@ export default function Supplies() {
                           Còn <span className="font-semibold text-amber-800">{formatAmount(item.quantityOnHand, item.unit)}</span> / ngưỡng {formatAmount(item.reorderThreshold, item.unit)}
                         </span>
                       </span>
-                      {canRequest && (
-                        <Button variant="inline" size="sm" onClick={() => setDialog({ kind: 'request', item })}>
-                          Đề xuất thêm
-                        </Button>
-                      )}
                     </li>
                   ))}
                 </ul>
@@ -286,192 +168,13 @@ export default function Supplies() {
         <SupplyItemSheet
           item={opened}
           onClose={() => setOpenId(null)}
-          showPrice={showPrice}
-          onReceive={canReceive ? () => setDialog({ kind: 'receive', item: opened }) : undefined}
-          onUse={canUse(opened) && opened.quantityOnHand > 0 ? () => setDialog({ kind: 'use', item: opened }) : undefined}
-          onRequest={canRequest ? () => setDialog({ kind: 'request', item: opened }) : undefined}
-          onEdit={canManage ? () => setDialog({ kind: 'item', item: opened }) : undefined}
-          onChanged={afterItemChange}
+          onEdit={canManage ? () => {
+            setOpenId(null);
+            setDialog({ item: opened });
+          } : undefined}
         />
       )}
-
-      {dialog?.kind === 'item' && <SupplyItemDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
-      {dialog?.kind === 'receive' && <ReceiveDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
-      {dialog?.kind === 'use' && <UsageDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
-      {dialog?.kind === 'request' && (
-        <SupplyRequestDialog
-          items={all}
-          item={dialog.item}
-          request={dialog.request}
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            setDialog(null);
-            reloadRequests();
-          }}
-        />
-      )}
-      {dialog?.kind === 'reject' && <RejectRequestDialog request={dialog.request} onClose={() => setDialog(null)} onDone={reloadRequests} />}
-      <ConfirmDialog
-        open={dialog?.kind === 'delete'}
-        title={dialog?.kind === 'delete' ? `Xóa ${dialog.item.name}` : 'Xóa vật tư'}
-        message="Vật tư sẽ ẩn khỏi kho. Khẩu phần và đề xuất cũ không bị ảnh hưởng."
-        confirmLabel="Xóa"
-        pending={remove.pending}
-        onClose={() => {
-          remove.clearError();
-          setDialog(null);
-        }}
-        onConfirm={() =>
-          dialog?.kind === 'delete' &&
-          void remove.run(
-            () => deleteSupplyItem(dialog.item.id),
-            () => {
-              toast.push(`Đã xóa ${dialog.item.name}`, 'success');
-              if (openId === dialog.item.id) setOpenId(null);
-              setDialog(null);
-              afterItemChange();
-            },
-          )
-        }
-      >
-        {remove.error && <ErrorBox message={remove.error} />}
-      </ConfirmDialog>
-      {dialog?.kind === 'cancel' && (
-        <ReasonDialog
-          title={`Hủy đề xuất ${dialog.request.item.name}`}
-          message={<>Đề xuất của <b>{dialog.request.requester.fullName}</b> đã duyệt nhưng chưa cấp. Người gửi nhận thông báo kèm lý do, muốn thì gửi đề xuất mới.</>}
-          label="Lý do hủy"
-          maxLength={500}
-          suggestions={['Nhà cung cấp hết hàng', 'Đã mua loại khác thay thế', 'Duyệt nhầm']}
-          confirmLabel="Hủy đề xuất"
-          pending={cancelRequest.pending}
-          error={cancelRequest.error}
-          onClose={() => {
-            cancelRequest.clearError();
-            setDialog(null);
-          }}
-          onConfirm={(reason) =>
-            dialog.kind === 'cancel' &&
-            void cancelRequest.run(
-              () => cancelSupplyRequest(dialog.request.id, reason),
-              () => {
-                toast.push(`Đã hủy đề xuất ${dialog.request.item.name}`, 'success');
-                setDialog(null);
-                reloadRequests();
-              },
-            )
-          }
-        />
-      )}
-      {dialog?.kind === 'fulfill' && (
-        <FulfillRequestDialog
-          request={dialog.request}
-          approveFirst={dialog.approveFirst}
-          onClose={() => setDialog(null)}
-          onDone={() => {
-            reloadRequests();
-            afterItemChange();
-          }}
-        />
-      )}
+      {dialog && <SupplyItemDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
     </div>
-  );
-}
-
-/* ===== Đề xuất ===== */
-
-function RequestsPanel({ manager, version, onDialog }: { manager: boolean; version: number; onDialog: (dialog: Dialog) => void }) {
-  const [status, setStatus] = useState<SupplyRequestStatus | 'ALL'>(manager ? 'PENDING' : 'ALL');
-  const list = useService(() => listSupplyRequests(status === 'ALL' ? undefined : status), [status, version]);
-  const rows = list.data ?? [];
-
-  return (
-    <TabPanel className="space-y-3 bg-gray-50/60 p-4">
-      <ChipFilter
-        value={status}
-        onChange={setStatus}
-        options={[
-          ...(manager ? (['PENDING', 'APPROVED', 'FULFILLED', 'REJECTED', 'CANCELLED'] as const) : []).map((value) => ({ value, label: supplyRequestStatusText[value] })),
-          { value: 'ALL' as const, label: 'Tất cả' },
-        ]}
-      />
-      {list.loading && !list.data ? (
-        <Skeleton rows={3} />
-      ) : list.error ? (
-        <ErrorBox message={list.error} />
-      ) : rows.length === 0 ? (
-        <EmptyState title={status === 'PENDING' ? 'Không có đề xuất nào chờ duyệt' : 'Chưa có đề xuất nào'} hint={manager ? undefined : 'Đề xuất bạn gửi hiện ở đây kèm kết quả duyệt.'} />
-      ) : (
-        rows.map((request) => (
-          <article key={request.id} className={cn('rounded-2xl bg-white p-4 ring-1 ring-gray-200/80', request.status === 'PENDING' ? 'shadow-[inset_3px_0_0_0_#f59e0b]' : 'shadow-card')}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-semibold text-gray-900">
-                  {request.item.name}{' '}
-                  {request.status === 'FULFILLED' && request.quantity !== null && <span className="tabular-nums text-emerald-800">+{formatAmount(request.quantity, request.item.unit)}</span>}
-                </p>
-                <p className="text-xs text-gray-500" title={formatDateTime(request.createdAt)}>
-                  {manager ? `${request.requester.fullName} · ` : ''}
-                  {formatRelative(request.createdAt, now())} · kho đang còn {formatAmount(request.item.quantityOnHand, request.item.unit)}
-                  {request.item.deletedAt ? ' · vật tư đã xóa' : ''}
-                </p>
-              </div>
-              <Pill tone={REQUEST_TONE[request.status]}>{supplyRequestStatusText[request.status]}</Pill>
-            </div>
-            {request.note && <p className="mt-2 whitespace-pre-line text-sm text-gray-700">{request.note}</p>}
-            {request.status === 'REJECTED' && request.rejectionReason && (
-              <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">
-                Lý do từ chối: {request.rejectionReason}
-                {request.reviewer && <span className="text-xs text-red-700/80"> · {request.reviewer.fullName}</span>}
-              </p>
-            )}
-            {request.status === 'APPROVED' && request.reviewer && <p className="mt-2 text-xs text-gray-500">{request.reviewer.fullName} đã duyệt, chờ cấp</p>}
-            {request.status === 'FULFILLED' && (
-              <p className="mt-2 text-xs text-gray-500">
-                {request.fulfiller ? `${request.fulfiller.fullName} đã cấp` : 'Đã cấp'}
-                {request.quantity !== null ? ` ${formatAmount(request.quantity, request.item.unit)}` : ''} {request.fulfilledAt ? formatRelative(request.fulfilledAt, now()) : ''}
-              </p>
-            )}
-            {request.status === 'CANCELLED' && (
-              <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700 ring-1 ring-gray-100">
-                Đã hủy{request.cancellationReason ? `: ${request.cancellationReason}` : ''}
-                <span className="block text-xs text-gray-500" title={request.cancelledAt ? formatDateTime(request.cancelledAt) : undefined}>
-                  {[request.canceller?.fullName, request.cancelledAt ? formatDateTime(request.cancelledAt) : null].filter(Boolean).join(' · ')}
-                </span>
-              </p>
-            )}
-            {(manager || request.status === 'PENDING') && (request.status === 'PENDING' || request.status === 'APPROVED') && (
-              <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-3">
-                {manager && request.status === 'PENDING' && (
-                  <>
-                    <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'reject', request })}>
-                      Từ chối
-                    </Button>
-                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request, approveFirst: true })}>
-                      Duyệt
-                    </Button>
-                  </>
-                )}
-                {manager && request.status === 'APPROVED' && (
-                  <>
-                    <Button variant="inlineDanger" size="sm" onClick={() => onDialog({ kind: 'cancel', request })}>
-                      Hủy đề xuất
-                    </Button>
-                    <Button size="sm" onClick={() => onDialog({ kind: 'fulfill', request })}>
-                      Cấp hàng
-                    </Button>
-                  </>
-                )}
-                {!manager && request.status === 'PENDING' && (
-                  <Button variant="secondary" size="sm" onClick={() => onDialog({ kind: 'request', request })}>
-                    Sửa
-                  </Button>
-                )}
-              </div>
-            )}
-          </article>
-        ))
-      )}
-    </TabPanel>
   );
 }
