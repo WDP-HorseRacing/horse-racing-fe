@@ -56,8 +56,8 @@ interface Attention {
 
 const levelOrder = { danger: 0, warn: 1, info: 2 };
 
-/** Việc Flow 4 cần xử lý: sự cố đang mở, vật tư sắp hết, đề xuất vật tư chờ duyệt (Quản lý CLB). */
-function stableAttention(stable: { incidents: Incident[]; lowStock: SupplyItem[]; pendingSupply: number }, trainer: boolean): Attention[] {
+/** Việc Flow 4 cần xem: sự cố đang mở và vật tư sắp hết. */
+function stableAttention(stable: { incidents: Incident[]; lowStock: SupplyItem[] }, trainer: boolean): Attention[] {
   const items: Attention[] = stable.incidents.map((incident) => ({
     key: `inc-${incident.id}`,
     level: incident.urgent || incidentStale(incident) ? ('danger' as const) : ('warn' as const),
@@ -66,9 +66,6 @@ function stableAttention(stable: { incidents: Incident[]; lowStock: SupplyItem[]
     to: links.incidents(incident.horseId),
     cta: trainer ? 'Xử lý' : 'Xem',
   }));
-  if (stable.pendingSupply > 0) {
-    items.push({ key: 'supply-pending', level: 'warn', title: `${stable.pendingSupply} đề xuất vật tư chờ duyệt`, to: links.supplies('requests'), cta: 'Duyệt' });
-  }
   if (stable.lowStock.length > 0) {
     items.push({
       key: 'supply-low',
@@ -76,7 +73,7 @@ function stableAttention(stable: { incidents: Incident[]; lowStock: SupplyItem[]
       title: `${stable.lowStock.length} vật tư sắp hết`,
       detail: stable.lowStock.slice(0, 4).map((item) => item.name).join(', '),
       to: links.supplies(),
-      cta: trainer ? 'Đề xuất' : 'Xem',
+      cta: 'Xem',
     });
   }
   return items;

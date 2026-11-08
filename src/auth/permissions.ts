@@ -89,15 +89,8 @@ export const CAPABILITIES: Capability[] = [
   { key: 'incident.report', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Báo sự cố tại chuồng kèm ảnh', roles: { GROOM: G } },
   { key: 'incident.view', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Xem sự cố tại chuồng', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: S } },
   { key: 'incident.handle', code: 'F4.4', group: 'Chăm sóc chuồng', feature: 'Chuyển bác sĩ, đóng sự cố', roles: { HEAD_TRAINER: Z } },
-  { key: 'supply.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem vật tư, vật tư sắp hết, lô hàng, sổ nhập xuất', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
-  { key: 'supply.manage', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Thêm, sửa, xóa vật tư', roles: { CLUB_MANAGER: A } },
-  { key: 'supply.receive', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Nhập hàng kèm đơn giá', roles: { CLUB_MANAGER: A } },
-  { key: 'supply.use', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư (trừ thuốc), trừ tồn ngay, ghi chú bắt buộc', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
-  { key: 'supply.useMedicine', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xuất dùng vật tư loại thuốc', roles: { CLUB_MANAGER: A, VETERINARIAN: A } },
-  { key: 'supply.price', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đơn giá, thành tiền và giá trị tồn', roles: { CLUB_MANAGER: A } },
-  { key: 'supplyRequest.create', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Gửi, sửa đề xuất bổ sung vật tư', roles: { HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
-  { key: 'supplyRequest.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem đề xuất bổ sung vật tư', roles: { CLUB_MANAGER: A, HEAD_TRAINER: S, VETERINARIAN: S, GROOM: S } },
-  { key: 'supplyRequest.review', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Duyệt, từ chối, đánh dấu đã cấp đề xuất', roles: { CLUB_MANAGER: A } },
+  { key: 'supply.view', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Xem danh sách vật tư và số lượng hiện có', roles: { CLUB_MANAGER: A, HEAD_TRAINER: A, VETERINARIAN: A, GROOM: A } },
+  { key: 'supply.manage', code: 'F4.5', group: 'Chăm sóc chuồng', feature: 'Thêm, sửa thông tin vật tư', roles: { CLUB_MANAGER: A } },
 
   // ===== Quản trị =====
   { key: 'admin.users', code: 'QT', group: 'Quản trị', feature: 'Quản lý nhân sự: tạo tài khoản, đổi vai trò, khóa tài khoản', roles: { CLUB_MANAGER: A } },

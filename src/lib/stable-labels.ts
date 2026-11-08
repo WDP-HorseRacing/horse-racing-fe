@@ -1,6 +1,6 @@
 // Nhãn tiếng Việt và kiểm ô cho Flow 4 (vật tư, khẩu phần, checklist, sự cố).
 // Mọi ô được kiểm ở đây trước khi gửi, để báo lỗi ngay dưới ô thay vì chờ BE.
-import type { ChecklistStatus, FeedingMeal, FeedingPlanStatus, IncidentStatus, SupplyCategory, SupplyMovementType, SupplyRequestStatus } from '../api/types';
+import type { ChecklistStatus, FeedingMeal, FeedingPlanStatus, IncidentStatus, SupplyCategory } from '../api/types';
 
 export const supplyCategoryText: Record<SupplyCategory, string> = {
   FEED: 'Thức ăn',
@@ -20,22 +20,6 @@ export const SUPPLY_UNIT_HINTS: Record<SupplyCategory, string> = {
   SUPPLEMENT: 'kg, gói, lọ…',
   MEDICINE: 'viên, lọ, ống…',
   EQUIPMENT: 'cái, bộ, đôi…',
-};
-
-export const supplyRequestStatusText: Record<SupplyRequestStatus, string> = {
-  PENDING: 'Chờ duyệt',
-  APPROVED: 'Đã duyệt',
-  REJECTED: 'Từ chối',
-  FULFILLED: 'Đã cấp',
-  CANCELLED: 'Đã hủy',
-};
-
-export const movementTypeText: Record<SupplyMovementType, string> = {
-  OPENING: 'Tồn ban đầu',
-  RESTOCK: 'Nhập hàng',
-  USAGE: 'Xuất dùng',
-  USAGE_REVERSAL: 'Hủy lần xuất',
-  COUNT_ADJUST: 'Kiểm kê (cũ)',
 };
 
 export const mealText: Record<FeedingMeal, string> = {
