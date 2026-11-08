@@ -4,7 +4,7 @@ import { MAX_VIDEO_BYTES, getRealMimeType, getVideoMimeType } from '../lib/files
 import { http } from './http';
 import type { UploadRequest } from './types';
 
-type MediaPurpose = 'HORSE_PHOTO' | 'TRIAL_VIDEO' | 'INCIDENT_PHOTO';
+type MediaPurpose = 'HORSE_PHOTO' | 'TRIAL_VIDEO' | 'INCIDENT_PHOTO' | 'CHECKLIST_EVIDENCE';
 
 interface UploadOptions {
   /** Phần trăm đã tải (0 đến 100). */
@@ -105,5 +105,20 @@ export async function uploadIncidentPhoto(file: File, options: { onProgress?: (p
     ...options,
     field: 'photoMediaId',
     networkMessage: 'Chưa tải được ảnh lên, vui lòng kiểm tra mạng rồi thử lại',
+  });
+}
+
+/** Tải ảnh bằng chứng cho một việc trong checklist chăm sóc của Groom. */
+export async function uploadChecklistEvidence(file: File, options: { onProgress?: (percent: number) => void; signal?: AbortSignal } = {}): Promise<string> {
+  const mimeType = await getRealMimeType(file).catch(() => {
+    throw new AppError('Ảnh bằng chứng phải có định dạng JPEG, PNG hoặc WebP', 'evidenceMediaId');
+  });
+  if (!PHOTO_TYPES.includes(mimeType)) throw new AppError('Ảnh bằng chứng phải có định dạng JPEG, PNG hoặc WebP', 'evidenceMediaId');
+  if (file.size === 0) throw new AppError('Tệp ảnh bằng chứng đang rỗng', 'evidenceMediaId');
+  if (file.size > PHOTO_MAX_BYTES) throw new AppError('Ảnh bằng chứng không được vượt quá 10 MB', 'evidenceMediaId');
+  return uploadMedia(file, 'CHECKLIST_EVIDENCE', mimeType, {
+    ...options,
+    field: 'evidenceMediaId',
+    networkMessage: 'Chưa tải được ảnh bằng chứng lên, vui lòng thử lại',
   });
 }
