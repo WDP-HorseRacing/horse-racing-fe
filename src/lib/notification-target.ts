@@ -6,7 +6,7 @@ import { links } from './links';
 
 export function notificationTarget(item: Pick<NotificationItem, 'category' | 'resource' | 'priority'>, role?: UserRole): string | undefined {
   // Vật tư: BE không gửi đối tượng. Sắp hết (HIGH) mở kho, còn lại là tin về đề xuất nên mở tab Đề xuất.
-  if (item.category === 'SUPPLY') return item.priority === 'HIGH' ? links.supplies() : links.supplies('requests');
+  if (item.category === 'SUPPLY') return links.supplies();
   const resource = item.resource;
   // Buổi tập bị hủy, được giao dắt một lượt (Groom): BE không gửi đối tượng, mở màn Dắt ngựa tập.
   if (item.category === 'TRAINING_SESSION') return links.today;

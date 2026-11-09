@@ -82,9 +82,9 @@ export const regenerateTodayChecklists = () => http.post<RegenerateChecklistResu
  * Ngày đã qua mà chưa xong thì BE chuyển "Không hoàn thành".
  */
 export const listChecklists = (horseId: string, from: string, to: string) => http.get<DailyChecklist[]>(`/horses/${horseId}/checklists`, { from, to });
-/** Groom được giao tick hoặc gỡ tick, chỉ trong ngày. `note: null` để xóa ghi chú, bỏ trống để giữ. Trả về cả checklist. */
-export const tickChecklistItem = (itemId: string, done: boolean, note?: string | null) =>
-  http.patch<DailyChecklist>(`/checklist-items/${itemId}`, note === undefined ? { done } : { done, note });
+/** Gắn ảnh bằng chứng để hoàn tất việc, hoặc chỉ cập nhật ghi chú. Không gửi `done`: BE tự đánh dấu khi nhận ảnh. */
+export const updateChecklistItem = (itemId: string, input: { evidenceMediaId?: string; note?: string | null }) =>
+  http.patch<DailyChecklist>(`/checklist-items/${itemId}`, input);
 
 /** Màn Hôm nay của Groom: mọi ngựa đang phụ trách. checklist là null khi hôm nay ngựa không có việc. Chỉ có lượt tập còn phải dắt. */
 export const getGroomToday = () => http.get<GroomToday>('/grooms/me/today');
