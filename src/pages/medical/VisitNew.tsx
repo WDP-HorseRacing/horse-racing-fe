@@ -7,7 +7,7 @@
 // Chi phí ghi theo từng buổi khám, bỏ trống là 0. Thời điểm khám là lúc lưu (BE không nhận `examDate`).
 // Tham số URL: horseId, caseId, kind, requestIds (phân cách dấu phẩy), conclusion, replaces, edit, back.
 // Có `edit=<id buổi khám>` thì mở trang sửa buổi khám (VisitEdit), dùng chung các khối trong components/visit-form.
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Activity, AlertTriangle, Bandage, FolderOpen, HeartPulse, Plus, Stethoscope, Trash2, Wallet } from 'lucide-react';
@@ -16,7 +16,7 @@ import { useFormErrors } from '../../hooks/useFormErrors';
 import { useLeaveConfirm } from '../../hooks/useLeaveConfirm';
 import { getHorse } from '../../api/horses';
 import { createFollowUpVisit, createStandaloneVisit, getInjuries, getRecord, listHorseCases, listHorseExamRequests, listHorseRecords } from '../../api/medical';
-import type { BodyRegion, HealthStatus, InjuryType, MedicalRecord, RecoveryStatus, VisitConclusion, VisitInputBase } from '../../api/types';
+import type { BodyRegion, HealthStatus, InjuryType, MedicalRecord, RecoveryStatus, TrackedInjury, VisitConclusion, VisitInputBase } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
@@ -52,6 +52,7 @@ import { RecoveryTag } from './components/ExamTimeline';
 import { BackLink, FormSection, HorseCard, Outcome, SaveCard } from './components/form-page';
 import { DateTimePicker } from '../../components/ui/DatePicker';
 import { CareNotesSection, MetricFields, PrescriptionSection, RequestChooser } from './components/visit-form';
+import { HorseInjury3DViewer } from './components/HorseInjury3DViewer';
 import {
   METRICS,
   emptyMetrics,
@@ -227,9 +228,67 @@ function VisitForm(props: VisitOptions) {
     setHealthAfter(keep || (value === 'ISSUE' && horse && next.allowed.includes(horse.healthStatus) ? horse.healthStatus : ''));
   };
   // Vết đang theo dõi chỉ cập nhật được trong bệnh án (tái khám) hoặc buổi mở bệnh án.
-  const tracked = allowCaseFields ? (ctx?.tracked ?? []) : [];
+  const tracked = useMemo(() => (allowCaseFields ? (ctx?.tracked ?? []) : []), [allowCaseFields, ctx?.tracked]);
   const chosenUpdates = tracked.filter((injury) => updates[injury.id]?.status);
   const healing = chosenUpdates.filter((injury) => updates[injury.id].status === 'HEALED').length;
+
+  const allInjuriesFor3D = useMemo<TrackedInjury[]>(() => {
+    const list: TrackedInjury[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+    for (const t of tracked) {
+      const upd = updates[t.id];
+      list.push({
+        id: t.id,
+        horseId: t.horseId,
+        bodyRegion: t.bodyRegion,
+        injuryType: t.injuryType,
+        position: t.position,
+        firstMedicalRecordId: t.firstMedicalRecordId,
+        currentRecoveryStatus: upd?.status ? upd.status : t.currentRecoveryStatus,
+        firstExamDate: t.firstExamDate,
+        history: upd?.notes
+          ? [...(t.history ?? []), { medicalRecordId: 'temp', examDate: today, caseId: null, recoveryStatus: upd.status || t.currentRecoveryStatus, notes: upd.notes }]
+          : t.history ?? [],
+      });
+    }
+    for (const row of injuries) {
+      if (row.bodyRegion) {
+        const pos = positionOfRegion(row.bodyRegion);
+        list.push({
+          id: `new-${row.key}`,
+          horseId: horse?.id ?? '',
+          bodyRegion: row.bodyRegion,
+          injuryType: (row.injuryType || 'OTHER') as InjuryType,
+          position: { x: pos.x, y: pos.y, z: 0.1 },
+          firstMedicalRecordId: 'temp',
+          currentRecoveryStatus: row.recoveryStatus,
+          firstExamDate: today,
+          history: row.notes
+            ? [{ medicalRecordId: 'temp', examDate: today, caseId: null, recoveryStatus: row.recoveryStatus, notes: row.notes }]
+            : [],
+        });
+      }
+    }
+    return list;
+  }, [tracked, updates, injuries, horse?.id]);
+
+  const handleQuickSelectRegion = (region: BodyRegion) => {
+    const emptyRow = injuries.find((r) => !r.bodyRegion);
+    if (emptyRow) {
+      setInjuries(injuries.map((r) => (r.key === emptyRow.key ? { ...r, bodyRegion: region } : r)));
+    } else if (injuries.length < 20) {
+      setInjuries([
+        ...injuries,
+        {
+          key: nextRowKey(),
+          bodyRegion: region,
+          injuryType: 'SPRAIN',
+          recoveryStatus: 'ACUTE',
+          notes: '',
+        },
+      ]);
+    }
+  };
   // Buổi khám không mở bệnh án: thuốc phải có ngày kết thúc (không có bệnh án để đóng).
   const standaloneNormal = !followUp && !issue;
   const costValue = parseMoney(cost);
@@ -541,6 +600,16 @@ function VisitForm(props: VisitOptions) {
                     )
                   }
                 >
+                  {/* Bản đồ 3D giải phẫu chấn thương trực quan */}
+                  <div className="mb-4">
+                    <HorseInjury3DViewer
+                      injuries={allInjuriesFor3D}
+                      horseName={horse?.name}
+                      readOnly={false}
+                      onSelectRegion={handleQuickSelectRegion}
+                    />
+                  </div>
+
                   {tracked.length > 0 && (
                     <div className="space-y-2.5">
                       <p className="text-xs font-medium text-gray-500">Chấn thương đang theo dõi · chỗ không khám thì để Giữ nguyên</p>

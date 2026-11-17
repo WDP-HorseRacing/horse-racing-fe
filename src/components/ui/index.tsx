@@ -1049,11 +1049,14 @@ export function DataTable<T>({
   flat?: boolean;
 }) {
   const [page, setPage] = useState(0);
+  const [prevRowsLength, setPrevRowsLength] = useState(rows.length);
+  if (rows.length !== prevRowsLength) {
+    setPrevRowsLength(rows.length);
+    setPage(0);
+  }
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   const current = Math.min(page, pageCount - 1);
   const slice = rows.slice(current * pageSize, current * pageSize + pageSize);
-
-  useEffect(() => setPage(0), [rows.length]);
 
   if (rows.length === 0) return <EmptyState title={emptyTitle} hint={emptyHint} className={flat ? 'rounded-none border-0 bg-transparent' : ''} />;
 
@@ -1498,6 +1501,7 @@ function CountUp({ value }: { value: ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (typeof value !== 'number' || value === 0 || !ref.current || prefersReducedMotion()) return;
+    const target = ref.current;
     const counter = { n: 0 };
     const tween = gsap.to(counter, {
       n: value,
@@ -1505,12 +1509,12 @@ function CountUp({ value }: { value: ReactNode }) {
       ease: 'power3.out',
       delay: 0.1,
       onUpdate: () => {
-        if (ref.current) ref.current.textContent = String(Math.round(counter.n));
+        if (target) target.textContent = String(Math.round(counter.n));
       },
     });
     return () => {
       tween.kill();
-      if (ref.current) ref.current.textContent = String(value);
+      if (target) target.textContent = String(value);
     };
   }, [value]);
   return <span ref={ref}>{value}</span>;

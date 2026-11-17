@@ -61,7 +61,7 @@ export function SupplyItemSheet({
         </div>
       </section>
       <p className="mt-4 rounded-xl bg-gray-50 px-3 py-2.5 text-xs leading-relaxed text-gray-600 ring-1 ring-gray-100">
-        Danh mục dùng để tra cứu phục vụ chăm sóc và dinh dưỡng cho ngựa. Việc nhập, xuất và quản lý kho do đối tác bên thứ ba phụ trách.
+        Danh mục dùng để tra cứu phục vụ chăm sóc và dinh dưỡng cho đàn ngựa trong câu lạc bộ.
       </p>
     </Sheet>
   );

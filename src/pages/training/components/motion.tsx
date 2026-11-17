@@ -153,7 +153,7 @@ export function LiveTrace({
 }) {
   const width = 240;
   const latest = points[points.length - 1];
-  const end = latest ? new Date(latest.recordedAt).getTime() : Date.now();
+  const end = latest ? new Date(latest.recordedAt).getTime() : 0;
   const start = end - windowSeconds * 1000;
   const recent = points.filter((point) => new Date(point.recordedAt).getTime() >= start);
   const top = Math.max(limits.heartRateCriticalBpm + 20, ...recent.map((point) => point.heartRateBpm + 10));

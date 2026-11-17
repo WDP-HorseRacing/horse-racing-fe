@@ -165,7 +165,9 @@ export function useLiveMetrics({ sessionId, participantIds, socket, enabled = tr
   const [store, setStore] = useState<Record<string, { points: MetricPoint[]; receivedAt?: number }>>({});
   const idsKey = participantIds.slice().sort().join(',');
   const idsRef = useRef<string[]>(participantIds);
-  idsRef.current = participantIds;
+  useEffect(() => {
+    idsRef.current = participantIds;
+  }, [participantIds]);
 
   const apply = (participantId: string, incoming: MetricPoint[]) =>
     setStore((current) => {

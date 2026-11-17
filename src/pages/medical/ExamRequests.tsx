@@ -164,8 +164,8 @@ function StaffView() {
   const [dismissing, setDismissing] = useState<ExamRequest | null>(null);
   const [urgency, setUrgency] = useState<ExamRequest | null>(null);
 
-  const canCreate = can(user, 'examRequest.create');
   const isVet = can(user, 'examRequest.dismiss');
+  const canCreate = can(user, 'examRequest.create') && !isVet;
   const data = queue.list.data;
   const rows = data?.items ?? [];
 
