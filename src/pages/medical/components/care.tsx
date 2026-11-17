@@ -344,7 +344,7 @@ export function CompleteCareModal({
       open
       onClose={onClose}
       title={`Hoàn tất ${careTypeLabel[schedule.type].toLowerCase()}`}
-      description={`${horseName} · đến hạn ${formatDateTime(schedule.dueAt)}`}
+      description={`${horseName} (đến hạn ${formatDateTime(schedule.dueAt)})`}
       dirty={next !== ''}
       busy={action.pending}
       footer={
@@ -403,7 +403,7 @@ export function CancelCareModal({
       open
       onClose={onClose}
       title={`Hủy lịch ${careTypeLabel[schedule.type].toLowerCase()}`}
-      description={`${horseName} · đến hạn ${formatDateTime(schedule.dueAt)}`}
+      description={`${horseName} (đến hạn ${formatDateTime(schedule.dueAt)})`}
       dirty={reason.trim() !== ''}
       busy={action.pending}
       footer={
@@ -464,7 +464,7 @@ export function ReopenCareModal({
       open
       onClose={onClose}
       title={`Mở lại lịch ${careTypeLabel[schedule.type].toLowerCase()}`}
-      description={`${horseName} · hoàn tất ${schedule.completedAt ? formatDateTime(schedule.completedAt) : ''}`}
+      description={`${horseName} (hoàn tất ${schedule.completedAt ? formatDateTime(schedule.completedAt) : ''})`}
       dirty={reason.trim() !== ''}
       busy={action.pending}
       footer={

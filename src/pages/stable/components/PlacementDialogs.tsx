@@ -318,7 +318,7 @@ export function AssignStallDialog({
       title={moving ? `Chuyển ô cho ${horse?.name ?? ''}` : `Xếp ô cho ${horse?.name ?? ''}`}
       dirty={stallId !== ''}
       busy={action.pending}
-      description={`${horse?.barnName ?? ''}${moving ? ` · đang ở ô ${horse?.stallCode}` : ' · đang chờ xếp ô'}`}
+      description={`${horse?.barnName ?? ''}${moving ? ` (hiện ở ô ${horse?.stallCode})` : ' (đang chờ xếp ô)'}`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

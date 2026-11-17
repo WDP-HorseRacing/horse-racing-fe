@@ -21,7 +21,7 @@ export function SupplyItemSheet({
       open
       onClose={onClose}
       title={item.name}
-      description={`${supplyCategoryText[item.category]} · đơn vị ${item.unit}`}
+      description={`${supplyCategoryText[item.category]}, đơn vị: ${item.unit}`}
       footer={
         <div className="flex items-center gap-2">
           {onDelete && (

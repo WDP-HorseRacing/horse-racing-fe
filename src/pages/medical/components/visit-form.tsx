@@ -166,10 +166,10 @@ export function RequestChooser({
               <label
                 key={row.id}
                 className={cn(
-                  'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-300',
+                  'group relative flex cursor-pointer items-start gap-4 rounded-2xl bg-white p-4 transition-all duration-200',
                   checked
-                    ? 'bg-emerald-50/50 shadow-float ring-2 ring-emerald-500'
-                    : 'ring-1 ring-gray-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-gray-200/50',
+                    ? 'ring-1 ring-emerald-600 shadow-xs'
+                    : 'ring-1 ring-gray-200 hover:ring-gray-300',
                   row.urgent && !checked && 'shadow-[inset_4px_0_0_0_#ef4444]',
                 )}
               >
