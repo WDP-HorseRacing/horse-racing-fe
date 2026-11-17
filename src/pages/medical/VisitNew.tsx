@@ -29,7 +29,6 @@ import {
   NotFound,
   Notice,
   PageHeader,
-  Pill,
   Segmented,
   Select,
   Skeleton,
@@ -382,7 +381,7 @@ function VisitForm(props: VisitOptions) {
 
   const title = !horse
     ? 'Ghi buổi khám'
-    : `${followUp ? 'Tái khám' : kind === 'REQUEST' ? 'Khám theo yêu cầu' : 'Khám định kỳ'}: ${horse.name}${issue ? ' và mở bệnh án' : ''}`;
+    : `${followUp ? 'Tái khám' : kind === 'REQUEST' ? 'Khám theo yêu cầu' : 'Khám định kỳ'}: ${horse.name}`;
   useCrumbs(
     horse ? [{ label: horse.name, to: links.horseMedical(horse.id) }, { label: followUp ? 'Tái khám' : 'Ghi buổi khám' }] : [{ label: 'Ghi buổi khám' }],
     [{ label: 'Y tế', to: links.medicalBoard }],
@@ -487,13 +486,8 @@ function VisitForm(props: VisitOptions) {
     <div className="space-y-5" ref={formRef}>
       <PageHeader
         back={<BackLink to={cancelTo}>Quay lại</BackLink>}
-        title={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {title}
-            {horse && !followUp && (kind === 'REQUEST' ? <Pill tone="amber">Theo yêu cầu · {selectedIds.length}</Pill> : <Pill>Định kỳ</Pill>)}
-          </span>
-        }
-        description={replaces ? 'Ghi lại thay buổi khám đã hủy. Thời điểm khám là lúc bấm lưu.' : 'Thời điểm khám là lúc bấm lưu.'}
+        title={title}
+        description={replaces ? 'Ghi lại buổi khám thay thế cho buổi đã hủy.' : undefined}
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">
@@ -702,7 +696,7 @@ function VisitForm(props: VisitOptions) {
 
                   {tracked.length > 0 && (
                     <div className="space-y-2.5">
-                      <p className="text-xs font-medium text-gray-500">Chấn thương đang theo dõi · chỗ không khám thì để Giữ nguyên</p>
+                      <p className="text-xs font-medium text-gray-500">Chấn thương đang theo dõi (vị trí không khám giữ nguyên trạng thái)</p>
                       {tracked.map((injury) => {
                         const update = updates[injury.id] ?? { status: '', notes: '' };
                         const set = (patch: Partial<InjuryUpdate>) => setUpdates({ ...updates, [injury.id]: { ...update, ...patch } });
@@ -712,15 +706,16 @@ function VisitForm(props: VisitOptions) {
                             key={injury.id}
                             data-tracked-injury={injury.id}
                             className={cn(
-                              'rounded-xl p-3 ring-1 transition-all',
-                              isSelectedIn3D && 'ring-2 ring-emerald-600 bg-emerald-50/60',
-                              !isSelectedIn3D && (update.status ? 'bg-emerald-50/40 ring-emerald-200' : 'bg-gray-50/80 ring-transparent'),
+                              'rounded-xl p-3 bg-gray-50/80 ring-1 transition-all',
+                              isSelectedIn3D
+                                ? 'ring-emerald-600 shadow-xs'
+                                : (update.status ? 'ring-emerald-200' : 'ring-transparent'),
                             )}
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                                 <span className="font-semibold text-gray-900">{bodyRegionLabel[injury.bodyRegion]}</span>
-                                <span className="text-gray-600">· {injuryTypeLabel[injury.injuryType]}</span>
+                                <span className="text-gray-600">- {injuryTypeLabel[injury.injuryType]}</span>
                                 <RecoveryTag status={injury.currentRecoveryStatus} />
                                 <span className="text-xs text-gray-500">từ {formatDate(injury.firstExamDate)}</span>
                               </p>
@@ -754,9 +749,8 @@ function VisitForm(props: VisitOptions) {
                             key={row.key}
                             data-injury-row={row.key}
                             className={cn(
-                              'rounded-xl p-3 transition-all',
-                              isSelectedIn3D ? 'bg-emerald-50/70 ring-2 ring-emerald-500' : 'bg-gray-50/80',
-                              rowInvalid && 'ring-1 ring-red-200',
+                              'rounded-xl p-3 bg-gray-50/80 ring-1 transition-all',
+                              isSelectedIn3D ? 'ring-emerald-600 shadow-xs' : (rowInvalid ? 'ring-red-200' : 'ring-transparent'),
                             )}
                           >
                             <div className="grid items-start gap-2 sm:grid-cols-3">
