@@ -42,11 +42,9 @@ import {
   CaseList,
   CaseDetail,
   PeriodicExams,
-  CareSchedules,
   HorseMedical,
   VisitNew,
   CaseClose,
-  CareNew,
   AdminUsers,
   AuditLog,
   DailyFees,
@@ -151,8 +149,8 @@ const router = createBrowserRouter(
           <Route path="medical/horses/:id" element={<HorseMedical />} />
           <Route path="medical/visits/new" element={<VisitNew />} />
           <Route path="medical/periodic" element={<PeriodicExams />} />
-          <Route path="medical/care" element={<CareSchedules />} />
-          <Route path="medical/care/new" element={<CareNew />} />
+          <Route path="medical/care" element={<Navigate to={links.periodic} replace />} />
+          <Route path="medical/care/new" element={<Navigate to={links.periodic} replace />} />
           <Route path="medical/costs" element={<Navigate to={links.costReport} replace />} />
           <Route path="medical/locks" element={<Navigate to="/medical/board" replace />} />
           <Route path="medical/records" element={<Navigate to="/medical/cases" replace />} />

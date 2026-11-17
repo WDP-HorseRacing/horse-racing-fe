@@ -8,7 +8,7 @@ import { useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Film, Flag, HeartPulse, MessageSquareQuote, Pencil, Radio, Timer, Trash2 } from 'lucide-react';
 import { getHorse } from '../../api/horses';
-import { CLUB_DEFAULT_LIMITS, getParticipantSummary, getThresholds, listMetrics } from '../../api/performance';
+import { CLUB_DEFAULT_LIMITS, getParticipantSummary, listMetrics } from '../../api/performance';
 import { getClass, getEvaluation, getSession, listHorseSessions, listTrialResults, updateTrialVideo } from '../../api/training';
 import type { Evaluation, HorseTrainingSession, TrialResult } from '../../api/types';
 import { Button, ConfirmDialog, EmptyState, NotFound, Notice, Skeleton, cn, useToast } from '../../components/ui';
@@ -50,7 +50,6 @@ export default function ParticipantDetail() {
   const role = user?.role;
   const scope = useRef<HTMLDivElement>(null);
   const owner = role === 'HORSE_OWNER';
-  const canThresholds = role === 'HEAD_TRAINER' || role === 'CLUB_MANAGER' || role === 'VETERINARIAN';
 
   const groom = role === 'GROOM';
   const toast = useToast();
@@ -61,7 +60,7 @@ export default function ParticipantDetail() {
   const removeVideo = useAction();
   const data = useService(async () => {
     if (groom) return null;
-    const [horse, row, summary, metrics, trials, evaluation, thresholds] = await Promise.all([
+    const [horse, row, summary, metrics, trials, evaluation] = await Promise.all([
       horseId ? getHorse(horseId).catch(() => undefined) : Promise.resolve(undefined),
       horseId ? findSessionRow(horseId, id).catch(() => undefined) : Promise.resolve(undefined),
       // Tổng kết lỗi thì vẫn hiện trang, các ô số để trống.
@@ -69,7 +68,6 @@ export default function ParticipantDetail() {
       owner ? Promise.resolve(null) : listMetrics(id).catch(() => null),
       listTrialResults(id).catch(() => []),
       getEvaluation(id).catch(() => null),
-      canThresholds && horseId ? getThresholds(horseId).catch(() => null) : Promise.resolve(null),
     ]);
     const trial = row?.sessionType === 'TIME_TRIAL';
     const [target, trainerId] = await Promise.all([
@@ -78,7 +76,7 @@ export default function ParticipantDetail() {
       // Chỉ HLV trưởng của lớp sửa kết quả, video, đánh giá sau buổi: cần biết lớp do ai phụ trách.
       row && role === 'HEAD_TRAINER' ? getClass(row.classId).then((item) => item.headTrainerId, () => null) : Promise.resolve(null),
     ]);
-    return { horse, row, summary, metrics, trials, evaluation, thresholds, target, trainerId };
+    return { horse, row, summary, metrics, trials, evaluation, target, trainerId };
   }, [id, horseId]);
 
   const ongoing = data.data?.row?.participantStatus === 'ONGOING';
@@ -115,13 +113,13 @@ export default function ParticipantDetail() {
   }
   if (data.loading && !data.data) return <Skeleton rows={6} />;
   if (data.error || !data.data) return <NotFound message={data.error} />;
-  const { horse, row, summary, trials, evaluation, thresholds, target } = data.data;
+  const { horse, row, summary, trials, evaluation, target } = data.data;
   const departed = !!horse && leftClub(horse.lifecycleStatus);
   const videoOpen = !!row && resultEditable(row);
   const canEditVideo = classTrainer && videoOpen && !departed;
   // Sân tập của buổi chỉ HLV của lớp, quản lý, bác sĩ mở được.
   const canOpenBoard = classTrainer || role === 'CLUB_MANAGER' || role === 'VETERINARIAN';
-  const limits = thresholds?.limits ?? CLUB_DEFAULT_LIMITS;
+  const limits = CLUB_DEFAULT_LIMITS;
   const duration = summary?.firstRecordedAt && summary.lastRecordedAt ? (new Date(summary.lastRecordedAt).getTime() - new Date(summary.firstRecordedAt).getTime()) / 1000 : undefined;
   const best = trials.length ? Math.min(...trials.map((item) => item.elapsedMs)) : undefined;
   const alerts = summary ? summary.warningCount + summary.criticalCount : undefined;

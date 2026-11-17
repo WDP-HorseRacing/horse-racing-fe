@@ -6,7 +6,7 @@
 // Thêm hai khối: ngựa Chấn thương, Cách ly chưa có bệnh án và thuốc cần cho hôm nay.
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, CalendarClock, ChevronDown, ClipboardList, FilePlus2, FolderOpen, HeartPulse, Map as MapIcon, Pill as PillIcon, ShieldAlert, Stethoscope, Syringe, X } from 'lucide-react';
+import { ArrowRight, CalendarClock, ChevronDown, ClipboardList, FilePlus2, FolderOpen, HeartPulse, Map as MapIcon, Pill as PillIcon, ShieldAlert, Stethoscope, X } from 'lucide-react';
 import { useService } from '../../hooks/useService';
 import { getMedicalDashboard } from '../../api/medical';
 import { listBarns, listStalls } from '../../api/stable';
@@ -23,11 +23,9 @@ import { QUEUE_LABEL, buildQueue, matchesFilter, type QueueFilter, type QueueIte
 import { HealthPill, healthDot } from '../../components/ui/status';
 import { HealthChangeModal } from './components/modals';
 import { healthLabel } from '../../lib/labels';
-import { careTypeLabel } from '../../lib/api-labels';
 import { daysBetween, formatDate, formatDateShort } from '../../lib/format';
 import { now } from '../../lib/clock';
 import { links, type VisitParams } from '../../lib/links';
-import { CareDue } from './components/care';
 import { usePeople } from './components/people';
 import { RequestMeta } from './components/parts';
 import { todayKey } from './components/utils';
@@ -211,11 +209,9 @@ export default function MedicalBoard() {
   // HT bật Khu của tôi: chỉ khu mình. Tắt (hoặc vai trò khác): mọi khu BE trả.
   const barnItems = barns.data ? (mine ? barns.data.mineOnly : barns.data.all) : undefined;
   // Gọi BE không kèm bộ lọc sức khỏe rồi lọc ở FE: đổi tab sức khỏe không phải gọi lại API. (BE nay cũng đếm 4 ô theo khu, không theo bộ lọc sức khỏe.)
-  // "Lịch của tôi": khối chăm sóc đến hạn chỉ còn lịch người xem là người làm, các khối khác không đổi.
-  const [careMine, setCareMine] = useState(false);
   const board = useService(
-    () => getMedicalDashboard({ barnId: barnId || undefined, ...(careMine ? { careAssignee: 'me' as const } : {}), ...(mine ? { mine: true } : {}) }),
-    [barnId, careMine, mine],
+    () => getMedicalDashboard({ barnId: barnId || undefined, ...(mine ? { mine: true } : {}) }),
+    [barnId, mine],
   );
   const people = usePeople();
   const exam = (visit: VisitParams = {}) => navigate(links.visitNew({ ...visit, back: links.medicalBoard }));
@@ -257,13 +253,9 @@ export default function MedicalBoard() {
   const urgentCount = data.pendingRequests.filter((row) => row.urgent).length;
   const followUps = data.openCases.filter((item) => item.nextVisitAt && item.nextVisitAt.slice(0, 10) <= today).length;
   const overdueCheckups = data.checkups.filter((item) => item.daysLeft < 0).length;
-  const careDueToday = data.careSchedules.filter((item) => item.dueDate <= today).length;
   const shown = queue.filter((item) => matchesFilter(item, queueFilter));
   const visibleRows = showAll ? shown : shown.slice(0, QUEUE_PAGE);
   const filterCount = (filter: QueueFilter) => queue.filter((item) => matchesFilter(item, filter)).length;
-  const careByType = (['VACCINATION', 'DEWORMING', 'FARRIER'] as const)
-    .map((type) => ({ type, rows: data.careSchedules.filter((item) => item.type === type).sort((a, b) => a.dueDate.localeCompare(b.dueDate)) }))
-    .filter((group) => group.rows.length > 0);
 
   return (
     <div className="space-y-5">
@@ -325,14 +317,6 @@ export default function MedicalBoard() {
           tone={overdueCheckups ? 'danger' : 'warning'}
           active={queueFilter === 'CHECKUP'}
           onClick={() => setQueueFilter(queueFilter === 'CHECKUP' ? 'ALL' : 'CHECKUP')}
-        />
-        <Stat
-          value={data.careSchedules.length}
-          label="Chăm sóc đến hạn"
-          hint={careDueToday ? `${careDueToday} đến hạn hoặc quá hạn` : 'trong 3 ngày tới'}
-          icon={<Syringe size={18} />}
-          tone="warning"
-          onClick={() => navigate(links.careSchedules)}
         />
       </div>
 
@@ -539,40 +523,6 @@ export default function MedicalBoard() {
                 ))}
               </ul>
             )}
-          </SideCard>
-
-          <SideCard icon={<Syringe size={15} />} title="Chăm sóc đến hạn" count={data.careSchedules.length} to={links.careSchedules} toLabel="Lịch chăm sóc">
-            {user?.role === 'VETERINARIAN' && (
-              <ToggleChip checked={careMine} onChange={setCareMine}>
-                Lịch của tôi
-              </ToggleChip>
-            )}
-            <div className={cn(user?.role === 'VETERINARIAN' && 'mt-3')}>
-              {careByType.length === 0 ? (
-                <p className="text-sm text-gray-500">Không có tiêm phòng, tẩy giun, kiểm tra móng nào đến hạn trong 3 ngày tới.</p>
-              ) : (
-                <div className="space-y-3">
-                  {careByType.map((group) => (
-                    <div key={group.type}>
-                      <p className="mb-1 text-xs font-semibold text-gray-500">
-                        {careTypeLabel[group.type]} · {group.rows.length}
-                      </p>
-                      <ul className="space-y-1">
-                        {group.rows.map((row) => (
-                          <li key={row.scheduleId} className="flex items-center justify-between gap-3 text-sm">
-                            <button type="button" onClick={() => openHorse(row.horseId)} className="min-w-0 truncate text-left text-gray-800 hover:underline">
-                              {row.horseName}
-                              <span className="ml-1.5 text-xs text-gray-400">{row.assignedToName ?? 'chưa có người làm'}</span>
-                            </button>
-                            <CareDue dueAt={`${row.dueDate}T12:00:00`} />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </SideCard>
         </div>
       </div>

@@ -3,9 +3,9 @@
 // lịch sử cảnh báo thể lực, ngưỡng nhịp tim và tốc độ (HLV của khu đặt phiên bản mới). Mỗi khối một nguồn API, tải riêng.
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Flag, Gauge, Layers, MessageSquareQuote, SlidersHorizontal } from 'lucide-react';
+import { Activity, AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Flag, Gauge, Layers, MessageSquareQuote } from 'lucide-react';
 import { listHorseClasses, listHorseSessions } from '../../../api/training';
-import { getThresholds, getWorkload, listHorseAlerts, listSessionSummaries } from '../../../api/performance';
+import { getWorkload, listHorseAlerts, listSessionSummaries } from '../../../api/performance';
 import type { HorseDetail, HorsePermissions } from '../../../api/types';
 import { Button, EmptyState, ErrorBox, Segmented, Skeleton, cn } from '../../../components/ui';
 import { LineChart, chartColors } from '../../../components/charts/LineChart';
@@ -133,8 +133,7 @@ export default function TrainingTab({ horse }: { horse: HorseDetail; permissions
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <TrendCard horseId={horse.id} className={staffView ? 'lg:col-span-8' : 'lg:col-span-12'} />
-        {staffView && <ThresholdCard horseId={horse.id} className="lg:col-span-4" />}
+        <TrendCard horseId={horse.id} className="lg:col-span-12" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
@@ -290,49 +289,6 @@ function TrendCard({ horseId, className = '' }: { horseId: string; className?: s
         <p className="mt-2 text-xs text-gray-500">
           {rows.length} buổi có số đo · tổng {rows.reduce((sum, row) => sum + row.alertCount, 0)} giây vượt ngưỡng. Cùng cường độ, nhịp tim trung bình giảm dần là thể lực đang lên.
         </p>
-      )}
-    </section>
-  );
-}
-
-/* ===== Ngưỡng ===== */
-
-/** Mọi ngựa dùng chung ngưỡng câu lạc bộ (BE bỏ ngưỡng riêng từ 18/10), thẻ chỉ để xem. */
-function ThresholdCard({ horseId, className = '' }: { horseId: string; className?: string }) {
-  const data = useService(() => getThresholds(horseId), [horseId], { silent: true });
-  const current = data.data;
-  return (
-    <section data-training-block className={cn('rounded-2xl bg-white p-5 ring-1 ring-gray-200/80', className)}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 whitespace-nowrap font-semibold text-gray-900">
-          <SlidersHorizontal size={16} className="text-emerald-700" /> Ngưỡng cảnh báo
-        </h3>
-      </div>
-      {data.loading && !current ? (
-        <Skeleton rows={2} />
-      ) : data.error || !current ? (
-        <ErrorBox message={data.error ?? 'Không tải được ngưỡng'} />
-      ) : (
-        <>
-          <dl className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl bg-amber-50 p-2.5 ring-1 ring-amber-100">
-              <dt className="text-[11px] text-amber-800">Cảnh báo</dt>
-              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateWarningBpm}</dd>
-              <dd className="text-[10px] text-gray-500">bpm</dd>
-            </div>
-            <div className="rounded-xl bg-red-50 p-2.5 ring-1 ring-red-100">
-              <dt className="text-[11px] text-red-700">Nguy hiểm</dt>
-              <dd className="tabular-nums text-lg font-bold">{current.limits.heartRateCriticalBpm}</dd>
-              <dd className="text-[10px] text-gray-500">bpm</dd>
-            </div>
-            <div className="rounded-xl bg-gray-50 p-2.5 ring-1 ring-gray-100">
-              <dt className="text-[11px] text-gray-600">Tốc độ tối đa</dt>
-              <dd className="tabular-nums text-lg font-bold">{current.limits.maxSpeedMps}</dd>
-              <dd className="text-[10px] text-gray-500">m/s</dd>
-            </div>
-          </dl>
-          <p className="mt-3 text-xs text-gray-500">Ngưỡng chung của câu lạc bộ, áp cho mọi ngựa. Vượt ngưỡng nguy hiểm khi tập thì bác sĩ và HLV nhận cảnh báo khẩn.</p>
-        </>
       )}
     </section>
   );

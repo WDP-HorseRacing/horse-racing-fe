@@ -618,7 +618,6 @@ function VetDashboard({ name }: { name: string }) {
           />
           <Stat value={overdue.length} label="Quá hạn khám định kỳ" icon={<Syringe size={18} />} tone="warning" onClick={() => navigate(links.periodic)} />
           <Stat value={medical.openCases.length} label="Bệnh án đang điều trị" icon={<ClipboardCheck size={18} />} onClick={() => navigate(links.cases)} />
-          <Stat value={careDue.length} label="Lịch chăm sóc đến hạn" icon={<CalendarClock size={18} />} tone="warning" onClick={() => navigate(links.careSchedules)} />
       </DashboardHero>
 
       <Row>

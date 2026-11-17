@@ -13,7 +13,6 @@ import {
   CalendarRange,
   Flag,
   Layers,
-  CalendarClock,
   ClipboardCheck,
   ClipboardList,
   HeartPulse,
@@ -100,7 +99,6 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
           { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
           { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
-          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
         ]),
         {
           group: 'Quản trị',
@@ -127,7 +125,6 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           { name: 'Bảng điều khiển', path: links.medicalBoard, icon: HeartPulse },
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
           { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
-          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
         ]),
       ];
     case 'VETERINARIAN':
@@ -138,7 +135,6 @@ function menuGroups(role: UserRole | undefined): NavGroup[] {
           { name: 'Yêu cầu khám', path: links.requests, icon: ClipboardCheck },
           { name: 'Bệnh án', path: links.cases, icon: Stethoscope },
           { name: 'Khám định kỳ', path: links.periodic, icon: Syringe },
-          { name: 'Lịch chăm sóc', path: links.careSchedules, icon: CalendarClock },
         ]),
         { group: 'Đàn ngựa', items: [{ name: 'Ngựa', path: links.horses, icon: Users }] },
         training([classesItem]),
