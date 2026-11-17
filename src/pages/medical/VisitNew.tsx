@@ -79,6 +79,7 @@ interface InjuryRow {
   injuryType: InjuryType | '';
   recoveryStatus: RecoveryStatus;
   notes: string;
+  position?: InjuryPosition;
   /** Buổi khám ghi lại: giữ tọa độ cũ nếu vẫn cùng vùng (có thể do mobile chấm trên mô hình 3D). */
   kept?: { region: BodyRegion; position: InjuryPosition };
 }
@@ -232,6 +233,8 @@ function VisitForm(props: VisitOptions) {
   const chosenUpdates = tracked.filter((injury) => updates[injury.id]?.status);
   const healing = chosenUpdates.filter((injury) => updates[injury.id].status === 'HEALED').length;
 
+  const [selected3DInjuryId, setSelected3DInjuryId] = useState<string | null>(null);
+
   const allInjuriesFor3D = useMemo<TrackedInjury[]>(() => {
     const list: TrackedInjury[] = [];
     const today = new Date().toISOString().slice(0, 10);
@@ -254,12 +257,13 @@ function VisitForm(props: VisitOptions) {
     for (const row of injuries) {
       if (row.bodyRegion) {
         const pos = positionOfRegion(row.bodyRegion);
+        const finalPos = row.position ?? pos;
         list.push({
           id: `new-${row.key}`,
           horseId: horse?.id ?? '',
           bodyRegion: row.bodyRegion,
           injuryType: (row.injuryType || 'OTHER') as InjuryType,
-          position: { x: pos.x, y: pos.y, z: 0.1 },
+          position: { x: finalPos.x, y: finalPos.y, z: finalPos.z },
           firstMedicalRecordId: 'temp',
           currentRecoveryStatus: row.recoveryStatus,
           firstExamDate: today,
@@ -272,21 +276,103 @@ function VisitForm(props: VisitOptions) {
     return list;
   }, [tracked, updates, injuries, horse?.id]);
 
-  const handleQuickSelectRegion = (region: BodyRegion) => {
+  const handleAdd3DPoint = (point: { x: number; y: number; z: number; bodyRegion: BodyRegion }) => {
     const emptyRow = injuries.find((r) => !r.bodyRegion);
     if (emptyRow) {
-      setInjuries(injuries.map((r) => (r.key === emptyRow.key ? { ...r, bodyRegion: region } : r)));
-    } else if (injuries.length < 20) {
+      setInjuries(
+        injuries.map((r) =>
+          r.key === emptyRow.key
+            ? { ...r, bodyRegion: point.bodyRegion, position: { x: point.x, y: point.y, z: point.z } }
+            : r,
+        ),
+      );
+      setSelected3DInjuryId(`new-${emptyRow.key}`);
+      toast.push(`Đã chọn vùng ${bodyRegionLabel[point.bodyRegion] ?? point.bodyRegion} trên mô hình 3D.`, 'success');
+    } else if (injuries.length < 10) {
+      const newKey = nextRowKey();
       setInjuries([
         ...injuries,
         {
-          key: nextRowKey(),
+          key: newKey,
+          bodyRegion: point.bodyRegion,
+          injuryType: 'SPRAIN',
+          recoveryStatus: 'ACUTE',
+          notes: '',
+          position: { x: point.x, y: point.y, z: point.z },
+        },
+      ]);
+      setSelected3DInjuryId(`new-${newKey}`);
+      toast.push(
+        `Đã đánh dấu chấn thương mới tại ${bodyRegionLabel[point.bodyRegion] ?? point.bodyRegion}. Nhấp đúp lần nữa để hủy.`,
+        'success',
+      );
+    } else {
+      toast.push('Mỗi buổi khám ghi nhận tối đa 10 chấn thương trực quan.', 'error');
+    }
+  };
+
+  const handleRemove3DPoint = (targetInjury: TrackedInjury) => {
+    const isHistorical = tracked.some((t) => t.id === targetInjury.id);
+    if (isHistorical) {
+      toast.push(
+        'Chấn thương cũ trong bệnh án, bạn chỉ có thể cập nhật tiến triển ở danh sách bên dưới, không thể xóa bỏ lịch sử.',
+        'error',
+      );
+      const trackedEl = document.querySelector(`[data-tracked-injury="${targetInjury.id}"]`);
+      trackedEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    const keyMatch = targetInjury.id.replace('new-', '');
+    const numKey = Number(keyMatch);
+    setInjuries((prev) => prev.filter((item) => item.key !== numKey));
+    if (selected3DInjuryId === targetInjury.id) {
+      setSelected3DInjuryId(null);
+    }
+    toast.push(
+      `Đã hủy đánh dấu chấn thương tại ${bodyRegionLabel[targetInjury.bodyRegion] ?? targetInjury.bodyRegion}.`,
+      'info',
+    );
+  };
+
+  const handleSelectInjuryFrom3D = (injury: TrackedInjury) => {
+    setSelected3DInjuryId(injury.id);
+    if (injury.id.startsWith('new-')) {
+      const keyMatch = injury.id.replace('new-', '');
+      const el = document.querySelector(`[data-injury-row="${keyMatch}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      const el = document.querySelector(`[data-tracked-injury="${injury.id}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const handleQuickSelectRegion = (region: BodyRegion) => {
+    const emptyRow = injuries.find((r) => !r.bodyRegion);
+    const pos = positionOfRegion(region);
+    if (emptyRow) {
+      setInjuries(
+        injuries.map((r) =>
+          r.key === emptyRow.key ? { ...r, bodyRegion: region, position: pos } : r,
+        ),
+      );
+      setSelected3DInjuryId(`new-${emptyRow.key}`);
+    } else if (injuries.length < 10) {
+      const newKey = nextRowKey();
+      setInjuries([
+        ...injuries,
+        {
+          key: newKey,
           bodyRegion: region,
           injuryType: 'SPRAIN',
           recoveryStatus: 'ACUTE',
           notes: '',
+          position: pos,
         },
       ]);
+      setSelected3DInjuryId(`new-${newKey}`);
+    } else {
+      toast.push('Mỗi buổi khám ghi nhận tối đa 10 chấn thương trực quan.', 'error');
     }
   };
   // Buổi khám không mở bệnh án: thuốc phải có ngày kết thúc (không có bệnh án để đóng).
@@ -354,7 +440,7 @@ function VisitForm(props: VisitOptions) {
       if (injuries.length) {
         base.newInjuries = injuries.map((row) => ({
           bodyRegion: row.bodyRegion as BodyRegion,
-          position: row.kept && row.kept.region === row.bodyRegion ? row.kept.position : positionOfRegion(row.bodyRegion as BodyRegion),
+          position: row.position ? row.position : (row.kept && row.kept.region === row.bodyRegion ? row.kept.position : positionOfRegion(row.bodyRegion as BodyRegion)),
           injuryType: row.injuryType as InjuryType,
           recoveryStatus: row.recoveryStatus,
           ...(row.notes.trim() ? { notes: row.notes.trim() } : {}),
@@ -606,7 +692,11 @@ function VisitForm(props: VisitOptions) {
                       injuries={allInjuriesFor3D}
                       horseName={horse?.name}
                       readOnly={false}
+                      selectedInjuryId={selected3DInjuryId}
+                      onSelectInjury={handleSelectInjuryFrom3D}
                       onSelectRegion={handleQuickSelectRegion}
+                      onAddPoint={handleAdd3DPoint}
+                      onRemovePoint={handleRemove3DPoint}
                     />
                   </div>
 
@@ -616,8 +706,17 @@ function VisitForm(props: VisitOptions) {
                       {tracked.map((injury) => {
                         const update = updates[injury.id] ?? { status: '', notes: '' };
                         const set = (patch: Partial<InjuryUpdate>) => setUpdates({ ...updates, [injury.id]: { ...update, ...patch } });
+                        const isSelectedIn3D = selected3DInjuryId === injury.id;
                         return (
-                          <div key={injury.id} className={cn('rounded-xl p-3 ring-1', update.status ? 'bg-emerald-50/40 ring-emerald-200' : 'bg-gray-50/80 ring-transparent')}>
+                          <div
+                            key={injury.id}
+                            data-tracked-injury={injury.id}
+                            className={cn(
+                              'rounded-xl p-3 ring-1 transition-all',
+                              isSelectedIn3D && 'ring-2 ring-emerald-600 bg-emerald-50/60',
+                              !isSelectedIn3D && (update.status ? 'bg-emerald-50/40 ring-emerald-200' : 'bg-gray-50/80 ring-transparent'),
+                            )}
+                          >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                                 <span className="font-semibold text-gray-900">{bodyRegionLabel[injury.bodyRegion]}</span>
@@ -649,11 +748,30 @@ function VisitForm(props: VisitOptions) {
                         const regionKey = `injury.${row.key}.bodyRegion`;
                         const typeKey = `injury.${row.key}.injuryType`;
                         const rowInvalid = !!show(regionKey) || !!show(typeKey);
+                        const isSelectedIn3D = selected3DInjuryId === `new-${row.key}`;
                         return (
-                          <div key={row.key} className={cn('rounded-xl bg-gray-50/80 p-3', rowInvalid && 'ring-1 ring-red-200')}>
+                          <div
+                            key={row.key}
+                            data-injury-row={row.key}
+                            className={cn(
+                              'rounded-xl p-3 transition-all',
+                              isSelectedIn3D ? 'bg-emerald-50/70 ring-2 ring-emerald-500' : 'bg-gray-50/80',
+                              rowInvalid && 'ring-1 ring-red-200',
+                            )}
+                          >
                             <div className="grid items-start gap-2 sm:grid-cols-3">
                               <Field name={regionKey} error={show(regionKey)} onBlur={f.blur(regionKey)}>
-                                <Select value={row.bodyRegion} onChange={(event) => update({ bodyRegion: event.target.value as BodyRegion })} className={cn(show(regionKey) && invalidClass)}>
+                                <Select
+                                  value={row.bodyRegion}
+                                  onChange={(event) => {
+                                    const nextRegion = event.target.value as BodyRegion;
+                                    update({
+                                      bodyRegion: nextRegion,
+                                      position: nextRegion ? positionOfRegion(nextRegion) : undefined,
+                                    });
+                                  }}
+                                  className={cn(show(regionKey) && invalidClass)}
+                                >
                                   <option value="">Vùng cơ thể…</option>
                                   {REGIONS.map((value) => (
                                     <option key={value} value={value}>
