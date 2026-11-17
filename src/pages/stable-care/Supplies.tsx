@@ -1,6 +1,6 @@
 // F4.5 — Danh sách danh mục vật tư CLB. Tồn kho và nhập/xuất do bên thứ ba đảm nhận; Quản lý CLB thêm, sửa và xóa danh mục.
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, ShieldCheck, Box } from 'lucide-react';
+import { Pencil, Plus, Trash2, Box } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
 import { deleteSupplyItem, listSupplyItems } from '../../api/supplies';
 import type { NotificationItem, SupplyCategory, SupplyItem } from '../../api/types';
@@ -64,16 +64,9 @@ export default function Supplies() {
     <div className="space-y-6">
       <PageHeader
         title="Vật tư"
-        description="Danh mục vật tư CLB phục vụ chăm sóc và dinh dưỡng. Việc nhập, xuất và quản lý kho do đối tác bên thứ ba đảm nhận."
+        description="Danh mục vật tư phục vụ công tác chăm sóc và dinh dưỡng tại chuồng."
         actions={canManage && <Button onClick={() => setDialog({})}><Plus size={16} /> Thêm vật tư</Button>}
       />
-
-      <div className="rounded-xl bg-emerald-50/70 p-3.5 text-xs text-emerald-900 ring-1 ring-emerald-200/80 flex items-center gap-2.5">
-        <ShieldCheck size={18} className="shrink-0 text-emerald-700" />
-        <span>
-          <strong>Lưu ý nghiệp vụ:</strong> Hệ thống tập trung vào công tác chăm sóc, dinh dưỡng và huấn luyện ngựa. Toàn bộ công tác nhập, xuất kho và số lượng tồn kho do bên thứ ba quản lý độc lập.
-        </span>
-      </div>
 
       {items.loading && !items.data ? (
         <Skeleton rows={6} />

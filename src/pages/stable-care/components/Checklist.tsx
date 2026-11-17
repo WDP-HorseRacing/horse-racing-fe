@@ -1,7 +1,7 @@
 // F4.1 — Checklist chăm sóc hằng ngày của một ngựa.
 // Groom BẮT BUỘC tải ảnh bằng chứng để hoàn tất việc; ghi chú có thể cập nhật riêng. Ngày đã qua thì chỉ xem.
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Check, MessageSquarePlus, ShieldAlert } from 'lucide-react';
+import { Camera, Check, MessageSquarePlus } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { updateChecklistItem } from '../../../api/stable-care';
 import { uploadChecklistEvidence } from '../../../api/media';
@@ -62,14 +62,6 @@ export function ChecklistItems({
 
   return (
     <>
-      {editable && (
-        <div className="mb-3 rounded-xl bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-900 ring-1 ring-amber-200/80 flex items-start gap-2.5">
-          <ShieldAlert size={16} className="shrink-0 text-amber-700 mt-0.5" />
-          <div className="leading-relaxed">
-            <strong className="font-semibold text-amber-950">Bắt buộc ảnh minh chứng:</strong> Nhân viên Groom bắt buộc phải chụp hoặc tải ảnh bằng chứng thực tế tại chuồng (tối đa 10 MB) để xác nhận hoàn tất việc. Không thể tick hoàn thành mà không có ảnh.
-          </div>
-        </div>
-      )}
       <ul className={cn('space-y-1.5', large && 'space-y-2')}>
         {checklist.items.map((item) => (
           <ChecklistItemRow
@@ -246,14 +238,19 @@ function ChecklistItemRow({
           type="button"
           role="checkbox"
           aria-checked={item.done}
-          aria-label={item.done ? `Đã hoàn tất: ${item.name}` : `Bắt buộc chụp hoặc tải ảnh để hoàn tất: ${item.name}`}
+          aria-label={item.done ? `Đã hoàn tất: ${item.name}` : `Hoàn tất: ${item.name}`}
           disabled={!editable || item.done || photoActionBusy}
-          onClick={openPhotoPicker}
-          title={item.done ? 'Đã hoàn tất có ảnh minh chứng' : 'Bắt buộc tải ảnh minh chứng để hoàn tất việc'}
+          onClick={() => {
+            if (!item.done && !hasImage && !selectedFile && !uploadedMediaId) {
+              toast.push('Vui lòng chụp hoặc đính kèm ảnh minh chứng trước khi hoàn thành công việc', 'error');
+            }
+            openPhotoPicker();
+          }}
+          title={item.done ? 'Đã hoàn tất' : 'Chụp hoặc tải ảnh để hoàn tất'}
           className={cn(
             'flex shrink-0 items-center justify-center rounded-lg ring-2 transition disabled:cursor-default',
             large ? 'h-9 w-9' : 'h-6 w-6',
-            item.done ? 'bg-emerald-600 text-white ring-emerald-600' : 'bg-white text-transparent ring-amber-300 hover:ring-emerald-500',
+            item.done ? 'bg-emerald-600 text-white ring-emerald-600' : 'bg-white text-transparent ring-gray-300 hover:ring-emerald-500',
             busy && 'opacity-60',
           )}
         >
@@ -265,7 +262,7 @@ function ChecklistItemRow({
             <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
               <span>{formatTime(item.doneAt)}{item.doer ? ` · ${item.doer.fullName}` : ''}</span>
               <span className="inline-flex items-center gap-1 rounded bg-emerald-100/70 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-800">
-                Đã có ảnh minh chứng
+                Đã đính kèm ảnh
               </span>
             </p>
           )}
@@ -297,10 +294,10 @@ function ChecklistItemRow({
             </>
           ) : (
             <div className="flex flex-1 items-center gap-2">
-              <span className="text-[11px] font-medium text-amber-800 bg-amber-50 px-2 py-0.5 rounded ring-1 ring-amber-200">
-                Bắt buộc ảnh minh chứng
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                <Camera size={13} className="text-gray-400/80" />
+                {item.done ? 'Đã hoàn tất' : 'Chưa có ảnh minh chứng'}
               </span>
-              <span className="text-xs text-gray-500">{item.done ? 'Đã hoàn tất' : 'Chưa gắn ảnh'}</span>
             </div>
           )}
           {uploadedMediaId && !photoActionBusy && (

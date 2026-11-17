@@ -60,7 +60,7 @@ export function SupplyItemDialog({ item, onClose, onDone }: { item?: SupplyItem;
       open
       onClose={onClose}
       title={item ? `Sửa vật tư: ${item.name}` : 'Thêm vật tư mới'}
-      description="Danh mục vật tư phục vụ chăm sóc và dinh dưỡng. Việc nhập, xuất và tồn kho do bên thứ ba phụ trách."
+      description="Thêm mặt hàng mới vào danh mục phục vụ chăm sóc và dinh dưỡng."
       footer={<Footer onSubmit={submit} pending={action.pending} label={saveLabel} />}
       dirty={dirty}
       busy={action.pending}

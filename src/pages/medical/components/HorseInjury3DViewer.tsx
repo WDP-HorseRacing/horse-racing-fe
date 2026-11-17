@@ -17,6 +17,7 @@ export interface HorseInjury3DViewerProps {
   className?: string;
   readOnly?: boolean;
   onSelectInjury?: (injury: TrackedInjury) => void;
+  onSelectRegion?: (region: BodyRegion) => void;
   onAddPoint?: (point: { x: number; y: number; z: number; bodyRegion: BodyRegion }) => void;
 }
 
@@ -50,12 +51,26 @@ const STATUS_COLORS: Record<RecoveryStatus, { hex: string; bg: string; text: str
 
 type PresetView = 'LATERAL_LEFT' | 'LATERAL_RIGHT' | 'FRONT' | 'TOP' | 'PERSPECTIVE';
 
+const QUICK_REGIONS: BodyRegion[] = [
+  'HEAD',
+  'NECK',
+  'BACK',
+  'CHEST',
+  'LEFT_FRONT_LEG',
+  'RIGHT_FRONT_LEG',
+  'LEFT_HIND_LEG',
+  'RIGHT_HIND_LEG',
+  'PELVIS',
+  'ABDOMEN',
+];
+
 export function HorseInjury3DViewer({
   injuries,
   horseName,
   className = '',
   readOnly = true,
   onSelectInjury,
+  onSelectRegion,
   onAddPoint,
 }: HorseInjury3DViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,6 +82,7 @@ export function HorseInjury3DViewer({
   const [currentView, setCurrentView] = useState<PresetView>('LATERAL_LEFT');
   const [projectedMarkers, setProjectedMarkers] = useState<ProjectedMarker[]>([]);
   const [addingMode, setAddingMode] = useState(false);
+  const [containerWidth, setContainerWidth] = useState(800);
 
   // Three.js instances ref
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -313,6 +329,7 @@ export function HorseInjury3DViewer({
       for (const entry of entries) {
         const { width: newW, height: newH } = entry.contentRect;
         if (newW > 0 && newH > 0 && cameraRef.current && rendererRef.current) {
+          setContainerWidth(newW);
           cameraRef.current.aspect = newW / newH;
           cameraRef.current.updateProjectionMatrix();
           rendererRef.current.setSize(newW, newH);
@@ -533,7 +550,7 @@ export function HorseInjury3DViewer({
               if (!marker.visible) return null;
               const isSelected = selectedId === marker.injury.id;
               const isLeft = marker.side === 'left';
-              const cardAnchorX = isLeft ? 190 : (containerRef.current?.clientWidth ?? 800) - 190;
+              const cardAnchorX = isLeft ? 190 : containerWidth - 190;
               const cardAnchorY = marker.targetY + 24;
 
               // Elbow point nối giữa điểm chấn thương 3D và thẻ ghi chú 2D
@@ -578,7 +595,9 @@ export function HorseInjury3DViewer({
             const isSelected = selectedId === marker.injury.id;
             const isLeft = marker.side === 'left';
             const statusConfig = STATUS_COLORS[marker.injury.currentRecoveryStatus] ?? STATUS_COLORS.ACUTE;
-            const lastHistory = marker.injury.history[marker.injury.history.length - 1];
+            const historyList = Array.isArray(marker.injury.history) ? marker.injury.history : [];
+            const lastHistory = historyList.length ? historyList[historyList.length - 1] : undefined;
+            const noteText = lastHistory?.notes ?? '';
 
             return (
               <div
@@ -609,15 +628,17 @@ export function HorseInjury3DViewer({
                   {INJURY_TYPE_NAMES[marker.injury.injuryType] ?? marker.injury.injuryType}
                 </p>
 
-                {lastHistory?.notes && (
+                {noteText && (
                   <p className="mt-0.5 line-clamp-2 text-[10px] text-gray-500 leading-tight">
-                    {lastHistory.notes}
+                    {noteText}
                   </p>
                 )}
 
                 <div className="mt-1 flex items-center justify-between border-t border-gray-100 pt-1 text-[9px] text-gray-400">
                   <span>{formatDate(marker.injury.firstExamDate)}</span>
-                  <span className="text-emerald-700 font-medium">{marker.injury.history.length} lần khám</span>
+                  <span className="text-emerald-700 font-medium">
+                    {historyList.length > 0 ? `${historyList.length} lần khám` : 'Ghi nhận mới'}
+                  </span>
                 </div>
               </div>
             );
@@ -639,10 +660,32 @@ export function HorseInjury3DViewer({
       </div>
 
       {/* Thông điệp khi ngựa hoàn toàn khỏe mạnh không có chấn thương */}
-      {injuries.length === 0 && !loading && (
+      {injuries.length === 0 && !loading && !onSelectRegion && (
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900 ring-1 ring-emerald-200/80">
           <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
           <span>Chiến mã hiện không có chấn thương nào đang điều trị. Thể trạng cơ xương khớp ổn định.</span>
+        </div>
+      )}
+
+      {/* Chọn nhanh vùng giải phẫu khi ở form khám bệnh */}
+      {onSelectRegion && (
+        <div className="mt-3 rounded-xl bg-stone-50/80 p-3 ring-1 ring-stone-200/80">
+          <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+            <Activity size={14} className="text-emerald-700" />
+            <span>Chọn nhanh vùng tổn thương trên mô hình giải phẫu:</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {QUICK_REGIONS.map((region) => (
+              <button
+                key={region}
+                type="button"
+                onClick={() => onSelectRegion(region)}
+                className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200 transition-colors hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-300"
+              >
+                + {bodyRegionLabel[region]}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
