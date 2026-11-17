@@ -13,6 +13,12 @@ dist
 dist-ssr
 *.local
 
+.env
+env.*
+
+# Public Vite endpoints needed by the frontend CI build.
+!deploy/portainer/env.production
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
