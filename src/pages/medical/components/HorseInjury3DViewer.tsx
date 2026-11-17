@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RotateCw, Eye, Activity, AlertCircle, CheckCircle2, Plus } from 'lucide-react';
+import { RotateCw, Eye, Activity, AlertCircle, MapPin } from 'lucide-react';
 import type { BodyRegion, InjuryType, RecoveryStatus, TrackedInjury } from '../../../api/types';
 import { bodyRegionLabel } from '../../../lib/api-labels';
 import { formatDate } from '../../../lib/format';
@@ -16,9 +16,11 @@ export interface HorseInjury3DViewerProps {
   horseName?: string;
   className?: string;
   readOnly?: boolean;
+  selectedInjuryId?: string | null;
   onSelectInjury?: (injury: TrackedInjury) => void;
   onSelectRegion?: (region: BodyRegion) => void;
   onAddPoint?: (point: { x: number; y: number; z: number; bodyRegion: BodyRegion }) => void;
+  onRemovePoint?: (injury: TrackedInjury) => void;
 }
 
 interface ProjectedMarker {
@@ -28,6 +30,7 @@ interface ProjectedMarker {
   side: 'left' | 'right';
   targetY: number;
   visible: boolean;
+  isOccluded: boolean;
   color: string;
 }
 
@@ -69,16 +72,22 @@ export function HorseInjury3DViewer({
   horseName,
   className = '',
   readOnly = true,
+  selectedInjuryId,
   onSelectInjury,
   onSelectRegion,
   onAddPoint,
+  onRemovePoint,
 }: HorseInjury3DViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
+  const selectedId = selectedInjuryId !== undefined ? selectedInjuryId : internalSelectedId;
+  const setSelectedId = (id: string | null) => {
+    setInternalSelectedId(id);
+  };
   const [currentView, setCurrentView] = useState<PresetView>('LATERAL_LEFT');
   const [projectedMarkers, setProjectedMarkers] = useState<ProjectedMarker[]>([]);
   const [addingMode, setAddingMode] = useState(false);
@@ -94,32 +103,45 @@ export function HorseInjury3DViewer({
   const animationFrameRef = useRef<number | null>(null);
 
   const activeInjuries = useMemo(() => {
-    // Ưu tiên hiển thị các chấn thương cấp tính và đang hồi phục
     return [...injuries].sort((a, b) => {
       const order: Record<RecoveryStatus, number> = { ACUTE: 0, RECOVERING: 1, HEALED: 2 };
       return order[a.currentRecoveryStatus] - order[b.currentRecoveryStatus];
     });
   }, [injuries]);
 
-  // Khởi tạo Three.js Scene
+  // Refs for callbacks in event listeners
+  const activeInjuriesRef = useRef(activeInjuries);
+  const addingModeRef = useRef(addingMode);
+  const onAddPointRef = useRef(onAddPoint);
+  const onRemovePointRef = useRef(onRemovePoint);
+  const onSelectInjuryRef = useRef(onSelectInjury);
+
+  useEffect(() => {
+    activeInjuriesRef.current = activeInjuries;
+    addingModeRef.current = addingMode;
+    onAddPointRef.current = onAddPoint;
+    onRemovePointRef.current = onRemovePoint;
+    onSelectInjuryRef.current = onSelectInjury;
+  });
+
+  // 1. Khởi tạo Three.js Scene ONCE khi mount
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
 
-    let width = container.clientWidth || 800;
-    let height = container.clientHeight || 500;
+    const width = container.clientWidth || 800;
+    const height = container.clientHeight || 480;
 
-    // 1. Scene & Camera
+    // Scene & Camera
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-    // Mặc định góc Lateral Left (nhìn ngang sườn trái chuẩn như Ảnh 2)
     camera.position.set(3.6, 1.25, 0.1);
     cameraRef.current = camera;
 
-    // 2. Renderer
+    // Renderer
     const renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -132,18 +154,18 @@ export function HorseInjury3DViewer({
     renderer.toneMappingExposure = 1.1;
     rendererRef.current = renderer;
 
-    // 3. OrbitControls
+    // OrbitControls
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 1.5;
-    controls.maxDistance = 6.0;
-    controls.maxPolarAngle = Math.PI / 2 + 0.1; // không xoay xuống dưới đất quá nhiều
-    controls.target.set(0, 1.05, 0); // tâm xoay ở giữa ngực/thân ngựa
+    controls.minDistance = 1.6;
+    controls.maxDistance = 5.5;
+    controls.maxPolarAngle = Math.PI / 2 + 0.15;
+    controls.target.set(0, 1.05, 0);
     controlsRef.current = controls;
 
-    // 4. Ánh sáng y học chuyên nghiệp (Studio Medical Lighting)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+    // Ánh sáng chuyên nghiệp
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
     scene.add(ambientLight);
 
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0xe2e8f0, 0.6);
@@ -154,7 +176,7 @@ export function HorseInjury3DViewer({
     keyLight.position.set(5, 5, 4);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xdcfce7, 0.7); // ánh sáng xanh nhạt đồng cỏ tự nhiên
+    const fillLight = new THREE.DirectionalLight(0xdcfce7, 0.7);
     fillLight.position.set(-5, 3, -4);
     scene.add(fillLight);
 
@@ -167,7 +189,7 @@ export function HorseInjury3DViewer({
     scene.add(markersGroup);
     markersGroupRef.current = markersGroup;
 
-    // 5. Tải mô hình 3D GLB
+    // Tải mô hình 3D GLB
     const loader = new GLTFLoader();
     setLoading(true);
     setLoadError(null);
@@ -178,18 +200,15 @@ export function HorseInjury3DViewer({
         const model = gltf.scene;
         horseMeshRef.current = model;
 
-        // Tinh chỉnh vật liệu cơ bắp giải phẫu màu đất nung/cơ bắp nhã nhặn
         model.traverse((child) => {
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            // Áp dụng shader làm nổi bật khối cơ giải phẫu
             if (mesh.material) {
               const mat = mesh.material as THREE.MeshStandardMaterial;
               mat.roughness = 0.55;
               mat.metalness = 0.05;
-              // Màu warm sand / terracotta thanh lịch tựa sách giải phẫu
               if (!mat.color || mat.color.getHex() === 0xffffff) {
                 mat.color = new THREE.Color(0xd4a373);
               }
@@ -197,11 +216,9 @@ export function HorseInjury3DViewer({
           }
         });
 
-        // Bounding box chuẩn hóa tâm
         const box = new THREE.Box3().setFromObject(model);
-        // Giữ móng chân gần mặt phẳng y=0
         model.position.y = -box.min.y;
-        controls.target.set(0, (box.max.y - box.min.y) * 0.55, 0);
+        controls.target.set(0, (box.max.y - box.min.y) * 0.52, 0);
         controls.update();
 
         scene.add(model);
@@ -215,12 +232,19 @@ export function HorseInjury3DViewer({
       },
     );
 
-    // 6. Raycast click để chọn hoặc thêm điểm chấn thương
+    // 2. KHÓA CUỘN TRANG WEB KHI LĂN CHUỘT TRONG KHUNG 3D (Mouse Wheel Scroll Isolation)
+    const handleContainerWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    container.addEventListener('wheel', handleContainerWheel, { passive: false });
+
+    // 3. TƯƠNG TÁC RAYCAST: DOUBLE-CLICK & PIN MODE CLICK
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
-    const handleCanvasClick = (event: MouseEvent) => {
-      if (!horseMeshRef.current || !cameraRef.current) return;
+    const processRaycast = (event: MouseEvent, isDblClick: boolean) => {
+      if (!horseMeshRef.current || !cameraRef.current || !canvasRef.current) return;
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -228,22 +252,76 @@ export function HorseInjury3DViewer({
       raycaster.setFromCamera(mouse, cameraRef.current);
       const intersects = raycaster.intersectObjects(horseMeshRef.current.children, true);
 
-      if (intersects.length > 0) {
-        const hit = intersects[0];
-        // Đổi sang root-local của mô hình
-        const localPoint = horseMeshRef.current.worldToLocal(hit.point.clone());
-        const suggested = suggestBodyRegion(localPoint);
+      if (intersects.length === 0) return;
 
-        if (onAddPoint && addingMode) {
-          onAddPoint({ x: localPoint.x, y: localPoint.y, z: localPoint.z, bodyRegion: suggested });
+      const hit = intersects[0];
+      const hitWorldPos = hit.point;
+
+      // Tìm chấn thương gần nhất với điểm bấm (bán kính 0.22 đơn vị thế giới)
+      let closestInj: TrackedInjury | null = null;
+      let minDistance = Infinity;
+      for (const inj of activeInjuriesRef.current) {
+        const mPos = new THREE.Vector3(inj.position.x, inj.position.y, inj.position.z);
+        if (horseMeshRef.current) mPos.applyMatrix4(horseMeshRef.current.matrixWorld);
+        const dist = mPos.distanceTo(hitWorldPos);
+        if (dist < 0.22 && dist < minDistance) {
+          minDistance = dist;
+          closestInj = inj;
+        }
+      }
+
+      if (closestInj) {
+        if (isDblClick) {
+          // Nhấp đúp vào chấn thương đã có -> Hủy / Xóa chấn thương đó
+          onRemovePointRef.current?.(closestInj);
+        } else {
+          // Click đơn -> Chọn chấn thương
+          setSelectedId(closestInj.id);
+          onSelectInjuryRef.current?.(closestInj);
+        }
+        return;
+      }
+
+      // Nhấp đúp vào vùng mới HOẶC click đơn khi đang ở Chế độ ghim (addingMode)
+      if (isDblClick || (addingModeRef.current && !isDblClick)) {
+        const localPoint = horseMeshRef.current.worldToLocal(hit.point.clone());
+        if (![localPoint.x, localPoint.y, localPoint.z].every(Number.isFinite)) return;
+        const suggested = suggestBodyRegion(localPoint);
+        onAddPointRef.current?.({
+          x: +localPoint.x.toFixed(3),
+          y: +localPoint.y.toFixed(3),
+          z: +localPoint.z.toFixed(3),
+          bodyRegion: suggested,
+        });
+        if (addingModeRef.current) {
           setAddingMode(false);
         }
       }
     };
 
-    canvas.addEventListener('click', handleCanvasClick);
+    const handleCanvasClick = (event: MouseEvent) => {
+      // Chỉ kích hoạt click đơn khi đang ở chế độ ghim
+      if (addingModeRef.current) {
+        processRaycast(event, false);
+      }
+    };
 
-    // 7. Render Loop & Chiếu tọa độ Markers 3D -> 2D
+    const handleCanvasDblClick = (event: MouseEvent) => {
+      processRaycast(event, true);
+    };
+
+    // Phòng ngừa kẹt chuột xoay khi nhả chuột ngoài màn hình
+    const handleWindowPointerUp = () => {
+      if (controlsRef.current) {
+        controlsRef.current.update();
+      }
+    };
+
+    canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('dblclick', handleCanvasDblClick);
+    window.addEventListener('pointerup', handleWindowPointerUp);
+
+    // 4. Render Loop & Chiếu tọa độ Markers 3D -> 2D
     let isMounted = true;
     const clock = new THREE.Clock();
 
@@ -267,7 +345,7 @@ export function HorseInjury3DViewer({
       renderer.render(scene, camera);
 
       // Cập nhật tọa độ màn hình cho đường Vector Leader Lines
-      if (containerRef.current && cameraRef.current && activeInjuries.length > 0) {
+      if (containerRef.current && cameraRef.current && activeInjuriesRef.current.length > 0) {
         const w = containerRef.current.clientWidth;
         const h = containerRef.current.clientHeight;
         const currentCamera = cameraRef.current;
@@ -275,7 +353,7 @@ export function HorseInjury3DViewer({
         const leftList: ProjectedMarker[] = [];
         const rightList: ProjectedMarker[] = [];
 
-        activeInjuries.forEach((inj) => {
+        activeInjuriesRef.current.forEach((inj) => {
           const worldPos = new THREE.Vector3(inj.position.x, inj.position.y, inj.position.z);
           if (horseMeshRef.current) {
             worldPos.applyMatrix4(horseMeshRef.current.matrixWorld);
@@ -284,9 +362,13 @@ export function HorseInjury3DViewer({
 
           const screenX = ((projected.x + 1) / 2) * w;
           const screenY = ((-projected.y + 1) / 2) * h;
-          const visible = projected.z < 1.0 && screenX > 20 && screenX < w - 20 && screenY > 20 && screenY < h - 20;
+          const visible = projected.z < 1.0 && screenX > 15 && screenX < w - 15 && screenY > 15 && screenY < h - 15;
 
-          // Phân loại sang lề trái hoặc phải màn hình
+          // Kiểm tra điểm có nằm ở mặt sau (occluded) so với camera không
+          const camToPoint = worldPos.clone().sub(currentCamera.position).normalize();
+          const pointNormal = new THREE.Vector3(inj.position.x, 0, inj.position.z).normalize();
+          const isOccluded = pointNormal.dot(camToPoint) > 0.45;
+
           const side: 'left' | 'right' = screenX < w / 2 ? 'left' : 'right';
           const color = STATUS_COLORS[inj.currentRecoveryStatus]?.hex ?? '#ef4444';
 
@@ -297,6 +379,7 @@ export function HorseInjury3DViewer({
             side,
             targetY: screenY,
             visible,
+            isOccluded,
             color,
           };
 
@@ -304,13 +387,14 @@ export function HorseInjury3DViewer({
           else rightList.push(marker);
         });
 
-        // Tự động giãn cách đều các thẻ để không bị đè lên nhau
+        // Giãn cách thẻ và Giới hạn cận trên / cận dưới để không bao giờ đè lên viền hoặc thanh đáy
         const spaceMarkers = (list: ProjectedMarker[]) => {
           list.sort((a, b) => a.screenY - b.screenY);
-          const minGap = 68; // khoảng cách tối thiểu giữa 2 thẻ
-          let lastY = 40;
+          const minGap = 72;
+          let lastY = 48; // cách mép trên tối thiểu 48px
           list.forEach((m) => {
             if (m.targetY < lastY) m.targetY = lastY;
+            if (m.targetY > h - 76) m.targetY = h - 76; // cách mép dưới tối thiểu 76px
             lastY = m.targetY + minGap;
           });
         };
@@ -324,11 +408,11 @@ export function HorseInjury3DViewer({
 
     animate();
 
-    // 8. Resize Observer
+    // Resize Observer an toàn (chống NaN khi width/height = 0)
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width: newW, height: newH } = entry.contentRect;
-        if (newW > 0 && newH > 0 && cameraRef.current && rendererRef.current) {
+        if (newW > 50 && newH > 50 && cameraRef.current && rendererRef.current) {
           setContainerWidth(newW);
           cameraRef.current.aspect = newW / newH;
           cameraRef.current.updateProjectionMatrix();
@@ -342,25 +426,26 @@ export function HorseInjury3DViewer({
     return () => {
       isMounted = false;
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      container.removeEventListener('wheel', handleContainerWheel);
       canvas.removeEventListener('click', handleCanvasClick);
+      canvas.removeEventListener('dblclick', handleCanvasDblClick);
+      window.removeEventListener('pointerup', handleWindowPointerUp);
       resizeObserver.disconnect();
       controls.dispose();
       renderer.dispose();
     };
-  }, [activeInjuries, addingMode, onAddPoint]);
+  }, []);
 
-  // Cập nhật 3D Marker Spheres khi danh sách chấn thương thay đổi
+  // 2. Cập nhật 3D Marker Spheres khi danh sách chấn thương thay đổi
   useEffect(() => {
     const markersGroup = markersGroupRef.current;
     if (!markersGroup) return;
 
-    // Xóa markers cũ
     while (markersGroup.children.length > 0) {
       const obj = markersGroup.children[0];
       markersGroup.remove(obj);
     }
 
-    // Tạo markers mới
     activeInjuries.forEach((injury) => {
       const { x, y, z } = injury.position;
       const colorHex = STATUS_COLORS[injury.currentRecoveryStatus]?.hex ?? '#ef4444';
@@ -370,13 +455,13 @@ export function HorseInjury3DViewer({
       markerAnchor.position.set(x, y, z);
 
       // Điểm tâm đỏ phát sáng
-      const coreGeo = new THREE.SphereGeometry(0.038, 16, 16);
+      const coreGeo = new THREE.SphereGeometry(0.04, 16, 16);
       const coreMat = new THREE.MeshBasicMaterial({ color });
       const coreMesh = new THREE.Mesh(coreGeo, coreMat);
       markerAnchor.add(coreMesh);
 
       // Vòng tròn phát sáng nhịp đập
-      const pulseGeo = new THREE.RingGeometry(0.045, 0.075, 24);
+      const pulseGeo = new THREE.RingGeometry(0.048, 0.08, 24);
       const pulseMat = new THREE.MeshBasicMaterial({
         color,
         side: THREE.DoubleSide,
@@ -385,7 +470,6 @@ export function HorseInjury3DViewer({
       });
       const pulseMesh = new THREE.Mesh(pulseGeo, pulseMat);
       pulseMesh.name = `pulse-${injury.id}`;
-      // Vòng tròn luôn hướng về camera hoặc vuông góc
       pulseMesh.rotation.x = Math.PI / 2;
       markerAnchor.add(pulseMesh);
 
@@ -404,19 +488,15 @@ export function HorseInjury3DViewer({
 
     switch (preset) {
       case 'LATERAL_LEFT':
-        // Nhìn ngang sườn trái (Lateral View - như Ảnh 2)
         camera.position.set(3.4, target.y + 0.15, 0);
         break;
       case 'LATERAL_RIGHT':
-        // Nhìn ngang sườn phải
         camera.position.set(-3.4, target.y + 0.15, 0);
         break;
       case 'FRONT':
-        // Nhìn từ phía trước đầu
         camera.position.set(0, target.y + 0.25, 3.2);
         break;
       case 'TOP':
-        // Nhìn từ trên xuống 45 độ
         camera.position.set(2.2, target.y + 2.5, 1.8);
         break;
       case 'PERSPECTIVE':
@@ -429,7 +509,7 @@ export function HorseInjury3DViewer({
   };
 
   return (
-    <div className={cn('relative flex flex-col rounded-2xl bg-gradient-to-b from-stone-50 to-emerald-50/30 p-4 ring-1 ring-gray-200/80 shadow-card overflow-hidden', className)}>
+    <div className={cn('relative flex flex-col rounded-2xl bg-gradient-to-b from-stone-50 to-emerald-50/30 p-4 ring-1 ring-gray-200/80 shadow-card', className)}>
       {/* Tiêu đề & Công cụ góc nhìn */}
       <div className="mb-2 flex flex-wrap items-center justify-between gap-3 z-10">
         <div>
@@ -443,14 +523,14 @@ export function HorseInjury3DViewer({
           </p>
         </div>
 
-        {/* Thanh công cụ Preset góc nhìn */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Thanh công cụ Preset góc nhìn & Chế độ ghim */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg bg-white p-0.5 ring-1 ring-gray-200 text-xs">
             <button
               type="button"
               onClick={() => setCameraPreset('LATERAL_LEFT')}
               className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition',
+                'rounded-md px-2.5 py-1 font-medium transition cursor-pointer',
                 currentView === 'LATERAL_LEFT' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900',
               )}
               title="Góc nhìn nghiêng sườn trái (Lateral Left - Chuẩn sách giải phẫu)"
@@ -461,7 +541,7 @@ export function HorseInjury3DViewer({
               type="button"
               onClick={() => setCameraPreset('LATERAL_RIGHT')}
               className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition',
+                'rounded-md px-2.5 py-1 font-medium transition cursor-pointer',
                 currentView === 'LATERAL_RIGHT' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900',
               )}
               title="Góc nhìn nghiêng sườn phải"
@@ -472,7 +552,7 @@ export function HorseInjury3DViewer({
               type="button"
               onClick={() => setCameraPreset('FRONT')}
               className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition',
+                'rounded-md px-2.5 py-1 font-medium transition cursor-pointer',
                 currentView === 'FRONT' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900',
               )}
               title="Góc nhìn chính diện"
@@ -483,7 +563,7 @@ export function HorseInjury3DViewer({
               type="button"
               onClick={() => setCameraPreset('TOP')}
               className={cn(
-                'rounded-md px-2.5 py-1 font-medium transition',
+                'rounded-md px-2.5 py-1 font-medium transition cursor-pointer',
                 currentView === 'TOP' ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900',
               )}
               title="Góc nhìn từ trên lưng"
@@ -494,7 +574,7 @@ export function HorseInjury3DViewer({
               type="button"
               onClick={() => setCameraPreset('PERSPECTIVE')}
               className={cn(
-                'rounded-md px-2 py-1 font-medium transition text-gray-500 hover:text-gray-900',
+                'rounded-md px-2 py-1 font-medium transition text-gray-500 hover:text-gray-900 cursor-pointer',
                 currentView === 'PERSPECTIVE' && 'bg-gray-100 font-semibold',
               )}
               title="Đặt lại góc nhìn mặc định"
@@ -508,19 +588,31 @@ export function HorseInjury3DViewer({
               type="button"
               onClick={() => setAddingMode(!addingMode)}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 transition',
-                addingMode ? 'bg-amber-500 text-white ring-amber-600 animate-pulse' : 'bg-white text-emerald-800 ring-emerald-300 hover:bg-emerald-50',
+                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 transition cursor-pointer',
+                addingMode
+                  ? 'bg-amber-500 text-white ring-amber-600 shadow-sm animate-pulse'
+                  : 'bg-white text-emerald-800 ring-emerald-300 hover:bg-emerald-50',
               )}
+              title={addingMode ? 'Click lên thân ngựa để ghim điểm chấn thương' : 'Bật chế độ ghim chấn thương bằng 1 click'}
             >
-              <Plus size={13} /> {addingMode ? 'Click lên thân ngựa…' : 'Chấm điểm tổn thương'}
+              <MapPin size={13} /> {addingMode ? '📍 Đang ở chế độ ghim (Click lên ngựa)…' : '📍 Chế độ ghim'}
             </button>
           )}
         </div>
       </div>
 
       {/* Vùng Render 3D Canvas và SVG Vector Overlay */}
-      <div ref={containerRef} className="relative h-[480px] w-full select-none rounded-xl bg-gradient-to-b from-stone-100/70 via-stone-50 to-emerald-50/40 ring-1 ring-stone-200/70">
-        <canvas ref={canvasRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
+      <div
+        ref={containerRef}
+        className="relative h-[480px] w-full select-none rounded-xl bg-gradient-to-b from-stone-100/70 via-stone-50 to-emerald-50/40 ring-1 ring-stone-200/70 overflow-hidden"
+      >
+        <canvas
+          ref={canvasRef}
+          className={cn(
+            'h-full w-full',
+            addingMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing',
+          )}
+        />
 
         {/* Loading Spinner */}
         {loading && (
@@ -538,8 +630,8 @@ export function HorseInjury3DViewer({
           </div>
         )}
 
-        {/* SVG Vector Leader Lines (tựa Ảnh 2) */}
-        {!loading && (
+        {/* SVG Vector Leader Lines */}
+        {!loading && containerWidth >= 640 && (
           <svg className="pointer-events-none absolute inset-0 h-full w-full z-10" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <filter id="vector-glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -550,16 +642,14 @@ export function HorseInjury3DViewer({
               if (!marker.visible) return null;
               const isSelected = selectedId === marker.injury.id;
               const isLeft = marker.side === 'left';
-              const cardAnchorX = isLeft ? 190 : containerWidth - 190;
+              const cardAnchorX = isLeft ? 186 : containerWidth - 186;
               const cardAnchorY = marker.targetY + 24;
 
-              // Elbow point nối giữa điểm chấn thương 3D và thẻ ghi chú 2D
-              const elbowX = isLeft ? marker.screenX - 35 : marker.screenX + 35;
+              const elbowX = isLeft ? Math.max(cardAnchorX + 25, marker.screenX - 35) : Math.min(cardAnchorX - 25, marker.screenX + 35);
               const elbowY = cardAnchorY;
 
               return (
                 <g key={marker.injury.id} className="transition-opacity duration-300">
-                  {/* Điểm neo tại chấn thương */}
                   <circle
                     cx={marker.screenX}
                     cy={marker.screenY}
@@ -568,28 +658,28 @@ export function HorseInjury3DViewer({
                     stroke="#ffffff"
                     strokeWidth={2}
                     filter="url(#vector-glow)"
+                    opacity={marker.isOccluded ? 0.5 : 1}
                   />
-                  {/* Đường chỉ Vector gãy khúc thanh lịch */}
                   <polyline
                     points={`${marker.screenX},${marker.screenY} ${elbowX},${elbowY} ${cardAnchorX},${cardAnchorY}`}
                     fill="none"
                     stroke={marker.color}
                     strokeWidth={isSelected ? 2.5 : 1.75}
-                    strokeDasharray={isSelected ? undefined : '4 3'}
+                    strokeDasharray={isSelected ? undefined : marker.isOccluded ? '3 3' : '4 3'}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    opacity={isSelected ? 1 : 0.85}
+                    opacity={isSelected ? 1 : marker.isOccluded ? 0.4 : 0.85}
                   />
-                  {/* Điểm chốt tại thẻ ghi chú */}
-                  <circle cx={cardAnchorX} cy={cardAnchorY} r={3} fill={marker.color} />
+                  <circle cx={cardAnchorX} cy={cardAnchorY} r={3} fill={marker.color} opacity={marker.isOccluded ? 0.5 : 1} />
                 </g>
               );
             })}
           </svg>
         )}
 
-        {/* Floating Callout Cards ở hai bên lề (tựa Ảnh 2) */}
+        {/* Floating Callout Cards ở hai bên lề */}
         {!loading &&
+          containerWidth >= 640 &&
           projectedMarkers.map((marker) => {
             if (!marker.visible) return null;
             const isSelected = selectedId === marker.injury.id;
@@ -613,6 +703,7 @@ export function HorseInjury3DViewer({
                 className={cn(
                   'pointer-events-auto absolute w-[172px] cursor-pointer rounded-xl bg-white/95 p-2.5 text-xs shadow-md backdrop-blur-md ring-1 transition-all duration-200 z-15 hover:scale-102 hover:shadow-lg',
                   isSelected ? 'ring-2 ring-emerald-600 shadow-emerald-tint' : 'ring-gray-200/90 hover:ring-emerald-400',
+                  marker.isOccluded && 'opacity-70 hover:opacity-100',
                 )}
               >
                 <div className="flex items-center justify-between gap-1">
@@ -643,51 +734,52 @@ export function HorseInjury3DViewer({
               </div>
             );
           })}
+      </div>
 
-        {/* Hướng dẫn tương tác xoay 3D ở góc dưới */}
-        <div className="pointer-events-none absolute bottom-2.5 left-3 flex items-center gap-2 rounded-lg bg-white/80 px-2 py-1 text-[10px] font-medium text-gray-600 backdrop-blur-xs ring-1 ring-gray-200 z-10">
-          <Eye size={12} className="text-emerald-700" />
-          <span>Kéo chuột để xoay 360° · Cuộn để phóng to/thu nhỏ</span>
+      {/* Thanh chỉ dẫn & thống kê dưới khung 3D (tách biệt hoàn toàn khỏi canvas để không bị đè - Khắc phục Hình 2) */}
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-gray-500">
+        <div className="flex items-center gap-2">
+          <Eye size={13} className="text-emerald-700 shrink-0" />
+          <span>
+            Kéo xoay 360° · Cuộn để phóng to/thu nhỏ · <strong>Nhấp đúp</strong> lên thân ngựa để đánh dấu / hủy
+          </span>
         </div>
-
-        {/* Thống kê nhanh chấn thương */}
-        <div className="pointer-events-none absolute bottom-2.5 right-3 flex items-center gap-2 rounded-lg bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-gray-700 backdrop-blur-xs ring-1 ring-gray-200 z-10">
-          <span>Tổng số vết: {injuries.length}</span>
-          <span className="text-red-600">
+        <div className="flex items-center gap-2 font-medium">
+          <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700">Tổng số: {injuries.length}</span>
+          <span className="rounded bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 ring-1 ring-red-200">
             {injuries.filter((i) => i.currentRecoveryStatus === 'ACUTE').length} cấp tính
           </span>
         </div>
       </div>
 
-      {/* Thông điệp khi ngựa hoàn toàn khỏe mạnh không có chấn thương */}
-      {injuries.length === 0 && !loading && !onSelectRegion && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900 ring-1 ring-emerald-200/80">
-          <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
-          <span>Chiến mã hiện không có chấn thương nào đang điều trị. Thể trạng cơ xương khớp ổn định.</span>
-        </div>
-      )}
-
-      {/* Chọn nhanh vùng giải phẫu khi ở form khám bệnh */}
-      {onSelectRegion && (
-        <div className="mt-3 rounded-xl bg-stone-50/80 p-3 ring-1 ring-stone-200/80">
-          <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-            <Activity size={14} className="text-emerald-700" />
-            <span>Chọn nhanh vùng tổn thương trên mô hình giải phẫu:</span>
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {QUICK_REGIONS.map((region) => (
+      {/* Thanh chọn nhanh vùng tổn thương */}
+      <div className="mt-3 rounded-xl bg-white/70 p-2.5 ring-1 ring-gray-200/80">
+        <p className="mb-2 text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+          <Activity size={13} className="text-emerald-700" />
+          Chọn nhanh vùng tổn thương trên mô hình giải phẫu:
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_REGIONS.map((region) => {
+            const hasInjury = injuries.some((i) => i.bodyRegion === region);
+            return (
               <button
                 key={region}
                 type="button"
-                onClick={() => onSelectRegion(region)}
-                className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200 transition-colors hover:bg-emerald-50 hover:text-emerald-800 hover:ring-emerald-300"
+                onClick={() => onSelectRegion?.(region)}
+                className={cn(
+                  'rounded-lg px-2.5 py-1 text-xs font-medium ring-1 transition cursor-pointer',
+                  hasInjury
+                    ? 'bg-emerald-50 text-emerald-800 ring-emerald-400 font-semibold'
+                    : 'bg-white text-gray-700 ring-gray-200 hover:bg-emerald-50/60 hover:text-emerald-800',
+                )}
               >
-                + {bodyRegionLabel[region]}
+                {hasInjury ? '✓ ' : '+ '}
+                {bodyRegionLabel[region] ?? region}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
