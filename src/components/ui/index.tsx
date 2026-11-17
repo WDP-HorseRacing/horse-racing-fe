@@ -394,16 +394,38 @@ function leftField(event: React.FocusEvent<HTMLElement>) {
 
 /** Cuộn tới ô đang báo lỗi đầu tiên trong vùng chứa và đặt con trỏ vào đó. */
 export function scrollToFirstError(root: ParentNode = document) {
-  window.requestAnimationFrame(() => {
-    const field = root.querySelector<HTMLElement>('[data-invalid="true"]');
-    if (!field) return;
+  const tryScroll = () => {
+    const field =
+      root.querySelector<HTMLElement>('[data-invalid="true"]') ??
+      root.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+      root.querySelector<HTMLElement>('.border-red-500, .border-red-400, .border-red-300');
+    if (!field) return false;
     field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    field.querySelector<HTMLElement>('input, select, textarea, button[data-select-trigger]')?.focus({ preventScroll: true });
+    const target = field.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button[data-select-trigger]:not([disabled]), [tabindex="0"]',
+    );
+    if (target) {
+      target.focus({ preventScroll: true });
+    } else {
+      field.focus?.({ preventScroll: true });
+    }
+    return true;
+  };
+
+  // Double-rAF + fallback timeout đảm bảo React 19 đã commit DOM trước khi truy vấn phần tử lỗi
+  window.requestAnimationFrame(() => {
+    if (!tryScroll()) {
+      setTimeout(() => {
+        window.requestAnimationFrame(() => {
+          tryScroll();
+        });
+      }, 30);
+    }
   });
 }
 
-/** Viền đỏ nhạt cho ô đang lỗi. */
-export const invalidClass = 'border-red-300 focus:border-red-400 focus:ring-red-500/15';
+/** Viền đỏ rõ nét và nền đỏ nhạt nổi bật cho ô đang lỗi. */
+export const invalidClass = '!border-red-500 ring-2 ring-red-500/20 bg-red-50/20 text-gray-900 focus:!border-red-600 focus:ring-red-500/30';
 
 const inputClass =
   'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-70';

@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   Bandage,
   CalendarClock,
-  CalendarPlus,
   ClipboardList,
   FolderOpen,
   HeartPulse,
@@ -45,7 +44,7 @@ import { healthChangeSource } from '../../lib/api-labels';
 import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
 import { links } from '../../lib/links';
 import { InjuryProgress, VisitTimeline } from './components/ExamTimeline';
-import { CareScheduleSection } from './components/care';
+import { HorseInjury3DViewer } from './components/HorseInjury3DViewer';
 import { AdjustCostModal, CreateRequestModal, HealthChangeModal, PlaceLockModal, ReleaseLockModal, RequestRow, VoidVisitModal } from './components/modals';
 import { usePeople } from './components/people';
 import { CheckupDue, HealthShift } from './components/parts';
@@ -206,9 +205,6 @@ function GroomView({ horse }: { horse: HorseDetail }) {
         </Card>
         <p className="px-1 text-xs text-gray-500">Bệnh án, buổi khám và chẩn đoán không hiển thị với vai trò của bạn.</p>
       </div>
-      <div className="lg:col-span-5">
-        <CareScheduleSection horse={{ id: horse.id, name: horse.name, groom: horse.groom }} readOnly={leftClub(horse.lifecycleStatus)} />
-      </div>
       <IncidentReportDialog open={reporting} onClose={() => setReporting(false)} horse={{ id: horse.id, name: horse.name }} />
     </div>
   );
@@ -243,7 +239,6 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const readOnly = leftClub(horse.lifecycleStatus);
   const isVet = can(user, 'exam.record') && !readOnly;
   const canRequest = can(user, 'examRequest.create') && !readOnly;
-  const canCare = can(user, 'care.manage') && !readOnly;
   const people = usePeople(horse.groom ? [horse.groom] : []);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [showHealed, setShowHealed] = useState(false);
@@ -297,13 +292,19 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
   const menu = [
     ...(permissions.canChangeHealth && !readOnly ? [{ label: 'Đổi trạng thái sức khỏe', icon: <HeartPulse size={14} />, onSelect: () => setDialog({ kind: 'health' }) }] : []),
     ...(isVet && !activeLock ? [{ label: 'Đặt khóa huấn luyện', icon: <Lock size={14} />, onSelect: () => setDialog({ kind: 'lock' }) }] : []),
-    ...(canCare ? [{ label: 'Tạo lịch chăm sóc', icon: <CalendarPlus size={14} />, onSelect: () => navigate(links.careNew(horse.id, here)) }] : []),
   ];
 
   const tabs = TABS.map((item) => ({
     key: item.key,
     label: item.label,
-    badge: item.key === 'timeline' ? activeVisits.length : item.key === 'cases' ? data.cases.items.length : undefined,
+    badge:
+      item.key === 'timeline'
+        ? activeVisits.length
+        : item.key === 'cases'
+          ? data.cases.items.length
+          : item.key === 'injuries' && unhealed.length > 0
+            ? unhealed.length
+            : undefined,
   }));
 
   return (
@@ -458,24 +459,30 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
           )}
 
           {tab === 'injuries' && (
-            <Card>
-              <SectionTitle
-                icon={<Bandage size={16} />}
-                action={
-                  data.injuries.length > unhealed.length && (
-                    <ToggleChip checked={showHealed} onChange={setShowHealed}>
-                      Cả vết đã lành
-                    </ToggleChip>
-                  )
-                }
-              >
-                Diễn biến chấn thương
-              </SectionTitle>
-              <InjuryProgress
-                items={showHealed ? data.injuries : unhealed}
-                empty={data.injuries.length > 0 ? 'Mọi chấn thương đã lành.' : 'Chưa ghi chấn thương nào.'}
+            <div className="space-y-4">
+              <HorseInjury3DViewer
+                injuries={showHealed ? data.injuries : unhealed}
+                horseName={horse.name}
               />
-            </Card>
+              <Card>
+                <SectionTitle
+                  icon={<Bandage size={16} />}
+                  action={
+                    data.injuries.length > unhealed.length && (
+                      <ToggleChip checked={showHealed} onChange={setShowHealed}>
+                        Cả vết đã lành
+                      </ToggleChip>
+                    )
+                  }
+                >
+                  Chi tiết tiến trình điều trị
+                </SectionTitle>
+                <InjuryProgress
+                  items={showHealed ? data.injuries : unhealed}
+                  empty={data.injuries.length > 0 ? 'Mọi chấn thương đã lành.' : 'Chưa ghi chấn thương nào.'}
+                />
+              </Card>
+            </div>
           )}
 
           {tab === 'health' && (
@@ -574,8 +581,6 @@ function FullView({ horse, permissions, onChanged }: { horse: HorseDetail; permi
               )}
             </Card>
           )}
-
-          <CareScheduleSection horse={{ id: horse.id, name: horse.name, groom: horse.groom }} readOnly={readOnly} />
 
           {costVisible && data.requests && (
             <Card variant="flat">

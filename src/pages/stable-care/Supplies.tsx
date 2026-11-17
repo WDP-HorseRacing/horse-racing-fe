@@ -1,27 +1,29 @@
-// F4.5 — Danh sách vật tư CLB. Nhập và xuất do bên thứ ba đảm nhận; Quản lý CLB thêm và sửa thông tin.
+// F4.5 — Danh sách danh mục vật tư CLB. Tồn kho và nhập/xuất do bên thứ ba đảm nhận; Quản lý CLB thêm, sửa và xóa danh mục.
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2, ShieldCheck, Box } from 'lucide-react';
 import { onRealtime } from '../../api/realtime';
-import { listSupplyItems } from '../../api/supplies';
+import { deleteSupplyItem, listSupplyItems } from '../../api/supplies';
 import type { NotificationItem, SupplyCategory, SupplyItem } from '../../api/types';
 import { can } from '../../auth/permissions';
 import { useCrumbs } from '../../components/Breadcrumb';
-import { Button, ChipFilter, EmptyState, ErrorBox, Meter, NotFound, PageHeader, Pill, SearchInput, Skeleton, cn } from '../../components/ui';
-import { useService } from '../../hooks/useService';
-import { SUPPLY_CATEGORIES, formatAmount, formatQuantity, supplyCategoryText } from '../../lib/stable-labels';
+import { Button, ChipFilter, ConfirmDialog, EmptyState, ErrorBox, NotFound, PageHeader, Pill, SearchInput, Skeleton, cn, useToast } from '../../components/ui';
+import { useAction, useService } from '../../hooks/useService';
+import { SUPPLY_CATEGORIES, supplyCategoryText } from '../../lib/stable-labels';
 import { useStore } from '../../store/store';
-import { stockTone } from './care-helpers';
 import { SupplyItemSheet } from './components/SupplyItemSheet';
 import { SupplyItemDialog } from './components/supply-dialogs';
 
 type ItemDialog = { item?: SupplyItem };
 
 export default function Supplies() {
+  const toast = useToast();
+  const deleteAction = useAction();
   const user = useStore((state) => state.currentUser);
   const [category, setCategory] = useState<SupplyCategory | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<ItemDialog | null>(null);
+  const [deletingItem, setDeletingItem] = useState<SupplyItem | null>(null);
 
   const canManage = can(user, 'supply.manage');
   const items = useService(() => listSupplyItems(), []);
@@ -30,7 +32,6 @@ export default function Supplies() {
     const text = search.trim().toLowerCase();
     return all.filter((item) => (category === 'ALL' || item.category === category) && (!text || item.name.toLowerCase().includes(text)));
   }, [all, category, search]);
-  const low = all.filter((item) => item.lowStock);
   const opened = openId ? all.find((item) => item.id === openId) : undefined;
   useCrumbs([{ label: 'Vật tư' }]);
 
@@ -47,17 +48,32 @@ export default function Supplies() {
 
   const afterItemChange = () => items.reload();
 
+  const handleDelete = (item: SupplyItem) => {
+    void deleteAction.run(
+      () => deleteSupplyItem(item.id),
+      () => {
+        toast.push(`Đã xóa vật tư ${item.name}`, 'success');
+        setDeletingItem(null);
+        if (openId === item.id) setOpenId(null);
+        items.reload();
+      },
+    );
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Vật tư"
-        description={
-          canManage
-            ? 'Danh sách vật tư CLB. Quản lý CLB có thể thêm và sửa thông tin; số tồn chỉ xem, nhập và xuất do bên thứ ba đảm nhận.'
-            : 'Danh sách vật tư CLB để tra cứu; số tồn chỉ xem. Nhập và xuất do bên thứ ba đảm nhận.'
-        }
+        description="Danh mục vật tư CLB phục vụ chăm sóc và dinh dưỡng. Việc nhập, xuất và quản lý kho do đối tác bên thứ ba đảm nhận."
         actions={canManage && <Button onClick={() => setDialog({})}><Plus size={16} /> Thêm vật tư</Button>}
       />
+
+      <div className="rounded-xl bg-emerald-50/70 p-3.5 text-xs text-emerald-900 ring-1 ring-emerald-200/80 flex items-center gap-2.5">
+        <ShieldCheck size={18} className="shrink-0 text-emerald-700" />
+        <span>
+          <strong>Lưu ý nghiệp vụ:</strong> Hệ thống tập trung vào công tác chăm sóc, dinh dưỡng và huấn luyện ngựa. Toàn bộ công tác nhập, xuất kho và số lượng tồn kho do bên thứ ba quản lý độc lập.
+        </span>
+      </div>
 
       {items.loading && !items.data ? (
         <Skeleton rows={6} />
@@ -90,26 +106,25 @@ export default function Supplies() {
             ) : (
               <ul className="divide-y divide-gray-100">
                 {visible.map((item) => (
-                  <li key={item.id} className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap', item.lowStock && 'bg-amber-50/40')}>
+                  <li key={item.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-gray-50/70 sm:flex-nowrap">
                     <button type="button" onClick={() => setOpenId(item.id)} className="min-w-0 flex-1 text-left">
                       <span className="flex items-center gap-2">
                         <span className="truncate font-semibold text-gray-900 hover:underline">{item.name}</span>
-                        {item.lowStock && <Pill tone="amber">Sắp hết</Pill>}
+                        <Pill tone="gray">{supplyCategoryText[item.category]}</Pill>
                       </span>
-                      <span className="block text-xs text-gray-500">
-                        {supplyCategoryText[item.category]} · báo sắp hết ở {formatAmount(item.reorderThreshold, item.unit)}
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        Đơn vị tính: <span className="font-medium text-gray-700">{item.unit}</span>
                       </span>
                     </button>
-                    <div className="w-36 shrink-0">
-                      <p className="text-right tabular-nums text-sm font-semibold text-gray-900">
-                        {formatQuantity(item.quantityOnHand)} <span className="font-sans text-xs font-normal text-gray-500">{item.unit}</span>
-                      </p>
-                      <Meter className="mt-1" value={item.quantityOnHand} max={Math.max(item.reorderThreshold * 3, item.quantityOnHand, 1)} tone={stockTone(item)} />
-                    </div>
                     {canManage && (
-                      <Button variant="ghost" size="icon" title="Sửa vật tư" onClick={() => setDialog({ item })}>
-                        <Pencil size={15} />
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button variant="ghost" size="icon" title="Sửa vật tư" onClick={() => setDialog({ item })}>
+                          <Pencil size={15} />
+                        </Button>
+                        <Button variant="ghost" size="icon" title="Xóa vật tư" onClick={() => setDeletingItem(item)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                          <Trash2 size={15} />
+                        </Button>
+                      </div>
                     )}
                   </li>
                 ))}
@@ -118,31 +133,20 @@ export default function Supplies() {
           </section>
 
           <aside className="space-y-4 lg:sticky lg:top-6 lg:col-span-4">
-            <section className={cn('rounded-2xl bg-white p-4 ring-1 ring-gray-200/80', low.length ? 'shadow-amber-tint' : 'shadow-card')}>
-              <h2 className="flex items-center justify-between text-sm font-semibold text-gray-900">
-                Sắp hết
-                <span className={cn('rounded-md px-1.5 text-sm font-semibold tabular-nums', low.length ? 'bg-amber-50 text-amber-800' : 'text-gray-400')}>{low.length}</span>
+            <section className="rounded-2xl bg-white p-4 ring-1 ring-gray-200/80 shadow-card">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <Box size={16} className="text-emerald-700" />
+                Tổng quan danh mục
               </h2>
-              {low.length === 0 ? (
-                <p className="mt-1 text-sm text-gray-500">Chưa có vật tư nào sắp hết.</p>
-              ) : (
-                <ul className="mt-2">
-                  {low.map((item) => (
-                    <li key={item.id} className="flex items-center gap-2 border-t border-gray-100 py-2 first:border-t-0">
-                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                      <span className="min-w-0 flex-1">
-                        <button type="button" onClick={() => setOpenId(item.id)} className="block max-w-full truncate text-left text-sm font-medium text-gray-900 hover:underline">
-                          {item.name}
-                        </button>
-                        <span className="block text-xs tabular-nums text-gray-500">
-                          Còn <span className="font-semibold text-amber-800">{formatAmount(item.quantityOnHand, item.unit)}</span> / ngưỡng {formatAmount(item.reorderThreshold, item.unit)}
-                        </span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+                Các loại vật tư đăng ký trong hệ thống để lập khẩu phần ăn và báo cáo chăm sóc chuồng trại.
+              </p>
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                <span className="text-gray-500">Tổng số mặt hàng:</span>
+                <span className="font-bold text-gray-900 text-sm tabular-nums">{all.length}</span>
+              </div>
             </section>
+
             <section className="grid grid-cols-2 gap-2">
               {SUPPLY_CATEGORIES.map((value, index) => (
                 <button
@@ -172,9 +176,26 @@ export default function Supplies() {
             setOpenId(null);
             setDialog({ item: opened });
           } : undefined}
+          onDelete={canManage ? () => {
+            setDeletingItem(opened);
+          } : undefined}
         />
       )}
+
       {dialog && <SupplyItemDialog item={dialog.item} onClose={() => setDialog(null)} onDone={afterItemChange} />}
+
+      {deletingItem && (
+        <ConfirmDialog
+          open
+          title={`Xóa vật tư: ${deletingItem.name}`}
+          message={`Bạn có chắc muốn xóa "${deletingItem.name}" khỏi danh mục vật tư CLB? Thao tác này sẽ ẩn vật tư khỏi danh sách tra cứu.`}
+          confirmLabel={deleteAction.pending ? 'Đang xóa…' : 'Xóa vật tư'}
+          danger
+          pending={deleteAction.pending}
+          onClose={() => setDeletingItem(null)}
+          onConfirm={() => handleDelete(deletingItem)}
+        />
+      )}
     </div>
   );
 }
