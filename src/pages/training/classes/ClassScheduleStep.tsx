@@ -115,13 +115,18 @@ export function ClassScheduleStep({
     const error = submission.errors.get(slot.id);
     return error ? [{ slot, message: error.message }] : [];
   });
+  // Buổi sẽ bị bỏ (đã qua giờ, trùng lịch lớp khác của HLV): nêu lý do ngay dưới lịch, không chỉ trong tooltip của khối.
+  const skippedNotes = slots.flatMap((slot) => {
+    const message = submission.errors.has(slot.id) ? undefined : submission.warnings.get(slot.id);
+    return message ? [{ slot, message }] : [];
+  });
   const totalWeeks = new Set(submission.accepted.map((item) => item.week)).size;
   const weekdayTime = (slot: TemplateSlot) => `${weekdayShort[slot.weekday]} ${slot.start}`;
 
   return (
     <div className="space-y-4 pb-24">
       {/* Các giai đoạn */}
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 custom-scrollbar" data-lenis-prevent>
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1.5 custom-scrollbar" data-lenis-prevent>
         {ranges.map(({ phase, from, to }) => {
           const state = phaseState(phase.position);
           const selected = phase.position === position;
@@ -207,6 +212,18 @@ export function ClassScheduleStep({
               <p className="font-medium">Cần sửa</p>
               <ul className="mt-1 space-y-0.5">
                 {problems.map(({ slot, message }) => (
+                  <li key={slot.id}>
+                    {slot.name} {weekdayTime(slot)}: {message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {skippedNotes.length > 0 && (
+            <div className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-100">
+              <p className="font-medium">Sẽ bỏ khi tạo lớp</p>
+              <ul className="mt-1 space-y-0.5">
+                {skippedNotes.map(({ slot, message }) => (
                   <li key={slot.id}>
                     {slot.name} {weekdayTime(slot)}: {message}
                   </li>

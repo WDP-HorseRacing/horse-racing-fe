@@ -269,7 +269,7 @@ function EnrollSheet({
           </div>
           <Meter value={enrolled + selected.length} max={item.maxHorses} tone={enrolled + selected.length >= item.maxHorses ? 'amber' : 'green'} />
         </div>
-        {failures.length > 0 && <ErrorBox message={failures.join('. ')} />}
+        {failures.length > 0 && <ErrorBox message={`Không ghi danh được ${failures.length} ngựa`} items={failures} />}
         {pickError && (
           <p role="alert" className="text-sm font-medium text-red-600">
             {pickError}

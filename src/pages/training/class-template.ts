@@ -210,7 +210,12 @@ export function buildSubmission(plan: TrainingPlan, startDate: string, templates
   const note = (slotId: string, text: string) => warnings.set(slotId, warnings.has(slotId) ? `${warnings.get(slotId)}. ${text}` : text);
   const count = (items: Expanded[]) => items.reduce((map, item) => map.set(item.slot.id, (map.get(item.slot.id) ?? 0) + 1), new Map<string, number>());
   count(past).forEach((n, slotId) => note(slotId, `Bỏ ${n} buổi đã qua giờ`));
-  count(busySkipped.map((entry) => entry.item)).forEach((n, slotId) => note(slotId, `Bỏ ${n} buổi trùng lịch lớp khác của bạn`));
+  // Nêu lần trùng đầu tiên (lớp nào, lúc nào) để HLV biết vì sao buổi bị bỏ.
+  const busyBySlot = new Map<string, Problem[]>();
+  busySkipped.forEach(({ item, problem }) => busyBySlot.set(item.slot.id, [...(busyBySlot.get(item.slot.id) ?? []), problem]));
+  busyBySlot.forEach((problems, slotId) =>
+    note(slotId, `Bỏ ${problems.length} buổi: ${problems[0].message.charAt(0).toLowerCase()}${problems[0].message.slice(1)}${problems.length > 1 ? ` và ${problems.length - 1} lần khác` : ''}`),
+  );
 
   const short = ranges.flatMap(({ phase }) =>
     phase.subjects.flatMap((item) => {
