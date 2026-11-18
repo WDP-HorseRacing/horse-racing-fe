@@ -164,8 +164,8 @@ function StaffView() {
   const [dismissing, setDismissing] = useState<ExamRequest | null>(null);
   const [urgency, setUrgency] = useState<ExamRequest | null>(null);
 
-  const canCreate = can(user, 'examRequest.create');
   const isVet = can(user, 'examRequest.dismiss');
+  const canCreate = can(user, 'examRequest.create') && !isVet;
   const data = queue.list.data;
   const rows = data?.items ?? [];
 
@@ -218,12 +218,12 @@ function StaffView() {
               rowKey={(row) => row.id}
               pageSize={LIMIT}
               emptyTitle={queue.status === 'PENDING' ? 'Không có yêu cầu nào đang chờ' : 'Không có yêu cầu phù hợp'}
-              emptyHint={queue.status === 'PENDING' ? 'Yêu cầu do HLV trưởng, quản lý, bác sĩ gửi và sự cố khẩn được chuyển sẽ hiện ở đây.' : undefined}
+              emptyHint={queue.status === 'PENDING' ? 'Yêu cầu do HLV trưởng, quản lý gửi và sự cố khẩn được chuyển sẽ hiện ở đây.' : undefined}
               columns={[
                 { key: 'horse', header: 'Ngựa', render: (row) => <HorseChip horse={{ id: row.horseId, name: row.horseName }} /> },
                 {
                   key: 'source',
-                  header: 'Nguồn · mức',
+                  header: 'Nguồn / Mức độ',
                   render: (row) => (
                     <div className="space-y-1">
                       {row.urgent && <UrgentPill urgent />}

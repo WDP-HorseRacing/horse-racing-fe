@@ -3,7 +3,7 @@
 // Lưu nháp, hoặc lưu rồi áp dụng luôn (bản đang áp dụng cũ chuyển vào lịch sử). Kiểm hết ở đây trước khi gửi, lỗi hiện khi rời ô.
 // Bản mới: tạo nháp xong mà áp dụng lỗi thì giữ bản vừa tạo, bấm lại sẽ thay và áp dụng chính bản đó (không tạo trùng).
 import { useMemo, useRef, useState } from 'react';
-import { Copy, Plus, Trash2 } from 'lucide-react';
+import { Copy, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { listAllHorses } from '../../../api/horses';
 import { MEAL_ORDER, applyFeedingPlan, createFeedingPlan, listFeedingPlans, planLines, replaceFeedingPlan } from '../../../api/stable-care';
 import { listSupplyItems } from '../../../api/supplies';
@@ -90,6 +90,42 @@ export function FeedingPlanEditor({
   const update = (key: number, patch: Partial<Line>) => setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   const removeLine = (key: number) => setLines((current) => current.filter((line) => line.key !== key));
 
+  const applyStandardTemplate = () => {
+    const available = supplies.data ?? [];
+    if (available.length === 0) {
+      toast.push('Kho chưa có vật tư thức ăn để áp dụng mẫu', 'error');
+      return;
+    }
+    const findSupply = (keywords: string[], fallbackCategory?: string) => {
+      const match = available.find((item) => keywords.some((kw) => item.name.toLowerCase().includes(kw.toLowerCase())));
+      if (match) return match;
+      if (fallbackCategory) {
+        const catMatch = available.find((item) => item.category === fallbackCategory);
+        if (catMatch) return catMatch;
+      }
+      return available[0];
+    };
+
+    const oats = findSupply(['yến mạch', 'ngũ cốc', 'hạt', 'oat'], 'FEED');
+    const hay = findSupply(['cỏ khô', 'timothy', 'alfalfa', 'cỏ', 'hay'], 'FEED');
+    const mash = findSupply(['cám', 'hỗn hợp', 'pellet', 'thức ăn'], 'FEED');
+    const supplement = findSupply(['vitamin', 'khoáng', 'điện giải', 'supplement'], 'SUPPLEMENT');
+
+    const templateLines: Line[] = [
+      { key: nextKey++, meal: 'EARLY_MORNING', supplyItemId: oats.id, quantity: '2', note: 'Bữa sáng trước giờ tập' },
+      { key: nextKey++, meal: 'NOON', supplyItemId: hay.id, quantity: '3', note: 'Nghỉ trưa hồi sức' },
+      { key: nextKey++, meal: 'AFTERNOON', supplyItemId: mash.id, quantity: '2', note: 'Bữa phụ bổ sung năng lượng' },
+      { key: nextKey++, meal: 'EVENING', supplyItemId: hay.id, quantity: '2.5', note: 'Cỏ khô tiêu hóa ban đêm' },
+    ];
+    if (supplement && supplement.id !== hay.id) {
+      templateLines.push({ key: nextKey++, meal: 'EVENING', supplyItemId: supplement.id, quantity: '0.2', note: 'Bổ sung vi khoáng sau ngày tập' });
+    }
+
+    setLines(templateLines);
+    setNote('Khẩu phần tiêu chuẩn cho ngựa đua (4 bữa cân đối dinh dưỡng theo chuẩn CLB)');
+    toast.push('Đã điền khẩu phần tiêu chuẩn cho 4 bữa', 'success');
+  };
+
   const submit = (next: 'draft' | 'apply') => {
     setMode(next);
     if (!f.attempt(list.current ?? undefined)) return;
@@ -166,9 +202,14 @@ export function FeedingPlanEditor({
                 </span>
               ) : null}
             </p>
-            <Button variant="inline" size="sm" onClick={() => setCopying(true)}>
-              <Copy size={13} /> Chép từ ngựa khác
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={applyStandardTemplate} disabled={options.length === 0} title="Tự động điền 4 bữa ăn dinh dưỡng tiêu chuẩn cho ngựa">
+                <Sparkles size={13} className="text-emerald-700" /> Áp dụng mẫu chuẩn
+              </Button>
+              <Button variant="inline" size="sm" onClick={() => setCopying(true)}>
+                <Copy size={13} /> Chép từ ngựa khác
+              </Button>
+            </div>
           </div>
 
           {MEAL_ORDER.map((meal) => {

@@ -343,7 +343,7 @@ function AuditDetailSheet({ id, names, onClose }: { id: string; names: Map<strin
       open
       onClose={onClose}
       title={data ? `${auditActionText[data.action]} ${entityLabel(data.entityType).toLowerCase()}` : 'Chi tiết thao tác'}
-      description={data ? `${actorText(data, names)} · ${formatDateTime(data.createdAt)}` : undefined}
+      description={data ? `${actorText(data, names)} (${formatDateTime(data.createdAt)})` : undefined}
     >
       {detail.loading && !data ? (
         <Skeleton rows={5} />

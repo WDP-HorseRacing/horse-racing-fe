@@ -63,7 +63,8 @@ export const CAPABILITIES: Capability[] = [
   { key: 'exam.record', code: 'F3.3', group: 'Y tế', feature: 'Ghi buổi khám (định kỳ, theo yêu cầu, tái khám)', roles: { VETERINARIAN: A } },
   { key: 'examRequest.view', code: 'F3.4', group: 'Y tế', feature: 'Xem hàng đợi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A, GROOM: G } },
   // Groom không gửi yêu cầu khám trực tiếp nữa: báo sự cố (F4.4), sự cố khẩn tự tạo yêu cầu khám.
-  { key: 'examRequest.create', code: 'F3.4', group: 'Y tế', feature: 'Gửi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z, VETERINARIAN: A } },
+  // Bác sĩ thú y chỉ tiếp nhận và xử lý yêu cầu khám, không tự gửi yêu cầu cho chính mình.
+  { key: 'examRequest.create', code: 'F3.4', group: 'Y tế', feature: 'Gửi yêu cầu khám', roles: { CLUB_MANAGER: A, HEAD_TRAINER: Z } },
   { key: 'examRequest.dismiss', code: 'F3.4', group: 'Y tế', feature: 'Đổi mức khẩn, bỏ qua yêu cầu khám', roles: { VETERINARIAN: A } },
   { key: 'case.open', code: 'F3.5', group: 'Y tế', feature: 'Mở bệnh án', roles: { VETERINARIAN: A } },
   { key: 'exam.void', code: 'F3.6', group: 'Y tế', feature: 'Hủy buổi khám ghi sai và ghi buổi thay thế', roles: { VETERINARIAN: A } },

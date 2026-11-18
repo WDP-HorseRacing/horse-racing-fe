@@ -133,7 +133,7 @@ export default function CaseClose() {
       <PageHeader
         back={<BackLink to={back}>Về bệnh án</BackLink>}
         title="Đóng bệnh án"
-        description={`${horse.name} · ${item.initialDiagnosis}`}
+        description={`${horse.name} - ${item.initialDiagnosis}`}
       />
 
       <div className="grid items-start gap-5 lg:grid-cols-12">

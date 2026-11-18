@@ -434,7 +434,7 @@ export default function StableMap() {
     ? myZones.length
       ? `Bạn phụ trách ${myZones.join(', ')}${watchZones.length ? `. ${watchZones.length} khu của HLV khác chỉ xem` : mine ? '. Tắt Khu của tôi để xem các khu khác' : ''}. Bấm tên khu để phóng to, bấm ô để thao tác.`
       : 'Bạn chưa được giao khu nào. Quản lý câu lạc bộ sẽ giao khu cho bạn.'
-    : `${zones.length} khu · ${stalls.length} ô · ${totals.horses} ngựa thuộc khu. Bấm tên khu để phóng to, rê chuột vào ô để xem ngựa, bấm ô để thao tác.`;
+    : `${zones.length} khu, ${stalls.length} ô, ${totals.horses} ngựa thuộc khu. Bấm tên khu để phóng to, rê chuột vào ô để xem ngựa, bấm ô để thao tác.`;
 
   return (
     <div className="space-y-5">

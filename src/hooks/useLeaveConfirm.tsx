@@ -17,7 +17,9 @@ export function useLeaveConfirm(
   options: { includeSearch?: boolean } = {},
 ) {
   const isDirtyRef = useRef(isDirty);
-  isDirtyRef.current = isDirty;
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
   const includeSearch = options.includeSearch ?? false;
 
   // 1. Chặn người dùng đóng tab, tải lại trang (trình duyệt sẽ tự dùng thông báo mặc định)

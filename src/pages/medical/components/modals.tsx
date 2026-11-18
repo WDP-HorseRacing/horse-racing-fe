@@ -712,7 +712,7 @@ export function VoidVisitModal({
       title="Hủy buổi khám"
       dirty={reason.trim() !== ''}
       busy={action.pending}
-      description={`${horseName} · ${visitKindLabel[record.kind]} ${formatDateTime(record.examDate)}`}
+      description={`${horseName} - ${visitKindLabel[record.kind]} ngày ${formatDateTime(record.examDate)}`}
       footer={
         <>
           <CancelButton variant="secondary">Quay lại</CancelButton>
@@ -803,7 +803,7 @@ export function AdjustCostModal({
       title="Điều chỉnh chi phí buổi khám"
       dirty={reason.trim() !== '' || cost !== initial}
       busy={action.pending}
-      description={`${horseName} · buổi khám ${formatDateTime(record.examDate)} · chi phí hiện tại ${formatMoney(record.cost ?? 0)}`}
+      description={`${horseName} - buổi khám ${formatDateTime(record.examDate)} (chi phí hiện tại ${formatMoney(record.cost ?? 0)})`}
       footer={
         <>
           <CancelButton variant="secondary" />
@@ -891,7 +891,7 @@ export function AppointmentModal({ item, onClose, onDone }: { item: CheckupItem;
       title={rescheduling ? 'Dời ngày hẹn khám' : 'Đặt ngày hẹn khám'}
       dirty={reason.trim() !== '' || value !== initial}
       busy={action.pending}
-      description={`${item.horseName} · hạn khám ${formatDate(item.dueDate)}`}
+      description={`${item.horseName} (hạn khám ${formatDate(item.dueDate)})`}
       footer={
         <>
           <CancelButton variant="secondary" />
