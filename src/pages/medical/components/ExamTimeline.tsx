@@ -33,7 +33,8 @@ export function VisitCard({
   record,
   people,
   caseLabel,
-  onVoid,
+  // TẠM ẨN: hủy buổi khám, đổi lại thành `onVoid,` khi bật lại
+  onVoid: _onVoid,
   onAdjustCost,
   onEdit,
   compact = false,
@@ -182,7 +183,8 @@ export function VisitCard({
         )}
       </div>
 
-      {!voided && (onVoid || onAdjustCost || onEdit) && (
+      {/* TẠM ẨN: nút hủy buổi khám đang test, bỏ comment để bật lại (thêm lại `onVoid ||` vào điều kiện) */}
+      {!voided && (onAdjustCost || onEdit) && (
         <div className="mt-3 flex flex-wrap justify-end gap-2">
           {onEdit && (
             <Button size="sm" variant="inline" onClick={onEdit}>
@@ -194,11 +196,13 @@ export function VisitCard({
               <Wallet size={14} /> Điều chỉnh chi phí
             </Button>
           )}
+          {/* TẠM ẨN: hủy buổi khám
           {onVoid && (
             <Button size="sm" variant="inlineDanger" onClick={onVoid}>
               <Ban size={14} /> Hủy buổi khám
             </Button>
           )}
+          */}
         </div>
       )}
     </article>

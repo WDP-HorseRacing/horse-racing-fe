@@ -1,27 +1,30 @@
 // F3.2 — Lịch khám định kỳ (VET, CM, HT) từ GET /medical/checkups.
-// Chu kỳ cố định 30 ngày (không có chỗ sửa). VET đặt, dời, hủy ngày hẹn và ghi buổi khám định kỳ.
+// Chu kỳ cố định 30 ngày (không có chỗ sửa). VET ghi buổi khám định kỳ.
+// TẠM ẨN: tính năng đặt / dời / hủy ngày hẹn khám đang tắt. Bỏ comment các khối "TẠM ẨN" bên dưới để bật lại.
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarClock, Repeat, Stethoscope } from 'lucide-react';
-import { useAction, useService } from '../../hooks/useService';
-import { cancelCheckupAppointment, listCheckups } from '../../api/medical';
+import { /* CalendarClock, */ Repeat, Stethoscope } from 'lucide-react';
+import { /* useAction, */ useService } from '../../hooks/useService';
+import { /* cancelCheckupAppointment, */ listCheckups } from '../../api/medical';
 import { listBarns } from '../../api/stable';
-import type { CheckupDueStatus, CheckupItem } from '../../api/types';
+import type { CheckupDueStatus /* , CheckupItem */ } from '../../api/types';
 import { useStore } from '../../store/store';
 import { can } from '../../auth/permissions';
-import { Button, DataTable, ErrorBox, FilterSelect, FilterTabs, PageHeader, SearchInput, Skeleton, useToast } from '../../components/ui';
+import { Button, DataTable, ErrorBox, FilterSelect, FilterTabs, PageHeader, SearchInput, Skeleton /* , useToast */ } from '../../components/ui';
 import { HealthPill } from '../../components/ui/status';
 import { checkupStatusLabel } from '../../lib/api-labels';
-import { formatDate, formatDateTime } from '../../lib/format';
+import { formatDate /* , formatDateTime */ } from '../../lib/format';
 import { links } from '../../lib/links';
-import { AppointmentModal } from './components/modals';
+// TẠM ẨN: đặt hẹn khám
+// import { AppointmentModal } from './components/modals';
 import { CheckupDue, HorseChip } from './components/parts';
-import { ReasonDialog } from '../training/components/ReasonDialog';
+// import { ReasonDialog } from '../training/components/ReasonDialog';
 
 export default function PeriodicExams() {
   const user = useStore((state) => state.currentUser);
   const isVet = can(user, 'exam.record');
-  const canAppoint = can(user, 'checkup.appointment');
+  // TẠM ẨN: đặt hẹn khám
+  // const canAppoint = can(user, 'checkup.appointment');
   const [barnId, setBarnId] = useState('');
   const [status, setStatus] = useState<CheckupDueStatus | ''>('');
   const [search, setSearch] = useState('');
@@ -29,10 +32,11 @@ export default function PeriodicExams() {
   const list = useService(() => listCheckups({ barnId: barnId || undefined }), [barnId]);
   const navigate = useNavigate();
   const exam = (horseId?: string) => navigate(links.visitNew({ horseId, kind: 'ROUTINE', back: links.periodic }));
-  const [appointing, setAppointing] = useState<CheckupItem | null>(null);
-  const [cancelling, setCancelling] = useState<CheckupItem | null>(null);
-  const cancel = useAction();
-  const toast = useToast();
+  // TẠM ẨN: đặt hẹn khám
+  // const [appointing, setAppointing] = useState<CheckupItem | null>(null);
+  // const [cancelling, setCancelling] = useState<CheckupItem | null>(null);
+  // const cancel = useAction();
+  // const toast = useToast();
 
   const barnName = useMemo(() => new Map((barns.data ?? []).map((barn) => [barn.id, barn.name])), [barns.data]);
   const all = useMemo(() => list.data ?? [], [list.data]);
@@ -132,25 +136,27 @@ export default function PeriodicExams() {
                 </div>
               ),
             },
-            {
-              key: 'appointment',
-              header: 'Ngày hẹn',
-              render: (row) =>
-                row.appointment ? (
-                  <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
-                    <CalendarClock size={13} className="text-gray-400" /> {formatDateTime(row.appointment.scheduledAt)}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-400">Chưa hẹn</span>
-                ),
-            },
+            // TẠM ẨN: cột ngày hẹn khám
+            // {
+            //   key: 'appointment',
+            //   header: 'Ngày hẹn',
+            //   render: (row) =>
+            //     row.appointment ? (
+            //       <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+            //         <CalendarClock size={13} className="text-gray-400" /> {formatDateTime(row.appointment.scheduledAt)}
+            //       </span>
+            //     ) : (
+            //       <span className="text-xs text-gray-400">Chưa hẹn</span>
+            //     ),
+            // },
             {
               key: 'actions',
               header: '',
               className: 'text-right',
               render: (row) =>
-                isVet || canAppoint ? (
+                isVet /* || canAppoint */ ? (
                   <div className="flex justify-end gap-1">
+                    {/* TẠM ẨN: nút đặt / dời / hủy hẹn khám
                     {canAppoint && (
                       <Button size="sm" variant="inline" onClick={() => setAppointing(row)}>
                         {row.appointment ? 'Dời hẹn' : 'Đặt hẹn'}
@@ -161,6 +167,7 @@ export default function PeriodicExams() {
                         Hủy hẹn
                       </Button>
                     )}
+                    */}
                     {isVet && (
                       <Button size="sm" variant="secondary" onClick={() => exam(row.horseId)}>
                         <Stethoscope size={14} /> Ghi khám
@@ -173,6 +180,7 @@ export default function PeriodicExams() {
         />
       </FilterTabs>
 
+      {/* TẠM ẨN: hộp thoại đặt / dời / hủy hẹn khám
       {appointing && (
         <AppointmentModal
           item={appointing}
@@ -213,6 +221,7 @@ export default function PeriodicExams() {
           }
         />
       )}
+      */}
     </div>
   );
 }
