@@ -263,11 +263,21 @@ export function Skeleton({ rows = 3, className = '' }: { rows?: number; classNam
   );
 }
 
-export function ErrorBox({ message }: { message: string }) {
+/** Hộp lỗi đỏ. `items`: mỗi lỗi một dòng dưới câu `message` (ví dụ lỗi riêng của từng ngựa). */
+export function ErrorBox({ message, items }: { message: string; items?: string[] }) {
   return (
     <div className="flex items-start gap-3 rounded-xl bg-red-50 p-3.5 text-sm text-red-800 ring-1 ring-red-100">
       <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-      <span>{message}</span>
+      <div className="min-w-0">
+        <p className={items?.length ? 'font-medium' : undefined}>{message}</p>
+        {!!items?.length && (
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {items.map((item, index) => (
+              <li key={index}>{item}</li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

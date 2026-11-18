@@ -286,7 +286,7 @@ export default function ClassSessionsTab({ bundle, manage, reload }: { bundle: C
       </div>
 
       {/* Chip các tuần: chấm hổ phách khi tuần còn thiếu buổi */}
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 custom-scrollbar" data-lenis-prevent>
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 py-1.5 custom-scrollbar" data-lenis-prevent>
         {Array.from({ length: totalWeeks }, (_, index) => index + 1).map((value) => (
           <button
             key={value}

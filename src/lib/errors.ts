@@ -43,7 +43,36 @@ export function errorMessage(error: unknown): string {
 
 /** Vài câu lỗi của backend còn thuật ngữ tiếng Anh (microchip) hoặc viết thường "groom": đổi khi hiển thị. */
 export function humanizeMessage(message: string): string {
-  return message.replace(/Microchip/g, 'Số chip').replace(/groom/g, 'Groom');
+  return shortenClashList(message.replace(/\bMicrochip\b/g, 'Số chip').replace(/\bgroom\b/g, 'Groom'));
+}
+
+/** Số mục trùng giờ giữ lại trong câu báo; phần còn lại gộp thành "và N lượt trùng khác". */
+const CLASH_KEEP = 2;
+/** "08:30 ngày 10/10/2026" thành "08:30 10/10". */
+const shortClubTime = (text: string) => text.replace(/(\d{2}:\d{2}) ngày (\d{2}\/\d{2})\/\d{4}/g, '$1 $2');
+
+const GROOM_CLASH_HEAD = 'Người dắt bị trùng giờ: ';
+const GROOM_MOVE_HEAD = 'Groom mới đang dắt lượt trùng giờ: ';
+
+/**
+ * BE liệt kê mọi cặp lượt trùng giờ của Groom trong một câu (mỗi tuần của lớp một cặp), nên câu rất dài.
+ * Rút còn vài cặp đầu, viết gọn từng cặp, phần sau gộp thành "và N lượt trùng khác".
+ */
+export function shortenClashList(message: string): string {
+  const head = message.startsWith(GROOM_CLASH_HEAD) ? GROOM_CLASH_HEAD : message.startsWith(GROOM_MOVE_HEAD) ? GROOM_MOVE_HEAD : undefined;
+  if (!head) return message;
+  const tailAt = message.lastIndexOf('. ');
+  const body = message.slice(head.length, tailAt > head.length ? tailAt : undefined);
+  const items = body.split('; ').map((item) =>
+    shortClubTime(item)
+      .replace(/^ngựa (.+?) ở buổi (".+?") lúc (.+?) trùng lượt ngựa (.+?) ở buổi (".+?") lúc .+$/, '$1 ở buổi $2 lúc $3 trùng với $4 (buổi $5)')
+      .replace(/^buổi (".+?") lúc (.+?) trùng lượt ngựa (.+?) ở buổi (".+?") lúc .+$/, 'buổi $1 lúc $2 trùng với $3 (buổi $4)'),
+  );
+  const shown = items.slice(0, CLASH_KEEP).join('; ');
+  const more = items.length > CLASH_KEEP ? ` và ${items.length - CLASH_KEEP} lượt trùng khác` : '';
+  const title = head === GROOM_CLASH_HEAD ? 'Groom phụ trách đang dắt ngựa khác cùng giờ' : 'Groom mới đang dắt ngựa khác cùng giờ';
+  const advice = head === GROOM_CLASH_HEAD ? 'Đổi giờ buổi, hoặc đổi Groom dắt ở lượt kia trước.' : 'Đổi Groom dắt ở các lượt kia trước khi đổi Groom.';
+  return `${title}: ${shown}${more}. ${advice}`;
 }
 
 /**
